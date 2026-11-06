@@ -1,18 +1,57 @@
+import type { Content, GameState, Messages } from "./game";
+
 export type Kind = "weapon" | "passive" | "item";
 export type Key = `${Kind}:${string}`;
 
 export type Recipe =
-  | { kind: "evolution"; weapon: string; catalyst: string; result: string }
+  | { kind: "evolution"; weapon: string; catalyst: Key; result: string }
   | { kind: "union"; weapons: [string, string]; result: string }
   | { kind: "itemEvolution"; item: string; catalyst: string; result: string };
 
 export type Catalog = {
-  build: string;
-  extractedAt: string;
-  names: Record<string, string>;
-  maxLevel: Record<string, number>;
+  names: Record<Key, string>;
+  maxLevel: Record<Key, number>;
   recipes: Recipe[];
 };
+
+function titleCase(id: string): string {
+  return id.replace(/(^|-)(\w)/g, (_, dash: string, c: string) => `${dash ? " " : ""}${c.toUpperCase()}`);
+}
+
+export function buildCatalog(content: Content, messages: Messages): Catalog {
+  const names: Record<Key, string> = {};
+  const maxLevel: Record<Key, number> = {};
+  const name = (kind: Kind, id: string) => {
+    names[`${kind}:${id}`] = messages[`content.${kind}.${id}.name`]?.[0] ?? titleCase(id);
+  };
+  for (const w of content.allWeapons) {
+    name("weapon", w.id);
+    // Mirrors the game's own cap: a base weapon tops out at min(8, levels + 1), anything else at 1.
+    if (w.tier === "base") maxLevel[`weapon:${w.id}`] = Math.min(8, (w.levels?.length ?? 0) + 1);
+  }
+  for (const p of content.passives) {
+    name("passive", p.id);
+    maxLevel[`passive:${p.id}`] = p.maxLevel;
+  }
+  for (const i of content.allItems) name("item", i.id);
+
+  const passiveIds = new Set(content.passives.map((p) => p.id));
+  const recipes: Recipe[] = [];
+  for (const e of content.evolutions) {
+    if (typeof e.from !== "string" || e.catalyst === undefined) continue;
+    const catalyst: Key = passiveIds.has(e.catalyst) ? `passive:${e.catalyst}` : `item:${e.catalyst}`;
+    recipes.push({ kind: "evolution", weapon: e.from, catalyst, result: e.id });
+  }
+  for (const u of content.unions) {
+    if (!Array.isArray(u.from) || u.from.length !== 2) continue;
+    recipes.push({ kind: "union", weapons: [u.from[0] ?? "", u.from[1] ?? ""], result: u.id });
+  }
+  for (const i of content.evolvedItems) {
+    if (i.from === undefined || i.catalyst === undefined) continue;
+    recipes.push({ kind: "itemEvolution", item: i.from, catalyst: i.catalyst, result: i.id });
+  }
+  return { names, maxLevel, recipes };
+}
 
 // "max" mirrors the game: a base weapon must be maxed to evolve, and an item evolves
 // only once its catalyst passive is maxed. Everything else just has to be held.
@@ -28,7 +67,7 @@ export function toCombo(r: Recipe): Combo {
         result: `weapon:${r.result}`,
         parts: [
           { key: `weapon:${r.weapon}`, need: "max" },
-          { key: `passive:${r.catalyst}`, need: "own" },
+          { key: r.catalyst, need: "own" },
         ],
       };
     case "union":
@@ -54,6 +93,14 @@ export function toCombo(r: Recipe): Combo {
 
 /** Level for weapons/passives, stack count for items. Absent means not held. */
 export type Loadout = Map<Key, number>;
+
+export function readLoadout(state: GameState): Loadout {
+  const loadout: Loadout = new Map();
+  for (const w of state.loadout.weapons) loadout.set(`weapon:${w.def.id}`, w.level);
+  for (const p of state.loadout.passives) loadout.set(`passive:${p.def.id}`, p.level);
+  for (const [id, count] of state.loadout.items) if (count > 0) loadout.set(`item:${id}`, count);
+  return loadout;
+}
 
 export type PartState = "done" | "leveling" | "missing";
 
@@ -83,5 +130,5 @@ export function relevantCombos(combos: Combo[], loadout: Loadout): Combo[] {
 }
 
 export function nameOf(catalog: Catalog, key: Key): string {
-  return catalog.names[key] ?? key.slice(key.indexOf(":") + 1);
+  return catalog.names[key] ?? titleCase(key.slice(key.indexOf(":") + 1));
 }

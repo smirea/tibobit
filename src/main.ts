@@ -1,4 +1,3 @@
-import catalogJson from "./catalog.generated.json";
 import {
   type Catalog,
   type Combo,
@@ -7,32 +6,36 @@ import {
   type Loadout,
   type Part,
   type PartState,
+  buildCatalog,
   comboProgress,
   combosUsing,
   nameOf,
   partner,
   partState,
+  readLoadout,
   relevantCombos,
   toCombo,
 } from "./catalog";
+import { type Content, GameLink } from "./game";
 import { css } from "./style";
 
-const catalog = catalogJson as Catalog;
-const combos = catalog.recipes.map(toCombo);
-const itemIds = new Set(
-  Object.keys(catalog.names)
-    .filter((k) => k.startsWith("item:"))
-    .map((k) => k.slice(5)),
-);
+const link = new GameLink();
 
-// Held items never reach the DOM; the only way in is the game's own `items.set(id, count)`.
-// Sniff Map.prototype.set for a Map keyed by item ids and keep a live reference to it.
-let heldItems: Map<string, number> | undefined;
-const nativeSet = Map.prototype.set;
-Map.prototype.set = function (this: Map<unknown, unknown>, key: unknown, value: unknown) {
-  if (typeof key === "string" && typeof value === "number" && itemIds.has(key)) heldItems = this as Map<string, number>;
-  return nativeSet.call(this, key, value);
-};
+type Data = { catalog: Catalog; combos: Combo[] };
+let data: Data | undefined;
+let dataFrom: { content: Content; messages: number } | undefined;
+
+function currentData(): Data | undefined {
+  const content = link.content();
+  if (content === undefined) return undefined;
+  const messages = Object.keys(link.messages).length;
+  if (dataFrom?.content !== content || dataFrom.messages !== messages) {
+    const catalog = buildCatalog(content, link.messages);
+    data = { catalog, combos: catalog.recipes.map(toCombo) };
+    dataFrom = { content, messages };
+  }
+  return data;
+}
 
 const DISCOVERY_KEY = "tibo.discovery.v1";
 const EVOLUTIONS_KEY = "tibo.evolutions.v1";
@@ -95,37 +98,8 @@ class Discovery {
 
 const discovery = new Discovery();
 
-function slotLevel(slot: Element): number {
-  const text = slot.querySelector(".hud-slot-lv")?.textContent ?? "";
-  const n = Number.parseInt(text, 10);
-  return Number.isFinite(n) ? n : 1;
-}
-
-function readLoadout(): Loadout | undefined {
-  const weapons = document.querySelector(".hud-weapons");
-  if (weapons === null || !isShown(weapons)) return undefined;
-  const loadout: Loadout = new Map();
-  for (const slot of document.querySelectorAll<HTMLElement>(
-    ".hud-weapons > .hud-slot[data-tip], .hud-passives > .hud-slot[data-tip]",
-  )) {
-    if (slot.hidden) continue;
-    const tip = slot.dataset.tip ?? "";
-    if (tip.startsWith("weapon:") || tip.startsWith("passive:")) loadout.set(tip as Key, slotLevel(slot));
-  }
-  for (const [id, count] of heldItems ?? []) if (count > 0) loadout.set(`item:${id}`, count);
-  return loadout;
-}
-
 function isShown(el: Element): boolean {
   return el.getClientRects().length > 0;
-}
-
-let lastWeaponCount = 0;
-
-function trackRunReset(loadout: Loadout | undefined) {
-  const weapons = loadout === undefined ? 0 : [...loadout.keys()].filter((k) => k.startsWith("weapon:")).length;
-  if (weapons < lastWeaponCount) heldItems = undefined;
-  lastWeaponCount = weapons;
 }
 
 function h<K extends keyof HTMLElementTagNameMap>(
@@ -141,7 +115,7 @@ function h<K extends keyof HTMLElementTagNameMap>(
 
 const STATE_MARK: Record<PartState, string> = { done: "✓", leveling: "▲", missing: "✗" };
 
-function partLabel(part: Part, loadout: Loadout): HTMLElement {
+function partLabel({ catalog }: Data, part: Part, loadout: Loadout): HTMLElement {
   const state = partState(part, loadout, catalog);
   const max = catalog.maxLevel[part.key];
   let detail = "";
@@ -152,14 +126,13 @@ function partLabel(part: Part, loadout: Loadout): HTMLElement {
   return h("span", `tbh-part tbh-${state}`, `${STATE_MARK[state]} ${nameOf(catalog, part.key)}${detail}`);
 }
 
-function resultLabel(combo: Combo): HTMLElement {
-  const unknown = !discovery.made(combo.result);
+function resultLabel({ catalog }: Data, combo: Combo): HTMLElement {
   const el = h("span", "tbh-result", nameOf(catalog, combo.result));
-  if (unknown) el.append(h("span", "tbh-badge tbh-badge-evo", "NEW"));
+  if (!discovery.made(combo.result)) el.append(h("span", "tbh-badge tbh-badge-evo", "NEW"));
   return el;
 }
 
-function readiness(combo: Combo, loadout: Loadout): number {
+function readiness({ catalog }: Data, combo: Combo, loadout: Loadout): number {
   return comboProgress(combo, loadout, catalog).filter((s) => s === "done").length;
 }
 
@@ -169,56 +142,46 @@ const KIND_NOTE: Record<Combo["recipe"]["kind"], string> = {
   itemEvolution: "item",
 };
 
-function missingPath(part: Part, loadout: Loadout): HTMLElement | undefined {
+function missingPath({ catalog, combos }: Data, part: Part, loadout: Loadout): HTMLElement | undefined {
   if (loadout.has(part.key)) return undefined;
   const via = combos.find((c) => c.result === part.key);
   if (via === undefined) return undefined;
-  return h(
-    "div",
-    "tbh-via",
-    `${nameOf(catalog, part.key)} = ${via.parts.map((p) => nameOf(catalog, p.key)).join(" + ")}`,
-  );
+  return h("div", "tbh-via", `${nameOf(catalog, part.key)} = ${via.parts.map((p) => nameOf(catalog, p.key)).join(" + ")}`);
 }
 
-function renderPanel(panel: HTMLElement, loadout: Loadout) {
-  const list = relevantCombos(combos, loadout).sort(
-    (a, b) => readiness(b, loadout) - readiness(a, loadout) || nameOf(catalog, a.result).localeCompare(nameOf(catalog, b.result)),
+function header(panel: HTMLElement, count: string): HTMLElement {
+  const el = h("div", "tbh-header", h("span", "", "Combos"), h("span", "tbh-count", count));
+  el.addEventListener("click", () => panel.classList.toggle(panel.classList.contains("tbh-choice") ? "tbh-peek" : "tbh-collapsed"));
+  return el;
+}
+
+function renderPanel(panel: HTMLElement, d: Data, loadout: Loadout) {
+  const { catalog } = d;
+  const list = relevantCombos(d.combos, loadout).sort(
+    (a, b) => readiness(d, b, loadout) - readiness(d, a, loadout) || nameOf(catalog, a.result).localeCompare(nameOf(catalog, b.result)),
   );
-  const ready = list.filter((c) => readiness(c, loadout) === 2).length;
+  const ready = list.filter((c) => readiness(d, c, loadout) === 2).length;
   const body = h("div", "tbh-body");
   if (list.length === 0) body.append(h("div", "tbh-empty", "No combos use anything you hold yet."));
   for (const combo of list) {
-    const isReady = readiness(combo, loadout) === 2;
+    const isReady = readiness(d, combo, loadout) === 2;
     const row = h(
       "div",
       `tbh-row${isReady ? " tbh-ready" : ""}`,
-      h("div", "tbh-row-head", resultLabel(combo), h("span", "tbh-kind", isReady ? "READY" : KIND_NOTE[combo.recipe.kind])),
-      h("div", "tbh-parts", partLabel(combo.parts[0], loadout), h("span", "tbh-plus", "+"), partLabel(combo.parts[1], loadout)),
+      h("div", "tbh-row-head", resultLabel(d, combo), h("span", "tbh-kind", isReady ? "READY" : KIND_NOTE[combo.recipe.kind])),
+      h("div", "tbh-parts", partLabel(d, combo.parts[0], loadout), h("span", "tbh-plus", "+"), partLabel(d, combo.parts[1], loadout)),
     );
     for (const p of combo.parts) {
-      const via = missingPath(p, loadout);
+      const via = missingPath(d, p, loadout);
       if (via !== undefined) row.append(via);
     }
     body.append(row);
   }
-  const header = h("div", "tbh-header", h("span", "", "Combos"), h("span", "tbh-count", `${ready} ready / ${list.length}`));
-  header.addEventListener("click", () =>
-    panel.classList.toggle(panel.classList.contains("tbh-choice") ? "tbh-peek" : "tbh-collapsed"),
-  );
-  panel.replaceChildren(header, body);
-  const stale = staleWarning();
-  if (stale !== undefined) panel.append(h("div", "tbh-stale", stale));
+  panel.replaceChildren(header(panel, `${ready} ready / ${list.length}`), body);
 }
 
-const unknownIds = new Set<Key>();
-
-function noteUnknown(keys: Iterable<Key>) {
-  for (const key of keys) if (catalog.names[key] === undefined) unknownIds.add(key);
-}
-
-function staleWarning(): string | undefined {
-  if (unknownIds.size === 0) return undefined;
-  return `The combo data (${catalog.extractedAt}) does not know ${[...unknownIds].join(", ")}. Run \`bun run extract && bun run build\` in tibobit.`;
+function renderProblem(panel: HTMLElement, message: string) {
+  panel.replaceChildren(header(panel, "offline"), h("div", "tbh-stale", message));
 }
 
 function offerKey(card: HTMLElement): { key: Key; level: number } | undefined {
@@ -230,10 +193,10 @@ function offerKey(card: HTMLElement): { key: Key; level: number } | undefined {
   return undefined;
 }
 
-function annotateCard(card: HTMLElement, loadout: Loadout) {
+function annotateCard(card: HTMLElement, d: Data, version: number, loadout: Loadout) {
   const offer = offerKey(card);
   if (offer === undefined) return;
-  const signature = `${offer.key}|${[...loadout].join(",")}|${discovery.version}`;
+  const signature = `${offer.key}|${[...loadout].join(",")}|${discovery.version}|${version}`;
   if (card.dataset.tbh === signature) return;
   card.dataset.tbh = signature;
   card.querySelector(".tbh-card")?.remove();
@@ -243,7 +206,7 @@ function annotateCard(card: HTMLElement, loadout: Loadout) {
   const after: Loadout = new Map(loadout);
   after.set(offer.key, offer.key.startsWith("item:") ? (loadout.get(offer.key) ?? 0) + 1 : offer.level);
 
-  const uses = combosUsing(combos, offer.key).filter((c) => !loadout.has(c.result));
+  const uses = combosUsing(d.combos, offer.key).filter((c) => !loadout.has(c.result));
   const matches = uses.filter((c) => loadout.has(partner(c, offer.key).key));
   const shown = isNew ? uses : matches;
   const opensUnknown = matches.some((c) => !discovery.made(c.result));
@@ -255,17 +218,15 @@ function annotateCard(card: HTMLElement, loadout: Loadout) {
   const box = h("div", "tbh-card");
   if (isNew) box.append(h("span", "tbh-badge tbh-badge-new", "UNSEEN"));
   for (const combo of shown.sort((a, b) => Number(matches.includes(b)) - Number(matches.includes(a)))) {
-    const other = partner(combo, offer.key);
-    const isMatch = matches.includes(combo);
-    const readyAfter = comboProgress(combo, after, catalog).every((s) => s === "done");
+    const readyAfter = comboProgress(combo, after, d.catalog).every((s) => s === "done");
     box.append(
       h(
         "div",
-        `tbh-line${isMatch ? " tbh-match" : ""}`,
+        `tbh-line${matches.includes(combo) ? " tbh-match" : ""}`,
         h("span", "tbh-plus", "+"),
-        partLabel(other, loadout),
+        partLabel(d, partner(combo, offer.key), loadout),
         h("span", "tbh-arrow", "→"),
-        resultLabel(combo),
+        resultLabel(d, combo),
         ...(readyAfter ? [h("span", "tbh-kind tbh-ready-tag", "READY")] : []),
       ),
     );
@@ -288,26 +249,39 @@ function start() {
   const panel = mount();
   let panelSignature = "";
   let queued = false;
+  let version = 0;
+  let lastData: Data | undefined;
 
   const update = () => {
     queued = false;
-    const loadout = readLoadout();
-    trackRunReset(loadout);
-    panel.hidden = loadout === undefined;
-    if (loadout === undefined) return;
+    const hud = document.querySelector(".hud-weapons");
+    const game = link.game;
+    panel.hidden = game === undefined || game.state.over || hud === null || !isShown(hud);
+    if (panel.hidden || game === undefined) return;
     const cards = [...document.querySelectorAll<HTMLElement>(".ui-card[data-tip]")];
     const offered = cards.map(offerKey).filter((o) => o !== undefined);
-    discovery.settle(loadout, new Set(offered.map((o) => o.key)));
-    noteUnknown(loadout.keys());
-    noteUnknown(offered.map((o) => o.key));
     panel.classList.toggle("tbh-choice", offered.length > 0);
     if (offered.length === 0) panel.classList.remove("tbh-peek");
-    const signature = `${[...loadout].join(",")}|${discovery.version}|${staleWarning() ?? ""}`;
+
+    const d = currentData();
+    if (d === undefined) {
+      const problem = link.error === undefined ? "Reading the game's content..." : `Can't read the game's content: ${link.error}. The game changed; tibobit needs an update.`;
+      if (panelSignature !== problem) renderProblem(panel, problem);
+      panelSignature = problem;
+      return;
+    }
+    if (d !== lastData) {
+      lastData = d;
+      version++;
+    }
+    const loadout = readLoadout(game.state);
+    discovery.settle(loadout, new Set(offered.map((o) => o.key)));
+    const signature = `${[...loadout].join(",")}|${discovery.version}|${version}`;
     if (signature !== panelSignature) {
       panelSignature = signature;
-      renderPanel(panel, loadout);
+      renderPanel(panel, d, loadout);
     }
-    for (const card of cards) annotateCard(card, loadout);
+    for (const card of cards) annotateCard(card, d, version, loadout);
   };
   const schedule = () => {
     if (queued) return;
@@ -315,6 +289,7 @@ function start() {
     requestAnimationFrame(update);
   };
 
+  link.onChange(schedule);
   new MutationObserver((records) => {
     if (records.some((r) => !panel.contains(r.target) && !(r.target instanceof Element && r.target.closest(".tbh-card"))))
       schedule();

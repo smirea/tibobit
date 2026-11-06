@@ -1,12 +1,11 @@
 #!/usr/bin/env bun
 import path from "node:path";
-import catalog from "../src/catalog.generated.json";
 import pkg from "../package.json";
 
 const root = path.resolve(import.meta.dir, "..");
 const outFile = path.join(root, "dist", "tibo-helper.user.js");
 const rawUrl = "https://raw.githubusercontent.com/smirea/tibobit/master/dist/tibo-helper.user.js";
-const version = `${pkg.version}.${catalog.extractedAt.replaceAll("-", "")}`;
+const { version } = pkg;
 
 const header = `// ==UserScript==
 // @name         tibo.dog combo helper
@@ -34,4 +33,4 @@ if (!result.success) {
 const output = result.outputs[0];
 if (output === undefined) throw new Error("build produced no output");
 await Bun.write(outFile, header + (await output.text()));
-console.log(`wrote ${path.relative(root, outFile)} (${version}, data from ${catalog.build})`);
+console.log(`wrote ${path.relative(root, outFile)} (${version})`);
