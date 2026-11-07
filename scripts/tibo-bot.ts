@@ -617,8 +617,9 @@ async function main() {
   process.on("SIGINT", () => void stop("SIGINT"));
   process.on("SIGTERM", () => void stop("SIGTERM"));
   await command({ type: "speed", factor: SPEED });
-  const first = await api<Snap>("/state");
-  if (first.screen !== "title" && first.screen !== "over") runs = 1;
+  // Every run starts fresh, so a Daily always begins at tick 0 on its fixed seed.
+  await start();
+  runs = 1;
 
   const fillLink = async (s: Snap) => {
     if (awaitingLink === undefined || s.lastRunLink === undefined || s.lastRunLink === awaitingLink.known) return;
