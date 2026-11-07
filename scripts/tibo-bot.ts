@@ -556,12 +556,14 @@ async function choose(r: RunView) {
   const signature = `${r.tick}|${options.map((o) => o.name).join("|")}`;
   if (deadPicks.signature !== signature) deadPicks = { signature, names: new Set() };
   // The coach's upgrade list is its plan; when the row offers any of it, the pick is among those.
-  const wanted = options.filter((o) => inPlan(o.name) && o.available && !deadPicks.names.has(o.name));
-  const considered = wanted.length > 0 ? wanted : options;
+  // Only options that can be taken: a model shown an unaffordable card picks it again and again.
+  const takeable = options.filter((o) => o.available && !deadPicks.names.has(o.name));
+  if (takeable.length === 0) throw new Error(`every option of this ${r.choice?.kind} was tried without closing it: ${options.map((o) => o.name).join(", ")}`);
+  const wanted = takeable.filter((o) => inPlan(o.name));
+  const considered = wanted.length > 0 ? wanted : takeable;
   const criteria: Record<string, string> = {};
   for (const o of considered) {
     const notes = [
-      deadPicks.names.has(o.name) || !o.available ? "cannot be taken right now" : "",
       o.type === "other" ? o.name : `${o.type}${o.level === undefined ? "" : ` level ${o.level}`}, ${o.label}`,
       o.recommended ? "the game recommends it" : "",
       inPlan(o.name) ? "part of the long-term plan" : "",
@@ -573,16 +575,16 @@ async function choose(r: RunView) {
   const only = considered.length === 1 ? considered[0] : undefined;
   const { pick } = only !== undefined ? { pick: { choice: `${only.index}: ${only.name}` } } : await decide(
     situation(r),
-    { pick: { type: "choice", instructions: `Tibo levelled up. Which ${r.choice?.kind === "levelUp" ? "upgrade" : "reward"} makes Tibo strongest?`, criteria } },
+    { pick: { type: "choice", instructions: r.choice?.kind === "levelUp" ? "Tibo levelled up. Which upgrade makes Tibo strongest?" : `Tibo is at a ${r.choice?.kind}. Which option makes Tibo strongest?`, criteria } },
     PICK_MODEL,
   );
-  const index = Number((pick?.choice ?? "0").split(":")[0]);
-  const picked = options.find((o) => o.index === index);
+  const picked = considered.find((o) => o.index === Number((pick?.choice ?? "").split(":")[0])) ?? considered[0];
+  const index = picked?.index ?? 0;
   if (picked !== undefined) deadPicks.names.add(picked.name);
   pickLog.push(
     `${clock(r.time)} ${r.choice?.kind}: offered ${options.map((o) => o.name).join(", ")}; took ${picked?.name ?? index}${wanted.length > 0 ? " (from the want list)" : ""}; slots weapons ${r.loadout.weapons.length}/6, passives ${r.loadout.passives.length}/6`,
   );
-  return command({ type: "choose", index: Number.isFinite(index) ? index : 0 });
+  return command({ type: "choose", index });
 }
 
 async function start(): Promise<void> {
