@@ -49,7 +49,10 @@ export type Poi = {
   radius: number;
   state: { uid: number; used: boolean; charge: number; armed: boolean; goneAt: number };
 };
-export type Hazard = { kind: string; x: number; y: number; radius: number; strength: number };
+export type Hazard = { kind: string; x: number; y: number; radius: number; strength: number; poolShape: number; turn: number };
+
+/** The game's hit test for a shaped pool: is the point (dx, dy) from its centre inside, with `pad` of slack? */
+export type InPool = (poolShape: number, turn: number, dx: number, dy: number, radius: number, pad: number) => boolean;
 
 export type GameState = {
   loadout: {
@@ -69,7 +72,7 @@ export type GameState = {
   enemies: Pool<"x" | "y" | "hp" | "maxHp" | "radius" | "def" | "flags" | "damage">;
   bosses: Pool<"x" | "y" | "hp" | "maxHp" | "radius" | "def">;
   pickups: Pool<"x" | "y" | "kind" | "source" | "value" | "charge">;
-  zones: Pool<"x" | "y" | "radius" | "kind" | "hostile" | "shape" | "life" | "maxLife" | "damage" | "delay" | "angle" | "length">;
+  zones: Pool<"x" | "y" | "radius" | "kind" | "hostile" | "shape" | "life" | "maxLife" | "damage" | "delay" | "angle" | "length" | "poolShape" | "turn">;
   bullets: Pool<"x" | "y" | "radius" | "vx" | "vy" | "damage">;
   world: { activePois: Poi[]; activeHazards: Hazard[] };
   view: { width: number; height: number };
@@ -182,6 +185,7 @@ export class GameLink {
   icons: IconSheet | undefined;
   error: string | undefined;
   steer: Steer | undefined;
+  inPool: InPool | undefined;
   /** Simulation ticks per game frame; above 1 the game runs faster than real time. */
   speed = 1;
   /** Pause the next new run before its first tick, so agents start every run from tick 0. */
@@ -291,6 +295,16 @@ export class GameLink {
     assertContent(table.value);
     this.enums = findEnums(table.module);
     this.table = table.value as Table;
+    // The game's own hit test for shaped pools (clover, blob...): called as
+    // `x(r.poolShape,r.turn,dx,dy,radius,pad)` and exported by the sim chunk under a minified name.
+    const poolLocal = localAt(source, /([\w$]+)\([a-z]\.poolShape,[a-z]\.turn,/, "pool hit test");
+    const poolExport = (source.match(/export\{([^}]*)\}/)?.[1] ?? "")
+      .split(",")
+      .map((b) => b.split(" as "))
+      .find(([local]) => local === poolLocal)?.[1];
+    const inPool = poolExport === undefined ? undefined : ns[poolExport];
+    if (typeof inPool !== "function") throw new Error("the sim chunk does not export its pool hit test");
+    this.inPool = inPool as InPool;
     this.contentFn = contentFn.value as (bigUpdate: Record<string, boolean>) => Content;
     this.changed();
   }

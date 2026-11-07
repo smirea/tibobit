@@ -259,6 +259,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
   const zoneShape = Object.fromEntries(Object.entries(enums.zoneShapes).map(([k, v]) => [v, k]));
   const px = s.player.x[me] ?? 0;
   const py = s.player.y[me] ?? 0;
+  const inPool = link.inPool;
   // Each area answers "is this point (relative to the player) inside?" with the zone's real shape.
   type Area = { view: RunView["hazards"][number]; contains: (x: number, y: number) => boolean };
   const areas: Area[] = [];
@@ -267,9 +268,10 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     if (rel.dist - h.radius > HAZARD_RANGE) continue;
     const cx = h.x - px;
     const cy = h.y - py;
+    const contains = (x: number, y: number) => (inPool === undefined ? Math.hypot(x - cx, y - cy) <= h.radius : inPool(h.poolShape, h.turn, x - cx, y - cy, h.radius, 0));
     areas.push({
-      view: { ...rel, kind: h.kind, source: "terrain", shape: "circle", radius: round(h.radius), inside: rel.dist <= h.radius },
-      contains: (x, y) => Math.hypot(x - cx, y - cy) <= h.radius,
+      view: { ...rel, kind: h.kind, source: "terrain", shape: "pool", radius: round(h.radius), inside: contains(0, 0) },
+      contains,
     });
   }
   for (const i of alive(s.zones)) {
@@ -279,7 +281,11 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     const ax = (s.zones.x[i] ?? 0) - px;
     const ay = (s.zones.y[i] ?? 0) - py;
     const kind = zoneKind[s.zones.kind[i] ?? -1] ?? "unknown";
-    let contains = (x: number, y: number) => Math.hypot(x - ax, y - ay) <= radius;
+    const poolShape = s.zones.poolShape[i] ?? 0;
+    const turn = s.zones.turn[i] ?? 0;
+    // Pools (boss puddles, spore clouds) have their own shape; the rest are circles or lines.
+    let contains = (x: number, y: number) =>
+      poolShape !== 0 && inPool !== undefined ? inPool(poolShape, turn, x - ax, y - ay, radius, 0) : Math.hypot(x - ax, y - ay) <= radius;
     let nearest = { x: ax, y: ay };
     if (shape === "line") {
       const angle = s.zones.angle[i] ?? 0;

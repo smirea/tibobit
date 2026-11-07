@@ -483,6 +483,7 @@
     const zoneShape = Object.fromEntries(Object.entries(enums.zoneShapes).map(([k, v]) => [v, k]));
     const px = s.player.x[me] ?? 0;
     const py = s.player.y[me] ?? 0;
+    const inPool = link.inPool;
     const areas = [];
     for (const h of s.world.activeHazards) {
       const rel = relTo(s, h.x, h.y);
@@ -490,9 +491,10 @@
         continue;
       const cx = h.x - px;
       const cy = h.y - py;
+      const contains = (x, y) => inPool === undefined ? Math.hypot(x - cx, y - cy) <= h.radius : inPool(h.poolShape, h.turn, x - cx, y - cy, h.radius, 0);
       areas.push({
-        view: { ...rel, kind: h.kind, source: "terrain", shape: "circle", radius: round(h.radius), inside: rel.dist <= h.radius },
-        contains: (x, y) => Math.hypot(x - cx, y - cy) <= h.radius
+        view: { ...rel, kind: h.kind, source: "terrain", shape: "pool", radius: round(h.radius), inside: contains(0, 0) },
+        contains
       });
     }
     for (const i of alive(s.zones)) {
@@ -503,7 +505,9 @@
       const ax = (s.zones.x[i] ?? 0) - px;
       const ay = (s.zones.y[i] ?? 0) - py;
       const kind = zoneKind[s.zones.kind[i] ?? -1] ?? "unknown";
-      let contains = (x, y) => Math.hypot(x - ax, y - ay) <= radius;
+      const poolShape = s.zones.poolShape[i] ?? 0;
+      const turn = s.zones.turn[i] ?? 0;
+      let contains = (x, y) => poolShape !== 0 && inPool !== undefined ? inPool(poolShape, turn, x - ax, y - ay, radius, 0) : Math.hypot(x - ax, y - ay) <= radius;
       let nearest = { x: ax, y: ay };
       if (shape === "line") {
         const angle = s.zones.angle[i] ?? 0;
@@ -1189,6 +1193,7 @@
     icons;
     error;
     steer;
+    inPool;
     speed = 1;
     pauseAtStart = false;
     runLink;
@@ -1290,6 +1295,12 @@
       assertContent(table.value);
       this.enums = findEnums(table.module);
       this.table = table.value;
+      const poolLocal = localAt(source, /([\w$]+)\([a-z]\.poolShape,[a-z]\.turn,/, "pool hit test");
+      const poolExport = (source.match(/export\{([^}]*)\}/)?.[1] ?? "").split(",").map((b) => b.split(" as ")).find(([local]) => local === poolLocal)?.[1];
+      const inPool = poolExport === undefined ? undefined : ns[poolExport];
+      if (typeof inPool !== "function")
+        throw new Error("the sim chunk does not export its pool hit test");
+      this.inPool = inPool;
       this.contentFn = contentFn.value;
       this.changed();
     }
