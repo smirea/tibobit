@@ -210,7 +210,7 @@ const GAME_RULES = [
 /** One line per finished run in gameplay/notes: how long it lasted and what it carried. */
 async function runHistory(): Promise<string> {
   const glob = new Bun.Glob("*.md");
-  const rows: { time: number; line: string }[] = [];
+  const rows: { time: number; held: number; line: string }[] = [];
   for await (const name of glob.scan(NOTES_DIR)) {
     if (!name.startsWith("2")) continue;
     const text = await Bun.file(path.join(NOTES_DIR, name)).text();
@@ -219,10 +219,30 @@ async function runHistory(): Promise<string> {
     if (survived === null) continue;
     const weapons = text.match(/- (?:Final weapons|Weapons at [\d:]+): (.*)\./)?.[1] ?? "unknown";
     const passives = text.match(/- Final passives: (.*)\./)?.[1] ?? "unknown";
-    rows.push({ time: Number(survived[2]), line: `${name.slice(0, 16)}: survived ${survived[1]}, level ${survived[3]}; weapons ${weapons}; passives ${passives}` });
+    const held = weapons === "unknown" ? 0 : weapons.split(", ").length;
+    rows.push({ time: Number(survived[2]), held, line: `${name.slice(0, 16)}: survived ${survived[1]}, level ${survived[3]}; weapons ${weapons}; passives ${passives}` });
   }
+  if (rows.length === 0) return "(no finished runs yet)";
   rows.sort((a, b) => b.time - a.time);
-  return rows.map((r) => `- ${r.line}`).join("\n") || "(no finished runs yet)";
+  return [...rows.map((r) => `- ${r.line}`), "", `Survival by weapons held at the end: ${weaponTable(rows)}.`].join("\n");
+}
+
+// The coach kept narrowing the build to one weapon while every long run held five or six, so the
+// history states that comparison outright instead of leaving it to be inferred.
+function weaponTable(rows: { time: number; held: number }[]): string {
+  const groups = [
+    { label: "1-2 weapons", has: (n: number) => n >= 1 && n <= 2 },
+    { label: "3-4 weapons", has: (n: number) => n >= 3 && n <= 4 },
+    { label: "5-6 weapons", has: (n: number) => n >= 5 },
+  ];
+  return groups
+    .map((g) => {
+      const times = rows.filter((r) => g.has(r.held)).map((r) => r.time);
+      if (times.length === 0) return `${g.label}: no runs`;
+      const mean = times.reduce((a, b) => a + b, 0) / times.length;
+      return `${g.label}: ${times.length} runs, ${clock(Math.min(...times))} to ${clock(Math.max(...times))}, mean ${clock(mean)}`;
+    })
+    .join("; ");
 }
 
 /**
@@ -239,6 +259,7 @@ async function reviewRun(timeline: string, outcome: string, recent: string[], ru
     await readStrategy(),
     "Every finished run in this mode so far, longest first. Compare builds and timings across runs before trusting a lesson from one run:",
     await runHistory(),
+    "Every Build rule must agree with this history. A rule that refuses the weapons the longest runs held, or narrows the build below what those runs had, is wrong: rewrite it.",
     "This run's notes:",
     timeline || "(none)",
     "Outcome:",
