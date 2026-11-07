@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { appendFile, mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type CommandStatus, DIRECTIONS, type Direction, type ForecastView, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type CommandStatus, DIRECTIONS, type Direction, type ForecastView, type OptionView, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {
@@ -584,6 +584,15 @@ const pickLog: string[] = [];
 // is told instead of picking them forever.
 let deadPicks: { signature: string; names: Set<string> } = { signature: "", names: new Set() };
 
+function cardKind(r: RunView, o: OptionView): string {
+  const held = [...r.loadout.weapons, ...r.loadout.passives].find((x) => x.name === o.name);
+  if (o.type === "weapon")
+    return held === undefined ? `new weapon, fills weapon slot ${r.loadout.weapons.length + 1} of 6` : `weapon upgrade to level ${held.level + 1} of ${held.max}`;
+  if (o.type === "passive")
+    return held === undefined ? `new passive, fills passive slot ${r.loadout.passives.length + 1} of 6` : `passive upgrade to level ${held.level + 1} of ${held.max}`;
+  return o.type === "other" ? "" : o.type;
+}
+
 async function choose(r: RunView) {
   const options = r.choice?.options ?? [];
   if (options.length === 0) throw new Error(`a ${r.choice?.kind} choice with no options`);
@@ -595,15 +604,19 @@ async function choose(r: RunView) {
   if (takeable.length === 0) throw new Error(`every option of this ${r.choice?.kind} was tried without closing it: ${options.map((o) => o.name).join(", ")}`);
   const wanted = takeable.filter((o) => inPlan(o.name));
   const considered = wanted.length > 0 ? wanted : takeable;
+  // The decision API reads a choice's keys, not their descriptions: replayed picks did not change
+  // at all when a note was added to the description, and Laya took a new weapon in 4 of 6 offers
+  // once the key said so. So everything the model should weigh goes into the key.
   const criteria: Record<string, string> = {};
   for (const o of considered) {
     const notes = [
-      o.type === "other" ? o.name : `${o.type}${o.level === undefined ? "" : ` level ${o.level}`}, ${o.label}`,
-      o.recommended ? "the game recommends it" : "",
-      inPlan(o.name) ? "part of the long-term plan" : "",
+      cardKind(r, o),
+      inPlan(o.name) ? "in the coach's plan" : "",
       ...o.combos.filter((c) => c.partnerHeld).map((c) => `pairs with your ${c.partner.name} into ${c.name}${c.ready ? " right away" : ""}`),
-    ];
-    criteria[`${o.index}: ${o.type === "other" ? o.name.split(" | ")[0] : o.name}`] = notes.filter(Boolean).join("; ");
+      o.recommended ? "the game recommends it" : "",
+    ].filter(Boolean);
+    const name = o.type === "other" ? o.name.split(" | ")[0] : o.name;
+    criteria[`${o.index}: ${name}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`] = o.label;
   }
   // A single wanted card needs no question: the coach already chose it.
   const only = considered.length === 1 ? considered[0] : undefined;
