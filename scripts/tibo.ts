@@ -57,10 +57,14 @@ function summarizeRun(r: RunView): string[] {
   if (r.loadout.items.length > 0) lines.push(`items: ${r.loadout.items.map((i) => `${i.name} x${i.count}`).join(", ")}`);
   if (r.combos.length > 0)
     lines.push(`combos: ${r.combos.map((c) => `${c.name}${c.ready ? " READY" : ""} (${c.parts.map((x) => `${x.state === "done" ? "+" : x.state === "leveling" ? "~" : "-"}${x.name}`).join(" ")})`).join("; ")}`);
+  for (const u of r.unpaired) lines.push(`  ${u.name}: ${u.options.map((o) => `${o.name}${o.made ? "" : "*"}`).join(", ")}`);
   if (r.choice !== undefined) {
     lines.push(`choice (${r.choice.kind}):`);
-    for (const o of r.choice.options)
-      lines.push(`  [${o.index}] ${o.name}${o.level === undefined ? "" : ` Lv${o.level}`}${o.recommended ? " (recommended)" : ""}${o.unseen ? " UNSEEN" : ""}${o.combos.map((c) => `  -> ${c.name}${c.ready ? " READY" : ""}`).join("")}`);
+    for (const o of r.choice.options) {
+      lines.push(`  [${o.index}] ${o.name}${o.level === undefined ? "" : ` Lv${o.level}`}${o.recommended ? " (recommended)" : ""}${o.unseen ? " UNSEEN" : ""}`);
+      for (const c of o.combos)
+        lines.push(`      ${c.partnerHeld ? "+" : "-"} ${c.partner.name} -> ${c.name}${c.ready ? " READY" : ""}${c.made ? "" : " (new)"}`);
+    }
   }
   for (const b of r.bosses) lines.push(`boss ${b.name} ${Math.round(b.hp)}/${Math.round(b.maxHp)} at ${at(b)}`);
   lines.push(`enemies ${r.enemies.total}: ${r.enemies.nearest.slice(0, 5).map((e) => `${e.name}${e.elite ? "*" : ""} ${at(e)}`).join(", ")}`);

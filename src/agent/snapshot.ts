@@ -9,6 +9,7 @@ import {
   partState,
   readLoadout,
   relevantCombos,
+  unpaired,
 } from "../catalog";
 import { type Data, liveData } from "../data";
 import type { Discovery } from "../discovery";
@@ -101,9 +102,10 @@ function options(d: Data, discovery: Discovery, loadout: Loadout): OptionView[] 
     if (offer === undefined) return { index, type: "other", id: tip, name: label, recommended, unseen: false, combos: [] };
     const after: Loadout = new Map(loadout);
     after.set(offer.key, offer.key.startsWith("item:") ? (loadout.get(offer.key) ?? 0) + 1 : offer.level);
-    const unseen = discovery.isNew(offer.key);
-    const uses = combosUsing(d.combos, offer.key).filter((c) => !loadout.has(c.result));
-    const shown = unseen ? uses : uses.filter((c) => loadout.has(partner(c, offer.key).key));
+    const held = (c: Combo) => loadout.has(partner(c, offer.key).key);
+    const uses = combosUsing(d.combos, offer.key)
+      .filter((c) => !loadout.has(c.result))
+      .sort((a, b) => Number(held(b)) - Number(held(a)));
     const [type = "", id = ""] = offer.key.split(":");
     return {
       index,
@@ -112,8 +114,11 @@ function options(d: Data, discovery: Discovery, loadout: Loadout): OptionView[] 
       name: nameOf(d.catalog, offer.key),
       ...(type === "item" ? {} : { level: offer.level }),
       recommended,
-      unseen,
-      combos: shown.map((c) => comboView(d, discovery, c, after)),
+      unseen: discovery.isNew(offer.key),
+      combos: uses.map((c) => {
+        const other = partner(c, offer.key).key;
+        return { ...comboView(d, discovery, c, after), partner: { key: other, name: nameOf(d.catalog, other) }, partnerHeld: held(c) };
+      }),
     };
   });
 }
@@ -247,6 +252,17 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
       items: [...s.loadout.items].filter(([, n]) => n > 0).map(([id, count]) => ({ id, name: nameOf(d.catalog, `item:${id}`), count })),
     },
     combos: relevantCombos(d.combos, loadout).map((c) => comboView(d, discovery, c, loadout)),
+    unpaired: unpaired(d.combos, loadout).map((u) => ({
+      key: u.held,
+      name: nameOf(d.catalog, u.held),
+      options: u.options.map((o) => ({
+        key: o.partner.key,
+        name: nameOf(d.catalog, o.partner.key),
+        result: o.combo.result,
+        resultName: nameOf(d.catalog, o.combo.result),
+        made: discovery.made(o.combo.result),
+      })),
+    })),
     ...(choice === undefined ? {} : { choice: { kind: choice.kind, options: options(d, discovery, loadout), raw: toJson(choice) } }),
     bosses: bosses.sort((a, b) => a.dist - b.dist),
     enemies: { total: enemies.length, nearest: nearest(enemies) },

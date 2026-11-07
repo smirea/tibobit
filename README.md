@@ -29,7 +29,7 @@ Keep one tibo.dog tab open with the userscript installed. It connects within a f
 
 | Endpoint | What it does |
 | --- | --- |
-| `GET /state` | Latest snapshot: screen, player, loadout, reachable combos, open choice, bosses, nearest enemies, pickups, points of interest, hazards and enemy bullets. |
+| `GET /state` | Latest snapshot: screen, player, loadout, reachable combos, the panel's unpaired rows (`unpaired`), the open choice with every pairing of every option, bosses, nearest enemies, pickups, points of interest, hazards and enemy bullets. |
 | `GET /encyclopedia` | Every weapon, passive, item, recipe, enemy, boss, point of interest and biome, with English names, descriptions and the game's own stats. |
 | `POST /command` | Runs one JSON command. Add `?wait=1` to block until it finishes. |
 | `WS /ws` | Pushes every snapshot as it arrives. Send a JSON command to run it. |
@@ -38,7 +38,7 @@ Commands, also available as `./scripts/tibo.ts <verb>`:
 
 - `{"type":"move","dir":"left","seconds":2}` holds a direction. `dir` is one of the eight compass words (`up-left` and so on) or degrees, where 0 is right and 90 is down. Without `seconds` it holds until the next movement command.
 - `{"type":"goto","to":{"x":120,"y":-40}}` walks to a world position. `to` can also be `{"dx","dy"}` relative to where you stand, `{"poi":uid}` for a point of interest, or `{"pickup":uid}` for a chest or other pickup. `stay` holds still after arriving, either for a number of seconds or with `"done"` until the target is used up. Shrines, chests and most points of interest only open after you stand on them for their `chargeNeeded` seconds, so `{"type":"goto","to":{"poi":16},"stay":"done"}` is the usual way to take one.
-- `{"type":"choose","index":0}` picks an option of the open level-up, chest or shrine choice. Options carry `recommended` (the game's own suggestion), `unseen`, and the combos they join.
+- `{"type":"choose","index":0}` picks an option of the open level-up, chest or shrine choice. Options carry `recommended` (the game's own suggestion), `unseen`, and `combos`: every recipe the option is part of, with the partner, whether you hold it (`partnerHeld`), whether picking completes it (`ready`), and whether you have ever made the result (`made`).
 - `{"type":"dash","dir":"up"}`, `{"type":"stop"}`, `{"type":"pause"}`, `{"type":"resume"}`, and `{"type":"start","difficulty":"easy"}` to start an Open World run from the title or end screen.
 
 Positions are world units. `x` grows to the right and `y` grows downward, and the player walks about 62 units a second at base speed. Every listed thing carries `dx`, `dy`, `dist`, a compass `dir` from the player, and `onScreen`. Things off screen are the ones the game points at with arrows at the screen edge.

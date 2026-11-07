@@ -52,6 +52,12 @@ export type Owned = { id: string; name: string; level: number; max: number };
 export type ComboPart = { key: string; name: string; need: "own" | "max"; state: "done" | "leveling" | "missing"; have?: number; max?: number };
 export type ComboView = { result: string; name: string; kind: "evolution" | "union" | "itemEvolution"; ready: boolean; made: boolean; parts: ComboPart[] };
 
+/** One recipe an option joins: `ready` means picking the option completes it. */
+export type PairingView = ComboView & { partner: { key: string; name: string }; partnerHeld: boolean };
+
+/** A held weapon, passive or item with recipes left and no partner held yet, as in the panel. */
+export type UnpairedView = { key: string; name: string; options: { key: string; name: string; result: string; resultName: string; made: boolean }[] };
+
 export type OptionView = {
   index: number;
   type: string;
@@ -62,8 +68,8 @@ export type OptionView = {
   recommended: boolean;
   /** Never offered before in this browser profile. */
   unseen: boolean;
-  /** Recipes this option joins with what is already held. */
-  combos: ComboView[];
+  /** Every recipe this option is part of whose result is not held yet, held partners first. */
+  combos: PairingView[];
 };
 
 export type Snapshot = {
@@ -90,7 +96,9 @@ export type RunView = {
     invulnerable: boolean;
   };
   loadout: { weapons: Owned[]; passives: Owned[]; items: { id: string; name: string; count: number }[] };
+  /** Recipes using something held. */
   combos: ComboView[];
+  unpaired: UnpairedView[];
   choice?: { kind: string; options: OptionView[]; raw?: unknown };
   bosses: (Rel & { id: string; name: string; hp: number; maxHp: number; radius: number })[];
   enemies: { total: number; nearest: (Rel & { id: string; name: string; hp: number; radius: number; elite: boolean })[] };
