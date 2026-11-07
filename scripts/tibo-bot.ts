@@ -141,7 +141,10 @@ async function experimentDue(): Promise<boolean> {
   const finished: string[] = [];
   for (const name of names.sort().reverse()) {
     const text = await Bun.file(path.join(NOTES_DIR, name)).text();
-    if (text.includes(`| Mode | ${MODE} ${DIFFICULTY} |`) && text.includes("Survived **")) finished.push(text);
+    if (!text.includes(`| Mode | ${MODE} ${DIFFICULTY} |`)) continue;
+    // Another bot already playing an experiment counts, or two bots run the same one at once.
+    if (text.includes("| Run type | experiment") && text.includes("(the run is in progress)")) return false;
+    if (text.includes("Survived **")) finished.push(text);
     if (finished.length === EXPERIMENT_EVERY - 1) break;
   }
   return finished.length === EXPERIMENT_EVERY - 1 && finished.every((t) => !t.includes("| Run type | experiment"));
