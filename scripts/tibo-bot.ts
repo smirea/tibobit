@@ -41,6 +41,10 @@ const COACH_MODEL = option("coach-model", "grok-4.7-build-fast");
 const TAKEOVER = args.includes("--takeover");
 // Incognito runs just play: no notes file, no review, and they do not count toward experiments.
 const INCOGNITO = args.includes("--incognito");
+// After each review the bot commits and pushes gameplay/, so every edit the coach makes to its own
+// files can be read back and undone.
+const COMMIT = !args.includes("--no-commit");
+if (COMMIT && Bun.which("gai") === null) throw new Error("committing gameplay/ after each review needs gai on PATH; pass --no-commit to skip it");
 const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
 
@@ -451,7 +455,7 @@ const REVIEW_CONTRACT = [
 
 type PlanReply = { intent: string; testing: string[]; templates: Templates; edits: loop.LoopEdits };
 
-function checkPlan(raw: Record<string, unknown>, base: Templates, before: loop.ExperimentRow[]): loop.Checked<PlanReply> {
+function checkPlan(raw: Record<string, unknown>, base: Templates, before: loop.Tables): loop.Checked<PlanReply> {
   const errors: string[] = [];
   const templates = loop.checkTemplates(raw as { planner?: unknown; action?: unknown; knobs?: unknown }, base);
   const edits = loop.checkEdits(raw, before);
@@ -460,13 +464,13 @@ function checkPlan(raw: Record<string, unknown>, base: Templates, before: loop.E
   if (!loop.isText(raw.intent)) errors.push("intent must be a short paragraph");
   const testing = Array.isArray(raw.testing) && raw.testing.every((x) => typeof x === "string") ? (raw.testing as string[]) : undefined;
   if (testing === undefined) errors.push("testing must be an array of experiment ids");
-  const rows = ("value" in edits ? edits.value.experiments : undefined) ?? before;
+  const rows = ("value" in edits ? edits.value.experiments : undefined) ?? before.experiments;
   for (const id of testing ?? []) if (!rows.some((r) => r.id === id)) errors.push(`testing names ${id}, which is not a row of the experiments table`);
   if (errors.length > 0 || !("value" in templates) || !("value" in edits)) return { errors };
   return { value: { intent: String(raw.intent), testing: testing ?? [], templates: templates.value, edits: edits.value } };
 }
 
-function checkReview(raw: Record<string, unknown>, before: loop.ExperimentRow[]): loop.Checked<{ notes: string; edits: loop.LoopEdits }> {
+function checkReview(raw: Record<string, unknown>, before: loop.Tables): loop.Checked<{ notes: string; edits: loop.LoopEdits }> {
   const errors: string[] = [];
   const edits = loop.checkEdits(raw, before);
   if ("errors" in edits) errors.push(...edits.errors);
@@ -477,6 +481,8 @@ function checkReview(raw: Record<string, unknown>, before: loop.ExperimentRow[])
 }
 
 const loopFiles = async () => [
+  "## Beliefs (gameplay/beliefs.csv): what the loop holds true now",
+  await Bun.file(loop.BELIEFS_CSV).text(),
   "## Experiments (gameplay/experiments.csv)",
   await Bun.file(loop.EXPERIMENTS_CSV).text(),
   "## Infrastructure requests (gameplay/infrastructure_feedback.csv)",
@@ -517,7 +523,7 @@ async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ pla
     PLAN_CONTRACT,
   ].join("\n\n");
   const bubble = new CoachBubble("Planning the run…", 0);
-  const before = await loop.readExperiments();
+  const before = await loop.readTables();
   const reply = await consult(prompt, PLAN_TIMEOUT_MS, bubble, (raw) => checkPlan(raw, base.templates, before));
   if (reply === undefined) return reuse("the coach gave no usable plan");
   const changed = await loop.applyEdits(reply.edits, loop.runId(setup.started));
@@ -559,7 +565,7 @@ async function reviewRun(text: string, name: string): Promise<{ review: string; 
     REVIEW_CONTRACT,
   ].join("\n\n");
   const bubble = new CoachBubble("Reviewing the run…");
-  const before = await loop.readExperiments();
+  const before = await loop.readTables();
   const reply = await consult(prompt, REVIEW_TIMEOUT_MS, bubble, (raw) => checkReview(raw, before));
   if (reply === undefined) return undefined;
   const changed = await loop.applyEdits(reply.edits, name.slice(0, 19));
@@ -567,10 +573,33 @@ async function reviewRun(text: string, name: string): Promise<{ review: string; 
     const runs = row.runs.split(/;\s*/).filter(Boolean);
     if (!runs.includes(name)) row.runs = [...runs, name].join("; ");
   });
-  const summary = reply.notes.match(/^## Summary\s*\n+([^\n]+(?:\n[^\n#]+)*)/m)?.[1] ?? reply.notes.slice(0, 600);
-  bubble.set({ text: summary.trim(), ...(changed.length === 0 ? {} : { detail: `Updated ${changed.join(", ")}.` }) });
+  bubble.set({ text: summaryOf(reply.notes), ...(changed.length === 0 ? {} : { detail: `Updated ${changed.join(", ")}.` }) });
   if (changed.length > 0) console.log(`review updated ${changed.join(", ")}`);
   return { review: reply.notes, prompts: `${(loop.notesField(text, "Coach prompts") ?? "none").replace(/; coach-retrospective\.md \w+/g, "")}; coach-retrospective.md ${loop.hash(instructions)}` };
+}
+
+const summaryOf = (review: string) => (review.match(/^## Summary\s*\n+([^\n]+(?:\n[^\n#]+)*)/m)?.[1] ?? review.slice(0, 600)).trim();
+
+/** Commits gameplay/ with the reviewed run's notes and pushes it; a failure is reported, never fatal. */
+async function commitGameplay(name: string, review: string, testing: string[]) {
+  if (!COMMIT) return;
+  const run = (cmd: string[], env?: Record<string, string>) => {
+    const p = Bun.spawnSync(cmd, { cwd: loop.GAMEPLAY, stdout: "pipe", stderr: "pipe", env: { ...process.env, ...env } });
+    return { ok: p.exitCode === 0, out: `${p.stdout.toString()}${p.stderr.toString()}`.trim() };
+  };
+  run(["git", "add", "-A", "--", "."]);
+  if (run(["git", "diff", "--cached", "--quiet", "--", "."]).ok) return;
+  const lived = name.match(/lived-(\d+)-(\d+)/);
+  const title = `docs(gameplay): review the ${name.slice(0, 16).replace("_", " ").replace(/-(\d\d)$/, ":$1")} run, lived ${lived === null ? "?" : `${Number(lived[1])}:${lived[2]}`}${testing.length === 0 ? "" : `, testing ${testing.join(", ")}`}`;
+  // --only commits gameplay/ alone, whatever else someone has staged.
+  const commit = run(["gai", "-m", `${title}\n\n${summaryOf(review)}`, "--only", "--", "."], { AI_COMITTER_NAME: COACH_MODEL });
+  if (!commit.ok) {
+    console.error(`could not commit gameplay/: ${commit.out}`);
+    say({ role: "system", text: "Could not commit gameplay/ after the review.", detail: commit.out.slice(0, 500) });
+    return;
+  }
+  const push = run(["git", "push"]);
+  console.log(push.ok ? `committed and pushed gameplay/: ${title}` : `committed gameplay/ but could not push: ${push.out}`);
 }
 
 const withPrompts = (text: string, prompts: string) => text.replace(/^\| Coach prompts \| .* \|$/m, () => `| Coach prompts | ${prompts} |`);
@@ -582,6 +611,7 @@ async function reviewNotesFile(file: string) {
   if (done === undefined) throw new Error("the coach gave no review");
   await Bun.write(file, withPrompts(loop.withReview(text, done.review), done.prompts));
   console.log(`reviewed ${file}`);
+  await commitGameplay(path.basename(file), done.review, loop.notesTesting(text));
 }
 
 // ---- What the game says about things -------------------------------------------------------
@@ -1302,6 +1332,7 @@ class Planner {
     this.notes.review = done?.review ?? `(no review: the coach gave none. Rerun it with ./scripts/tibo-bot.ts --review ${file})`;
     if (done !== undefined) this.notes.prompts = done.prompts;
     await this.notes.write();
+    if (done !== undefined) await commitGameplay(path.basename(file), done.review, this.notes.plan.testing);
   }
 }
 

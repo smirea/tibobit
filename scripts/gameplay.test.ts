@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { checkEdits, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type ExperimentRow, notesName, notesTemplates, notesTesting, parseCsv, readExperiments, renderNotes, type RunSetup, withReview } from "./gameplay";
+import { type BeliefRow, checkEdits, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type ExperimentRow, notesName, notesTemplates, notesTesting, parseCsv, readExperiments, renderNotes, type RunSetup, withReview } from "./gameplay";
 
 const setup: RunSetup = { started: new Date(2026, 10, 7, 15, 4, 9), difficulty: "nightmare", mode: "daily", surface: "headless", seed: "S1", planner: "jev", action: "jev", coach: "grok" };
 
@@ -28,8 +28,16 @@ test("templates may only use the values their slot has, and must use the require
 
 test("the coach may retire an experiment but not delete it", () => {
   const row: ExperimentRow = { id: "E1", created: "2026-11-07", status: "proposed", hypothesis: "h", test: "t", runs: "", outcome: "", result: "", learnings: "" };
-  expect(checkEdits({ experiments: [{ ...row, id: "E2" }] }, [row])).toEqual({ errors: ["experiment E1 is missing: rows are never deleted, set status retired instead"] });
-  expect(checkEdits({ experiments: [{ ...row, status: "retired" }] }, [row])).toEqual({ value: { experiments: [{ ...row, status: "retired" }] } });
+  expect(checkEdits({ experiments: [{ ...row, id: "E2" }] }, { experiments: [row], beliefs: [] })).toEqual({ errors: ["experiments E1 is missing: rows are never deleted, set status retired instead"] });
+  expect(checkEdits({ experiments: [{ ...row, status: "retired" }] }, { experiments: [row], beliefs: [] })).toEqual({ value: { experiments: [{ ...row, status: "retired" }] } });
+});
+
+test("a belief keeps the run that wrote it, and takes the run that last changed it", () => {
+  const held: BeliefRow = { id: "B1", about: "game", claim: "Hot oil hurts most.", confidence: "lead", status: "held", evidence: "run 1", experiments: "E1", created: "run-1", updated: "run-1" };
+  const raised = { ...held, confidence: "likely", created: "", updated: "" };
+  const fresh = { ...held, id: "B2", created: "made up", updated: "made up" };
+  expect(stampBeliefs([{ ...held, updated: "" }, fresh], [held], "run-2")).toEqual([held, { ...fresh, created: "run-2", updated: "run-2" }]);
+  expect(stampBeliefs([raised], [held], "run-2")).toEqual([{ ...raised, created: "run-1", updated: "run-2" }]);
 });
 
 test("csv fields keep their commas and quotes", () => {

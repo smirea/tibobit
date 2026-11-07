@@ -10,6 +10,7 @@ export const NOTES_DIR = path.join(GAMEPLAY, "notes");
 export const COACH_PLAN = path.join(GAMEPLAY, "coach-plan.md");
 export const COACH_RETROSPECTIVE = path.join(GAMEPLAY, "coach-retrospective.md");
 export const EXPERIMENTS_CSV = path.join(GAMEPLAY, "experiments.csv");
+export const BELIEFS_CSV = path.join(GAMEPLAY, "beliefs.csv");
 export const INFRA_CSV = path.join(GAMEPLAY, "infrastructure_feedback.csv");
 
 export type Checked<T> = { value: T } | { errors: string[] };
@@ -53,10 +54,6 @@ const csvField = (v: string) => {
   return /[",]/.test(flat) ? `"${flat.replace(/"/g, '""')}"` : flat;
 };
 
-export const EXPERIMENT_COLUMNS = ["id", "created", "status", "hypothesis", "test", "runs", "outcome", "result", "learnings"] as const;
-export type ExperimentRow = Record<(typeof EXPERIMENT_COLUMNS)[number], string>;
-export const STATUSES = ["proposed", "running", "done", "recheck", "retired"];
-export const RESULTS = ["", "confirmed", "refuted", "inconclusive"];
 export const INFRA_COLUMNS = ["date", "run", "status", "request", "why"] as const;
 export type InfraRow = Record<(typeof INFRA_COLUMNS)[number], string>;
 
@@ -73,14 +70,58 @@ async function writeTable<C extends readonly string[]>(file: string, columns: C,
   await Bun.write(file, [columns.join(","), ...rows.map((r) => columns.map((c) => csvField(r[c as C[number]])).join(","))].join("\n") + "\n");
 }
 
+/**
+ * A table the coach rewrites whole. Its rows are never deleted, only moved to `retire`, so nothing
+ * the loop learned is lost; `stamps` are columns the bot fills, never the coach.
+ */
+type Table<C extends readonly string[]> = {
+  name: string;
+  file: string;
+  columns: C;
+  required: C[number][];
+  enums: Partial<Record<C[number], readonly string[]>>;
+  retire: string;
+  stamps: C[number][];
+};
+
+const EXPERIMENT_COLUMNS = ["id", "created", "status", "hypothesis", "test", "runs", "outcome", "result", "learnings"] as const;
+export type ExperimentRow = Record<(typeof EXPERIMENT_COLUMNS)[number], string>;
+export const EXPERIMENTS: Table<typeof EXPERIMENT_COLUMNS> = {
+  name: "experiments",
+  file: EXPERIMENTS_CSV,
+  columns: EXPERIMENT_COLUMNS,
+  required: ["id", "hypothesis"],
+  enums: { status: ["proposed", "running", "done", "recheck", "retired"], result: ["", "confirmed", "refuted", "inconclusive"] },
+  retire: "status retired",
+  stamps: [],
+};
+
+// What the loop holds true right now, about the game or about how the models behave. Experiments
+// are questions; beliefs are the answers that survived them, kept so a rewritten prompt cannot
+// quietly drop one.
+const BELIEF_COLUMNS = ["id", "about", "claim", "confidence", "status", "evidence", "experiments", "created", "updated"] as const;
+export type BeliefRow = Record<(typeof BELIEF_COLUMNS)[number], string>;
+export const BELIEFS: Table<typeof BELIEF_COLUMNS> = {
+  name: "beliefs",
+  file: BELIEFS_CSV,
+  columns: BELIEF_COLUMNS,
+  required: ["id", "claim", "evidence"],
+  enums: { about: ["game", "planner", "action", "coach"], confidence: ["lead", "likely", "confirmed"], status: ["held", "recheck", "disproved"] },
+  retire: "status disproved",
+  stamps: ["created", "updated"],
+};
+
 export const readExperiments = () => readTable(EXPERIMENTS_CSV, EXPERIMENT_COLUMNS);
+export const readBeliefs = () => readTable(BELIEFS_CSV, BELIEF_COLUMNS);
 export const readInfra = () => readTable(INFRA_CSV, INFRA_COLUMNS);
+export type Tables = { experiments: ExperimentRow[]; beliefs: BeliefRow[] };
+export const readTables = async (): Promise<Tables> => ({ experiments: await readExperiments(), beliefs: await readBeliefs() });
 
 /** Fails at startup, not after a run, when a loop file is missing or the coach left one unreadable. */
 export async function checkLoopFiles() {
   mkdirSync(NOTES_DIR, { recursive: true });
   for (const f of [COACH_PLAN, COACH_RETROSPECTIVE]) if (!(await Bun.file(f).exists())) throw new Error(`${f} is missing`);
-  await readExperiments();
+  await readTables();
   await readInfra();
 }
 
@@ -219,39 +260,50 @@ export function checkTemplates(raw: { planner?: unknown; action?: unknown; knobs
 }
 
 // ---- Coach edits ---------------------------------------------------------------------------
-// Both coach calls may rewrite the experiments table, file infrastructure requests, and rewrite
-// either coach prompt. Rows are never deleted, only retired, so no experiment's history is lost.
+// Both coach calls may rewrite the experiments and beliefs tables, file infrastructure requests,
+// and rewrite either coach prompt.
 
-export type LoopEdits = { experiments?: ExperimentRow[]; infra?: { request: string; why: string }[]; coachPlan?: string; coachRetrospective?: string };
+export type LoopEdits = { experiments?: ExperimentRow[]; beliefs?: BeliefRow[]; infra?: { request: string; why: string }[]; coachPlan?: string; coachRetrospective?: string };
 const PROMPT_LIMIT = 30_000;
 
-export function checkEdits(raw: Record<string, unknown>, before: ExperimentRow[]): Checked<LoopEdits> {
+function checkTable<C extends readonly string[]>(raw: unknown, table: Table<C>, before: Record<C[number], string>[], errors: string[]): Record<C[number], string>[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) {
+    errors.push(`${table.name} must be the whole table as an array of rows`);
+    return undefined;
+  }
+  const columns = table.columns as readonly C[number][];
+  const rows: Record<C[number], string>[] = [];
+  for (const [i, r] of raw.entries()) {
+    if (typeof r !== "object" || r === null) {
+      errors.push(`${table.name}[${i}] must be an object`);
+      continue;
+    }
+    const o = r as Record<string, unknown>;
+    for (const k of Object.keys(o)) if (!(columns as readonly string[]).includes(k)) errors.push(`${table.name}[${i}].${k} is not a column; the columns are ${columns.join(", ")}`);
+    const row = Object.fromEntries(columns.map((c) => [c, o[c] === undefined || o[c] === null ? "" : String(o[c])])) as Record<C[number], string>;
+    const id = row[columns[0] as C[number]] || `[${i}]`;
+    for (const c of table.required) if (!isText(row[c])) errors.push(`${table.name} ${id} has no ${c}`);
+    for (const [c, allowed] of Object.entries(table.enums) as [C[number], readonly string[]][])
+      if (!allowed.includes(row[c])) errors.push(`${table.name} ${id} ${c} must be ${allowed.includes("") ? "empty or " : ""}one of ${allowed.filter(Boolean).join(", ")}`);
+    rows.push(row);
+  }
+  const ids = rows.map((r) => r[columns[0] as C[number]]);
+  for (const id of new Set(ids.filter((id, i) => ids.indexOf(id) !== i))) errors.push(`${table.name} id ${id} is used twice`);
+  for (const old of before) {
+    const id = old[columns[0] as C[number]];
+    if (!ids.includes(id)) errors.push(`${table.name} ${id} is missing: rows are never deleted, set ${table.retire} instead`);
+  }
+  return rows;
+}
+
+export function checkEdits(raw: Record<string, unknown>, before: Tables): Checked<LoopEdits> {
   const errors: string[] = [];
   const edits: LoopEdits = {};
-  if (raw.experiments !== undefined) {
-    if (!Array.isArray(raw.experiments)) errors.push("experiments must be the whole table as an array of rows");
-    else {
-      const rows: ExperimentRow[] = [];
-      for (const [i, r] of raw.experiments.entries()) {
-        if (typeof r !== "object" || r === null) {
-          errors.push(`experiments[${i}] must be an object`);
-          continue;
-        }
-        const o = r as Record<string, unknown>;
-        for (const k of Object.keys(o)) if (!(EXPERIMENT_COLUMNS as readonly string[]).includes(k)) errors.push(`experiments[${i}].${k} is not a column; the columns are ${EXPERIMENT_COLUMNS.join(", ")}`);
-        const row = Object.fromEntries(EXPERIMENT_COLUMNS.map((c) => [c, o[c] === undefined || o[c] === null ? "" : String(o[c])])) as ExperimentRow;
-        if (!isText(row.id)) errors.push(`experiments[${i}] has no id`);
-        if (!isText(row.hypothesis)) errors.push(`experiment ${row.id} has no hypothesis`);
-        if (!STATUSES.includes(row.status)) errors.push(`experiment ${row.id} status must be one of ${STATUSES.join(", ")}`);
-        if (!RESULTS.includes(row.result)) errors.push(`experiment ${row.id} result must be empty or one of ${RESULTS.filter(Boolean).join(", ")}`);
-        rows.push(row);
-      }
-      const ids = rows.map((r) => r.id);
-      for (const id of new Set(ids.filter((id, i) => ids.indexOf(id) !== i))) errors.push(`experiment id ${id} is used twice`);
-      for (const old of before) if (!ids.includes(old.id)) errors.push(`experiment ${old.id} is missing: rows are never deleted, set status retired instead`);
-      edits.experiments = rows;
-    }
-  }
+  const experiments = checkTable(raw.experiments, EXPERIMENTS, before.experiments, errors);
+  if (experiments !== undefined) edits.experiments = experiments;
+  const beliefs = checkTable(raw.beliefs, BELIEFS, before.beliefs, errors);
+  if (beliefs !== undefined) edits.beliefs = beliefs;
   if (raw.infra !== undefined) {
     if (!Array.isArray(raw.infra) || !raw.infra.every((x) => typeof x === "object" && x !== null && isText((x as { request?: unknown }).request)))
       errors.push('infra must be an array of {"request": "...", "why": "..."}');
@@ -269,6 +321,15 @@ export function checkEdits(raw: Record<string, unknown>, before: ExperimentRow[]
   return errors.length > 0 ? { errors } : { value: edits };
 }
 
+/** A belief keeps the run it was first written in, and gets the current run whenever the coach changes it. */
+export function stampBeliefs(rows: BeliefRow[], before: BeliefRow[], run: string): BeliefRow[] {
+  const same = (a: BeliefRow, b: BeliefRow) => BELIEF_COLUMNS.every((c) => BELIEFS.stamps.includes(c) || a[c] === b[c]);
+  return rows.map((row) => {
+    const old = before.find((b) => b.id === row.id);
+    return { ...row, created: old?.created ?? run, updated: old !== undefined && same(old, row) ? old.updated : run };
+  });
+}
+
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** Writes the coach's edits. `run` is the run's id, the start of its notes file name. */
@@ -277,6 +338,10 @@ export async function applyEdits(edits: LoopEdits, run: string): Promise<string[
   if (edits.experiments !== undefined) {
     await writeTable(EXPERIMENTS_CSV, EXPERIMENT_COLUMNS, edits.experiments);
     done.push(`experiments.csv (${edits.experiments.length} rows)`);
+  }
+  if (edits.beliefs !== undefined) {
+    await writeTable(BELIEFS_CSV, BELIEF_COLUMNS, stampBeliefs(edits.beliefs, await readBeliefs(), run));
+    done.push(`beliefs.csv (${edits.beliefs.length} rows)`);
   }
   if (edits.infra !== undefined && edits.infra.length > 0) {
     await writeTable(INFRA_CSV, INFRA_COLUMNS, [...(await readInfra()), ...edits.infra.map((x) => ({ date: today(), run, status: "open", request: x.request, why: x.why }))]);
@@ -463,8 +528,18 @@ export function catalog(): string {
   ].join("\n");
 }
 
+function tableContract<C extends readonly string[]>(t: Table<C>, about: string): string {
+  const enums = Object.entries(t.enums as Record<string, readonly string[]>).map(([c, v]) => `${c} is ${v.includes("") ? "empty or " : ""}one of ${v.filter(Boolean).join(", ")}`);
+  const stamps = t.stamps.length === 0 ? "" : ` The bot fills ${t.stamps.join(" and ")}.`;
+  return `"${t.name}": ${about} The whole table as an array of row objects with the keys ${t.columns.join(", ")}; ${enums.join("; ")}.${stamps} Rows are never deleted: set ${t.retire} instead. Leave the key out to keep the table as it is.`;
+}
+
 export const EDITS_CONTRACT = [
-  '"experiments": the whole experiments table as an array of row objects with the keys ' + EXPERIMENT_COLUMNS.join(", ") + `. status is one of ${STATUSES.join(", ")}; result is empty or one of ${RESULTS.filter(Boolean).join(", ")}. Rows are never deleted: retire them. Leave the key out to keep the table as it is.`,
+  tableContract(EXPERIMENTS, "the questions the loop asks of the game and of the models."),
+  tableContract(
+    BELIEFS,
+    "what the loop holds true now, each claim short enough to act on, with the runs and numbers behind it in evidence and the experiment ids in experiments. Write a belief once a finding is worth acting on (lead), raise its confidence when another run agrees, set it to recheck when a run contradicts it, and to disproved when a recheck refutes it.",
+  ),
   '"infra": new requests for the coding harness, an array of {"request": "what to build or change in the bot", "why": "what it would let the loop learn or do"}. Only for what no template, knob or prompt edit can do. Leave it out when there are none.',
   '"coachPlan" and "coachRetrospective": the whole new coach-plan.md or coach-retrospective.md, only when the way the loop plans or reviews should change. Leave them out otherwise.',
 ].join("\n");
