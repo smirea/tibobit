@@ -123,7 +123,7 @@ const CHECKPOINTS = [30, 150, 300, 480, 660, 840, 1020, 1140];
 const COACH_COOLDOWN = 45;
 // A post-run review rewrites two files in one reply, which can take grok a few minutes. A consult
 // during the run holds the paused game, so it gets less.
-const REVIEW_TIMEOUT_MS = 420_000;
+const REVIEW_TIMEOUT_MS = 900_000;
 const CONSULT_TIMEOUT_MS = 180_000;
 const URGENT_COOLDOWN = 10;
 const LOW_HEALTH = 0.5;
