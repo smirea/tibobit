@@ -277,6 +277,27 @@
   var MAX_POIS = 15;
   var SECTOR_RANGE = 300;
   var PATH_AHEAD = 60;
+  var HURT_WINDOW_TICKS = 180;
+  var hurtHistory = [];
+  function recentHurt(s) {
+    const totals = new Map(s.run.damageTakenBySource);
+    if (hurtHistory.length > 0 && (hurtHistory.at(-1)?.tick ?? 0) > s.tick)
+      hurtHistory = [];
+    hurtHistory.push({ tick: s.tick, totals });
+    while (hurtHistory.length > 1 && (hurtHistory[1]?.tick ?? 0) <= s.tick - HURT_WINDOW_TICKS)
+      hurtHistory.shift();
+    const before = hurtHistory[0]?.totals ?? new Map;
+    const out = {};
+    for (const [source, total] of totals) {
+      const delta = total - (before.get(source) ?? 0);
+      if (delta >= 0.5)
+        out[source] = round(delta);
+    }
+    return out;
+  }
+  function byDamage(m) {
+    return Object.fromEntries([...m].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => [k, Math.round(v)]));
+  }
   function directionOf(dx, dy) {
     const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
     return DIRECTIONS[(octant + 8) % 8] ?? "right";
@@ -551,7 +572,8 @@
         xpNext: round(s.loadout.xpNext),
         gold: Math.floor(s.loadout.gold),
         dashCharges: s.player.dashCharges[me] ?? 0,
-        invulnerable: (s.player.invuln[me] ?? 0) > 0
+        invulnerable: (s.player.invuln[me] ?? 0) > 0,
+        hurtBy: recentHurt(s)
       },
       loadout: {
         weapons: s.loadout.weapons.map((w) => owned(`weapon:${w.def.id}`, w.level)),
@@ -589,7 +611,7 @@
   function snapshot(link, discovery, commands) {
     const base = { capturedAt: Date.now(), commands, ...link.error === undefined ? {} : { error: link.error } };
     const game = link.game;
-    const ended = game?.state.over ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, kills: game.state.run.kills } } : {};
+    const ended = game?.state.over ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, kills: game.state.run.kills, damageTaken: byDamage(game.state.run.damageTakenBySource) } } : {};
     if (game === undefined || !inRun(link))
       return { ...base, ...ended, screen: game?.state.over ? "over" : "title" };
     const d = liveData(link);

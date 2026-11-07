@@ -127,6 +127,19 @@ const inPlan = (name: string) => plan?.want.some((w) => w.toLowerCase() === name
 
 const plural = (n: number, one: string) => `${n} ${n === 1 ? one : one.replace(/y$/, "ie")}${n === 1 ? "" : "s"}`;
 
+function sourceWords(source: string): string {
+  if (!source.includes(":")) return source.toLowerCase();
+  const [kind = "", id = ""] = source.split(":");
+  if (kind === "enemy") return `${id.replace(/-/g, " ")} enemies`;
+  if (kind === "boss") return `the ${id.replace(/-/g, " ")} boss`;
+  return hazardWords(source);
+}
+
+function hurtLine(r: RunView): string[] {
+  const sources = Object.entries(r.player.hurtBy).sort((a, b) => b[1] - a[1]).slice(0, 2);
+  return sources.length === 0 ? [] : [`In the last 3 seconds Tibo was hurt by ${sources.map(([k]) => sourceWords(k)).join(" and ")}.`];
+}
+
 function situation(r: RunView): string {
   const p = r.player;
   const hp = Math.round((p.hp / p.maxHp) * 100);
@@ -144,6 +157,7 @@ function situation(r: RunView): string {
           : `Tibo is standing where a boss attack lands in ${h.landsIn.toFixed(1)} seconds, and must step out of it.`,
       ),
     `Weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}. Passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
+    ...hurtLine(r),
     ...(plan === undefined ? [] : [`Plan: ${plan.advice}`]),
   ].join("\n");
 }
@@ -266,6 +280,7 @@ async function main() {
       if (s.screen === "over" && s.lastRun !== undefined && runs > 0) {
         const avg = latency.reduce((a, b) => a + b, 0) / Math.max(1, latency.length);
         console.log(`run ${runs} ended at ${s.lastRun.time}s, level ${s.lastRun.level}, ${s.lastRun.kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
+        console.log(`  damage taken: ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}`);
         log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, seed: lastSeed, ...s.lastRun, steps, planCalls, avgDecisionMs: Math.round(avg) })}\n`);
         log.flush();
         if (runs >= RUNS) return;

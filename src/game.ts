@@ -80,7 +80,7 @@ export type GameState = {
   paused: boolean;
   tick: number;
   runClock: number;
-  run: { timeSec: number; level: number; kills: number; seed: string };
+  run: { timeSec: number; level: number; kills: number; seed: string; damageTakenBySource: Map<string, number> };
   daily: unknown;
 };
 

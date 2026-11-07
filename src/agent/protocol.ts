@@ -91,8 +91,8 @@ export type Snapshot = {
   capturedAt: number;
   screen: "title" | "run" | "choice" | "paused" | "over";
   run?: RunView;
-  /** How the most recent run went; set once a run has ended. */
-  lastRun?: { time: number; level: number; kills: number };
+  /** How the most recent run went; set once a run has ended. `damageTaken` is by source, largest first. */
+  lastRun?: { time: number; level: number; kills: number; damageTaken: Record<string, number> };
   commands: CommandStatus[];
   error?: string;
 };
@@ -114,6 +114,8 @@ export type RunView = {
     gold: number;
     dashCharges: number;
     invulnerable: boolean;
+    /** Damage taken in the last 3 game seconds by source, such as "enemy:aphid", "boss:..." or "burn". */
+    hurtBy: Record<string, number>;
   };
   /** `banished` lists the ids banished this run, which the game never offers again. */
   loadout: { weapons: Owned[]; passives: Owned[]; items: { id: string; name: string; count: number }[]; banished: string[] };

@@ -23,6 +23,28 @@ const HAZARD_RANGE = 600;
 const MAX_POIS = 15;
 const SECTOR_RANGE = 300;
 const PATH_AHEAD = 60;
+const HURT_WINDOW_TICKS = 180;
+
+// Cumulative damage by source at recent ticks, to report what hurt the player lately.
+let hurtHistory: { tick: number; totals: Map<string, number> }[] = [];
+
+function recentHurt(s: GameState): Record<string, number> {
+  const totals = new Map(s.run.damageTakenBySource);
+  if (hurtHistory.length > 0 && (hurtHistory.at(-1)?.tick ?? 0) > s.tick) hurtHistory = [];
+  hurtHistory.push({ tick: s.tick, totals });
+  while (hurtHistory.length > 1 && (hurtHistory[1]?.tick ?? 0) <= s.tick - HURT_WINDOW_TICKS) hurtHistory.shift();
+  const before = hurtHistory[0]?.totals ?? new Map<string, number>();
+  const out: Record<string, number> = {};
+  for (const [source, total] of totals) {
+    const delta = total - (before.get(source) ?? 0);
+    if (delta >= 0.5) out[source] = round(delta);
+  }
+  return out;
+}
+
+function byDamage(m: Map<string, number>): Record<string, number> {
+  return Object.fromEntries([...m].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => [k, Math.round(v)]));
+}
 
 export function directionOf(dx: number, dy: number): Direction {
   const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
@@ -320,6 +342,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
       gold: Math.floor(s.loadout.gold),
       dashCharges: s.player.dashCharges[me] ?? 0,
       invulnerable: (s.player.invuln[me] ?? 0) > 0,
+      hurtBy: recentHurt(s),
     },
     loadout: {
       weapons: s.loadout.weapons.map((w) => owned(`weapon:${w.def.id}`, w.level)),
@@ -359,7 +382,9 @@ export function inRun(link: GameLink): boolean {
 export function snapshot(link: GameLink, discovery: Discovery, commands: CommandStatus[]): Snapshot {
   const base = { capturedAt: Date.now(), commands, ...(link.error === undefined ? {} : { error: link.error }) };
   const game = link.game;
-  const ended = game?.state.over ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, kills: game.state.run.kills } } : {};
+  const ended = game?.state.over
+    ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, kills: game.state.run.kills, damageTaken: byDamage(game.state.run.damageTakenBySource) } }
+    : {};
   if (game === undefined || !inRun(link)) return { ...base, ...ended, screen: game?.state.over ? "over" : "title" };
   const d = liveData(link);
   if (d === undefined || !link.ready) return { ...base, screen: "run", error: link.error ?? "game content not loaded yet" };
