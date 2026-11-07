@@ -512,6 +512,18 @@ async function main() {
   // The previous run's notes wait for its share link, which appears while the next run starts.
   let awaitingLink: { notes: RunNotes; known: string | undefined } | undefined;
   console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, speed x${SPEED}, coach ${COACH}, log ${LOG}`);
+  // A run the bot is stopped in the middle of says so in its notes instead of staying "in progress".
+  const stop = async (signal: string) => {
+    if (notes !== undefined) {
+      notes.link = "none (run aborted)";
+      notes.outcome = `- Aborted at ${last === undefined ? "the start" : clock(last.time)}: the bot was stopped (${signal}).`;
+      notes.review = "No review: the run was stopped, not lost.";
+      await notes.write();
+    }
+    process.exit(0);
+  };
+  process.on("SIGINT", () => void stop("SIGINT"));
+  process.on("SIGTERM", () => void stop("SIGTERM"));
   await command({ type: "speed", factor: SPEED });
   const first = await api<Snap>("/state");
   if (first.screen !== "title" && first.screen !== "over") runs = 1;

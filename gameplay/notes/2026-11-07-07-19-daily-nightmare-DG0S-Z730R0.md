@@ -1,6 +1,6 @@
 # Run 2026-11-07 07:19, daily nightmare
 
-Run link: pending: written once the game shows the run summary
+Run link: none (run aborted)
 
 | | |
 | --- | --- |
@@ -20,8 +20,8 @@ Coach notes taken during the run, by game time.
 
 ## Outcome
 
-(the run is in progress)
+- Aborted in the first minute: the bot was restarted to switch level-up picks to h2o-lightning.
 
 ## Review
 
-(written after the run)
+No review: the run was stopped, not lost.
