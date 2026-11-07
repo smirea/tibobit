@@ -137,14 +137,21 @@ export class Controller {
     // Advance through them, never pressing anything that leaves the game, such as "Try Grok Bot".
     let again: HTMLButtonElement | undefined;
     for (let i = 0; i < 15 && button("Open World") === undefined; i++) {
-      again = button(/^(Play again|Retry|Try again|Again|Run again)$/i);
-      if (again !== undefined) break;
-      const next = button(/^(Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
-      if (next === undefined) {
+      if (i === 14) {
         const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
         throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
       }
-      press(next);
+      again = button(/^(Play again|Retry|Try again|Again|Run again)$/i);
+      if (again !== undefined) break;
+      const next = button(/^(Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
+      if (next !== undefined) press(next);
+      else {
+        // Some end screens (the run summary) have no button and listen for keys instead.
+        for (const key of ["Escape", "Enter"]) {
+          for (const type of ["keydown", "keyup"]) window.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
+          await wait(400);
+        }
+      }
       await wait(1200);
     }
     if (again !== undefined) press(again);

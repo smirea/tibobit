@@ -773,15 +773,23 @@
         throw new Error("a run is already in progress");
       let again;
       for (let i = 0;i < 15 && button("Open World") === undefined; i++) {
+        if (i === 14) {
+          const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
+          throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
+        }
         again = button(/^(Play again|Retry|Try again|Again|Run again)$/i);
         if (again !== undefined)
           break;
         const next = button(/^(Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
-        if (next === undefined) {
-          const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
-          throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
+        if (next !== undefined)
+          press(next);
+        else {
+          for (const key of ["Escape", "Enter"]) {
+            for (const type of ["keydown", "keyup"])
+              window.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
+            await wait(400);
+          }
         }
-        press(next);
         await wait(1200);
       }
       if (again !== undefined)
