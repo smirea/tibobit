@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
-// @version      1.14.1
+// @version      1.14.2
 // @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
@@ -259,7 +259,7 @@
     }
   }
   var DEFAULT_PACE = { planEvery: 5, actEvery: 0.3 };
-  var PACE_LIMITS = { planEvery: { min: 1, max: 300, step: 1 }, actEvery: { min: 0.1, max: 5, step: 0.1 } };
+  var PACE_LIMITS = { planEvery: { min: 0.5, max: 300, step: 0.5 }, actEvery: { min: 0.1, max: 5, step: 0.1 } };
   var DEFAULT_SETTINGS = { pace: DEFAULT_PACE, incognito: false };
   function parsePilotChange(input) {
     const c = input ?? {};

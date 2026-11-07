@@ -294,7 +294,7 @@ export type PilotRole = (typeof PILOT_ROLES)[number];
 /** How often, in seconds, the bot asks its planner while a goal is under way, and takes a step. */
 export type PilotPace = { planEvery: number; actEvery: number };
 export const DEFAULT_PACE: PilotPace = { planEvery: 5, actEvery: 0.3 };
-export const PACE_LIMITS = { planEvery: { min: 1, max: 300, step: 1 }, actEvery: { min: 0.1, max: 5, step: 0.1 } } as const;
+export const PACE_LIMITS = { planEvery: { min: 0.5, max: 300, step: 0.5 }, actEvery: { min: 0.1, max: 5, step: 0.1 } } as const;
 /** `incognito`: the bot just plays, keeping no notes and writing no review, so the run teaches nothing. */
 export type PilotSettings = { pace: PilotPace; incognito: boolean };
 export const DEFAULT_SETTINGS: PilotSettings = { pace: DEFAULT_PACE, incognito: false };
