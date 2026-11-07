@@ -503,6 +503,7 @@ async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ pla
   if (COACH === "none") return reuse("no coach");
   const instructions = await Bun.file(loop.COACH_PLAN).text();
   const prompt = [
+    loop.editableFiles("plan"),
     instructions,
     "# Facts",
     "## The game and the bot",
@@ -544,6 +545,7 @@ async function reviewRun(text: string, name: string): Promise<{ review: string; 
   if (COACH === "none") return undefined;
   const instructions = await Bun.file(loop.COACH_RETROSPECTIVE).text();
   const prompt = [
+    loop.editableFiles("review"),
     instructions,
     "# Facts",
     "## The game and the bot",

@@ -2,8 +2,6 @@
 
 You run the research behind a bot that plays tibo.dog. A run just ended. Work out what it taught us, write it into the run's notes, and update the beliefs and experiments tables so the next plan starts from it.
 
-You own this file, coach-plan.md, the beliefs table and the experiments table. You can change how the in-game models play (their prompts, what state they see, the knobs) through the next plan, but not which models they are, and not the code. When the code is what stands in the way, file an infrastructure request.
-
 ## What we are after
 
 Understanding comes first, and the score second. A run that settles a question beats a longer run that teaches nothing.

@@ -543,3 +543,26 @@ export const EDITS_CONTRACT = [
   '"infra": new requests for the coding harness, an array of {"request": "what to build or change in the bot", "why": "what it would let the loop learn or do"}. Only for what no template, knob or prompt edit can do. Leave it out when there are none.',
   '"coachPlan" and "coachRetrospective": the whole new coach-plan.md or coach-retrospective.md, only when the way the loop plans or reviews should change. Leave them out otherwise.',
 ].join("\n");
+
+/**
+ * What the coach can change, at the top of both coach prompts. Written here rather than in the
+ * prompts, which the coach rewrites, so the list cannot be edited away or fall behind the code.
+ */
+export function editableFiles(phase: "plan" | "review"): string {
+  const own = phase === "plan" ? "coach-plan.md" : "coach-retrospective.md";
+  return [
+    "# What you can change",
+    "",
+    "Everything below lives in gameplay/, and you change it through keys in your JSON reply (see Reply at the end). Anything you leave out stays as it is.",
+    "",
+    ...(phase === "plan"
+      ? ["- **The in-game prompts** (`planner`, `action`, `knobs`): what the planner and the action model are told, which state blocks they see, what each question asks, and the knobs, for the run about to start. They are recorded in the run's notes, and the next plan starts from them."]
+      : ["- **This run's notes** (`notes`): the review between the plan and the picks, in the sections this prompt asks for."]),
+    `- **beliefs.csv** (\`beliefs\`): what the loop holds true about the game and the in-game models. You rewrite the whole table; rows are never deleted, only disproved.`,
+    `- **experiments.csv** (\`experiments\`): the questions the loop asks. You rewrite the whole table; rows are never deleted, only retired.`,
+    "- **infrastructure_feedback.csv** (`infra`): requests for changes to the bot's code. You can only add rows; whoever works on the code closes them.",
+    `- **coach-plan.md** (\`coachPlan\`) and **coach-retrospective.md** (\`coachRetrospective\`): your own prompts, before and after each run. This one is ${own}. Rewrite one only when the way the loop plans or reviews should change.`,
+    "",
+    "You cannot change which models play (the coach, the planner and the action model), the bot's code, or the parts of a notes file the bot writes: its header, outcome, plan, picks and prompts. When the code stands in the way, file an infrastructure request. After the review, the bot commits gameplay/, so every change you make is in the history.",
+  ].join("\n");
+}
