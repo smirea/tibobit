@@ -194,6 +194,9 @@ function digest(r: RunView): string {
     `Nearest chest: ${where(r.pickups.chests[0])}. Nearest food: ${where(r.pickups.nearest.find((x) => x.kind === "heal"))}. Nearest shrine to stand in: ${where(r.pois.find((x) => x.chargeNeeded > 0))}.`,
     `Attacks on the ground: ${r.hazards.filter((h) => h.source === "attack").slice(0, 4).map((h) => `${h.shape} ${h.kind} ${Math.round(h.dist)} away to the ${h.dir}${h.landsIn === undefined ? "" : `, lands in ${h.landsIn}s`}`).join("; ") || "none"}.`,
     ...(r.choice === undefined ? [] : [`Open ${r.choice.kind} choice: ${r.choice.options.map((o) => o.name).join(", ")}.`]),
+    `Enemies by direction (within 60 / within 150): ${r.sectors.map((x) => `${x.dir} ${x.enemiesNear}/${x.enemiesFar}`).join(", ")}.`,
+    `Health 30 seconds ago: ${healthHistory[0]?.hp ?? "unknown"}%.`,
+    `Level-up picks since the last consult: ${pickLog.splice(0).join("; ") || "none"}.`,
   ].join("\n");
 }
 
@@ -209,6 +212,7 @@ class Coach {
   private sawBoss = false;
   private lowHealth = false;
   private critical = false;
+  private bleeding = false;
   private bossClose = false;
   private attack = false;
   private evolved = 0;
@@ -225,9 +229,12 @@ class Coach {
     const attack = r.hazards.some((h) => h.source === "attack" && h.landsIn !== undefined && h.dist < 120);
     const bossClose = r.bosses.some((b) => b.dist < 50);
     const critical = r.player.hp / r.player.maxHp < 0.15;
+    const then = healthHistory[0];
+    const bleeding = then !== undefined && then.hp - (r.player.hp / r.player.maxHp) * 100 >= 33;
     const cooled = r.time - this.lastAsked >= COACH_COOLDOWN;
     if (!this.sawBoss && r.bosses.length > 0) why = `a boss appeared: ${r.bosses[0]?.name}`;
     else if (critical && !this.critical && cooled) why = "health dropped below 15%";
+    else if (bleeding && !this.bleeding && cooled) why = "health fell by a third within 30 seconds";
     else if (bossClose && !this.bossClose && cooled) why = "a boss came within 50 units";
     else if (attack && !this.attack && cooled) why = "a boss attack is telegraphed nearby";
     else if (low && !this.lowHealth && cooled) why = "health dropped below half";
@@ -236,6 +243,7 @@ class Coach {
     this.sawBoss ||= r.bosses.length > 0;
     this.lowHealth = low;
     this.critical = critical;
+    this.bleeding = bleeding;
     this.bossClose = bossClose;
     this.attack = attack;
     this.evolved = Math.max(this.evolved, evolved);
@@ -260,7 +268,7 @@ class Coach {
       `You are asked now because ${why}. State now:`,
       digest(r),
       "Answer from these facts alone; do not browse, search or use tools.",
-      'Reply with only JSON: {"want": [up to 6 exact weapon, passive or item names to take when offered, best first], "advice": "one short sentence for the decision model about the next minute or two", "note": "one or two sentences for the run notes: what is happening and what to watch", "infra": "one concrete suggestion to improve the data or controls the bot has, or an empty string"}',
+      'Reply with only JSON: {"want": [up to 6 exact weapon, passive or item names to take when offered, best first], "advice": "one short sentence for the decision model about the next minute or two; it stays in force for 90 seconds, so never name a compass direction or a countdown", "note": "one or two sentences for the run notes: what is happening and what to watch", "infra": "one concrete suggestion to improve the data or controls the bot has, or an empty string"}',
     ].join("\n\n");
     const reply = await askCoach(prompt);
     if (reply === undefined) return;
@@ -338,6 +346,14 @@ function healthTrend(r: RunView): string[] {
   return [`Health went from ${then.hp}% to ${pct}% over the last ${Math.round(r.time - then.time)} seconds.`];
 }
 
+// A complete recipe evolves at the next chest, which makes the nearest chest worth the walk.
+function readyLine(r: RunView): string[] {
+  const ready = r.combos.filter((c) => c.ready && c.kind !== "union").map((c) => c.name);
+  if (ready.length === 0) return [];
+  const chest = r.pickups.chests[0];
+  return [`The next chest evolves ${ready.join(" and ")}; ${chest === undefined ? "no chest is in sight" : `the nearest chest is ${Math.round(chest.dist)} away to the ${chest.dir}`}.`];
+}
+
 function hurtLine(r: RunView): string[] {
   const sources = Object.entries(r.player.hurtBy).sort((a, b) => b[1] - a[1]).slice(0, 2);
   return sources.length === 0 ? [] : [`In the last 3 seconds Tibo was hurt by ${sources.map(([k]) => sourceWords(k)).join(" and ")}.`];
@@ -362,6 +378,7 @@ function situation(r: RunView): string {
     `Weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}. Passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
     ...hurtLine(r),
     ...healthTrend(r),
+    ...readyLine(r),
     ...(plan === undefined || r.time - plan.at > ADVICE_SECONDS ? [] : [`Plan: ${plan.advice}`]),
   ].join("\n");
 }
@@ -454,6 +471,9 @@ async function move(r: RunView) {
   return command(dir === undefined ? { type: "goto", to: { dx: 0, dy: 0 }, stay: STEP, pause: true } : { type: "move", dir, seconds: STEP, pause: true });
 }
 
+// Every level-up offer and what was taken, for the coach to see between consults.
+const pickLog: string[] = [];
+
 // Picks that did nothing (an item Tibo cannot afford, say) for the choice now open, so the model
 // is told instead of picking them forever.
 let deadPicks: { signature: string; names: Set<string> } = { signature: "", names: new Set() };
@@ -482,6 +502,7 @@ async function choose(r: RunView) {
   const index = Number((pick?.choice ?? "0").split(":")[0]);
   const picked = options.find((o) => o.index === index);
   if (picked !== undefined) deadPicks.names.add(picked.name);
+  pickLog.push(`${clock(r.time)} ${r.choice?.kind}: offered ${options.map((o) => o.name).join(", ")}; took ${picked?.name ?? index}`);
   return command({ type: "choose", index: Number.isFinite(index) ? index : 0 });
 }
 

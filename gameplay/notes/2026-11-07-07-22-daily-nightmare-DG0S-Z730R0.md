@@ -16,7 +16,7 @@ Run link: pending: written once the game shows the run summary
 
 Coach notes taken during the run, by game time.
 
-(no notes yet)
+- **0:30** (checkpoint at 0:30) Full health at 0:30 with Seeker Sprouts 2/8 and Fertilizer still missing, so every level-up goes to Sprouts, then Fertilizer, then sustain. Watch for Fertilizer before the ~3:22 chest and for Amusing near 2:00. Advice: Keep walking away from the densest side, skip the shrine, and step off any telegraph before food or a chest. Want: Seeker Sprouts, Fertilizer, Hearty Helping, Gravy Heart, Hash Rush, Starch Plating.
 
 ## Outcome
 
