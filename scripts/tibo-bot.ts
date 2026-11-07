@@ -650,6 +650,8 @@ async function start(): Promise<void> {
   await command({ type: "speed", factor: SPEED });
 }
 
+let recordCrash: ((e: unknown) => Promise<void>) | undefined;
+
 async function main() {
   await mkdir(path.dirname(LOG), { recursive: true });
   await Bun.write(LOG, "");
@@ -682,6 +684,13 @@ async function main() {
   };
   process.on("SIGINT", () => void stop("SIGINT"));
   process.on("SIGTERM", () => void stop("SIGTERM"));
+  recordCrash = async (e) => {
+    if (notes === undefined) return;
+    notes.link = "none (bot crashed)";
+    notes.outcome = `- Crashed at ${last === undefined ? "the start" : clock(last.time)}: ${e instanceof Error ? e.message : String(e)}`;
+    notes.review = "No review: the bot crashed.";
+    await notes.write();
+  };
   await command({ type: "speed", factor: SPEED });
   // Every run starts fresh, so a Daily always begins at tick 0 on its fixed seed.
   await start();
@@ -774,4 +783,8 @@ async function main() {
 
 const reviewTarget = option("review", "");
 if (reviewTarget !== "") await reviewNotesFile(reviewTarget);
-else await main();
+else
+  await main().catch(async (e: unknown) => {
+    await recordCrash?.(e);
+    throw e;
+  });

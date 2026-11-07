@@ -971,11 +971,18 @@
           const game = this.game();
           if (game.state.choiceQueue.length === 0)
             throw new Error("no choice is open");
-          const card = choiceCards()[command.index];
-          if (card === undefined)
+          if (choiceCards()[command.index] === undefined)
             throw new Error(`no option ${command.index}; there are ${choiceCards().length}`);
-          card.click();
-          this.finish(status, "done");
+          const shown = () => `${game.state.choiceQueue.length}|${choiceCards().map((c) => c.textContent).join("|")}`;
+          const before = shown();
+          (async () => {
+            for (let attempt = 0;attempt < 10; attempt++) {
+              choiceCards()[command.index]?.click();
+              if (await until(() => shown() !== before, 300))
+                return this.finish(status, "done");
+            }
+            this.finish(status, "failed", "the option did not take");
+          })();
           return;
         }
         case "dash": {
