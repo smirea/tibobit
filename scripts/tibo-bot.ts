@@ -19,7 +19,12 @@ const MODEL = option("model", "h2o-lightning-4b@q8_0");
 // Level-up picks are rare (a few dozen a run), so they can afford a slower, stronger model.
 const PICK_MODEL = option("pick-model", MODEL);
 const SERVER = option("server", process.env.TIBO_SERVER ?? DEFAULT_ORIGIN);
-const DECIDER = option("decider", "http://localhost:1234/v1/systemone");
+// A System One decisions endpoint: LM Studio locally, or OpenRouter's (`--decider openrouter`),
+// which serves TypeSafe's Jev models and needs OPENROUTER_API_KEY.
+const DECIDERS: Record<string, string> = { lmstudio: "http://localhost:1234/v1/systemone", openrouter: "https://openrouter.ai/api/alpha/decisions" };
+const DECIDER = DECIDERS[option("decider", "lmstudio")] ?? option("decider", "lmstudio");
+const DECIDER_KEY = new URL(DECIDER).hostname === "openrouter.ai" ? process.env.OPENROUTER_API_KEY : undefined;
+if (new URL(DECIDER).hostname === "openrouter.ai" && !DECIDER_KEY) throw new Error("--decider openrouter needs OPENROUTER_API_KEY (in .env.local, managed by env-manager)");
 const STEP = Number(option("step", "0.35"));
 const RUNS = Number(option("runs", "1"));
 const DIFFICULTY = option("difficulty", "easy");
@@ -32,8 +37,11 @@ const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
 
 type Snap = Snapshot & { connected: boolean; ageMs: number };
-type Question = { type: "choice"; instructions: string; criteria: Record<string, string | null> } | { type: "noul"; instructions: string };
-type Answer = { choice?: string; probabilities?: Record<string, number>; confidence?: number; noul?: number };
+type Question =
+  | { type: "choice"; instructions: string; criteria: Record<string, string | null> }
+  | { type: "noul"; instructions: string }
+  | { type: "score"; instructions: string; criteria: string[] };
+type Answer = { choice?: string; probabilities?: Record<string, number>; confidence?: number; noul?: number; score?: number };
 
 async function api<T>(route: string, body?: unknown): Promise<T> {
   const init = body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
@@ -71,19 +79,27 @@ async function decide(state: string, questions: Record<string, Question>, model 
   const started = performance.now();
   const body = JSON.stringify({ model, state, questions });
   let json: { answers?: Record<string, Answer>; error?: unknown } | undefined;
-  // LM Studio occasionally never answers a request; give up on it and ask again.
+  const headers: Record<string, string> = { "content-type": "application/json", ...(DECIDER_KEY === undefined ? {} : { authorization: `Bearer ${DECIDER_KEY}` }) };
+  // LM Studio occasionally never answers a request, and OpenRouter rate-limits; ask again.
   for (let attempt = 0; json === undefined; attempt++) {
     try {
-      const res = await timed("decide", fetch(DECIDER, { method: "POST", headers: { "content-type": "application/json" }, body, signal: AbortSignal.timeout(60_000) }));
+      const res = await timed("decide", fetch(DECIDER, { method: "POST", headers, body, signal: AbortSignal.timeout(60_000) }));
+      if (res.status === 429 || res.status >= 500) throw new Error(`HTTP ${res.status}`);
       json = (await res.json()) as { answers?: Record<string, Answer>; error?: unknown };
     } catch (e) {
-      if (attempt >= 3) throw e;
+      if (attempt >= 5) throw e;
       console.log(`decision request failed (${e instanceof Error ? e.message : e}); retrying`);
+      await Bun.sleep(250 * 2 ** attempt);
     }
   }
   latency.push(performance.now() - started);
   if (json.answers === undefined) throw new Error(`decision model error: ${JSON.stringify(json.error ?? json).slice(0, 300)}`);
   trace?.({ event: "decision", state, questions, answers: json.answers });
+  // A score is an index into its criteria; as a share of the scale it reads like a noul.
+  for (const [key, q] of Object.entries(questions)) {
+    const a = json.answers[key];
+    if (q.type === "score" && a?.score !== undefined) a.noul = a.score / Math.max(1, q.criteria.length - 1);
+  }
   return json.answers;
 }
 
@@ -661,15 +677,13 @@ function standingSpot(r: RunView): string {
 }
 
 // Small decision models judge one concrete option far better than they rank nine at once, so
-// every direction (and standing still) is its own yes/no question. They also notice a threat in
-// a description far more reliably than they weigh "good" against "bad": on 60 replayed Daily
-// states, Laya picked the safest way 97% of the time when asked "does it put Tibo in danger",
-// against 77% for "is it a good move" and 48% for one nine-way choice. So Tibo first keeps the
-// moves the model rates about as safe as the safest, then asks which of those is useful.
-// Only moves the model itself calls safe go to that second question: on 400 replayed Nightmare
-// states with the sim forecast, letting any near-safest move through doubled the health lost
-// per step (0.87% against 0.45%), and the cap brings it back to 0.48% while still asking in 87%.
+// every direction (and standing still) is its own question. On replayed Nightmare steps, a 0-4
+// hurt score per move picked a least-damaging move 98-100% of the time with Jev, against 95%
+// for a yes/no danger question (which, like Laya, rated a fatal move safest when its description
+// listed few threats). Only moves rated about as safe as the safest, and safe outright, compete
+// on usefulness: letting any near-safest move through doubled the health lost per step.
 const SAFE_MARGIN = 0.1;
+const HURT_SCALE = ["takes no damage", "gets scratched", "gets badly hurt", "gets very badly hurt", "dies"];
 // Share of max health a move may cost over the cheapest move in the next second and still be offered.
 const AFFORDABLE_EXTRA_DAMAGE = 0.02;
 const SAFE_ENOUGH = 0.5;
@@ -695,25 +709,23 @@ async function move(r: RunView) {
   }
   const state = situation(r);
 
+  // One request per step: how badly each move hurts (a score on a scale, which Jev and Laya both
+  // weigh better than a yes/no "danger" question) and whether it leads somewhere useful. The bot
+  // keeps the moves rated about as safe as the safest and takes the most useful of those.
   const questions: Record<string, Question> = {};
-  for (const [key, text] of Object.entries(moves))
-    questions[key] = { type: "noul", instructions: `If Tibo does this: ${text}. Does it put Tibo in danger, from enemies, a boss, bullets or a harmful patch?` };
+  for (const [key, text] of Object.entries(moves)) {
+    questions[key] = { type: "score", instructions: `If Tibo does this: ${text}. How badly does it hurt Tibo in the next second?`, criteria: HURT_SCALE };
+    questions[`useful:${key}`] = { type: "noul", instructions: `If Tibo does this: ${text}. Does it bring Tibo toward something useful, like food when hurt, a chest, a shrine to stand in, or xp gems to level up?` };
+  }
   const canDash = r.player.dashCharges > 0 && r.sectors.some((x) => x.enemiesNear > 0 || (x.nearestBullet ?? 999) < 40);
   if (canDash) questions.dash = { type: "noul", instructions: "Is Tibo about to be hit or surrounded, so a quick dash away would save it?" };
-  const danger = await decide(state, questions);
-  const risk = (k: string) => danger[k]?.noul ?? 1;
+  const answers = await decide(state, questions);
+  const risk = (k: string) => answers[k]?.noul ?? 1;
   const safest = Math.min(...Object.keys(moves).map(risk));
   const safe = Object.keys(moves).filter((k) => risk(k) <= safest + SAFE_MARGIN && (risk(k) < SAFE_ENOUGH || risk(k) === safest));
-
-  let choice = safe.sort((x, y) => risk(x) - risk(y))[0] ?? "stay";
-  if (safe.length > 1) {
-    const useful: Record<string, Question> = {};
-    for (const k of safe) useful[k] = { type: "noul", instructions: `If Tibo does this: ${moves[k]}. Does it bring Tibo toward something useful, like food when hurt, a chest, a shrine to stand in, or xp gems to level up?` };
-    const gain = await decide(state, useful);
-    choice = safe.sort((x, y) => (gain[y]?.noul ?? 0) - (gain[x]?.noul ?? 0))[0] ?? choice;
-  }
+  const choice = safe.sort((x, y) => (answers[`useful:${y}`]?.noul ?? 0) - (answers[`useful:${x}`]?.noul ?? 0) || risk(x) - risk(y))[0] ?? "stay";
   const dir = (DIRECTIONS as readonly string[]).includes(choice) ? (choice as Direction) : undefined;
-  if (dir !== undefined && (danger.dash?.noul ?? 0) > 0.5) await command({ type: "dash", dir });
+  if (dir !== undefined && (answers.dash?.noul ?? 0) > 0.5) await command({ type: "dash", dir });
   return command(dir === undefined ? { type: "goto", to: { dx: 0, dy: 0 }, stay: STEP, pause: true } : { type: "move", dir, seconds: STEP, pause: true });
 }
 
