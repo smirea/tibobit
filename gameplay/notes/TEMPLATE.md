@@ -11,6 +11,11 @@ Run link: {{link}}
 | Coach | {{coach}} |
 | Bot | step {{step}}s, speed x{{speed}} |
 | Strategy | {{strategy}} |
+| Run type | {{kind}} |
+
+## Experiment
+
+{{experiment}}
 
 ## Timeline
 

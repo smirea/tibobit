@@ -93,6 +93,14 @@ const GAMEPLAY = path.join(import.meta.dir, "..", "gameplay");
 const STRATEGY_FILE = path.join(GAMEPLAY, "strategy.md");
 const NOTES_DIR = path.join(GAMEPLAY, "notes");
 const FEEDBACK_FILE = path.join(GAMEPLAY, "infrastructure_feedback.csv");
+// Every few runs is an experiment: the coach picks a high-level strategy from experiments.md and
+// plays it on purpose even where strategy.md disagrees, so the strategy does not settle into a
+// local maximum. Results go to experiments.csv; lessons that hold up go into strategy.md.
+const EXPERIMENTS_FILE = path.join(GAMEPLAY, "experiments.md");
+const EXPERIMENTS_CSV = path.join(GAMEPLAY, "experiments.csv");
+const EXPERIMENT_EVERY = Number(option("experiment-every", "3"));
+const FORCED_EXPERIMENT = option("experiment", "");
+type Experiment = { name: string; hypothesis: string; directive: string };
 const CHECKPOINTS = [30, 150, 300, 480, 660, 840, 1020, 1140];
 const COACH_COOLDOWN = 45;
 const URGENT_COOLDOWN = 10;
@@ -111,6 +119,56 @@ const today = () => new Date().toISOString().slice(0, 10);
 async function readStrategy(): Promise<string> {
   const file = Bun.file(STRATEGY_FILE);
   return (await file.exists()) ? file.text() : "# Strategy\n\n(no strategy yet)\n";
+}
+
+async function readExperiments(): Promise<string> {
+  const file = Bun.file(EXPERIMENTS_FILE);
+  return (await file.exists()) ? file.text() : "# Experiments\n\n(no ideas yet)\n";
+}
+
+async function experimentLog(): Promise<string> {
+  const file = Bun.file(EXPERIMENTS_CSV);
+  const text = (await file.exists()) ? (await file.text()).trim() : "";
+  return text.split("\n").length > 1 ? text : "(no experiment runs yet)";
+}
+
+// Counted from the notes, not this process, so restarts and a second bot keep the cadence.
+async function experimentDue(): Promise<boolean> {
+  if (FORCED_EXPERIMENT !== "") return true;
+  if (EXPERIMENT_EVERY <= 0) return false;
+  const names: string[] = [];
+  for await (const name of new Bun.Glob("2*.md").scan(NOTES_DIR)) names.push(name);
+  const finished: string[] = [];
+  for (const name of names.sort().reverse()) {
+    const text = await Bun.file(path.join(NOTES_DIR, name)).text();
+    if (text.includes(`| Mode | ${MODE} ${DIFFICULTY} |`) && text.includes("Survived **")) finished.push(text);
+    if (finished.length === EXPERIMENT_EVERY - 1) break;
+  }
+  return finished.length === EXPERIMENT_EVERY - 1 && finished.every((t) => !t.includes("| Run type | experiment"));
+}
+
+async function chooseExperiment(): Promise<Experiment | undefined> {
+  const reply = await askCoach(
+    [
+      "You coach a bot that plays tibo.dog, and the next run is an experiment run.",
+      GAME_RULES,
+      `Goal of the serious runs: survive 20 minutes on ${DIFFICULTY} in today's ${MODE === "daily" ? "Daily (the same seed every attempt today)" : "Open World"}.`,
+      "Experiment runs exist to escape a local maximum: they play one high-level strategy on purpose, even where the serious strategy disagrees, to learn which of its ideas hold and which do not.",
+      "The experiment list:",
+      await readExperiments(),
+      "Results of earlier experiment runs (CSV):",
+      await experimentLog(),
+      "The serious strategy now:",
+      await readStrategy(),
+      "Finished runs in this mode, longest first:",
+      await runHistory(),
+      FORCED_EXPERIMENT === "" ? "Pick the experiment that would teach the most now: untried ideas first, or a retry where a result was unclear. You may also invent a new one." : `Run the experiment named "${FORCED_EXPERIMENT}".`,
+      "Answer from these facts alone; do not browse, search or use tools.",
+      'Reply with only JSON: {"name": "the experiment name as in the list", "hypothesis": "one sentence: what you expect to happen and why", "directive": "the high-level strategy for this run in two to four sentences, written for the coach that advises the bot during the run: what to pick, where to walk, and what to give up"}',
+    ].join("\n\n"),
+  );
+  if (reply === undefined || typeof reply.name !== "string" || typeof reply.directive !== "string") return undefined;
+  return { name: reply.name, hypothesis: typeof reply.hypothesis === "string" ? reply.hypothesis : "", directive: reply.directive };
 }
 
 const csvField = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
@@ -148,7 +206,7 @@ class RunNotes {
   review = "(written after the run)";
   private fields: Record<string, string>;
 
-  constructor(r: RunView, strategy: string) {
+  constructor(r: RunView, strategy: string, readonly experiment?: Experiment) {
     const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
     this.id = `${stamp}-${MODE}-${DIFFICULTY}-${r.seed}`;
     this.file = path.join(NOTES_DIR, `${this.id}.md`);
@@ -163,6 +221,11 @@ class RunNotes {
       step: String(STEP),
       speed: String(SPEED),
       strategy: `strategy.md ${createHash("sha1").update(strategy).digest("hex").slice(0, 8)}`,
+      kind: experiment === undefined ? "serious" : `experiment: ${experiment.name}`,
+      experiment:
+        experiment === undefined
+          ? "None: a serious run that follows strategy.md."
+          : `**${experiment.name}**\n\nHypothesis: ${experiment.hypothesis}\n\nDirective: ${experiment.directive}`,
     };
   }
 
@@ -220,7 +283,8 @@ async function runHistory(): Promise<string> {
     const weapons = text.match(/- (?:Final weapons|Weapons at [\d:]+): (.*)\./)?.[1] ?? "unknown";
     const passives = text.match(/- Final passives: (.*)\./)?.[1] ?? "unknown";
     const held = weapons === "unknown" ? 0 : weapons.split(", ").length;
-    rows.push({ time: Number(survived[2]), held, line: `${name.slice(0, 16)}: survived ${survived[1]}, level ${survived[3]}; weapons ${weapons}; passives ${passives}` });
+    const kind = text.match(/\| Run type \| (experiment: [^|]+?) \|/)?.[1];
+    rows.push({ time: Number(survived[2]), held, line: `${name.slice(0, 16)}${kind === undefined ? "" : ` (${kind})`}: survived ${survived[1]}, level ${survived[3]}; weapons ${weapons}; passives ${passives}` });
   }
   if (rows.length === 0) return "(no finished runs yet)";
   rows.sort((a, b) => b.time - a.time);
@@ -249,8 +313,12 @@ function weaponTable(rows: { time: number; held: number }[]): string {
  * Asks the coach to review a finished run, rewrites strategy.md from its answer and files its
  * infrastructure suggestions. Returns the review paragraph.
  */
-async function reviewRun(timeline: string, outcome: string, recent: string[], runId: string, endTime: string): Promise<string | undefined> {
+async function reviewRun(timeline: string, outcome: string, recent: string[], runId: string, endTime: string, experiment?: Experiment): Promise<string | undefined> {
   if (COACH === "none") return undefined;
+  const experimentReply =
+    experiment === undefined
+      ? ""
+      : ', "experiment": {"expected": "which parts of the hypothesis played out as expected, and why", "unexpected": "which did not, and why", "lesson": "what a serious run should take from this, or that it should take nothing"}';
   const prompt = [
     "You coach a bot that plays tibo.dog, and a run just ended.",
     GAME_RULES,
@@ -260,13 +328,20 @@ async function reviewRun(timeline: string, outcome: string, recent: string[], ru
     "Every finished run in this mode so far, longest first. Compare builds and timings across runs before trusting a lesson from one run:",
     await runHistory(),
     "Every Build rule must agree with this history. A rule that refuses the weapons the longest runs held, or narrows the build below what those runs had, is wrong: rewrite it.",
+    "The experiment list:",
+    await readExperiments(),
+    "Results of earlier experiment runs (CSV):",
+    await experimentLog(),
+    experiment === undefined
+      ? "This was a serious run that followed the strategy file."
+      : `This was an experiment run, not a serious one: **${experiment.name}**. Hypothesis: ${experiment.hypothesis} Directive it played: ${experiment.directive} Judge the experiment on what it was testing, not on survival alone, and take into strategy.md only the parts that held up.`,
     "This run's notes:",
     timeline || "(none)",
     "Outcome:",
     outcome,
     ...(recent.length === 0 ? [] : ["The last few situations the decision model saw:", recent.join("\n---\n")]),
     "Answer from these facts alone; do not browse, search or use tools.",
-    'Reply with only JSON: {"review": "a short paragraph: why the run ended, what worked, what to change", "strategy": "the full updated strategy.md in Markdown. Keep it generic advice for future runs (seed-specific facts only where the Daily repeats), keep its sections, stay under 70 lines, and add one dated line to Lessons", "infra": ["concrete suggestions to improve the data or controls the bot has"]}',
+    'Reply with only JSON: {"review": "a short paragraph: why the run ended, what worked, what to change", "strategy": "the full updated strategy.md in Markdown. Keep it generic advice for future runs (seed-specific facts only where the Daily repeats), keep its sections, stay under 70 lines, and add one dated line to Lessons", "infra": ["concrete suggestions to improve the data or controls the bot has"], "experiments": "the full updated experiments.md: keep its intro, add new ideas this run suggests, and under each idea record its status and what runs so far showed and why"' + experimentReply + "}",
   ].join("\n\n");
   const reply = await askCoach(prompt);
   if (reply === undefined) return undefined;
@@ -275,6 +350,17 @@ async function reviewRun(timeline: string, outcome: string, recent: string[], ru
     console.log("strategy.md updated");
   }
   if (Array.isArray(reply.infra)) for (const s of reply.infra) await infraFeedback(runId, endTime, String(s));
+  if (typeof reply.experiments === "string" && reply.experiments.trimStart().startsWith("# Experiments") && reply.experiments.length < 12_000) {
+    await Bun.write(EXPERIMENTS_FILE, `${reply.experiments.trim()}\n`);
+    console.log("experiments.md updated");
+  }
+  const result = reply.experiment as Record<string, unknown> | undefined;
+  if (experiment !== undefined && result !== undefined) {
+    const field = (k: string) => (typeof result[k] === "string" ? String(result[k]).replace(/\s+/g, " ") : "");
+    const row = [today(), runId, experiment.name, experiment.hypothesis, endTime, field("expected"), field("unexpected"), field("lesson")];
+    await appendFile(EXPERIMENTS_CSV, `${row.map(csvField).join(",")}\n`);
+    console.log(`experiments.csv: ${experiment.name}`);
+  }
   return typeof reply.review === "string" ? reply.review : undefined;
 }
 
@@ -285,7 +371,13 @@ async function reviewNotesFile(file: string) {
   const outcome = section("Outcome");
   if (!outcome.includes("Survived")) throw new Error(`${file} has no finished outcome to review`);
   const time = outcome.match(/Survived \*\*([\d:]+)\*\*/)?.[1] ?? "";
-  const review = await reviewRun(section("Timeline"), outcome, [], path.basename(file, ".md"), time);
+  const experimentText = section("Experiment");
+  const name = experimentText.match(/^\*\*(.+?)\*\*/)?.[1];
+  const experiment =
+    name === undefined
+      ? undefined
+      : { name, hypothesis: experimentText.match(/Hypothesis: (.*)/)?.[1] ?? "", directive: experimentText.match(/Directive: (.*)/)?.[1] ?? "" };
+  const review = await reviewRun(section("Timeline"), outcome, [], path.basename(file, ".md"), time, experiment);
   if (review === undefined) throw new Error("the coach gave no review");
   await Bun.write(file, text.replace(/## Review\n\n[\s\S]*$/, `## Review\n\n${review}\n`));
   console.log(`reviewed ${file}`);
@@ -348,8 +440,14 @@ class Coach {
       "You coach a bot that plays tibo.dog.",
       GAME_RULES,
       `Goal: survive 20 minutes on ${DIFFICULTY} in today's ${MODE === "daily" ? "Daily (the same seed every attempt today)" : "Open World"}.`,
-      "Strategy file, learned from earlier runs:",
-      await readStrategy(),
+      ...(this.notes.experiment === undefined
+        ? ["Strategy file, learned from earlier runs:", await readStrategy()]
+        : [
+            `This run is an experiment: **${this.notes.experiment.name}**. Hypothesis: ${this.notes.experiment.hypothesis}`,
+            `Play this directive for the whole run, even where the strategy file disagrees, so the experiment tests what it set out to: ${this.notes.experiment.directive}`,
+            "Strategy file, for background only:",
+            await readStrategy(),
+          ]),
       "Finished runs in this mode, longest first:",
       await runHistory(),
       "Notes so far this run:",
@@ -384,7 +482,7 @@ class Coach {
       `- Coach consulted ${this.calls} times.`,
     ].join("\n");
     await this.notes.write();
-    const review = await reviewRun(this.notes.timeline.join("\n"), this.notes.outcome, recent, this.notes.id, clock(lastRun.time));
+    const review = await reviewRun(this.notes.timeline.join("\n"), this.notes.outcome, recent, this.notes.id, clock(lastRun.time), this.notes.experiment);
     if (review === undefined) return;
     this.notes.review = review;
     await this.notes.write();
@@ -755,10 +853,13 @@ async function main() {
       continue;
     }
     if (notes === undefined || coach === undefined) {
-      notes = new RunNotes(r, await readStrategy());
+      // Chosen while the game is paused at tick 0, so the coach's wait does not cost game time.
+      const experiment = COACH !== "none" && (await experimentDue()) ? await chooseExperiment() : undefined;
+      notes = new RunNotes(r, await readStrategy(), experiment);
       coach = new Coach(notes);
       await notes.write();
       console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}, notes ${notes.file}`);
+      if (experiment !== undefined) console.log(`experiment run: ${experiment.name}: ${experiment.directive}`);
     }
     last = r;
     if (Math.floor(r.time / 30) !== lastReport) {
