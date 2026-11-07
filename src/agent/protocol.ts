@@ -293,7 +293,7 @@ export const PILOT_ROLES = ["planner", "action", "system"] as const;
 export type PilotRole = (typeof PILOT_ROLES)[number];
 /** How often, in seconds, the bot asks its planner while a goal is under way, and takes a step. */
 export type PilotPace = { planEvery: number; actEvery: number };
-export const DEFAULT_PACE: PilotPace = { planEvery: 15, actEvery: 0.3 };
+export const DEFAULT_PACE: PilotPace = { planEvery: 5, actEvery: 0.3 };
 export const PACE_LIMITS = { planEvery: { min: 1, max: 300, step: 1 }, actEvery: { min: 0.1, max: 5, step: 0.1 } } as const;
 /** `live` ("DO IT LIVE"): the bot plays without pausing the game while its models think. */
 export type PilotState = { state: "off" | "on" | "stopping"; live: boolean; pace: PilotPace; detail?: string };

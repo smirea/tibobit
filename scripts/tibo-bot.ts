@@ -29,7 +29,7 @@ const DECIDER = DECIDERS[option("decider", "lmstudio")] ?? option("decider", "lm
 const DECIDER_KEY = new URL(DECIDER).hostname === "openrouter.ai" ? process.env.OPENROUTER_API_KEY : undefined;
 if (new URL(DECIDER).hostname === "openrouter.ai" && !DECIDER_KEY) throw new Error("--decider openrouter needs OPENROUTER_API_KEY (in .env.local, managed by env-manager)");
 const STEP = Number(option("step", "0.35"));
-const PLAN_EVERY = Number(option("plan-every", "15"));
+const PLAN_EVERY = Number(option("plan-every", "5"));
 const RUNS = Number(option("runs", "1"));
 const DIFFICULTY = option("difficulty", "easy");
 const MODE = option("mode", "daily");
@@ -1180,6 +1180,8 @@ type PlanAnswer = { pick?: OptionView; goal: Goal; ms: number; cards?: CardOptio
 
 class Planner {
   calls = 0;
+  /** A card was just taken, so the goal is planned again with it in hand. */
+  picked = false;
   private lastAsked = Number.NEGATIVE_INFINITY;
   private sawBoss = false;
 
@@ -1191,7 +1193,8 @@ class Planner {
   /** Why to plan again while a goal is under way, if anything. */
   due(r: RunView): string | undefined {
     let why: string | undefined;
-    if (!this.sawBoss && r.bosses.length > 0) why = `a boss appeared: ${r.bosses[0]?.name}`;
+    if (this.picked) why = "a card was just taken";
+    else if (!this.sawBoss && r.bosses.length > 0) why = `a boss appeared: ${r.bosses[0]?.name}`;
     else if (r.time - this.lastAsked >= pace.planEvery) why = `${pace.planEvery} seconds passed`;
     this.sawBoss ||= r.bosses.length > 0;
     return why;
@@ -1200,6 +1203,7 @@ class Planner {
   /** Picks among `options` when a choice is open, and sets the next goal. */
   async plan(r: RunView, why: string, options?: OptionView[]): Promise<PlanAnswer> {
     this.lastAsked = r.time;
+    if (options === undefined) this.picked = false;
     this.calls++;
     const b = await readBook();
     const experiment = this.notes.experiment;
@@ -1321,6 +1325,7 @@ async function choose(r: RunView, planner: Planner, log: RunLog) {
   else log.write(r, { event: "pick", model: "none", reason: kind, action: cardName(picked), detail: "the only option that can be taken" });
   if (picked === undefined) throw new Error(`no ${kind} option was picked`);
   deadPicks.names.add(picked.name);
+  planner.picked = true;
   return command({ type: "choose", index: picked.index });
 }
 

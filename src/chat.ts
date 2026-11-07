@@ -41,8 +41,13 @@ function oddsRows(options: CardOption[]): HTMLElement[] {
     h(
       "div",
       `tbh-opt ${c.chosen ? "tbh-opt-chosen" : c.probability === undefined ? "tbh-opt-ruled-out" : "tbh-opt-safe"}`,
-      h("div", "tbh-opt-head", h("span", "tbh-opt-name", c.card), ...(c.chosen ? [h("span", "tbh-opt-outcome", "chosen")] : [])),
-      ...(c.probability === undefined ? [] : [h("div", "tbh-opt-scores", meter(percent(c.probability), c.probability, "tbh-meter-useful tbh-meter-wide"))]),
+      h(
+        "div",
+        "tbh-opt-head",
+        h("span", "tbh-opt-name", c.card),
+        ...(c.chosen ? [h("span", "tbh-opt-outcome", "chosen")] : []),
+        ...(c.probability === undefined ? [] : [h("span", "tbh-opt-scores", meter(percent(c.probability), c.probability, "tbh-meter-useful tbh-meter-wide"))]),
+      ),
       ...(c.notes === "" ? [] : [h("div", "tbh-opt-desc", c.notes)]),
     ),
   );
@@ -77,18 +82,14 @@ function inspectBody(m: ChatMessage): Node[] {
             "tbh-opt-head",
             h("span", "tbh-opt-name", m.move),
             h("span", "tbh-opt-outcome", m.outcome),
-            ...(m.forecast === undefined ? [] : [h("span", `tbh-chip${m.forecast === "no damage" ? " tbh-chip-ok" : ""}`, m.forecast)]),
+            h(
+              "span",
+              "tbh-opt-scores",
+              ...(m.forecast === undefined ? [] : [h("span", `tbh-chip${m.forecast === "no damage" ? " tbh-chip-ok" : ""}`, m.forecast)]),
+              ...(m.hurt === undefined ? [] : [meter(`hurt ${m.hurt.toFixed(1)}/4`, m.hurt / 4, "tbh-meter-hurt")]),
+              ...(m.useful === undefined ? [] : [meter(`useful ${percent(m.useful)}`, m.useful, "tbh-meter-useful")]),
+            ),
           ),
-          ...(m.hurt === undefined && m.useful === undefined
-            ? []
-            : [
-                h(
-                  "div",
-                  "tbh-opt-scores",
-                  ...(m.hurt === undefined ? [] : [meter(`hurt ${m.hurt.toFixed(1)}/4`, m.hurt / 4, "tbh-meter-hurt")]),
-                  ...(m.useful === undefined ? [] : [meter(`useful ${percent(m.useful)}`, m.useful, "tbh-meter-useful")]),
-                ),
-              ]),
           h("div", "tbh-opt-desc", m.description),
         ),
       );
@@ -232,7 +233,6 @@ function actionRow(m: ChatMessage): HTMLElement {
     `tbh-row tbh-row-${m.role}${m.inspect === undefined ? "" : " tbh-row-inspectable"}`,
     h("span", "tbh-row-time", m.time === undefined ? "" : fine(m.time)),
     h("span", "tbh-row-text", m.text),
-    ...(m.detail === undefined ? [] : [h("span", "tbh-row-detail", m.detail)]),
   );
   el.dataset.id = String(m.id);
   return el;
