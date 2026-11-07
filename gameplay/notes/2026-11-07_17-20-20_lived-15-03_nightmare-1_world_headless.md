@@ -9,7 +9,7 @@
 | Planner | typesafe/jev-1.14-20261014 |
 | Action model | typesafe/jev-1.14-20261014 |
 | Coach | grok grok-4.7-build-fast |
-| Coach prompts | coach-plan.md 40bad860 |
+| Coach prompts | coach-plan.md 40bad860; coach-retrospective.md 3ec01e62 |
 | Templates from | coach-plan.md |
 | Log | /tmp/tibobit/2026-11-07_17-20-20_nightmare-1_world_headless.csv |
 
@@ -29,7 +29,85 @@ This run tests E26 on nightmare open world: whether an explore walk of 600 units
 
 <!-- review: written by the coach from coach-retrospective.md -->
 
-(the coach is reviewing the run)
+## Summary
+
+This run tested E26: whether exploreDistance 600 lists a chest before 1:30 on nightmare open world, with the 3:38 templates and the other knobs unchanged. The bot played the test. From 0:00 to 1:07 four explore goals each walked 600 units and found nothing, and one explore (0:47–0:52) turned aside to a Beetle Nest. At 1:08 two chests were listed, 40 and 54 away, at 108/120 hp, and the planner opened them. That is earlier and healthier than the 300-unit world runs (1:32, 1:46, 2:16, 2:20, 3:02), on one seed (127B4T9), so it is a lead. The same chest directive then evolved five weapons by 8:16 and carried the run to 15:03, where enemy:ice-imp (773 of 1179, the last 169 in one second) killed Tibo on steps the one-second forecast had priced as free.
+
+## Findings
+
+- E26's clock line was met on seed 127B4T9: the first chest row is 1:08, chests 40 down and 54 down-left, hp 108/120, after explore goals ended "walked 600 units and found nothing new" at 0:10, 0:21, 0:47 and 1:07. Lead. One seed.
+- Those first chests appeared in the list at the 1:08 level-up. Later explores did stop early on a chest that had never been listed: 2:04 at 33, 4:01 at 155, 5:03 at 46, 7:04 at 71, 7:08 at 141, 9:08 at 173, 10:11 at 75, 11:15 at 342, 13:20 at 165, 14:06 at 80. Lead that the 600 early-stop fires once a chest is there to find.
+- The chest directive was what the planner played once a chest was listed: about 32 opens completed, and one fail (C65563 at 1:19, "no closer for 6 seconds", hp 108 down to 76 while the model stepped away). No evade goal started. Food goals started when food was listed under 70% hp, at 12:38, 14:26, 14:36 and 15:03. Likely.
+- Five evolutions were in by 8:16: Factory Reset 1:38, Gravy Pack 2:04, Loaded Dice 3:21, Permafrost Fries 7:07, Sack of Russets 8:16. The run lived 15:03 at level 52 with 42373 kills, the second nightmare world run past 15:00 on this directive plus the dash question. Likely.
+- enemy:ice-imp was 773 of 1179 damage and the killing blow (15:03, hurt_by enemy:ice-imp 169.1, hp 48 then 24). The big ticks at 10:56 (34 hp), 13:47 (87 hp) and 14:19 (114 hp) are page walks with enemies_near 0. Likely, second long run after ice-imp 116 of 392 on the 17:14 run.
+- The Mandoline dealt 63.6 at 12:18 from 273 away and 82.3 at 12:27 from 132 away, both page walks the forecast treated as as cheap as the safest step. Great Wireworm dealt 56.4 at 10:03 on a dash the model rated no damage (hurt 0.13). Lead. Same shape as the amusing forecast miss.
+- Hp rose with max hp unchanged and no food goal: +24 at 1:37 (67 to 91) and +29 at 1:38 (87 to 116), then +35 at 12:25 (139 to 173), +34 at 12:49 (94 to 129), +30 at 12:54 and +46 at 13:20 (146 to 192). Lead. This is the rise the short world runs had missed before 3:00.
+- With all six weapons and six passives filled, Skip beat Sack of Gold and Baked Potato at high hp (10:13 twice, 11:59 twice, 13:34, 14:02) and Baked Potato won when hp was lower (12:31 at 96, 12:56 at 110, 13:16 at 116, 14:02 at 103, 14:26 at 84). Reroll was on offer from 3:34 and was never taken. Lead.
+- At 10:02 the shrine pick was crit chance 0% to 6% at 75%, over max HP 192 to 215 at 19%, with Great Wireworm 94 away at 93%. The next second the worm hit for 56. Lead.
+- Boom Spud, gained at 8:03 from a Potato Crate, and Coal-Baked Spud, bought at 10:57 (gold 3804 to 3572), were still held at death. The goal list has no use-item option. Lead.
+- A finished food goal healed +31 at 12:38 (131 to 162) with no hit on that row. The 14:37 food ended at +7 while ice-imp 23.1 was on the hurt list. Likely, the ~30 heal when the same seconds stay clean.
+- Hot oil was 55 for the whole run. A large share of it is the 3:12–3:27 chest cluster in burn, which still opened and produced Loaded Dice plus Mash Landing 8/8. Lead that the oil was the smaller cost.
+
+## Went well
+
+- 0:00–1:07 the explore legs covered 600 units and hp went 120 to 108. Sprout-mite, potato-beetle and compost-maggot ticks stayed in single digits.
+- 1:08–1:11 the first two chests opened at 108 hp and Reset Button reached 8/8.
+- 1:38–8:16 the chest chain finished five evolutions. Hp was full again by 2:28 and stayed near max until the worm at 10:03.
+- 6:31 a Spud Freezer 39 to the left was charged and used by 6:34.
+- 12:38, 14:26 and 14:36 food was taken while hp was under 70%.
+- Dashes at 10:22 (88%), 12:54 (86%) and 13:01 (85%) left the ice-imp direction the forecast had marked dead.
+
+## Went poorly
+
+- 1:14–1:25 the chest was up-left and the model walked and dashed right and down (dash 78% at 1:14, 96% at 1:20). Hp 108 to 76. C65563 failed at 1:19. A step that still closed the last 50 units would have kept the channel.
+- 3:12–3:25 the model left chests that were 0.4 to 0.7 charged, because standing still forecast a few hp, while hot oil was underfoot (ticks up to 13.8). The opens still finished. Staying on the tile for the last half-second would have dropped the oil total.
+- 3:51 a Spud Freezer 41 to the left lost to explore up. The directive calls a close freezer good. The 6:31 freezer, 39 away, shows the planner will take one.
+- 10:02 crit over +23 max HP, then 10:03 Great Wireworm for 56 on a move rated no damage. Max HP was the survival card with the worm inside 100.
+- 10:56, 13:47 and 14:19 the page walked into ice-imp for 34, 87 and 114, enemies_near 0, forecast as cheap as the safest step. 12:18 and 12:27 the page walked into The Mandoline for 64 and 82 from 273 and 132 away. The action model was not asked. Those steps are where the run's health actually left.
+- 10:57 Coal-Baked Spud was bought and never used, and Boom Spud had sat unused since 8:03. Gold 7328 was still in hand at death.
+- 15:02–15:03 ice-imp 48.5 then 169, food 99 and 104 away, the food direction forecast as dead. The model walked down from 48 hp and died at 24. The food goal matched the directive and the burst was already faster than a 100-unit walk.
+
+## Moments
+
+- **0:10** Explore up-right walked 600 units and found nothing, hp 119. Better: right call.
+- **1:08** Two chests listed at 40 and 54, hp 108, and the planner opened them. Reset Button was 8/8 by 1:11. Better: right call.
+- **1:19** Chest C65563 failed, no closer for 6 seconds, after dashes right away from an up-left chest, hp 108 down to 91 and still falling. Better: take a step that shortens the chest distance once the forecast is a scratch.
+- **1:38** The chest opened into Factory Reset and hp went 87 to 116. Better: right call.
+- **3:21** Loaded Dice evolved in hot oil; Mash Landing was 8/8 by 3:27. Better: right call to finish the cluster, and stand the last half-second of each channel.
+- **3:51** Spud Freezer 41 left, explore up won. Better: charge the freezer.
+- **6:31** Spud Freezer 39 left, charged and used by 6:34. Better: right call.
+- **8:16** Sack of Russets evolved. Five evolutions, hp 163/163. Better: right call.
+- **10:03** Great Wireworm hit for 56 on a dash rated no damage, one second after the shrine took crit over +23 max HP. Better: take max HP, and treat a worm inside 20 as a forecast miss.
+- **12:18** The Mandoline hit for 64 from 273 away on a page walk the forecast called free. Better: ask the action model while a boss is listed.
+- **13:47** Ice-imp hit for 87 on a page walk, enemies_near 0, hp 192 to 105. Better: ask the model on that step.
+- **15:03** Ice-imp hit for 169, food was about 100 away, and Tibo died at 24 hp. Better: the food goal was the right call and an hour too late; the free walks at 13:47 and 14:19 were the loss.
+
+## Questions
+
+- Does a second nightmare world seed at exploreDistance 600 also list a chest before 1:30 with hp still above about 80%? Added as E39.
+- Do Great Wireworm and The Mandoline hits of 50 hp or more keep landing on steps the forecast prices as free, so the action model is never asked? Added as E38.
+- If planner.pick says max HP beats crit while a boss is within 150, and Baked Potato beats Skip under 70% hp, do the 10:02 shrine and the late Skip picks flip? Added as E40.
+- Boom Spud and Coal-Baked Spud stayed unused from 8:03 and 10:57 through death. The goal list has no use-item option, so a template cannot spend them. Filed as infrastructure.
+
+## Beliefs changed
+
+- B9: likely, held → likely, recheck. Skip won six times on a full build. Reroll still never won.
+- B15: likely, held → likely, recheck. The ice-imp killing hits are logged with enemies_near 0.
+- B18: likely, recheck → likely, disproved. +24 at 1:37 and +29 at 1:38, max hp still 120, no food goal.
+- B22: evidence added (a chest 342 away opened at 11:15–11:22 at full hp). Confidence and status stay lead, recheck.
+- B25: likely, held → likely, recheck. First chests at 1:08 under exploreDistance 600.
+- B32: lead, held → likely, held. Second world run past 15:00 (15:03) on this directive and dash question.
+- B33: lead, held → likely, held. Ice-imp 773 of 1179 and the killing blow.
+- B11, B13, B17, B20, B21, B23, B26, B28, B29, B31, B34: evidence from this run added. Confidence and status unchanged.
+- B35 added: game, lead, held. Non-food heals of about 24–46 with max hp unchanged, including before 3:00.
+- B36 added: game, lead, held. Great Wireworm and The Mandoline deal 56–82 hp on a step the forecast prices as free.
+- B37 added: game, lead, held. At exploreDistance 600, seed 127B4T9 listed a chest at 1:08 at 108/120.
+- B38 added: planner, lead, held. On a full build, Skip beats Sack of Gold and Baked Potato at high hp, and Baked Potato wins when hp is lower.
+- B39 added: planner, lead, held. The shrine question took crit over +23 max HP with Great Wireworm 94 away.
+
+## Process changes
+
+No coach prompt edit.
 
 <!-- /review -->
 
