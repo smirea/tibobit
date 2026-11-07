@@ -133,14 +133,22 @@ export class Controller {
 
   private async start(status: CommandStatus, difficulty: string) {
     if (inRun(this.link)) throw new Error("a run is already in progress");
-    const again = button(/^(Play again|Retry|Try again|Again)$/i);
+    // After a death the game walks through a few screens (a promo, a summary) before the title.
+    // Advance through them, never pressing anything that leaves the game, such as "Try Grok Bot".
+    let again: HTMLButtonElement | undefined;
+    for (let i = 0; i < 15 && button("Open World") === undefined; i++) {
+      again = button(/^(Play again|Retry|Try again|Again|Run again)$/i);
+      if (again !== undefined) break;
+      const next = button(/^(Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
+      if (next === undefined) {
+        const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
+        throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
+      }
+      press(next);
+      await wait(1200);
+    }
     if (again !== undefined) press(again);
     else {
-      const menu = button(/^(Menu|Main menu|Title|Back to title)$/i);
-      if (menu !== undefined) {
-        press(menu);
-        await wait(1500);
-      }
       const world = button("Open World");
       if (world === undefined) throw new Error("no Open World button on screen");
       press(world);

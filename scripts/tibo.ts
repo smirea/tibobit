@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { BRIDGE_ORIGIN, type CommandStatus, type PickupView, type Rel, type RunView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type CommandStatus, type PickupView, type Rel, type RunView, type Snapshot } from "../src/agent/protocol";
 
 const USAGE = `usage: tibo <command>
 
@@ -21,10 +21,12 @@ Commands wait until they finish (except move without seconds); add --no-wait to 
 
 type Snap = Snapshot & { connected: boolean; ageMs: number };
 
+const SERVER = process.env.TIBO_SERVER ?? DEFAULT_ORIGIN;
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${BRIDGE_ORIGIN}${path}`, init);
+    res = await fetch(`${SERVER}${path}`, init);
   } catch {
     throw new Error(`the agent server is not running; start it with ./scripts/agent-server.ts`);
   }

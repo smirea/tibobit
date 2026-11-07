@@ -16,6 +16,7 @@ const width = Number(option("width", "960"));
 const height = Number(option("height", "600"));
 const port = Number(option("port", "7358"));
 const headed = args.includes("--headed");
+const bridge = option("bridge", "");
 
 const root = path.resolve(import.meta.dir, "..");
 const userscript = Bun.file(path.join(root, "dist", "tibo-helper.user.js"));
@@ -55,7 +56,8 @@ const browser = await chromium.launch({
   args: ["--disable-web-security", "--disable-features=LocalNetworkAccessChecks", "--mute-audio", "--use-angle=metal"],
 });
 const context = await browser.newContext({ bypassCSP: true, viewport: { width, height } });
-await context.addInitScript({ content: `${shim}\n${await userscript.text()}` });
+const target = bridge === "" ? "" : `window.__tiboBridgeOrigin = "http://127.0.0.1:${Number(bridge)}";`;
+await context.addInitScript({ content: `${target}\n${shim}\n${await userscript.text()}` });
 const page = await context.newPage();
 page.on("pageerror", (e) => console.error("page error:", String(e)));
 page.on("console", (m) => {

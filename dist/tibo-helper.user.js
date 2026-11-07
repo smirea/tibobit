@@ -542,6 +542,7 @@
   }
 
   // src/agent/bridge.ts
+  var ORIGIN = globalThis.__tiboBridgeOrigin ?? BRIDGE_ORIGIN;
   var RUN_INTERVAL_MS = 33;
   var IDLE_INTERVAL_MS = 500;
   var RECONNECT_MS = 3000;
@@ -549,7 +550,7 @@
   function post(path, body) {
     return new Promise((resolve) => GM_xmlhttpRequest({
       method: "POST",
-      url: `${BRIDGE_ORIGIN}${path}`,
+      url: `${ORIGIN}${path}`,
       data: JSON.stringify(body),
       headers: { "content-type": "application/json" },
       timeout: 5000,
@@ -574,7 +575,7 @@
       const mine = ++session;
       GM_xmlhttpRequest({
         method: "GET",
-        url: `${BRIDGE_ORIGIN}/bridge/commands`,
+        url: `${ORIGIN}/bridge/commands`,
         responseType: "stream",
         onloadstart: (r) => {
           const body = r.response;
@@ -770,15 +771,22 @@
     async start(status, difficulty) {
       if (inRun(this.link))
         throw new Error("a run is already in progress");
-      const again = button(/^(Play again|Retry|Try again|Again)$/i);
+      let again;
+      for (let i = 0;i < 15 && button("Open World") === undefined; i++) {
+        again = button(/^(Play again|Retry|Try again|Again|Run again)$/i);
+        if (again !== undefined)
+          break;
+        const next = button(/^(Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
+        if (next === undefined) {
+          const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
+          throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
+        }
+        press(next);
+        await wait(1200);
+      }
       if (again !== undefined)
         press(again);
       else {
-        const menu = button(/^(Menu|Main menu|Title|Back to title)$/i);
-        if (menu !== undefined) {
-          press(menu);
-          await wait(1500);
-        }
         const world = button("Open World");
         if (world === undefined)
           throw new Error("no Open World button on screen");

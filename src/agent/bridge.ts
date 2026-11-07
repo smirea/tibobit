@@ -3,6 +3,9 @@ import type { GameLink } from "../game";
 import type { Controller } from "./control";
 import { encyclopedia } from "./encyclopedia";
 import { BRIDGE_ORIGIN, parseCommand } from "./protocol";
+
+// The headless runner can point a page at another server, so several games can run side by side.
+const ORIGIN = (globalThis as { __tiboBridgeOrigin?: string }).__tiboBridgeOrigin ?? BRIDGE_ORIGIN;
 import { inRun, snapshot } from "./snapshot";
 
 type GmResponse = { status: number; response: unknown; responseText?: string };
@@ -28,7 +31,7 @@ function post(path: string, body: unknown): Promise<boolean> {
   return new Promise((resolve) =>
     GM_xmlhttpRequest({
       method: "POST",
-      url: `${BRIDGE_ORIGIN}${path}`,
+      url: `${ORIGIN}${path}`,
       data: JSON.stringify(body),
       headers: { "content-type": "application/json" },
       timeout: 5000,
@@ -61,7 +64,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
     const mine = ++session;
     GM_xmlhttpRequest({
       method: "GET",
-      url: `${BRIDGE_ORIGIN}/bridge/commands`,
+      url: `${ORIGIN}/bridge/commands`,
       responseType: "stream",
       // Tampermonkey reports no status yet at loadstart, so the server's first line, a hello,
       // is what marks the connection live. A refused connection (409) never sends one.

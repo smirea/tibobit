@@ -4,7 +4,7 @@
 // commands; every decision (where to move, what to pick) is the model's.
 import os from "node:os";
 import path from "node:path";
-import { BRIDGE_ORIGIN, type CommandStatus, DIRECTIONS, type Direction, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type CommandStatus, DIRECTIONS, type Direction, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {
@@ -12,6 +12,7 @@ const option = (name: string, fallback: string) => {
   return i >= 0 ? (args[i + 1] ?? fallback) : fallback;
 };
 const MODEL = option("model", "h2o-lightning-4b@q8_0");
+const SERVER = option("server", process.env.TIBO_SERVER ?? DEFAULT_ORIGIN);
 const DECIDER = option("decider", "http://localhost:1234/v1/systemone");
 const STEP = Number(option("step", "0.35"));
 const RUNS = Number(option("runs", "1"));
@@ -19,14 +20,16 @@ const DIFFICULTY = option("difficulty", "easy");
 const SPEED = Number(option("speed", "4"));
 const PLANNER = option("planner", "grok");
 const PLAN_EVERY = Number(option("plan-every", "300"));
+const TRACE = args.includes("--trace");
+const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
 
 type Snap = Snapshot & { connected: boolean; ageMs: number };
-type Choice = { type: "choice"; instructions: string; criteria: Record<string, string | null> };
-type Answer = { choice: string; probabilities: Record<string, number>; confidence: number };
+type Question = { type: "choice"; instructions: string; criteria: Record<string, string | null> } | { type: "noul"; instructions: string };
+type Answer = { choice?: string; probabilities?: Record<string, number>; confidence?: number; noul?: number };
 
 async function api<T>(route: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BRIDGE_ORIGIN}${route}`, body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const res = await fetch(`${SERVER}${route}`, body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const json = (await res.json()) as T & { error?: string };
   if (!res.ok) throw new Error(`${route}: ${json.error ?? res.status}`);
   return json;
@@ -45,12 +48,14 @@ async function timed<T>(phase: "state" | "decide" | "command", work: Promise<T>)
 const command = (c: unknown) => timed("command", api<CommandStatus & { interruptedBy?: string }>("/command?wait=1&timeout=30", c));
 
 const latency: number[] = [];
-async function decide(state: string, questions: Record<string, Choice>): Promise<Record<string, Answer>> {
+let trace: ((entry: unknown) => void) | undefined;
+async function decide(state: string, questions: Record<string, Question>): Promise<Record<string, Answer>> {
   const started = performance.now();
   const res = await timed("decide", fetch(DECIDER, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: MODEL, state, questions }) }));
   const json = (await res.json()) as { answers?: Record<string, Answer>; error?: unknown };
   latency.push(performance.now() - started);
   if (json.answers === undefined) throw new Error(`decision model error: ${JSON.stringify(json.error ?? json).slice(0, 300)}`);
+  trace?.({ event: "decision", state, questions, answers: json.answers });
   return json.answers;
 }
 
@@ -104,7 +109,7 @@ function situation(r: RunView): string {
   const near = r.sectors.reduce((n, s) => n + s.enemiesNear, 0);
   return [
     `Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only chooses where to walk.`,
-    `Time ${Math.floor(r.time / 60)}:${String(Math.floor(r.time % 60)).padStart(2, "0")}. Health ${hp}%. Level ${p.level}. ${plural(near, "enemy")} within 60 units, ${plural(r.enemies.total, "enemy")} around.`,
+    `Time ${Math.floor(r.time / 60)}:${String(Math.floor(r.time % 60)).padStart(2, "0")}. Health ${hp}%${hp < 40 ? ", which is low" : ""}. Level ${p.level}. ${plural(near, "enemy")} within 60 units, ${plural(r.enemies.total, "enemy")} around.`,
     ...(r.bosses.length > 0 ? [`Boss ${r.bosses[0]?.name} is ${Math.round(r.bosses[0]?.dist ?? 0)} units away to the ${r.bosses[0]?.dir}.`] : []),
     `Weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}. Passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
     ...(plan === undefined ? [] : [`Plan: ${plan.advice}`]),
@@ -114,7 +119,8 @@ function situation(r: RunView): string {
 function sights(r: RunView, dir: Direction): string[] {
   const out: string[] = [];
   for (const c of r.pickups.chests) if (c.dir === dir && c.dist < 300) out.push(`a chest ${Math.round(c.dist)} away`);
-  for (const p of r.pickups.nearest) if (p.dir === dir && p.dist < 200 && p.kind !== "gold") out.push(`a ${p.kind} pickup ${Math.round(p.dist)} away`);
+  for (const p of r.pickups.nearest)
+    if (p.dir === dir && p.dist < 200 && p.kind !== "gold") out.push(p.kind === "heal" ? `food that heals Tibo ${Math.round(p.dist)} away` : `a ${p.kind} pickup ${Math.round(p.dist)} away`);
   for (const p of r.pois) if (p.dir === dir && p.dist < 300 && p.chargeNeeded > 0) out.push(`a ${p.name} ${Math.round(p.dist)} away`);
   return out.slice(0, 2);
 }
@@ -136,11 +142,15 @@ async function move(r: RunView) {
   for (const s of r.sectors) criteria[s.dir] = `walk ${s.dir}: ${describe(r, s)}`;
   const inside = r.pois.find((p) => p.inside && p.chargeNeeded > 0);
   criteria.stay = inside === undefined ? "stand still" : `stand still inside the ${inside.name}, charged ${inside.charge} of ${inside.chargeNeeded} seconds`;
-  const { move: answer } = await decide(situation(r), {
+  const canDash = r.player.dashCharges > 0 && r.sectors.some((x) => x.enemiesNear > 0 || (x.nearestBullet ?? 999) < 40);
+  const questions: Record<string, Question> = {
     move: { type: "choice", instructions: "Which way should Tibo walk next to stay alive and collect useful things?", criteria },
-  });
-  const choice = answer?.choice ?? "stay";
+  };
+  if (canDash) questions.dash = { type: "noul", instructions: "Is Tibo about to be hit or surrounded, so a quick dash in the chosen direction would save it?" };
+  const answers = await decide(situation(r), questions);
+  const choice = answers.move?.choice ?? "stay";
   const dir = (DIRECTIONS as readonly string[]).includes(choice) ? (choice as Direction) : undefined;
+  if (dir !== undefined && (answers.dash?.noul ?? 0) > 0.5) await command({ type: "dash", dir });
   return command(dir === undefined ? { type: "goto", to: { dx: 0, dy: 0 }, stay: STEP, pause: true } : { type: "move", dir, seconds: STEP, pause: true });
 }
 
@@ -167,11 +177,14 @@ async function choose(r: RunView) {
 async function main() {
   await Bun.write(LOG, "");
   const log = Bun.file(LOG).writer();
+  if (TRACE) trace = (entry) => log.write(`${JSON.stringify(entry)}\n`);
   let runs = 0;
   let lastReport = -1;
   let steps = 0;
   console.log(`model ${MODEL}, step ${STEP}s, speed x${SPEED}, log ${LOG}`);
   await command({ type: "speed", factor: SPEED });
+  const first = await api<Snap>("/state");
+  if (first.screen !== "title" && first.screen !== "over") runs = 1;
   for (;;) {
     const s = await timed("state", api<Snap>("/state"));
     if (!s.connected) throw new Error("the game tab is not connected to the agent server");
@@ -183,8 +196,15 @@ async function main() {
         log.flush();
         if (runs >= RUNS) return;
       }
-      const started = await command({ type: "start", difficulty: DIFFICULTY });
-      if (started.state !== "done") throw new Error(`could not start a run: ${started.detail ?? started.state}`);
+      let started = await command({ type: "start", difficulty: DIFFICULTY });
+      if (started.state !== "done") {
+        console.log(`start failed (${started.detail ?? started.state}); reloading the game page`);
+        await fetch(RELOAD).catch(() => undefined);
+        await Bun.sleep(8000);
+        started = await command({ type: "start", difficulty: DIFFICULTY });
+        if (started.state !== "done") throw new Error(`could not start a run: ${started.detail ?? started.state}`);
+      }
+      await command({ type: "speed", factor: SPEED });
       runs++;
       steps = 0;
       plan = undefined;

@@ -3,6 +3,8 @@ import type { ServerWebSocket } from "bun";
 import { BRIDGE_PORT, type CommandStatus, type Encyclopedia, type Snapshot, parseCommand } from "../src/agent/protocol";
 
 const KEEPALIVE_MS = 5_000;
+const portArg = process.argv.indexOf("--port");
+const PORT = portArg >= 0 ? Number(process.argv[portArg + 1]) : BRIDGE_PORT;
 const WAIT_LIMIT_MS = 120_000;
 
 let latest: { snapshot: Snapshot } | undefined;
@@ -68,7 +70,7 @@ WS   /ws             pushes every snapshot; send a JSON command to run it
 
 const server = Bun.serve({
   hostname: "127.0.0.1",
-  port: BRIDGE_PORT,
+  port: PORT,
   idleTimeout: 0,
   async fetch(req, srv) {
     const url = new URL(req.url);

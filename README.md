@@ -56,7 +56,9 @@ The server only listens on 127.0.0.1 and sends no CORS headers, so other website
 
 `./scripts/tibo-bot.ts` plays through the agent server with a local decision model served by LM Studio at `/v1/systemone` (for example `--model h2o-lightning-4b@q8_0` or `--model laya@q8_0`). Each step it asks the model one question: which of the eight directions to walk, or to stand still, with each option described by what lies that way. On a level-up it asks which card to take. The bot only describes the game and carries out the answers. Every few game minutes it asks `grok` for a short plan in the background, which the decision model sees as context (`--planner none` turns that off).
 
-The bot plays in lockstep: each step runs the game for `--step` seconds (default 0.35) and pauses it again (`"pause": true` on `move` and `goto`), so the model's thinking time costs no game time. `{"type":"speed","factor":4}` runs four simulation ticks per frame, so game time passes up to four times faster while the model thinks. Run summaries go to `.runs/`.
+The bot plays in lockstep: each step runs the game for `--step` seconds (default 0.35) and pauses it again (`"pause": true` on `move` and `goto`), so the model's thinking time costs no game time. `{"type":"speed","factor":4}` runs four simulation ticks per frame, so game time passes up to four times faster while the model thinks. Run summaries go to `.runs/`, and `--trace` adds every question and answer.
+
+To run several games side by side, give each its own server port: `./scripts/agent-server.ts --port 7367`, `./scripts/headless.ts --bridge 7367 --port 7368`, then `./scripts/tibo-bot.ts --server http://127.0.0.1:7367 --reload http://127.0.0.1:7368/reload` (or `TIBO_SERVER=http://127.0.0.1:7367 ./scripts/tibo.ts state`). LM Studio must keep each model loaded (`lms load <model>`), or loading one on demand can cancel the other.
 
 ## How it reads the game
 
