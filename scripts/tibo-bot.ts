@@ -747,6 +747,7 @@ const everListed = new Set<string>();
 
 function resetGoals() {
   pursuit = undefined;
+  distrusted = undefined;
   outcomes.length = 0;
   giveUps.clear();
   everListed.clear();
@@ -941,6 +942,17 @@ function ending(p: Pursuit, r: RunView, aim: Aim | Ended, status: CommandStatus 
   return undefined;
 }
 
+/** The forecast missed a hit on a free step; until `until`, every step asks the action model (knob distrustSeconds). */
+let distrusted: { until: number; lost: number; at: number } | undefined;
+
+/** Why the action model is asked even though the forecast calls the way to the goal cheap, if it is. */
+function distrustReason(r: RunView): string | undefined {
+  if (distrusted !== undefined && r.time < distrusted.until) return `the forecast was not trusted: Tibo lost ${distrusted.lost} health on a step it called free at ${clock(distrusted.at)}`;
+  const range = knobs().distrustBossRange;
+  const boss = range > 0 ? r.bosses.find((b) => b.dist <= range) : undefined;
+  return boss === undefined ? undefined : `the forecast was not trusted: the ${boss.name} boss is ${Math.round(boss.dist)} away`;
+}
+
 /** Why a goal stopped making progress, in the words the planner reads in its recent goals. */
 function stuckWords(p: Pursuit, r: RunView, aim: Aim): string {
   const seconds = knobs().stuckSeconds;
@@ -974,15 +986,19 @@ async function pursue(s: Snap, r: RunView, log: RunLog, planner: Planner) {
     const cost = aim.heading === undefined ? undefined : moveCost(r, aim.heading);
     const cheapest = cheapestMove(r);
     const clear = aim.heading !== undefined && (cost === undefined || cheapest === undefined || cost <= cheapest + knobs().extraDamage);
-    if (clear) {
+    const distrust = distrustReason(r);
+    if (clear && distrust === undefined) {
       // The page walks on its own here, so a hit the forecast missed would otherwise leave no row.
       const lost = log.lostSince(r);
-      if (lost >= 1) log.write(r, { event: "walk", model: "none", goal: p.id, action: aim.heading === "stay" ? "stand on the goal" : `walk ${aim.heading}`, reason: "the way to the goal cost no more than the cheapest move" });
+      if (lost >= 1) {
+        log.write(r, { event: "walk", model: "none", goal: p.id, action: aim.heading === "stay" ? "stand on the goal" : `walk ${aim.heading}`, reason: "the way to the goal cost no more than the cheapest move" });
+        if (knobs().distrustSeconds > 0) distrusted = { until: r.time + knobs().distrustSeconds, lost: Math.round(lost), at: r.time };
+      }
       if (aim.heading !== undefined && aim.heading !== "stay" && dashWorthAsking(r)) await dashOnTheWay(r, p, aim.heading, log);
       return walkOn(p, r, aim, status, log);
     }
     p.sent = undefined;
-    return steer(r, p, aim, log);
+    return steer(r, p, aim, log, distrust ?? `the way to the goal (${aim.heading ?? "none"}) costs more than the safest move`);
   }
 }
 
@@ -1140,7 +1156,7 @@ async function dashOnTheWay(r: RunView, p: Pursuit, heading: Direction, log: Run
 }
 
 /** The way to the goal costs more than the safest move: the action model picks this step. */
-async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog) {
+async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog, why: string) {
   const goal = goalWords(p, aim);
   const moves: Record<string, string> = {};
   for (const s of r.sectors) moves[s.dir] = `walk ${s.dir}: ${describe(r, s, aim.heading)}`;
@@ -1219,7 +1235,7 @@ async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog) {
   log.write(r, {
     event: "move",
     model: MODEL,
-    reason: `the way to the goal (${aim.heading ?? "none"}) costs more than the safest move`,
+    reason: why,
     goal: p.id,
     action: move,
     options: weighed.map((w) => `${w.move} ${w.forecast ?? "?"} hurt ${w.hurt ?? "-"} useful ${w.useful === undefined ? "-" : Math.round(w.useful * 100)}%${w.outcome === "ruled out" ? " (ruled out)" : ""}`).join("; "),

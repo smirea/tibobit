@@ -166,7 +166,7 @@ export const SLOTS = {
 } as const;
 export type Slot = keyof typeof SLOTS;
 
-export type Knobs = { exploreDistance: number; evadeSeconds: number; gemsSeconds: number; stuckSeconds: number; extraDamage: number; safeMargin: number };
+export type Knobs = { exploreDistance: number; evadeSeconds: number; gemsSeconds: number; stuckSeconds: number; extraDamage: number; safeMargin: number; distrustSeconds: number; distrustBossRange: number };
 export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: string }> = {
   exploreDistance: { min: 100, max: 1500, about: "units an explore goal walks before it ends; it also ends at the first chest never listed before" },
   evadeSeconds: { min: 2, max: 30, about: "seconds an evade goal lasts" },
@@ -174,6 +174,8 @@ export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: strin
   stuckSeconds: { min: 2, max: 20, about: "seconds without getting closer (or charging) before a goal is given up" },
   extraDamage: { min: 0, max: 0.25, about: "share of max health a move may cost over the cheapest move in the next second and still be taken: the page walks Tibo to the goal on its own while the way there costs no more than this over the cheapest, and the action model is never offered a move that costs more" },
   safeMargin: { min: 0, max: 0.5, about: "how far above the safest move's hurt rating (as a share of the scale) a move may be and still compete on usefulness" },
+  distrustSeconds: { min: 0, max: 30, about: "after Tibo loses health on a step the forecast called free (a walk row), the action model is asked about every step for this many seconds instead of the page walking on its own; 0 trusts the forecast" },
+  distrustBossRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is asked about every step, since boss attacks from afar are not in the one-second forecast; 0 turns it off" },
 };
 
 export type Templates = { planner: { state: string; goal: string; pick: string }; action: { state: string; hurt: string; useful: string; dash: string }; knobs: Knobs };
@@ -196,7 +198,7 @@ export const DEFAULT_TEMPLATES: Templates = {
     useful: "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
     dash: "Is Tibo about to be hit or surrounded, so a quick dash away would save it?",
   },
-  knobs: { exploreDistance: 300, evadeSeconds: 8, gemsSeconds: 12, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1 },
+  knobs: { exploreDistance: 300, evadeSeconds: 8, gemsSeconds: 12, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1, distrustSeconds: 0, distrustBossRange: 0 },
 };
 
 const STATE_LIMIT = 8000;
