@@ -93,7 +93,7 @@ const NOTES_DIR = path.join(GAMEPLAY, "notes");
 const FEEDBACK_FILE = path.join(GAMEPLAY, "infrastructure_feedback.csv");
 const CHECKPOINTS = [30, 150, 300, 480, 660, 840, 1020, 1140];
 const COACH_COOLDOWN = 45;
-const LOW_HEALTH = 0.35;
+const LOW_HEALTH = 0.5;
 
 type Plan = { want: string[]; advice: string };
 let plan: Plan | undefined;
@@ -173,6 +173,8 @@ class RunNotes {
   }
 }
 
+const where = (x: { dist: number; dir: string } | undefined) => (x === undefined ? "none in sight" : `${Math.round(x.dist)} away to the ${x.dir}`);
+
 function digest(r: RunView): string {
   const p = r.player;
   return [
@@ -184,6 +186,9 @@ function digest(r: RunView): string {
     `Unpaired: ${r.unpaired.map((u) => `${u.name} needs one of ${u.options.map((o) => o.name).join(", ")}`).join("; ") || "none"}.`,
     `Bosses: ${r.bosses.map((b) => `${b.name} ${Math.round(b.dist)} away, ${Math.round(b.hp)}/${Math.round(b.maxHp)} hp`).join("; ") || "none"}.`,
     `Hurt in the last 3 seconds by: ${Object.entries(p.hurtBy).map(([k, v]) => `${k} ${v}`).join(", ") || "nothing"}.`,
+    `Nearest chest: ${where(r.pickups.chests[0])}. Nearest food: ${where(r.pickups.nearest.find((x) => x.kind === "heal"))}. Nearest shrine to stand in: ${where(r.pois.find((x) => x.chargeNeeded > 0))}.`,
+    `Attacks on the ground: ${r.hazards.filter((h) => h.source === "attack").slice(0, 4).map((h) => `${h.shape} ${h.kind} ${Math.round(h.dist)} away to the ${h.dir}${h.landsIn === undefined ? "" : `, lands in ${h.landsIn}s`}`).join("; ") || "none"}.`,
+    ...(r.choice === undefined ? [] : [`Open ${r.choice.kind} choice: ${r.choice.options.map((o) => o.name).join(", ")}.`]),
   ].join("\n");
 }
 
@@ -210,7 +215,7 @@ class Coach {
     const checkpoint = CHECKPOINTS[this.nextCheckpoint];
     let why: string | undefined;
     if (!this.sawBoss && r.bosses.length > 0) why = `a boss appeared: ${r.bosses[0]?.name}`;
-    else if (low && !this.lowHealth && r.time - this.lastAsked >= COACH_COOLDOWN) why = "health dropped below a third";
+    else if (low && !this.lowHealth && r.time - this.lastAsked >= COACH_COOLDOWN) why = "health dropped below half";
     else if (evolved > this.evolved && r.time - this.lastAsked >= COACH_COOLDOWN) why = "a weapon evolved";
     else if (checkpoint !== undefined && r.time >= checkpoint) why = `checkpoint at ${clock(checkpoint)}`;
     this.sawBoss ||= r.bosses.length > 0;
@@ -371,6 +376,15 @@ function describe(r: RunView, s: SectorView): string {
   return parts.filter(Boolean).join(", ");
 }
 
+// Chests and shrines only open after Tibo stands on them for a moment, so standing still says so.
+function standing(r: RunView): string {
+  const chest = r.pickups.chests.find((c) => c.dist <= 14);
+  if (chest !== undefined) return `stand still on the chest to open it, ${chest.charge ?? 0} of ${chest.chargeNeeded ?? 1} seconds done`;
+  const inside = r.pois.find((p) => p.inside && p.chargeNeeded > 0);
+  if (inside !== undefined) return `stand still inside the ${inside.name}, charged ${inside.charge} of ${inside.chargeNeeded} seconds`;
+  return "stand still";
+}
+
 // Small decision models judge one concrete option far better than they rank nine at once, so
 // every direction (and standing still) is its own yes/no question. They also notice a threat in
 // a description far more reliably than they weigh "good" against "bad": on 60 replayed Daily
@@ -382,8 +396,7 @@ const SAFE_MARGIN = 0.1;
 async function move(r: RunView) {
   const moves: Record<string, string> = {};
   for (const s of r.sectors) moves[s.dir] = `walk ${s.dir}: ${describe(r, s)}`;
-  const inside = r.pois.find((p) => p.inside && p.chargeNeeded > 0);
-  moves.stay = inside === undefined ? "stand still" : `stand still inside the ${inside.name}, charged ${inside.charge} of ${inside.chargeNeeded} seconds`;
+  moves.stay = standing(r);
   const state = situation(r);
 
   const questions: Record<string, Question> = {};

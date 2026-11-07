@@ -1171,8 +1171,11 @@
     pauseAtStart = false;
     runLink;
     noteRunLink() {
-      if (location.pathname.startsWith("/r/"))
-        this.runLink = location.href;
+      if (!new URLSearchParams(location.search).has("run"))
+        return;
+      const share = new URL("/r/", location.origin);
+      share.search = location.search;
+      this.runLink = share.toString();
     }
     contentFn;
     seen = new Set;

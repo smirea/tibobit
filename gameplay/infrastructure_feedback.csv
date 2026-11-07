@@ -1,2 +1,15 @@
 date,run,time,notes
 2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,0:30,"When a level-up or chest is open, include the exact option names on screen so a second weapon can be named instead of only the one already held."
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,2:00,"Report the nearest chest's direction and whether the boss is firing a straight lane, so movement can reach the evolution and step out of the sweep."
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,2:30,"Expose the nearest chest's direction, distance, and whether it can be opened, so the bot can path to it when a weapon is evolution-ready."
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,3:31,"Trigger this low-health call at half HP, not a third, and include nearest food direction and distance so the bot can path to it before the fry-fly pack deletes the bar."
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,5:00,"Expose direction and distance to the nearest food and the nearest chest, and whether each lies inside the densest enemy cluster."
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,7:03,"Report nearest-food distance and direction, plus whether the boss attack is a straight lane, so the move model can sidestep Strawman toward food."
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,8:00,"Report nearest food as a direction and distance, plus whether the player is inside a damage zone and the shortest step out of it; health has stayed near 30 since 5:00."
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,8:09,"Give the walker a hard movement override for boss telegraphs: include the sidestep direction, and let a timer under 1.5s beat the coach sentence. The last four ticks still executed the 8:00 pack plan while an attack landed in 0.7s."
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,8:09,Put nearest chest distance and which owned weapon would evolve on pickup into every tick. The evolution was ready at 2:00 and the walker could not see the chest between consults.
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,8:09,"Add nearest food direction and distance, seconds since last heal, and HP change over 30s. The heal-first order ran from 3:31 to 8:09 while health stayed near 30."
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,8:09,Add the step direction that leaves hot oil and puddles. The death log said hurt by hot oil and never which way was clean ground.
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,8:09,"Make want exclusive at level-up and log the offered menu against the pick. Tot Toss, Tot Stampede, and Reset Button gained levels while the coach had named other weapons."
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,8:09,"Re-consult when a telegraph appears, a boss closes inside 50, or health crosses under 15%. Seven consults left a stale sentence in force through the death."
+2026-11-07,2026-11-07-06-00-daily-nightmare-DG0S-Z730R0,8:09,"Show catalyst ownership every tick (weapon, level, catalyst, owned or not). Butter Pat and Sprouting Eyes were wanted from 5:00 and still absent at 8:09."
