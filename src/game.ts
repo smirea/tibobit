@@ -96,10 +96,16 @@ export type Enums = {
 
 export type Messages = Record<string, string[]>;
 
+export type IconFrame = { x: number; y: number; w: number; h: number; ax: number; ay: number };
+export type IconPage = { url: string; width: number; height: number };
+/** The game's own icon sprite sheet, keyed by weapon, passive or item id. */
+export type IconSheet = IconPage & { frames: Map<string, IconFrame>; pageOf(frame: IconFrame): IconPage };
+
 /** While set, replaces the player's movement input every simulation tick. */
 export type Steer = (game: Game) => { x: number; y: number } | undefined;
 
 const SIM_CHUNK = /\/assets\/sim-[\w-]+\.js$/;
+const BOOT_CHUNK = /\/assets\/boot-[\w-]+\.js$/;
 const ENGLISH_CHUNK = /\/assets\/i18n-en-[\w.-]+\.js$/;
 
 type GamePrototype = { step(): unknown; setInput(x: number, y: number): unknown; choose: unknown };
@@ -166,6 +172,7 @@ export class GameLink {
   table: Table | undefined;
   enums: Enums | undefined;
   messages: Messages = {};
+  icons: IconSheet | undefined;
   error: string | undefined;
   steer: Steer | undefined;
   private contentFn: ((bigUpdate: Record<string, boolean>) => Content) | undefined;
@@ -219,6 +226,9 @@ export class GameLink {
     if (this.seen.has(url)) return;
     this.seen.add(url);
     if (SIM_CHUNK.test(url)) this.attachSim(url).catch((e) => this.fail(e));
+    else if (BOOT_CHUNK.test(url))
+      // Icons are decoration: without them the helper falls back to initials, so a miss only warns.
+      this.loadIcons(url).catch((e) => console.warn("[tibobit] no game icons:", e instanceof Error ? e.message : e));
     else if (ENGLISH_CHUNK.test(url)) this.loadMessages(url).catch((e) => this.fail(e));
   }
 
@@ -250,6 +260,43 @@ export class GameLink {
     this.enums = findEnums(table.module);
     this.table = table.value as Table;
     this.contentFn = contentFn.value as (bigUpdate: Record<string, boolean>) => Content;
+    this.changed();
+  }
+
+  // The boot chunk exports the loader that builds the game's icon sheet, `async function x(){return
+  // y(await z())}`, and the helper that points a style at the right atlas page for a frame,
+  // `function x(e,t){let n=m.get(t);n!==void 0&&f(e,n)}`. Their export names are minified.
+  private async loadIcons(url: string) {
+    const source = await (await fetch(url)).text();
+    const exported = new Map(
+      (source.match(/export\{([^}]*)\}/)?.[1] ?? "").split(",").map((b) => {
+        const [local = "", as] = b.split(" as ");
+        return [local, as ?? local] as const;
+      }),
+    );
+    const name = (pattern: RegExp, what: string) => {
+      const local = source.match(pattern)?.[1];
+      const exportedName = local === undefined ? undefined : exported.get(local);
+      if (exportedName === undefined) throw new Error(`could not find the ${what} in the boot chunk`);
+      return exportedName;
+    };
+    const loaderName = name(/async function ([\w$]+)\(\)\{return [\w$]+\(await [\w$]+\(\)\)\}/, "icon sheet loader");
+    const pageName = name(/function ([\w$]+)\(e,t\)\{let n=[\w$]+\.get\(t\);n!==void 0&&[\w$]+\(e,n\)\}/, "icon page lookup");
+    const mod = (await import(url)) as Record<string, unknown>;
+    const loader = mod[loaderName];
+    const page = mod[pageName];
+    if (typeof loader !== "function" || typeof page !== "function") throw new Error("icon exports are not functions");
+    const sheet = (await loader()) as IconPage & { frames: unknown };
+    if (!(sheet.frames instanceof Map) || typeof sheet.url !== "string") throw new Error("the icon sheet has an unexpected shape");
+    const frames = sheet.frames as Map<string, IconFrame>;
+    const pageOf = (frame: IconFrame): IconPage => {
+      const props: Record<string, string> = {};
+      page({ setProperty: (k: string, v: string) => (props[k] = v) }, frame);
+      const pageUrl = props["--icon-sheet"]?.match(/^url\("(.*)"\)$/)?.[1];
+      if (pageUrl === undefined) return sheet;
+      return { url: pageUrl, width: Number(props["--icon-sheet-w"]), height: Number(props["--icon-sheet-h"]) };
+    };
+    this.icons = { url: sheet.url, width: sheet.width, height: sheet.height, frames, pageOf };
     this.changed();
   }
 

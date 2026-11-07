@@ -129,6 +129,25 @@ export function relevantCombos(combos: Combo[], loadout: Loadout): Combo[] {
   return combos.filter((c) => !loadout.has(c.result) && c.parts.some((p) => loadout.has(p.key)));
 }
 
+export type Pairing = { partner: Part; combo: Combo };
+export type Unpaired = { held: Key; options: Pairing[] };
+
+/**
+ * Every held weapon, passive or item that has recipes left but none of whose partners is held,
+ * with the partners it could take. Something already paired with a held partner is left out.
+ */
+export function unpaired(combos: Combo[], loadout: Loadout): Unpaired[] {
+  const out: Unpaired[] = [];
+  for (const held of loadout.keys()) {
+    const options = combosUsing(combos, held)
+      .filter((c) => !loadout.has(c.result))
+      .map((combo) => ({ partner: partner(combo, held), combo }));
+    if (options.length === 0 || options.some((o) => loadout.has(o.partner.key))) continue;
+    out.push({ held, options });
+  }
+  return out;
+}
+
 export function nameOf(catalog: Catalog, key: Key): string {
   return catalog.names[key] ?? titleCase(key.slice(key.indexOf(":") + 1));
 }

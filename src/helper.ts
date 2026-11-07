@@ -4,7 +4,6 @@ import {
   type Kind,
   type Loadout,
   type Part,
-  type PartState,
   comboProgress,
   combosUsing,
   nameOf,
@@ -12,64 +11,62 @@ import {
   partState,
   readLoadout,
   relevantCombos,
+  unpaired,
 } from "./catalog";
 import { type Data, liveData } from "./data";
 import type { Discovery } from "./discovery";
-import type { GameLink } from "./game";
+import type { GameLink, IconSheet } from "./game";
 import { css } from "./style";
 
-let discovery: Discovery;
-
+type View = { d: Data; discovery: Discovery; icons: IconSheet | undefined; loadout: Loadout };
 
 function isShown(el: Element): boolean {
   return el.getClientRects().length > 0;
 }
 
-function h<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className: string,
-  ...children: (Node | string)[]
-): HTMLElementTagNameMap[K] {
+function h<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
   el.className = className;
   el.append(...children);
   return el;
 }
 
-const STATE_MARK: Record<PartState, string> = { done: "✓", leveling: "▲", missing: "✗" };
+function initials(name: string): string {
+  const words = name.split(/[\s-]+/).filter(Boolean);
+  return (words.length > 1 ? `${words[0]?.[0]}${words[1]?.[0]}` : name.slice(0, 2)).toUpperCase();
+}
 
-function partLabel({ catalog }: Data, part: Part, loadout: Loadout): HTMLElement {
-  const state = partState(part, loadout, catalog);
-  const max = catalog.maxLevel[part.key];
-  let detail = "";
-  if (part.need === "max" && max !== undefined) {
-    const have = loadout.get(part.key);
-    detail = have === undefined ? ` Lv${max}` : ` ${have}/${max}`;
+/** The game's own sprite for a weapon, passive or item, or its initials when the sheet has none. */
+function icon(v: View, key: Key, title: string, className = ""): HTMLElement {
+  const id = key.slice(key.indexOf(":") + 1);
+  const frame = v.icons?.frames.get(id);
+  const box = h("span", `tbh-icon ${className}`.trim());
+  box.title = title;
+  if (v.icons === undefined || frame === undefined) {
+    box.classList.add("tbh-icon-text");
+    box.textContent = initials(nameOf(v.d.catalog, key));
+    return box;
   }
-  return h("span", `tbh-part tbh-${state}`, `${STATE_MARK[state]} ${nameOf(catalog, part.key)}${detail}`);
+  const page = v.icons.pageOf(frame);
+  const art = h("i", "");
+  const s = art.style;
+  s.setProperty("--sheet", `url("${page.url}")`);
+  s.setProperty("--sw", String(page.width));
+  s.setProperty("--sh", String(page.height));
+  for (const k of ["x", "y", "w", "h", "ax", "ay"] as const) s.setProperty(`--${k}`, String(frame[k]));
+  box.append(art);
+  return box;
 }
 
-function resultLabel({ catalog }: Data, combo: Combo): HTMLElement {
-  const el = h("span", "tbh-result", nameOf(catalog, combo.result));
-  if (!discovery.made(combo.result)) el.append(h("span", "tbh-badge tbh-badge-evo", "NEW"));
-  return el;
+function partTitle(v: View, part: Part): string {
+  const max = v.d.catalog.maxLevel[part.key];
+  const have = v.loadout.get(part.key);
+  const level = part.need === "max" && max !== undefined ? ` (needs Lv${max}${have === undefined ? "" : `, have ${have}`})` : "";
+  return `${nameOf(v.d.catalog, part.key)}${level}`;
 }
 
-function readiness({ catalog }: Data, combo: Combo, loadout: Loadout): number {
-  return comboProgress(combo, loadout, catalog).filter((s) => s === "done").length;
-}
-
-const KIND_NOTE: Record<Combo["recipe"]["kind"], string> = {
-  evolution: "chest",
-  union: "union",
-  itemEvolution: "item",
-};
-
-function missingPath({ catalog, combos }: Data, part: Part, loadout: Loadout): HTMLElement | undefined {
-  if (loadout.has(part.key)) return undefined;
-  const via = combos.find((c) => c.result === part.key);
-  if (via === undefined) return undefined;
-  return h("div", "tbh-via", `${nameOf(catalog, part.key)} = ${via.parts.map((p) => nameOf(catalog, p.key)).join(" + ")}`);
+function pairingTitle(v: View, part: Part, combo: Combo): string {
+  return `${partTitle(v, part)} → ${nameOf(v.d.catalog, combo.result)}${v.discovery.made(combo.result) ? "" : " (never made)"}`;
 }
 
 function header(panel: HTMLElement, count: string): HTMLElement {
@@ -78,29 +75,31 @@ function header(panel: HTMLElement, count: string): HTMLElement {
   return el;
 }
 
-function renderPanel(panel: HTMLElement, d: Data, loadout: Loadout) {
-  const { catalog } = d;
-  const list = relevantCombos(d.combos, loadout).sort(
-    (a, b) => readiness(d, b, loadout) - readiness(d, a, loadout) || nameOf(catalog, a.result).localeCompare(nameOf(catalog, b.result)),
-  );
-  const ready = list.filter((c) => readiness(d, c, loadout) === 2).length;
+function renderPanel(panel: HTMLElement, v: View) {
+  const rows = unpaired(v.d.combos, v.loadout);
+  const paired = relevantCombos(v.d.combos, v.loadout).filter((c) => c.parts.every((p) => v.loadout.has(p.key)));
+  const ready = paired.filter((c) => comboProgress(c, v.loadout, v.d.catalog).every((s) => s === "done"));
   const body = h("div", "tbh-body");
-  if (list.length === 0) body.append(h("div", "tbh-empty", "No combos use anything you hold yet."));
-  for (const combo of list) {
-    const isReady = readiness(d, combo, loadout) === 2;
-    const row = h(
-      "div",
-      `tbh-row${isReady ? " tbh-ready" : ""}`,
-      h("div", "tbh-row-head", resultLabel(d, combo), h("span", "tbh-kind", isReady ? "READY" : KIND_NOTE[combo.recipe.kind])),
-      h("div", "tbh-parts", partLabel(d, combo.parts[0], loadout), h("span", "tbh-plus", "+"), partLabel(d, combo.parts[1], loadout)),
+  if (rows.length === 0) body.append(h("div", "tbh-empty", paired.length > 0 ? "Everything you hold is paired." : "Nothing you hold has a combo."));
+  for (const { held, options } of rows) {
+    const fresh = options.some((o) => !v.discovery.made(o.combo.result));
+    const opts = h("span", "tbh-opts");
+    for (const o of options) opts.append(icon(v, o.partner.key, pairingTitle(v, o.partner, o.combo), v.discovery.made(o.combo.result) ? "" : "tbh-fresh"));
+    body.append(
+      h(
+        "div",
+        "tbh-need",
+        fresh ? h("span", "tbh-badge tbh-badge-evo", "NEW") : h("span", ""),
+        icon(v, held, nameOf(v.d.catalog, held)),
+        h("span", "tbh-colon", ":"),
+        opts,
+      ),
     );
-    for (const p of combo.parts) {
-      const via = missingPath(d, p, loadout);
-      if (via !== undefined) row.append(via);
-    }
-    body.append(row);
   }
-  panel.replaceChildren(header(panel, `${ready} ready / ${list.length}`), body);
+  const counts = [`${rows.length} open`, `${paired.length} paired`, ...(ready.length > 0 ? [`${ready.length} ready`] : [])].join(" · ");
+  const head = header(panel, counts);
+  head.title = paired.map((c) => `${c.parts.map((p) => partTitle(v, p)).join(" + ")} → ${nameOf(v.d.catalog, c.result)}`).join("\n");
+  panel.replaceChildren(head, body);
 }
 
 function renderProblem(panel: HTMLElement, message: string) {
@@ -116,41 +115,42 @@ function offerKey(card: HTMLElement): { key: Key; level: number } | undefined {
   return undefined;
 }
 
-function annotateCard(card: HTMLElement, d: Data, version: number, loadout: Loadout) {
+function annotateCard(card: HTMLElement, v: View, version: number) {
   const offer = offerKey(card);
   if (offer === undefined) return;
-  const signature = `${offer.key}|${[...loadout].join(",")}|${discovery.version}|${version}`;
+  const signature = `${offer.key}|${[...v.loadout].join(",")}|${v.discovery.version}|${version}`;
   if (card.dataset.tbh === signature) return;
   card.dataset.tbh = signature;
   card.querySelector(".tbh-card")?.remove();
   card.classList.remove("tbh-card-new", "tbh-card-evo");
 
-  const isNew = discovery.isNew(offer.key);
-  const after: Loadout = new Map(loadout);
-  after.set(offer.key, offer.key.startsWith("item:") ? (loadout.get(offer.key) ?? 0) + 1 : offer.level);
-
-  const uses = combosUsing(d.combos, offer.key).filter((c) => !loadout.has(c.result));
-  const matches = uses.filter((c) => loadout.has(partner(c, offer.key).key));
-  const shown = isNew ? uses : matches;
-  const opensUnknown = matches.some((c) => !discovery.made(c.result));
+  const isNew = v.discovery.isNew(offer.key);
+  const after: Loadout = new Map(v.loadout);
+  after.set(offer.key, offer.key.startsWith("item:") ? (v.loadout.get(offer.key) ?? 0) + 1 : offer.level);
+  const held = (c: Combo) => v.loadout.has(partner(c, offer.key).key);
+  const uses = combosUsing(v.d.combos, offer.key)
+    .filter((c) => !v.loadout.has(c.result))
+    .sort((a, b) => Number(held(b)) - Number(held(a)));
 
   if (isNew) card.classList.add("tbh-card-new");
-  if (opensUnknown) card.classList.add("tbh-card-evo");
-  if (!isNew && shown.length === 0) return;
+  if (uses.some((c) => held(c) && !v.discovery.made(c.result))) card.classList.add("tbh-card-evo");
+  if (!isNew && uses.length === 0) return;
 
   const box = h("div", "tbh-card");
   if (isNew) box.append(h("span", "tbh-badge tbh-badge-new", "UNSEEN"));
-  for (const combo of shown.sort((a, b) => Number(matches.includes(b)) - Number(matches.includes(a)))) {
-    const readyAfter = comboProgress(combo, after, d.catalog).every((s) => s === "done");
+  for (const combo of uses) {
+    const other = partner(combo, offer.key);
+    const ready = comboProgress(combo, after, v.d.catalog).every((s) => s === "done");
+    const fresh = !v.discovery.made(combo.result);
     box.append(
       h(
         "div",
-        `tbh-line${matches.includes(combo) ? " tbh-match" : ""}`,
-        h("span", "tbh-plus", "+"),
-        partLabel(d, partner(combo, offer.key), loadout),
+        `tbh-line tbh-${partState(other, v.loadout, v.d.catalog)}`,
+        icon(v, other.key, partTitle(v, other)),
         h("span", "tbh-arrow", "→"),
-        resultLabel(d, combo),
-        ...(readyAfter ? [h("span", "tbh-kind tbh-ready-tag", "READY")] : []),
+        icon(v, combo.result, nameOf(v.d.catalog, combo.result), fresh ? "tbh-fresh" : ""),
+        h("span", "tbh-result", nameOf(v.d.catalog, combo.result)),
+        ...(ready ? [h("span", "tbh-ready-tag", "READY")] : []),
       ),
     );
   }
@@ -168,13 +168,12 @@ function mount(): HTMLElement {
   return panel;
 }
 
-export function startHelper(link: GameLink, discoveryStore: Discovery) {
-  discovery = discoveryStore;
+export function startHelper(link: GameLink, discovery: Discovery) {
   const panel = mount();
   let panelSignature = "";
   let queued = false;
   let version = 0;
-  let lastData: Data | undefined;
+  let lastInputs: [Data, IconSheet | undefined] | undefined;
 
   const update = () => {
     queued = false;
@@ -194,18 +193,19 @@ export function startHelper(link: GameLink, discoveryStore: Discovery) {
       panelSignature = problem;
       return;
     }
-    if (d !== lastData) {
-      lastData = d;
+    if (lastInputs?.[0] !== d || lastInputs[1] !== link.icons) {
+      lastInputs = [d, link.icons];
       version++;
     }
     const loadout = readLoadout(game.state);
     discovery.settle(loadout, new Set(offered.map((o) => o.key)));
+    const view: View = { d, discovery, icons: link.icons, loadout };
     const signature = `${[...loadout].join(",")}|${discovery.version}|${version}`;
     if (signature !== panelSignature) {
       panelSignature = signature;
-      renderPanel(panel, d, loadout);
+      renderPanel(panel, view);
     }
-    for (const card of cards) annotateCard(card, d, version, loadout);
+    for (const card of cards) annotateCard(card, view, version);
   };
   const schedule = () => {
     if (queued) return;
@@ -215,8 +215,7 @@ export function startHelper(link: GameLink, discoveryStore: Discovery) {
 
   link.onChange(schedule);
   new MutationObserver((records) => {
-    if (records.some((r) => !panel.contains(r.target) && !(r.target instanceof Element && r.target.closest(".tbh-card"))))
-      schedule();
+    if (records.some((r) => !panel.contains(r.target) && !(r.target instanceof Element && r.target.closest(".tbh-card")))) schedule();
   }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["data-tip", "hidden"] });
   setInterval(schedule, 1000);
   schedule();

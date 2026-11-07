@@ -4,8 +4,10 @@ A Tampermonkey userscript for [tibo.dog](https://tibo.dog), poteto's survivors-l
 
 ## What it does
 
-- **Combos panel, upper right.** Every evolution, union and item evolution that uses something you hold, with what each still needs: `✓` held, `▲` held but not at the level the recipe needs, `✗` missing. Ready combos sort first. A `NEW` tag marks a result you have never made. Click the header to collapse it.
-- **Card annotations.** A pink glow and `UNSEEN` badge mark a weapon, passive or item you have never been offered. A gold glow marks a card that completes a combo whose result you have never made. Under each card the script lists the combos that card joins with what you already hold. For undiscovered cards it also lists every partner it could combo with, dimmed when you do not hold the partner yet. `READY` means picking the card finishes the recipe.
+- **Combos panel, upper right.** One row per weapon, passive or item you hold that has no partner yet: `[NEW] [its icon] : [icons of everything it could pair with]`. Weapons list the catalysts they need, and passives and items list the weapons or items they would evolve. Something you already hold a partner for drops out of the list, and the header counts open rows, held pairs and pairs ready to evolve (hover it for the pairs). `NEW` and the pink dot mark results you have never made. Hover an icon for its name, the level it needs, and what it makes. Click the header to collapse the panel.
+- **Card annotations.** Every weapon, passive or item card lists all of its pairings as `[partner] → [result]`. A green outline means you hold the partner, yellow means you hold it below the level the recipe needs, and a faded icon means you don't have it. `READY` means picking the card finishes the recipe. A pink glow and `UNSEEN` badge mark a card you have never been offered, and a gold glow marks a card that pairs with something you hold into a result you have never made.
+
+Icons come from the game's own sprite sheet. When the script cannot find a sprite, it shows the name's initials.
 
 The recipe rules mirror the game's own code. A base weapon evolves at its max level (8) while you hold its catalyst (usually a passive, sometimes an item), and the evolution then drops from a chest. A union fuses two specific evolved weapons. An item evolves once its catalyst passive is at max level (5).
 

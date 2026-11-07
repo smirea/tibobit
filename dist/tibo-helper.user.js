@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
-// @version      1.2.0
+// @version      1.3.0
 // @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
@@ -114,6 +114,16 @@
   }
   function relevantCombos(combos, loadout) {
     return combos.filter((c) => !loadout.has(c.result) && c.parts.some((p) => loadout.has(p.key)));
+  }
+  function unpaired(combos, loadout) {
+    const out = [];
+    for (const held of loadout.keys()) {
+      const options = combosUsing(combos, held).filter((c) => !loadout.has(c.result)).map((combo) => ({ partner: partner(combo, held), combo }));
+      if (options.length === 0 || options.some((o) => loadout.has(o.partner.key)))
+        continue;
+      out.push({ held, options });
+    }
+    return out;
   }
   function nameOf(catalog, key) {
     return catalog.names[key] ?? titleCase(key.slice(key.indexOf(":") + 1));
@@ -858,6 +868,7 @@
 
   // src/game.ts
   var SIM_CHUNK = /\/assets\/sim-[\w-]+\.js$/;
+  var BOOT_CHUNK = /\/assets\/boot-[\w-]+\.js$/;
   var ENGLISH_CHUNK = /\/assets\/i18n-en-[\w.-]+\.js$/;
   function isGameClass(value) {
     if (typeof value !== "function")
@@ -921,6 +932,7 @@
     table;
     enums;
     messages = {};
+    icons;
     error;
     steer;
     contentFn;
@@ -971,6 +983,8 @@
       this.seen.add(url);
       if (SIM_CHUNK.test(url))
         this.attachSim(url).catch((e) => this.fail(e));
+      else if (BOOT_CHUNK.test(url))
+        this.loadIcons(url).catch((e) => console.warn("[tibobit] no game icons:", e instanceof Error ? e.message : e));
       else if (ENGLISH_CHUNK.test(url))
         this.loadMessages(url).catch((e) => this.fail(e));
     }
@@ -1003,6 +1017,41 @@
       this.contentFn = contentFn.value;
       this.changed();
     }
+    async loadIcons(url) {
+      const source = await (await fetch(url)).text();
+      const exported = new Map((source.match(/export\{([^}]*)\}/)?.[1] ?? "").split(",").map((b) => {
+        const [local = "", as] = b.split(" as ");
+        return [local, as ?? local];
+      }));
+      const name = (pattern, what) => {
+        const local = source.match(pattern)?.[1];
+        const exportedName = local === undefined ? undefined : exported.get(local);
+        if (exportedName === undefined)
+          throw new Error(`could not find the ${what} in the boot chunk`);
+        return exportedName;
+      };
+      const loaderName = name(/async function ([\w$]+)\(\)\{return [\w$]+\(await [\w$]+\(\)\)\}/, "icon sheet loader");
+      const pageName = name(/function ([\w$]+)\(e,t\)\{let n=[\w$]+\.get\(t\);n!==void 0&&[\w$]+\(e,n\)\}/, "icon page lookup");
+      const mod = await import(url);
+      const loader = mod[loaderName];
+      const page = mod[pageName];
+      if (typeof loader !== "function" || typeof page !== "function")
+        throw new Error("icon exports are not functions");
+      const sheet = await loader();
+      if (!(sheet.frames instanceof Map) || typeof sheet.url !== "string")
+        throw new Error("the icon sheet has an unexpected shape");
+      const frames = sheet.frames;
+      const pageOf = (frame) => {
+        const props = {};
+        page({ setProperty: (k, v) => props[k] = v }, frame);
+        const pageUrl = props["--icon-sheet"]?.match(/^url\("(.*)"\)$/)?.[1];
+        if (pageUrl === undefined)
+          return sheet;
+        return { url: pageUrl, width: Number(props["--icon-sheet-w"]), height: Number(props["--icon-sheet-h"]) };
+      };
+      this.icons = { url: sheet.url, width: sheet.width, height: sheet.height, frames, pageOf };
+      this.changed();
+    }
     async loadMessages(url) {
       const ns = await import(url);
       for (const value of Object.values(ns)) {
@@ -1018,7 +1067,7 @@
   var css = `
 .tbh-panel {
   position: fixed; top: 52px; right: 8px; z-index: 2147483000;
-  width: min(300px, calc(100vw - 16px)); max-height: calc(100vh - 120px); overflow: auto;
+  width: min(260px, calc(100vw - 16px)); max-height: calc(100vh - 120px); overflow: auto;
   background: rgba(17, 14, 10, 0.88); color: #f3e6c4; border: 1px solid #6b5631; border-radius: 6px;
   font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; box-shadow: 0 4px 18px rgba(0,0,0,.5);
   touch-action: auto; user-select: none;
@@ -1030,39 +1079,44 @@
   .tbh-panel { top: 100px; }
   .tbh-panel.tbh-choice { display: none; }
 }
-.tbh-header { display: flex; justify-content: space-between; padding: 6px 8px; cursor: pointer; font-weight: 700; color: #ffd36b; position: sticky; top: 0; background: rgba(17,14,10,.96); }
+.tbh-header { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: pointer; font-weight: 700; color: #ffd36b; position: sticky; top: 0; background: rgba(17,14,10,.96); }
 .tbh-count { color: #c9b58a; font-weight: 400; }
 .tbh-collapsed:not(.tbh-choice) :is(.tbh-body, .tbh-stale),
 .tbh-choice:not(.tbh-peek) :is(.tbh-body, .tbh-stale) { display: none; }
 .tbh-body { padding: 0 6px 6px; }
 .tbh-empty { color: #a8977a; padding: 4px 2px; }
-.tbh-row { padding: 5px 6px; margin-top: 4px; border-radius: 4px; background: rgba(255,255,255,.04); border-left: 3px solid #5d4c2e; }
-.tbh-row.tbh-ready { border-left-color: #5ee8a0; background: rgba(94,232,160,.10); }
-.tbh-row-head { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
-.tbh-result { font-weight: 700; color: #ffe9b0; }
-.tbh-kind { font-size: 10px; color: #a8977a; text-transform: uppercase; letter-spacing: .05em; }
-.tbh-ready .tbh-kind, .tbh-ready-tag { color: #5ee8a0; font-weight: 700; }
-.tbh-parts { display: flex; flex-wrap: wrap; gap: 2px 6px; margin-top: 2px; }
-.tbh-plus, .tbh-arrow { color: #8d7c5c; }
-.tbh-done { color: #7fe3a4; }
-.tbh-leveling { color: #ffcf5a; }
-.tbh-missing { color: #e38a7f; }
-.tbh-via { font-size: 10.5px; color: #a8977a; margin-top: 2px; }
+.tbh-need { display: grid; grid-template-columns: 30px 24px 8px 1fr; align-items: center; gap: 4px; padding: 3px 2px; border-top: 1px solid rgba(255,255,255,.06); }
+.tbh-need:first-child { border-top: 0; }
+.tbh-colon { color: #8d7c5c; }
+.tbh-opts { display: flex; flex-wrap: wrap; gap: 3px; }
 .tbh-stale { margin: 0 6px 6px; padding: 4px 6px; border-radius: 4px; background: rgba(227,138,127,.15); color: #f0b3aa; font-size: 11px; }
-.tbh-badge { display: inline-block; margin-left: 5px; padding: 0 4px; border-radius: 3px; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; vertical-align: 1px; }
+.tbh-badge { display: inline-block; padding: 0 4px; border-radius: 3px; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-align: center; }
 .tbh-badge-new { align-self: flex-start; background: #ff7ad9; color: #3d0630; margin: 0 0 2px; }
 .tbh-badge-evo { background: #ffd36b; color: #3a2600; }
+
+.tbh-icon { --s: 1.5; position: relative; display: inline-block; flex: none; width: calc(16px * var(--s)); height: calc(16px * var(--s)); border-radius: 4px; background: rgba(255,255,255,.06); }
+.tbh-icon > i { position: absolute; left: 50%; top: 50%; width: calc(var(--w) * var(--s) * 1px); height: calc(var(--h) * var(--s) * 1px);
+  margin: calc(var(--ay) * var(--s) * -1px) 0 0 calc(var(--ax) * var(--s) * -1px);
+  background: var(--sheet) no-repeat; background-size: calc(var(--sw) * var(--s) * 1px) calc(var(--sh) * var(--s) * 1px);
+  background-position: calc(var(--x) * var(--s) * -1px) calc(var(--y) * var(--s) * -1px); image-rendering: pixelated; }
+.tbh-icon-text { display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #f3e6c4; }
+.tbh-icon.tbh-fresh::after { content: ""; position: absolute; right: -2px; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: #ff7ad9; box-shadow: 0 0 0 1px rgba(17,14,10,.9); }
 
 .ui-card.tbh-card-new { box-shadow: 0 0 0 2px #ff7ad9, 0 0 16px rgba(255,122,217,.6) !important; }
 .ui-card.tbh-card-evo { box-shadow: 0 0 0 2px #ffd36b, 0 0 14px rgba(255,211,107,.55) !important; }
 .ui-card.tbh-card-new.tbh-card-evo { box-shadow: 0 0 0 2px #ff7ad9, 0 0 0 4px #ffd36b, 0 0 16px rgba(255,211,107,.5) !important; }
-.tbh-card { display: flex; flex-direction: column; gap: 1px; margin-top: 4px; font: clamp(11px, .6em, 16px)/1.3 ui-monospace, Menlo, Consolas, monospace; color: #c9b58a; text-align: start; }
-.tbh-line { display: flex; flex-wrap: wrap; gap: 0 5px; align-items: baseline; opacity: .7; }
-.tbh-line.tbh-match { opacity: 1; color: #f3e6c4; }
+.tbh-card { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; font: clamp(11px, .6em, 16px)/1.3 ui-monospace, Menlo, Consolas, monospace; color: #c9b58a; text-align: start; }
+.tbh-line { display: flex; align-items: center; gap: 5px; }
+.tbh-line .tbh-icon { --s: 1.5; }
+.tbh-line.tbh-done > .tbh-icon:first-child { box-shadow: 0 0 0 1px #7fe3a4; }
+.tbh-line.tbh-leveling > .tbh-icon:first-child { box-shadow: 0 0 0 1px #ffcf5a; }
+.tbh-line.tbh-missing > .tbh-icon:first-child { opacity: .55; }
+.tbh-line.tbh-done, .tbh-line.tbh-leveling { color: #f3e6c4; }
+.tbh-arrow { color: #8d7c5c; }
+.tbh-ready-tag { color: #5ee8a0; font-weight: 700; }
 `;
 
   // src/helper.ts
-  var discovery;
   function isShown(el) {
     return el.getClientRects().length > 0;
   }
@@ -1072,62 +1126,64 @@
     el.append(...children);
     return el;
   }
-  var STATE_MARK = { done: "✓", leveling: "▲", missing: "✗" };
-  function partLabel({ catalog }, part, loadout) {
-    const state = partState(part, loadout, catalog);
-    const max = catalog.maxLevel[part.key];
-    let detail = "";
-    if (part.need === "max" && max !== undefined) {
-      const have = loadout.get(part.key);
-      detail = have === undefined ? ` Lv${max}` : ` ${have}/${max}`;
+  function initials(name) {
+    const words = name.split(/[\s-]+/).filter(Boolean);
+    return (words.length > 1 ? `${words[0]?.[0]}${words[1]?.[0]}` : name.slice(0, 2)).toUpperCase();
+  }
+  function icon(v, key, title, className = "") {
+    const id = key.slice(key.indexOf(":") + 1);
+    const frame = v.icons?.frames.get(id);
+    const box = h("span", `tbh-icon ${className}`.trim());
+    box.title = title;
+    if (v.icons === undefined || frame === undefined) {
+      box.classList.add("tbh-icon-text");
+      box.textContent = initials(nameOf(v.d.catalog, key));
+      return box;
     }
-    return h("span", `tbh-part tbh-${state}`, `${STATE_MARK[state]} ${nameOf(catalog, part.key)}${detail}`);
+    const page = v.icons.pageOf(frame);
+    const art = h("i", "");
+    const s = art.style;
+    s.setProperty("--sheet", `url("${page.url}")`);
+    s.setProperty("--sw", String(page.width));
+    s.setProperty("--sh", String(page.height));
+    for (const k of ["x", "y", "w", "h", "ax", "ay"])
+      s.setProperty(`--${k}`, String(frame[k]));
+    box.append(art);
+    return box;
   }
-  function resultLabel({ catalog }, combo) {
-    const el = h("span", "tbh-result", nameOf(catalog, combo.result));
-    if (!discovery.made(combo.result))
-      el.append(h("span", "tbh-badge tbh-badge-evo", "NEW"));
-    return el;
+  function partTitle(v, part) {
+    const max = v.d.catalog.maxLevel[part.key];
+    const have = v.loadout.get(part.key);
+    const level = part.need === "max" && max !== undefined ? ` (needs Lv${max}${have === undefined ? "" : `, have ${have}`})` : "";
+    return `${nameOf(v.d.catalog, part.key)}${level}`;
   }
-  function readiness({ catalog }, combo, loadout) {
-    return comboProgress(combo, loadout, catalog).filter((s) => s === "done").length;
-  }
-  var KIND_NOTE = {
-    evolution: "chest",
-    union: "union",
-    itemEvolution: "item"
-  };
-  function missingPath({ catalog, combos }, part, loadout) {
-    if (loadout.has(part.key))
-      return;
-    const via = combos.find((c) => c.result === part.key);
-    if (via === undefined)
-      return;
-    return h("div", "tbh-via", `${nameOf(catalog, part.key)} = ${via.parts.map((p) => nameOf(catalog, p.key)).join(" + ")}`);
+  function pairingTitle(v, part, combo) {
+    return `${partTitle(v, part)} → ${nameOf(v.d.catalog, combo.result)}${v.discovery.made(combo.result) ? "" : " (never made)"}`;
   }
   function header(panel, count) {
     const el = h("div", "tbh-header", h("span", "", "Combos"), h("span", "tbh-count", count));
     el.addEventListener("click", () => panel.classList.toggle(panel.classList.contains("tbh-choice") ? "tbh-peek" : "tbh-collapsed"));
     return el;
   }
-  function renderPanel(panel, d, loadout) {
-    const { catalog } = d;
-    const list = relevantCombos(d.combos, loadout).sort((a, b) => readiness(d, b, loadout) - readiness(d, a, loadout) || nameOf(catalog, a.result).localeCompare(nameOf(catalog, b.result)));
-    const ready = list.filter((c) => readiness(d, c, loadout) === 2).length;
+  function renderPanel(panel, v) {
+    const rows = unpaired(v.d.combos, v.loadout);
+    const paired = relevantCombos(v.d.combos, v.loadout).filter((c) => c.parts.every((p) => v.loadout.has(p.key)));
+    const ready = paired.filter((c) => comboProgress(c, v.loadout, v.d.catalog).every((s) => s === "done"));
     const body = h("div", "tbh-body");
-    if (list.length === 0)
-      body.append(h("div", "tbh-empty", "No combos use anything you hold yet."));
-    for (const combo of list) {
-      const isReady = readiness(d, combo, loadout) === 2;
-      const row = h("div", `tbh-row${isReady ? " tbh-ready" : ""}`, h("div", "tbh-row-head", resultLabel(d, combo), h("span", "tbh-kind", isReady ? "READY" : KIND_NOTE[combo.recipe.kind])), h("div", "tbh-parts", partLabel(d, combo.parts[0], loadout), h("span", "tbh-plus", "+"), partLabel(d, combo.parts[1], loadout)));
-      for (const p of combo.parts) {
-        const via = missingPath(d, p, loadout);
-        if (via !== undefined)
-          row.append(via);
-      }
-      body.append(row);
+    if (rows.length === 0)
+      body.append(h("div", "tbh-empty", paired.length > 0 ? "Everything you hold is paired." : "Nothing you hold has a combo."));
+    for (const { held, options } of rows) {
+      const fresh = options.some((o) => !v.discovery.made(o.combo.result));
+      const opts = h("span", "tbh-opts");
+      for (const o of options)
+        opts.append(icon(v, o.partner.key, pairingTitle(v, o.partner, o.combo), v.discovery.made(o.combo.result) ? "" : "tbh-fresh"));
+      body.append(h("div", "tbh-need", fresh ? h("span", "tbh-badge tbh-badge-evo", "NEW") : h("span", ""), icon(v, held, nameOf(v.d.catalog, held)), h("span", "tbh-colon", ":"), opts));
     }
-    panel.replaceChildren(header(panel, `${ready} ready / ${list.length}`), body);
+    const counts = [`${rows.length} open`, `${paired.length} paired`, ...ready.length > 0 ? [`${ready.length} ready`] : []].join(" · ");
+    const head = header(panel, counts);
+    head.title = paired.map((c) => `${c.parts.map((p) => partTitle(v, p)).join(" + ")} → ${nameOf(v.d.catalog, c.result)}`).join(`
+`);
+    panel.replaceChildren(head, body);
   }
   function renderProblem(panel, message) {
     panel.replaceChildren(header(panel, "offline"), h("div", "tbh-stale", message));
@@ -1142,35 +1198,35 @@
       return { key: `item:${item[1]}`, level: 1 };
     return;
   }
-  function annotateCard(card, d, version, loadout) {
+  function annotateCard(card, v, version) {
     const offer = offerKey2(card);
     if (offer === undefined)
       return;
-    const signature = `${offer.key}|${[...loadout].join(",")}|${discovery.version}|${version}`;
+    const signature = `${offer.key}|${[...v.loadout].join(",")}|${v.discovery.version}|${version}`;
     if (card.dataset.tbh === signature)
       return;
     card.dataset.tbh = signature;
     card.querySelector(".tbh-card")?.remove();
     card.classList.remove("tbh-card-new", "tbh-card-evo");
-    const isNew = discovery.isNew(offer.key);
-    const after = new Map(loadout);
-    after.set(offer.key, offer.key.startsWith("item:") ? (loadout.get(offer.key) ?? 0) + 1 : offer.level);
-    const uses = combosUsing(d.combos, offer.key).filter((c) => !loadout.has(c.result));
-    const matches = uses.filter((c) => loadout.has(partner(c, offer.key).key));
-    const shown = isNew ? uses : matches;
-    const opensUnknown = matches.some((c) => !discovery.made(c.result));
+    const isNew = v.discovery.isNew(offer.key);
+    const after = new Map(v.loadout);
+    after.set(offer.key, offer.key.startsWith("item:") ? (v.loadout.get(offer.key) ?? 0) + 1 : offer.level);
+    const held = (c) => v.loadout.has(partner(c, offer.key).key);
+    const uses = combosUsing(v.d.combos, offer.key).filter((c) => !v.loadout.has(c.result)).sort((a, b) => Number(held(b)) - Number(held(a)));
     if (isNew)
       card.classList.add("tbh-card-new");
-    if (opensUnknown)
+    if (uses.some((c) => held(c) && !v.discovery.made(c.result)))
       card.classList.add("tbh-card-evo");
-    if (!isNew && shown.length === 0)
+    if (!isNew && uses.length === 0)
       return;
     const box = h("div", "tbh-card");
     if (isNew)
       box.append(h("span", "tbh-badge tbh-badge-new", "UNSEEN"));
-    for (const combo of shown.sort((a, b) => Number(matches.includes(b)) - Number(matches.includes(a)))) {
-      const readyAfter = comboProgress(combo, after, d.catalog).every((s) => s === "done");
-      box.append(h("div", `tbh-line${matches.includes(combo) ? " tbh-match" : ""}`, h("span", "tbh-plus", "+"), partLabel(d, partner(combo, offer.key), loadout), h("span", "tbh-arrow", "→"), resultLabel(d, combo), ...readyAfter ? [h("span", "tbh-kind tbh-ready-tag", "READY")] : []));
+    for (const combo of uses) {
+      const other = partner(combo, offer.key);
+      const ready = comboProgress(combo, after, v.d.catalog).every((s) => s === "done");
+      const fresh = !v.discovery.made(combo.result);
+      box.append(h("div", `tbh-line tbh-${partState(other, v.loadout, v.d.catalog)}`, icon(v, other.key, partTitle(v, other)), h("span", "tbh-arrow", "→"), icon(v, combo.result, nameOf(v.d.catalog, combo.result), fresh ? "tbh-fresh" : ""), h("span", "tbh-result", nameOf(v.d.catalog, combo.result)), ...ready ? [h("span", "tbh-ready-tag", "READY")] : []));
     }
     (card.querySelector(".ui-card-text") ?? card).append(box);
   }
@@ -1185,13 +1241,12 @@
     document.body.append(panel);
     return panel;
   }
-  function startHelper(link, discoveryStore) {
-    discovery = discoveryStore;
+  function startHelper(link, discovery) {
     const panel = mount();
     let panelSignature = "";
     let queued = false;
     let version = 0;
-    let lastData;
+    let lastInputs;
     const update = () => {
       queued = false;
       const hud = document.querySelector(".hud-weapons");
@@ -1212,19 +1267,20 @@
         panelSignature = problem;
         return;
       }
-      if (d !== lastData) {
-        lastData = d;
+      if (lastInputs?.[0] !== d || lastInputs[1] !== link.icons) {
+        lastInputs = [d, link.icons];
         version++;
       }
       const loadout = readLoadout(game.state);
       discovery.settle(loadout, new Set(offered.map((o) => o.key)));
+      const view = { d, discovery, icons: link.icons, loadout };
       const signature = `${[...loadout].join(",")}|${discovery.version}|${version}`;
       if (signature !== panelSignature) {
         panelSignature = signature;
-        renderPanel(panel, d, loadout);
+        renderPanel(panel, view);
       }
       for (const card of cards)
-        annotateCard(card, d, version, loadout);
+        annotateCard(card, view, version);
     };
     const schedule = () => {
       if (queued)
@@ -1243,11 +1299,11 @@
 
   // src/main.ts
   var link = new GameLink;
-  var discovery2 = new Discovery;
+  var discovery = new Discovery;
   var controller = new Controller(link);
   function start() {
-    startHelper(link, discovery2);
-    startBridge(link, discovery2, controller);
+    startHelper(link, discovery);
+    startBridge(link, discovery, controller);
   }
   if (document.body === null)
     document.addEventListener("DOMContentLoaded", start, { once: true });
