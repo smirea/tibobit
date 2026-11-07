@@ -380,7 +380,13 @@ export function inRun(link: GameLink): boolean {
 }
 
 export function snapshot(link: GameLink, discovery: Discovery, commands: CommandStatus[]): Snapshot {
-  const base = { capturedAt: Date.now(), commands, ...(link.error === undefined ? {} : { error: link.error }) };
+  link.noteRunLink();
+  const base = {
+    capturedAt: Date.now(),
+    commands,
+    ...(link.error === undefined ? {} : { error: link.error }),
+    ...(link.runLink === undefined ? {} : { lastRunLink: link.runLink }),
+  };
   const game = link.game;
   const ended = game?.state.over
     ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, kills: game.state.run.kills, damageTaken: byDamage(game.state.run.damageTakenBySource) } }

@@ -91,6 +91,8 @@ export type Snapshot = {
   capturedAt: number;
   screen: "title" | "run" | "choice" | "paused" | "over";
   run?: RunView;
+  /** The share link of the last finished run, once the game has shown its summary (https://tibo.dog/r/?...). */
+  lastRunLink?: string;
   /** How the most recent run went; set once a run has ended. `damageTaken` is by source, largest first. */
   lastRun?: { time: number; level: number; kills: number; damageTaken: Record<string, number> };
   commands: CommandStatus[];

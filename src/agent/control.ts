@@ -146,6 +146,7 @@ export class Controller {
         await wait(1500);
       }
     }
+    this.link.noteRunLink();
     // After a death the game walks through a few screens (a promo, a summary) before the title.
     // Advance through them, never pressing anything that leaves the game, such as "Try Grok Bot".
     for (let i = 0; i < 15 && button(entry) === undefined; i++) {
@@ -154,6 +155,7 @@ export class Controller {
         throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
       }
       const next = button(/^(Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
+      this.link.noteRunLink();
       if (next !== undefined) await press(next);
       else {
         // Some end screens (the run summary) have no button and listen for keys instead.

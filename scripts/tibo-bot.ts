@@ -4,6 +4,8 @@
 // commands; every decision (where to move, what to pick) is the model's.
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
+import { appendFile, mkdir } from "node:fs/promises";
 import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type CommandStatus, DIRECTIONS, type Direction, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 
 const args = process.argv.slice(2);
@@ -19,8 +21,8 @@ const RUNS = Number(option("runs", "1"));
 const DIFFICULTY = option("difficulty", "easy");
 const MODE = option("mode", "daily");
 const SPEED = Number(option("speed", "4"));
-const PLANNER = option("planner", "grok");
-const PLAN_EVERY = Number(option("plan-every", "300"));
+const COACH = option("coach", "grok");
+const COACH_MODEL = option("coach-model", "grok-4.7-build-fast");
 const TRACE = args.includes("--trace");
 const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
@@ -81,49 +83,214 @@ async function decide(state: string, questions: Record<string, Question>): Promi
   return json.answers;
 }
 
-// A long-range plan from a large model, refreshed rarely and in the background. The decision
-// model sees it as context: the advice line, and a mark on options the plan wants.
+// ---- Learning loop -------------------------------------------------------------------------
+// A large model (the coach) reads the generic strategy and this run's notes at checkpoints,
+// writes a note, and hands the decision model one line of advice plus a list of upgrades to
+// favour. After the run it reviews the notes and stats and rewrites the strategy for the next.
+const GAMEPLAY = path.join(import.meta.dir, "..", "gameplay");
+const STRATEGY_FILE = path.join(GAMEPLAY, "strategy.md");
+const NOTES_DIR = path.join(GAMEPLAY, "notes");
+const FEEDBACK_FILE = path.join(GAMEPLAY, "infrastructure_feedback.csv");
+const CHECKPOINTS = [30, 150, 300, 480, 660, 840, 1020, 1140];
+const COACH_COOLDOWN = 45;
+const LOW_HEALTH = 0.35;
+
 type Plan = { want: string[]; advice: string };
 let plan: Plan | undefined;
-let planAsked = Number.NEGATIVE_INFINITY;
-let planning = false;
-let planCalls = 0;
+const inPlan = (name: string) => plan?.want.some((w) => w.toLowerCase() === name.toLowerCase()) ?? false;
 
-// Asked at fixed game times and awaited while the game is paused, so a plan always lands on the
-// same tick; only the planner's own wording can differ between runs.
-async function updatePlan(r: RunView) {
-  if (PLANNER === "none" || planning || r.time - planAsked < PLAN_EVERY) return;
-  planAsked = r.time;
-  planning = true;
-  planCalls++;
-  const prompt = [
-    "You advise a small model that plays tibo.dog, a survivors-like game: weapons auto-fire, the player only walks and picks level-up upgrades.",
-    "A base weapon at max level plus its catalyst (a passive or item) evolves at the next chest; evolved weapons are much stronger.",
-    `Goal: survive 20 minutes. Now: time ${Math.round(r.time)}s, level ${r.player.level}, health ${Math.round(r.player.hp)}/${Math.round(r.player.maxHp)}.`,
-    `Weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
-    `Passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
-    `Unpaired: ${r.unpaired.map((u) => `${u.name} needs one of ${u.options.map((o) => `${o.name} (makes ${o.resultName})`).join(", ")}`).join("; ") || "none"}.`,
-    "Answer from these facts alone; do not browse, search or use tools.",
-    'Reply with only JSON: {"want": [up to 6 exact weapon or passive names to take when offered, best first], "advice": "one short sentence on how to play the next few minutes"}',
-  ].join("\n");
-  const proc = Bun.spawn(["grok", "-p", prompt, "-m", "grok-4.7-build-fast", "--output-format", "plain"], { cwd: os.tmpdir(), stdout: "pipe", stderr: "ignore" });
-  await new Response(proc.stdout)
-    .text()
-    .then((text) => {
-      const json = text.match(/\{[\s\S]*\}/)?.[0];
-      const parsed = json === undefined ? undefined : (JSON.parse(json) as Partial<Plan>);
-      if (parsed !== undefined && Array.isArray(parsed.want) && typeof parsed.advice === "string") {
-        plan = { want: parsed.want.map(String), advice: parsed.advice };
-        console.log(`plan: want ${plan.want.join(", ")}; ${plan.advice}`);
-      }
-    })
-    .catch((e) => console.error("planner failed:", e instanceof Error ? e.message : e))
-    .finally(() => {
-      planning = false;
-    });
+const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+const today = () => new Date().toISOString().slice(0, 10);
+
+async function readStrategy(): Promise<string> {
+  const file = Bun.file(STRATEGY_FILE);
+  return (await file.exists()) ? file.text() : "# Strategy\n\n(no strategy yet)\n";
 }
 
-const inPlan = (name: string) => plan?.want.some((w) => w.toLowerCase() === name.toLowerCase()) ?? false;
+const csvField = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+async function infraFeedback(run: string, time: string, note: string) {
+  const text = note.trim();
+  if (text === "") return;
+  await appendFile(FEEDBACK_FILE, `${[today(), run, time, text.replace(/\s+/g, " ")].map(csvField).join(",")}\n`);
+}
+
+/** Runs the coach CLI once and returns the JSON object in its reply, or undefined. */
+async function askCoach(prompt: string): Promise<Record<string, unknown> | undefined> {
+  if (COACH === "none") return undefined;
+  const proc = Bun.spawn(["grok", "-p", prompt, "-m", COACH_MODEL, "--output-format", "plain"], { cwd: os.tmpdir(), stdout: "pipe", stderr: "ignore" });
+  const timer = setTimeout(() => proc.kill(), 240_000);
+  try {
+    const text = await new Response(proc.stdout).text();
+    const json = text.match(/\{[\s\S]*\}/)?.[0];
+    return json === undefined ? undefined : (JSON.parse(json) as Record<string, unknown>);
+  } catch (e) {
+    console.error("coach failed:", e instanceof Error ? e.message : e);
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The run's notes file, rendered from gameplay/notes/TEMPLATE.md and rewritten on every change. */
+class RunNotes {
+  readonly id: string;
+  readonly file: string;
+  link = "pending: written once the game shows the run summary";
+  timeline: string[] = [];
+  outcome = "(the run is in progress)";
+  review = "(written after the run)";
+  private fields: Record<string, string>;
+
+  constructor(r: RunView, strategy: string) {
+    const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 16);
+    this.id = `${stamp}-${MODE}-${DIFFICULTY}-${r.seed}`;
+    this.file = path.join(NOTES_DIR, `${this.id}.md`);
+    this.fields = {
+      title: `Run ${stamp.slice(0, 10)} ${stamp.slice(11).replace("-", ":")}, ${MODE} ${DIFFICULTY}`,
+      date: new Date().toISOString(),
+      mode: MODE,
+      difficulty: DIFFICULTY,
+      seed: r.seed,
+      model: MODEL,
+      coach: COACH === "none" ? "none" : `${COACH} ${COACH_MODEL}`,
+      step: String(STEP),
+      speed: String(SPEED),
+      strategy: `strategy.md ${createHash("sha1").update(strategy).digest("hex").slice(0, 8)}`,
+    };
+  }
+
+  async write() {
+    const template = await Bun.file(path.join(NOTES_DIR, "TEMPLATE.md")).text();
+    const values: Record<string, string> = {
+      ...this.fields,
+      link: this.link,
+      timeline: this.timeline.length === 0 ? "(no notes yet)" : this.timeline.join("\n"),
+      outcome: this.outcome,
+      review: this.review,
+    };
+    await Bun.write(this.file, template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => values[key] ?? ""));
+  }
+}
+
+function digest(r: RunView): string {
+  const p = r.player;
+  return [
+    `Time ${clock(r.time)}, health ${Math.round(p.hp)}/${Math.round(p.maxHp)}, level ${p.level}, gold ${p.gold}, ${r.enemies.total} enemies around.`,
+    `Weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
+    `Passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
+    `Items: ${r.loadout.items.map((i) => `${i.name} x${i.count}`).join(", ") || "none"}.`,
+    `Recipes in reach: ${r.combos.map((c) => `${c.name} (${c.parts.map((x) => `${x.name} ${x.state}`).join(" + ")})`).join("; ") || "none"}.`,
+    `Unpaired: ${r.unpaired.map((u) => `${u.name} needs one of ${u.options.map((o) => o.name).join(", ")}`).join("; ") || "none"}.`,
+    `Bosses: ${r.bosses.map((b) => `${b.name} ${Math.round(b.dist)} away, ${Math.round(b.hp)}/${Math.round(b.maxHp)} hp`).join("; ") || "none"}.`,
+    `Hurt in the last 3 seconds by: ${Object.entries(p.hurtBy).map(([k, v]) => `${k} ${v}`).join(", ") || "nothing"}.`,
+  ].join("\n");
+}
+
+const GAME_RULES = [
+  "tibo.dog is a survivors-like game. Weapons fire on their own; the player only walks, dashes, and picks level-up upgrades and chest rewards.",
+  "A base weapon at max level plus its catalyst (a passive or an item) evolves at the next chest; evolved weapons are much stronger. Two evolved weapons can sometimes fuse into a union.",
+  "A small local decision model plays every step. It only sees one line of advice from you, and a mark on level-up options whose exact names you list in want.",
+].join("\n");
+
+class Coach {
+  private nextCheckpoint = 0;
+  private lastAsked = Number.NEGATIVE_INFINITY;
+  private sawBoss = false;
+  private lowHealth = false;
+  private evolved = 0;
+  calls = 0;
+
+  constructor(private notes: RunNotes) {}
+
+  /** The reason to consult the coach now, if there is one. */
+  private reason(r: RunView): string | undefined {
+    const evolved = r.loadout.weapons.filter((w) => w.max === 1).length;
+    const low = r.player.hp / r.player.maxHp < LOW_HEALTH;
+    const checkpoint = CHECKPOINTS[this.nextCheckpoint];
+    let why: string | undefined;
+    if (!this.sawBoss && r.bosses.length > 0) why = `a boss appeared: ${r.bosses[0]?.name}`;
+    else if (low && !this.lowHealth && r.time - this.lastAsked >= COACH_COOLDOWN) why = "health dropped below a third";
+    else if (evolved > this.evolved && r.time - this.lastAsked >= COACH_COOLDOWN) why = "a weapon evolved";
+    else if (checkpoint !== undefined && r.time >= checkpoint) why = `checkpoint at ${clock(checkpoint)}`;
+    this.sawBoss ||= r.bosses.length > 0;
+    this.lowHealth = low;
+    this.evolved = Math.max(this.evolved, evolved);
+    while (CHECKPOINTS[this.nextCheckpoint] !== undefined && r.time >= (CHECKPOINTS[this.nextCheckpoint] ?? 0)) this.nextCheckpoint++;
+    return why;
+  }
+
+  // Awaited while the game is paused, so a checkpoint always lands on the same tick.
+  async consult(r: RunView) {
+    const why = this.reason(r);
+    if (why === undefined || COACH === "none") return;
+    this.lastAsked = r.time;
+    this.calls++;
+    const prompt = [
+      "You coach a bot that plays tibo.dog.",
+      GAME_RULES,
+      `Goal: survive 20 minutes on ${DIFFICULTY} in today's ${MODE === "daily" ? "Daily (the same seed every attempt today)" : "Open World"}.`,
+      "Strategy file, learned from earlier runs:",
+      await readStrategy(),
+      "Notes so far this run:",
+      this.notes.timeline.join("\n") || "(none yet)",
+      `You are asked now because ${why}. State now:`,
+      digest(r),
+      "Answer from these facts alone; do not browse, search or use tools.",
+      'Reply with only JSON: {"want": [up to 6 exact weapon, passive or item names to take when offered, best first], "advice": "one short sentence for the decision model about the next minute or two", "note": "one or two sentences for the run notes: what is happening and what to watch", "infra": "one concrete suggestion to improve the data or controls the bot has, or an empty string"}',
+    ].join("\n\n");
+    const reply = await askCoach(prompt);
+    if (reply === undefined) return;
+    if (Array.isArray(reply.want) && typeof reply.advice === "string") plan = { want: reply.want.map(String), advice: reply.advice };
+    const note = typeof reply.note === "string" ? reply.note : "";
+    this.notes.timeline.push(`- **${clock(r.time)}** (${why}) ${note}${plan === undefined ? "" : ` Advice: ${plan.advice} Want: ${plan.want.join(", ")}.`}`);
+    await this.notes.write();
+    if (typeof reply.infra === "string") await infraFeedback(this.notes.id, clock(r.time), reply.infra);
+    console.log(`coach ${clock(r.time)} (${why}): ${note}`);
+  }
+
+  async review(lastRun: NonNullable<Snapshot["lastRun"]>, last: RunView | undefined, recent: string[]) {
+    const damage = Object.entries(lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ");
+    this.notes.outcome = [
+      `- Survived **${clock(lastRun.time)}** (${lastRun.time}s), level ${lastRun.level}, ${lastRun.kills} kills.`,
+      `- Damage taken by source: ${damage || "none recorded"}.`,
+      ...(last === undefined
+        ? []
+        : [
+            `- Final weapons: ${last.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ")}.`,
+            `- Final passives: ${last.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ")}.`,
+          ]),
+      `- Coach consulted ${this.calls} times.`,
+    ].join("\n");
+    await this.notes.write();
+    if (COACH === "none") return;
+    const strategy = await readStrategy();
+    const prompt = [
+      "You coach a bot that plays tibo.dog, and a run just ended.",
+      GAME_RULES,
+      `Goal: survive 20 minutes on ${DIFFICULTY} in today's ${MODE === "daily" ? "Daily (the same seed every attempt today)" : "Open World"}.`,
+      "Current strategy file:",
+      strategy,
+      "This run's notes:",
+      this.notes.timeline.join("\n") || "(none)",
+      "Outcome:",
+      this.notes.outcome,
+      "The last few situations the decision model saw:",
+      recent.join("\n---\n"),
+      "Answer from these facts alone; do not browse, search or use tools.",
+      'Reply with only JSON: {"review": "a short paragraph: why the run ended, what worked, what to change", "strategy": "the full updated strategy.md in Markdown. Keep it generic advice for future runs (seed-specific facts only where the Daily repeats), keep its sections, stay under 70 lines, and add one dated line to Lessons", "infra": ["concrete suggestions to improve the data or controls the bot has"]}',
+    ].join("\n\n");
+    const reply = await askCoach(prompt);
+    if (reply === undefined) return;
+    if (typeof reply.review === "string") this.notes.review = reply.review;
+    await this.notes.write();
+    if (typeof reply.strategy === "string" && reply.strategy.trimStart().startsWith("# Strategy") && reply.strategy.length < 12_000) {
+      await Bun.write(STRATEGY_FILE, `${reply.strategy.trim()}\n`);
+      console.log("strategy.md updated");
+    }
+    if (Array.isArray(reply.infra)) for (const s of reply.infra) await infraFeedback(this.notes.id, clock(lastRun.time), String(s));
+  }
+}
 
 const plural = (n: number, one: string) => `${n} ${n === 1 ? one : one.replace(/y$/, "ie")}${n === 1 ? "" : "s"}`;
 
@@ -261,57 +428,89 @@ async function choose(r: RunView) {
   return command({ type: "choose", index: Number.isFinite(index) ? index : 0 });
 }
 
+async function start(): Promise<void> {
+  let started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY }, 120);
+  if (started.state !== "done") {
+    console.log(`start failed (${started.detail ?? started.state}); reloading the game page`);
+    await fetch(RELOAD).catch(() => undefined);
+    await Bun.sleep(8000);
+    started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY }, 120);
+    if (started.state !== "done") throw new Error(`could not start a run: ${started.detail ?? started.state}`);
+  }
+  await command({ type: "speed", factor: SPEED });
+}
+
 async function main() {
+  await mkdir(path.dirname(LOG), { recursive: true });
   await Bun.write(LOG, "");
   const log = Bun.file(LOG).writer();
   if (TRACE) trace = (entry) => log.write(`${JSON.stringify(entry)}\n`);
   let runs = 0;
-  let lastSeed = "";
   let lastReport = -1;
   let steps = 0;
-  console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, speed x${SPEED}, log ${LOG}`);
+  let notes: RunNotes | undefined;
+  let coach: Coach | undefined;
+  let last: RunView | undefined;
+  const recent: string[] = [];
+  // The previous run's notes wait for its share link, which appears while the next run starts.
+  let awaitingLink: { notes: RunNotes; known: string | undefined } | undefined;
+  console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, speed x${SPEED}, coach ${COACH}, log ${LOG}`);
   await command({ type: "speed", factor: SPEED });
   const first = await api<Snap>("/state");
   if (first.screen !== "title" && first.screen !== "over") runs = 1;
+
+  const fillLink = async (s: Snap) => {
+    if (awaitingLink === undefined || s.lastRunLink === undefined || s.lastRunLink === awaitingLink.known) return;
+    awaitingLink.notes.link = s.lastRunLink;
+    await awaitingLink.notes.write();
+    console.log(`run link: ${s.lastRunLink}`);
+    awaitingLink = undefined;
+  };
+
   for (;;) {
     const s = await timed("state", api<Snap>("/state"));
     if (!s.connected) throw new Error("the game tab is not connected to the agent server");
+    await fillLink(s);
     if (s.screen === "title" || s.screen === "over") {
-      if (s.screen === "over" && s.lastRun !== undefined && runs > 0) {
-        const avg = latency.reduce((a, b) => a + b, 0) / Math.max(1, latency.length);
+      if (s.screen === "over" && s.lastRun !== undefined && runs > 0 && notes !== undefined && coach !== undefined) {
+        const avg = latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length);
         console.log(`run ${runs} ended at ${s.lastRun.time}s, level ${s.lastRun.level}, ${s.lastRun.kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
         console.log(`  damage taken: ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}`);
-        log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, seed: lastSeed, ...s.lastRun, steps, planCalls, avgDecisionMs: Math.round(avg) })}\n`);
+        log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty: DIFFICULTY, notes: notes.id, ...s.lastRun, steps, coachCalls: coach.calls, avgDecisionMs: Math.round(avg) })}\n`);
         log.flush();
-        if (runs >= RUNS) return;
+        await coach.review(s.lastRun, last, recent);
+        console.log(`notes: ${notes.file}`);
+        awaitingLink = { notes, known: s.lastRunLink };
+        notes = undefined;
+        coach = undefined;
+        if (runs >= RUNS) {
+          // Starting walks through the end screens, which is where the game shows the share link.
+          await start();
+          await fillLink(await api<Snap>("/state"));
+          return;
+        }
       }
-      let started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY }, 120);
-      if (started.state !== "done") {
-        console.log(`start failed (${started.detail ?? started.state}); reloading the game page`);
-        await fetch(RELOAD).catch(() => undefined);
-        await Bun.sleep(8000);
-        started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY }, 120);
-        if (started.state !== "done") throw new Error(`could not start a run: ${started.detail ?? started.state}`);
-      }
-      await command({ type: "speed", factor: SPEED });
+      await start();
       runs++;
       steps = 0;
       plan = undefined;
-      planAsked = Number.NEGATIVE_INFINITY;
-      planCalls = 0;
       lastReport = -1;
       latency.length = 0;
+      recent.length = 0;
       continue;
     }
     const r = s.run;
-    if (r !== undefined && r.seed !== lastSeed) {
-      lastSeed = r.seed;
-      console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}`);
-    }
     if (r === undefined) {
       await Bun.sleep(100);
       continue;
     }
+    if (notes === undefined || coach === undefined) {
+      notes = new RunNotes(r, await readStrategy());
+      coach = new Coach(notes);
+      await notes.write();
+      console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}, notes ${notes.file}`);
+    }
+    last = r;
     if (Math.floor(r.time / 30) !== lastReport) {
       lastReport = Math.floor(r.time / 30);
       const per = (ms: number) => Math.round(ms / Math.max(1, timings.steps));
@@ -324,7 +523,9 @@ async function main() {
     }
     steps++;
     timings.steps++;
-    await updatePlan(r);
+    await coach.consult(r);
+    recent.push(situation(r));
+    if (recent.length > 4) recent.shift();
     if (s.screen === "choice") await choose(r);
     else await move(r);
   }

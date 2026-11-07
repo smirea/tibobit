@@ -186,6 +186,12 @@ export class GameLink {
   speed = 1;
   /** Pause the next new run before its first tick, so agents start every run from tick 0. */
   pauseAtStart = false;
+  /** The share link of the last finished run, which the game puts in the address bar (/r/?...) on its summary. */
+  runLink: string | undefined;
+
+  noteRunLink() {
+    if (location.pathname.startsWith("/r/")) this.runLink = location.href;
+  }
   private contentFn: ((bigUpdate: Record<string, boolean>) => Content) | undefined;
   private seen = new Set<string>();
   private listeners = new Set<() => void>();

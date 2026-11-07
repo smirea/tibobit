@@ -609,7 +609,13 @@
     return link.game !== undefined && !link.game.state.over && hud !== null && hud.getClientRects().length > 0;
   }
   function snapshot(link, discovery, commands) {
-    const base = { capturedAt: Date.now(), commands, ...link.error === undefined ? {} : { error: link.error } };
+    link.noteRunLink();
+    const base = {
+      capturedAt: Date.now(),
+      commands,
+      ...link.error === undefined ? {} : { error: link.error },
+      ...link.runLink === undefined ? {} : { lastRunLink: link.runLink }
+    };
     const game = link.game;
     const ended = game?.state.over ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, kills: game.state.run.kills, damageTaken: byDamage(game.state.run.damageTakenBySource) } } : {};
     if (game === undefined || !inRun(link))
@@ -921,12 +927,14 @@
           await wait(1500);
         }
       }
+      this.link.noteRunLink();
       for (let i = 0;i < 15 && button(entry) === undefined; i++) {
         if (i === 14) {
           const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
           throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
         }
         const next = button(/^(Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
+        this.link.noteRunLink();
         if (next !== undefined)
           await press(next);
         else {
@@ -1161,6 +1169,11 @@
     steer;
     speed = 1;
     pauseAtStart = false;
+    runLink;
+    noteRunLink() {
+      if (location.pathname.startsWith("/r/"))
+        this.runLink = location.href;
+    }
     contentFn;
     seen = new Set;
     listeners = new Set;
