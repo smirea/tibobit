@@ -56,7 +56,8 @@ async function timed<T>(phase: "state" | "decide" | "command", work: Promise<T>)
   }
 }
 
-const command = (c: unknown) => timed("command", api<CommandStatus & { interruptedBy?: string }>("/command?wait=1&timeout=30", c));
+const command = (c: unknown, timeoutSeconds = 30) =>
+  timed("command", api<CommandStatus & { interruptedBy?: string }>(`/command?wait=1&timeout=${timeoutSeconds}`, c));
 
 const latency: number[] = [];
 let trace: ((entry: unknown) => void) | undefined;
@@ -253,12 +254,12 @@ async function main() {
         log.flush();
         if (runs >= RUNS) return;
       }
-      let started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY });
+      let started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY }, 120);
       if (started.state !== "done") {
         console.log(`start failed (${started.detail ?? started.state}); reloading the game page`);
         await fetch(RELOAD).catch(() => undefined);
         await Bun.sleep(8000);
-        started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY });
+        started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY }, 120);
         if (started.state !== "done") throw new Error(`could not start a run: ${started.detail ?? started.state}`);
       }
       await command({ type: "speed", factor: SPEED });
