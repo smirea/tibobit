@@ -655,6 +655,8 @@ type Pursuit = {
   goal: Goal;
   id: string;
   title: string;
+  /** Its one-word name for the panel's action tiles. */
+  tag: string;
   since: number;
   deadline: number;
   /** The least work left so far (distance, plus seconds of charging as distance) and when. */
@@ -766,6 +768,36 @@ function goalTitle(g: Goal, r: RunView): string {
 }
 
 
+const SPOT_TAGS: [RegExp, string][] = [
+  [/cart|crate|slots|microwave|vendor|shop/i, "Shop"],
+  [/shrine|whetstone/i, "Shrine"],
+  [/magnet/i, "Magnet"],
+  [/dog|pup/i, "Pet"],
+  [/nest/i, "Fight"],
+  [/lantern/i, "Light"],
+  [/patch|crop/i, "Farm"],
+];
+
+/** A goal's one-word name for the panel's action tiles. */
+function goalTag(g: Goal, r: RunView): string {
+  switch (g.kind) {
+    case "chest":
+      return "Loot";
+    case "poi": {
+      const name = r.pois.find((p) => p.uid === g.uid)?.name ?? "Spot";
+      return SPOT_TAGS.find(([re]) => re.test(name))?.[1] ?? name.split(" ")[0] ?? "Spot";
+    }
+    case "food":
+      return "Eat";
+    case "explore":
+      return "Wander";
+    case "gems":
+      return "Gems";
+    case "evade":
+      return "Run";
+  }
+}
+
 function aimAt(p: Pursuit, r: RunView): Aim | Ended {
   const g = p.goal;
   const age = r.time - p.since;
@@ -803,6 +835,7 @@ function begin(goal: Goal, r: RunView, log: RunLog) {
     goal,
     id: goalId(goal),
     title,
+    tag: goalTag(goal, r),
     since: r.time,
     deadline: r.time,
     best: { left: Number.POSITIVE_INFINITY, time: r.time },
@@ -815,12 +848,13 @@ function begin(goal: Goal, r: RunView, log: RunLog) {
   p.deadline = r.time + seconds + GOAL_SLACK;
   pursuit = p;
   log.write(r, { event: "goal", goal: p.id, action: "start", detail: title });
-  say({ role: "action", model: "goal", time: r.time, text: title, detail: "done" in aim ? aim.done : aim.progress });
+  say({ role: "action", model: "goal", time: r.time, text: title, tag: p.tag, detail: "done" in aim ? aim.done : aim.progress });
 }
 
 /** `dropped`: the planner chose another goal before this one ended. */
 type Result = "done" | "failed" | "dropped";
 const RESULT_WORDS: Record<Result, string> = { done: "done", failed: "gave up", dropped: "dropped" };
+const RESULT_MARKS: Record<Result, string> = { done: "✓", failed: "✗", dropped: "–" };
 
 function finish(r: RunView, log: RunLog, outcome: string, result: Result) {
   const p = pursuit;
@@ -830,7 +864,7 @@ function finish(r: RunView, log: RunLog, outcome: string, result: Result) {
   if (outcomes.length > 30) outcomes.shift();
   if (result === "failed" && "uid" in p.goal) giveUps.set(p.id, r.time + GIVE_UP_SECONDS);
   log.write(r, { event: "goal", goal: p.id, action: result, detail: outcome });
-  say({ role: "action", model: "goal", time: r.time, text: `${p.title}: ${RESULT_WORDS[result]}`, detail: `${outcome} · ${Math.round(r.time - p.since)}s` });
+  say({ role: "action", model: "goal", time: r.time, text: `${p.title}: ${RESULT_WORDS[result]}`, tag: `${p.tag} ${RESULT_MARKS[result]}`, detail: `${outcome} · ${Math.round(r.time - p.since)}s` });
 }
 
 /** The planner's goal takes over, unless it is the one already under way. */
@@ -1069,6 +1103,7 @@ async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog) {
     model: MODEL,
     time: r.time,
     text: `${move[0]?.toUpperCase()}${move.slice(1)}`,
+    ...(dash ? { tag: "Dash" } : {}),
     inspect: {
       kind: "moves",
       situation: state,
@@ -1429,6 +1464,7 @@ async function main() {
   let adopted = TAKEOVER && now.run !== undefined && now.screen !== "over" && now.screen !== "title";
   say({
     role: "system",
+    tag: adopted ? "Take over" : "Start",
     time: now.run?.time ?? 0,
     text: `${adopted ? `Taking over the run at ${clock(now.run?.time ?? 0)}` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}`}${(now.incognito ?? INCOGNITO) ? ", incognito: no notes, no review" : ""}.`,
     detail: `Planner ${PLAN_MODEL}, action model ${MODEL}, run plan and review by ${COACH === "none" ? "nobody" : COACH_NAME}. Run logs: ${LOG_DIR}`,
@@ -1454,7 +1490,7 @@ async function main() {
       if (s.screen === "over" && s.lastRun !== undefined && runs > 0 && notes !== undefined && planner !== undefined && runLog !== undefined) {
         const avg = latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length);
         console.log(`run ${runs} ended at ${s.lastRun.time}s, level ${s.lastRun.level}, ${s.lastRun.kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
-        say({ role: "system", time: s.lastRun.time, text: `Run over at ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills.` });
+        say({ role: "system", time: s.lastRun.time, tag: "Over", text: `Run over at ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills.` });
         console.log(`  damage taken: ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}`);
         runLog.write(last, { event: "run_end", detail: `survived ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills; damage by ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}` });
         log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty: DIFFICULTY, notes: notes.id, runLog: runLog.file, ...s.lastRun, steps, plannerCalls: planner.calls, avgDecisionMs: Math.round(avg) })}\n`);
@@ -1542,9 +1578,14 @@ async function main() {
     if (incognito && notes.saved) {
       notes.saved = false;
       console.log("incognito: this run gets no notes and no review");
-      say({ role: "system", time: r.time, text: "Incognito: this run gets no notes, and it will not be reviewed." });
+      say({ role: "system", time: r.time, tag: "Incognito", text: "Incognito: this run gets no notes, and it will not be reviewed." });
     }
     if (!modeSet) await setMode();
+    // Live, the bot never pauses the game itself, so a pause is the player's: the models wait for it.
+    if (LIVE && s.screen === "paused") {
+      await Bun.sleep(250);
+      continue;
+    }
     const stepStarted = performance.now();
     if (s.screen === "choice") await choose(r, planner, runLog);
     else {

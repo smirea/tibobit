@@ -119,6 +119,11 @@ function offerKey(tip: string): { key: Key; level: number } | undefined {
  * The open choice's options in on-screen order; `choose` clicks them by this index. Level-ups,
  * chests and shrines show cards; shops such as the vendor or the dog kennel show plain buttons.
  */
+/** The game's pause menu (Escape or P) stops the run without setting the sim's own paused flag. */
+function pauseMenuOpen(): boolean {
+  return [...document.querySelectorAll<HTMLButtonElement>("button")].some((b) => !b.closest("#tibo-helper") && b.textContent?.trim() === "Resume" && b.getClientRects().length > 0);
+}
+
 export function choiceCards(): HTMLElement[] {
   const cards = [...document.querySelectorAll<HTMLElement>("button.ui-card, .ui-card[data-tip]")];
   // The other buttons of the overlay: Leave in a shop, Reroll and Skip on a level-up. Banish is
@@ -496,6 +501,6 @@ export function snapshot(link: GameLink, discovery: Discovery, commands: Command
   const d = liveData(link);
   if (d === undefined || !link.ready) return { ...base, screen: "run", error: link.error ?? "game content not loaded yet" };
   const s = game.state;
-  const screen = s.choiceQueue.length > 0 ? "choice" : s.paused ? "paused" : "run";
+  const screen = s.choiceQueue.length > 0 ? "choice" : s.paused || pauseMenuOpen() ? "paused" : "run";
   return { ...base, screen, run: runView(link, game, discovery, d) };
 }

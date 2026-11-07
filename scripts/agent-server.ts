@@ -73,12 +73,12 @@ function startPilot() {
     bot = undefined;
     if (pilot.state === "stopping") return setPilot({ state: "off" });
     if (code === 0) {
-      say({ role: "system", text: "The run is over: the wheel is yours." });
+      say({ role: "system", tag: "Over", text: "The run is over: the wheel is yours." });
       return setPilot({ state: "off" });
     }
     const reason = errors.trim().split("\n").filter((l) => /error/i.test(l)).at(-1) ?? errors.trim().split("\n").at(-1);
     const detail = `The bot stopped (exit ${code})${reason ? `: ${reason.trim().slice(0, 300)}` : ""}`;
-    say({ role: "system", text: detail });
+    say({ role: "system", tag: "Stopped", text: detail });
     setPilot({ state: "off", detail });
   });
 }

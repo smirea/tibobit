@@ -2,7 +2,6 @@ import type { Bridge } from "./agent/bridge";
 import { type CardOption, type ChatMessage, type Inspect, PACE_LIMITS, type PilotPace, type PilotRole } from "./agent/protocol";
 
 const ROLE_LABELS: Record<PilotRole, string> = { planner: "Plan", action: "Action", system: "Bot" };
-const ACTION_ROWS = 20;
 const HIDE_DELAY_MS = 200;
 // Narrower than this to the panel's left, the inspector covers the screen's top instead (phones).
 const MIN_SIDE_ROOM = 300;
@@ -230,7 +229,8 @@ function inspector(panel: () => HTMLElement, messages: () => readonly ChatMessag
   };
 }
 
-const MOVES_PER_ROW = 12;
+// More than ten lines of tiles ever hold; the box clips the rest.
+const FLOW_TILES = 160;
 
 /** A step the action model chose, as the move it took; undefined for anything else. */
 function step(m: ChatMessage): { move: string; hurt: boolean; dash: boolean } | undefined {
@@ -239,21 +239,15 @@ function step(m: ChatMessage): { move: string; hurt: boolean; dash: boolean } | 
   return { move: chosen?.move ?? "stand still", hurt: chosen?.forecast !== undefined && chosen.forecast !== "no damage", dash: m.text.startsWith("Dash") };
 }
 
-function actionRow(m: ChatMessage): HTMLElement {
-  const el = h(
-    "div",
-    `tbh-row tbh-row-${m.role}${m.inspect === undefined ? "" : " tbh-row-inspectable"}`,
-    h("span", "tbh-row-time", m.time === undefined ? "" : fine(m.time)),
-    h("span", "tbh-row-text", arrowed(m.text)),
-  );
-  el.dataset.id = String(m.id);
-  return el;
-}
-
-/** One step as a square holding its arrow: red when the game forecast it hurts, ringed for a dash. */
-function stepSquare(m: ChatMessage): HTMLElement {
+/**
+ * One action as a tile: a step is its arrow (red when the game forecast it hurts), anything else
+ * its short name, such as "Run", "Shop" or "Loot ✓".
+ */
+function actionTile(m: ChatMessage): HTMLElement {
   const s = step(m);
-  const el = h("span", `tbh-sq${s?.hurt ? " tbh-sq-hurt" : ""}${s?.dash ? " tbh-sq-dash" : ""}`, ARROWS[s?.move ?? ""] ?? "?");
+  const arrow = s !== undefined && !s.dash;
+  const label = arrow ? (ARROWS[s.move] ?? "?") : s?.dash ? `Dash ${ARROWS[s.move] ?? ""}` : (m.tag ?? arrowed(m.text).split(/[ :,]/)[0] ?? "");
+  const el = h("span", `tbh-tile ${arrow ? "tbh-tile-arrow" : "tbh-tile-word"} tbh-tile-${m.role}${s?.hurt ? " tbh-tile-hurt" : ""}${m.inspect === undefined ? "" : " tbh-tile-inspectable"}`, label);
   el.dataset.id = String(m.id);
   return el;
 }
@@ -293,8 +287,6 @@ export function chatBox(bridge: Bridge): HTMLElement {
   const list = h("div", "tbh-actions");
   list.setAttribute("aria-live", "polite");
   const rows = new Map<number, { el: HTMLElement; message: ChatMessage }>();
-  /** One row per run of steps, keyed by its newest step, so a hovered square keeps its place. */
-  const stepRows = new Map<string, HTMLElement>();
   const insp = inspector(() => plan.closest<HTMLElement>(".tbh-panel") ?? plan, () => bridge.chat());
   let shownPlan: ChatMessage | undefined;
 
@@ -325,42 +317,29 @@ export function chatBox(bridge: Bridge): HTMLElement {
       plan.classList.toggle("tbh-row-inspectable", latest !== undefined);
     }
 
-    // Newest first. A run of steps shares one row of squares; anything else is a row of its own.
-    const groups: ChatMessage[][] = [];
-    for (let i = messages.length - 1; i >= 0 && groups.length <= ACTION_ROWS; i--) {
+    // Newest first: the newest action is a 2x2 tile in the corner and the rest flow around it, as
+    // many as the box holds. The tiles hold still while the pointer is over them, or a new step
+    // every few tenths of a second would slide the one being read out from under it.
+    if (list.matches(":hover")) return insp.refresh((target) => (target.kind === "plan" ? plan : rows.get(target.id)?.el));
+    const actions: ChatMessage[] = [];
+    for (let i = messages.length - 1; i >= 0 && actions.length < FLOW_TILES; i--) {
       const m = messages[i];
-      if (m === undefined || m.role === "planner") continue;
-      const group = groups.at(-1);
-      if (step(m) !== undefined && group !== undefined && step(group[0] as ChatMessage) !== undefined && group.length < MOVES_PER_ROW) group.push(m);
-      else groups.push([m]);
+      if (m !== undefined && m.role !== "planner") actions.push(m);
     }
-    const shown = groups.slice(0, ACTION_ROWS);
-    const ids = new Set(shown.flat().map((m) => m.id));
+    const ids = new Set(actions.map((m) => m.id));
     for (const [id] of rows) if (!ids.has(id)) rows.delete(id);
-    const made = (message: ChatMessage, make: (m: ChatMessage) => HTMLElement) => {
+    const els = actions.map((message, i) => {
       const before = rows.get(message.id);
-      if (before?.message === message) return before.el;
-      const el = make(message);
+      const el = before?.message === message ? before.el : actionTile(message);
       rows.set(message.id, { el, message });
+      el.classList.toggle("tbh-tile-main", i === 0);
       return el;
-    };
-    const els = shown.map((group) => {
-      const [first] = group;
-      if (first === undefined || step(first) === undefined) return made(first as ChatMessage, actionRow);
-      const key = `steps-${first.id}`;
-      const line = stepRows.get(key) ?? h("div", "tbh-row tbh-row-steps", h("span", "tbh-row-time", first.time === undefined ? "" : fine(first.time)), h("span", "tbh-sqs"));
-      stepRows.set(key, line);
-      const squares = group.map((m) => made(m, stepSquare));
-      const holder = line.lastElementChild as HTMLElement;
-      if (holder.children.length !== squares.length || squares.some((sq, i) => holder.children[i] !== sq)) holder.replaceChildren(...squares);
-      return line;
     });
-    for (const key of [...stepRows.keys()]) if (!shown.some((g) => `steps-${g[0]?.id}` === key)) stepRows.delete(key);
     if (els.length !== list.children.length || els.some((el, i) => list.children[i] !== el)) list.replaceChildren(...els);
     insp.refresh((target) => (target.kind === "plan" ? plan : rows.get(target.id)?.el));
   };
 
-  // Moving within one row fires pointerover again for each child; only a new row starts over.
+  // Moving within one tile fires pointerover again for each child; only a new tile starts over.
   let hovered: Element | undefined;
   plan.addEventListener("pointerenter", () => {
     if (shownPlan === undefined || hovered === plan) return;

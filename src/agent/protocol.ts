@@ -349,7 +349,8 @@ export type Inspect =
  * earlier message with that key, which is how a planner message streams: `stream` holds its
  * reasoning so far until the final text replaces it.
  */
-export type ChatLine = { role: PilotRole; text: string; detail?: string; model?: string; time?: number; key?: string; stream?: string; inspect?: Inspect };
+/** `tag` is the action's short name in the panel ("Run", "Shop", "Loot ✓"). */
+export type ChatLine = { role: PilotRole; text: string; tag?: string; detail?: string; model?: string; time?: number; key?: string; stream?: string; inspect?: Inspect };
 export type ChatMessage = ChatLine & { id: number; at: number };
 
 const KEEP_PLANS = 500;
@@ -382,6 +383,7 @@ export function parseChatLine(input: unknown): ChatLine {
   const model = optionalString(c.model, "model");
   const key = optionalString(c.key, "key");
   const stream = optionalString(c.stream, "stream");
+  const tag = optionalString(c.tag, "tag");
   const inspect = c.inspect as Inspect | undefined;
   if (inspect !== undefined && !["prompt", "plan", "moves", "cards"].includes((inspect as { kind?: unknown } | null)?.kind as string)) fail("inspect.kind must be prompt, plan, moves or cards");
   return {
@@ -392,6 +394,7 @@ export function parseChatLine(input: unknown): ChatLine {
     ...(c.time === undefined ? {} : { time: num(c.time, "time") }),
     ...(key === undefined ? {} : { key }),
     ...(stream === undefined ? {} : { stream }),
+    ...(tag === undefined ? {} : { tag }),
     ...(inspect === undefined ? {} : { inspect }),
   };
 }
