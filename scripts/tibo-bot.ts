@@ -207,6 +207,24 @@ const GAME_RULES = [
   "A small local decision model plays every step. It only sees one line of advice from you, and a mark on level-up options whose exact names you list in want.",
 ].join("\n");
 
+/** One line per finished run in gameplay/notes: how long it lasted and what it carried. */
+async function runHistory(): Promise<string> {
+  const glob = new Bun.Glob("*.md");
+  const rows: { time: number; line: string }[] = [];
+  for await (const name of glob.scan(NOTES_DIR)) {
+    if (!name.startsWith("2")) continue;
+    const text = await Bun.file(path.join(NOTES_DIR, name)).text();
+    if (!text.includes(`| Mode | ${MODE} ${DIFFICULTY} |`)) continue;
+    const survived = text.match(/Survived \*\*([\d:]+)\*\* \(([\d.]+)s\), level (\d+)/);
+    if (survived === null) continue;
+    const weapons = text.match(/- (?:Final weapons|Weapons at [\d:]+): (.*)\./)?.[1] ?? "unknown";
+    const passives = text.match(/- Final passives: (.*)\./)?.[1] ?? "unknown";
+    rows.push({ time: Number(survived[2]), line: `${name.slice(0, 16)}: survived ${survived[1]}, level ${survived[3]}; weapons ${weapons}; passives ${passives}` });
+  }
+  rows.sort((a, b) => b.time - a.time);
+  return rows.map((r) => `- ${r.line}`).join("\n") || "(no finished runs yet)";
+}
+
 /**
  * Asks the coach to review a finished run, rewrites strategy.md from its answer and files its
  * infrastructure suggestions. Returns the review paragraph.
@@ -219,6 +237,8 @@ async function reviewRun(timeline: string, outcome: string, recent: string[], ru
     `Goal: survive 20 minutes on ${DIFFICULTY} in today's ${MODE === "daily" ? "Daily (the same seed every attempt today)" : "Open World"}.`,
     "Current strategy file:",
     await readStrategy(),
+    "Every finished run in this mode so far, longest first. Compare builds and timings across runs before trusting a lesson from one run:",
+    await runHistory(),
     "This run's notes:",
     timeline || "(none)",
     "Outcome:",
@@ -309,12 +329,14 @@ class Coach {
       `Goal: survive 20 minutes on ${DIFFICULTY} in today's ${MODE === "daily" ? "Daily (the same seed every attempt today)" : "Open World"}.`,
       "Strategy file, learned from earlier runs:",
       await readStrategy(),
+      "Finished runs in this mode, longest first:",
+      await runHistory(),
       "Notes so far this run:",
       this.notes.timeline.join("\n") || "(none yet)",
       `You are asked now because ${why}. State now:`,
       digest(r),
       "Answer from these facts alone; do not browse, search or use tools.",
-      'Reply with only JSON: {"want": [up to 6 exact weapon, passive or item names to take when offered, best first], "advice": "one short sentence for the decision model about the next minute or two; it stays in force for 90 seconds, so never name a compass direction or a countdown", "note": "one or two sentences for the run notes: what is happening and what to watch", "infra": "one concrete suggestion to improve the data or controls the bot has, or an empty string"}',
+      'Reply with only JSON: {"want": [up to 8 exact weapon, passive or item names, best first. This list is binding: whenever a level-up offers any name on it, only those can be taken, so include the weapons to keep levelling as well as the passives you want], "advice": "one short sentence for the decision model about the next minute or two; it stays in force for 90 seconds, so never name a compass direction or a countdown", "note": "one or two sentences for the run notes: what is happening and what to watch", "infra": "one concrete suggestion to improve the data or controls the bot has, or an empty string"}',
     ].join("\n\n");
     const reply = await askCoach(prompt);
     if (reply === undefined) return;
