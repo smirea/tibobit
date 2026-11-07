@@ -88,7 +88,9 @@ let planAsked = Number.NEGATIVE_INFINITY;
 let planning = false;
 let planCalls = 0;
 
-function requestPlan(r: RunView) {
+// Asked at fixed game times and awaited while the game is paused, so a plan always lands on the
+// same tick; only the planner's own wording can differ between runs.
+async function updatePlan(r: RunView) {
   if (PLANNER === "none" || planning || r.time - planAsked < PLAN_EVERY) return;
   planAsked = r.time;
   planning = true;
@@ -104,7 +106,7 @@ function requestPlan(r: RunView) {
     'Reply with only JSON: {"want": [up to 6 exact weapon or passive names to take when offered, best first], "advice": "one short sentence on how to play the next few minutes"}',
   ].join("\n");
   const proc = Bun.spawn(["grok", "-p", prompt, "-m", "grok-4.7-build-fast", "--output-format", "plain"], { cwd: os.tmpdir(), stdout: "pipe", stderr: "ignore" });
-  void new Response(proc.stdout)
+  await new Response(proc.stdout)
     .text()
     .then((text) => {
       const json = text.match(/\{[\s\S]*\}/)?.[0];
@@ -274,7 +276,7 @@ async function main() {
     }
     steps++;
     timings.steps++;
-    requestPlan(r);
+    await updatePlan(r);
     if (s.screen === "choice") await choose(r);
     else await move(r);
   }
