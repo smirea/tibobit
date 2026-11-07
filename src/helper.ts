@@ -13,6 +13,8 @@ import {
   relevantCombos,
   unpaired,
 } from "./catalog";
+import type { Bridge } from "./agent/bridge";
+import { validPort } from "./agent/protocol";
 import { type Data, liveData } from "./data";
 import type { Discovery } from "./discovery";
 import type { GameLink, IconSheet } from "./game";
@@ -132,7 +134,7 @@ function header(panel: HTMLElement, count: string): HTMLElement {
   return el;
 }
 
-function renderPanel(panel: HTMLElement, v: View) {
+function renderPanel(panel: HTMLElement, content: HTMLElement, v: View) {
   const rows = unpaired(v.d.combos, v.loadout);
   const paired = relevantCombos(v.d.combos, v.loadout).filter((c) => c.parts.every((p) => v.loadout.has(p.key)));
   const ready = paired.filter((c) => comboProgress(c, v.loadout, v.d.catalog).every((s) => s === "done"));
@@ -156,11 +158,46 @@ function renderPanel(panel: HTMLElement, v: View) {
   const counts = [`${rows.length} open`, `${paired.length} paired`, ...(ready.length > 0 ? [`${ready.length} ready`] : [])].join(" · ");
   const head = header(panel, counts);
   head.title = paired.map((c) => `${c.parts.map((p) => partTitle(v, p)).join(" + ")} → ${nameOf(v.d.catalog, c.result)}`).join("\n");
-  panel.replaceChildren(head, body);
+  content.replaceChildren(head, body);
 }
 
-function renderProblem(panel: HTMLElement, message: string) {
-  panel.replaceChildren(header(panel, "offline"), h("div", "tbh-stale", message));
+function renderProblem(panel: HTMLElement, content: HTMLElement, message: string) {
+  content.replaceChildren(header(panel, "offline"), h("div", "tbh-stale", message));
+}
+
+/** Port picker for the agent server, so a tab can join a server other than the default one. */
+function connectionRow(bridge: Bridge): HTMLElement {
+  const input = h("input", "tbh-port");
+  input.type = "number";
+  input.min = "1";
+  input.max = "65535";
+  input.value = String(bridge.status().port);
+  input.setAttribute("aria-label", "Agent server port");
+  const button = h("button", "tbh-connect", "Connect");
+  const status = h("div", "tbh-conn-status");
+
+  const refresh = () => {
+    const s = bridge.status();
+    const text = s.state === "connected" ? `connected to :${s.port}` : (s.error ?? `connecting to :${s.port}…`);
+    if (status.textContent !== text) status.textContent = text;
+    status.dataset.state = s.state === "connected" ? "ok" : s.error === undefined ? "wait" : "error";
+  };
+  const connect = (e: SubmitEvent) => {
+    e.preventDefault();
+    const port = Number(input.value);
+    input.classList.toggle("tbh-invalid", !validPort(port));
+    if (!validPort(port)) return;
+    bridge.connect(port);
+  };
+  // A form, because Enter submits it as a default action, which still happens after guardPanelKeys
+  // stops the key event from reaching anything else.
+  const row = h("form", "tbh-conn-row", h("span", "tbh-conn-label", "Agent port"), input, button);
+  row.noValidate = true;
+  row.addEventListener("submit", connect);
+  bridge.onChange(refresh);
+  input.addEventListener("input", () => input.classList.remove("tbh-invalid"));
+  refresh();
+  return h("div", "tbh-conn", row, status);
 }
 
 function offerKey(card: HTMLElement): { key: Key; level: number } | undefined {
@@ -214,19 +251,30 @@ function annotateCard(card: HTMLElement, v: View, version: number) {
   (card.querySelector(".ui-card-text") ?? card).append(box);
 }
 
-function mount(): HTMLElement {
+/**
+ * The game reads keys on the window, so typing a port would otherwise steer or pick cards. This has
+ * to run at document-start, before the game's own listeners, to see the keys first.
+ */
+export function guardPanelKeys() {
+  for (const type of ["keydown", "keyup", "keypress"]) {
+    window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest("#tibo-helper") !== null && e.stopImmediatePropagation(), true);
+  }
+}
+
+function mount(footer: HTMLElement): { panel: HTMLElement; content: HTMLElement } {
   const style = document.createElement("style");
   style.textContent = css;
   document.head.append(style);
-  const panel = h("div", "tbh-panel");
+  const content = h("div", "");
+  const panel = h("div", "tbh-panel", content, footer);
   panel.id = "tibo-helper";
   if (window.innerWidth < 700) panel.classList.add("tbh-collapsed");
   document.body.append(panel);
-  return panel;
+  return { panel, content };
 }
 
-export function startHelper(link: GameLink, discovery: Discovery) {
-  const panel = mount();
+export function startHelper(link: GameLink, discovery: Discovery, bridge: Bridge) {
+  const { panel, content } = mount(connectionRow(bridge));
   const dropStaleTip = startTips();
   let panelSignature = "";
   let queued = false;
@@ -248,7 +296,7 @@ export function startHelper(link: GameLink, discovery: Discovery) {
     const d = liveData(link);
     if (d === undefined) {
       const problem = link.error === undefined ? "Reading the game's content..." : `Can't read the game's content: ${link.error}. The game changed; tibobit needs an update.`;
-      if (panelSignature !== problem) renderProblem(panel, problem);
+      if (panelSignature !== problem) renderProblem(panel, content, problem);
       panelSignature = problem;
       return;
     }
@@ -262,7 +310,7 @@ export function startHelper(link: GameLink, discovery: Discovery) {
     const signature = `${[...loadout].join(",")}|${discovery.version}|${version}`;
     if (signature !== panelSignature) {
       panelSignature = signature;
-      renderPanel(panel, view);
+      renderPanel(panel, content, view);
     }
     for (const card of cards) annotateCard(card, view, version);
     dropStaleTip();

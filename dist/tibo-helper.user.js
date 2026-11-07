@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
-// @version      1.4.0
+// @version      1.5.0
 // @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
@@ -168,7 +168,11 @@
 
   // src/agent/protocol.ts
   var BRIDGE_PORT = 7357;
-  var BRIDGE_ORIGIN = `http://127.0.0.1:${BRIDGE_PORT}`;
+  var bridgeOrigin = (port) => `http://127.0.0.1:${port}`;
+  var BRIDGE_ORIGIN = bridgeOrigin(BRIDGE_PORT);
+  function validPort(port) {
+    return Number.isInteger(port) && port >= 1 && port <= 65535;
+  }
   var DIRECTIONS = ["right", "down-right", "down", "down-left", "left", "up-left", "up", "up-right"];
   function fail(message) {
     throw new Error(message);
@@ -586,15 +590,26 @@
   }
 
   // src/agent/bridge.ts
-  var ORIGIN = globalThis.__tiboBridgeOrigin ?? BRIDGE_ORIGIN;
+  var PORT_KEY = "tibobit.bridgePort";
+  function savedPort() {
+    try {
+      const port = Number(localStorage.getItem(PORT_KEY));
+      return validPort(port) ? port : undefined;
+    } catch {
+      return;
+    }
+  }
+  function initialOrigin() {
+    return globalThis.__tiboBridgeOrigin ?? bridgeOrigin(savedPort() ?? BRIDGE_PORT);
+  }
   var RUN_INTERVAL_MS = 33;
   var IDLE_INTERVAL_MS = 500;
   var RECONNECT_MS = 3000;
   var MAX_IN_FLIGHT = 4;
-  function post(path, body) {
+  function post(origin, path, body) {
     return new Promise((resolve) => GM_xmlhttpRequest({
       method: "POST",
-      url: `${ORIGIN}${path}`,
+      url: `${origin}${path}`,
       data: JSON.stringify(body),
       headers: { "content-type": "application/json" },
       timeout: 5000,
@@ -604,8 +619,16 @@
     }));
   }
   function startBridge(link, discovery, controller) {
+    let origin = initialOrigin();
     let session = 0;
+    let request;
+    let error;
     let connected = false;
+    const listeners = new Set;
+    const notify = () => {
+      for (const listener of listeners)
+        listener();
+    };
     let inFlight = 0;
     let lastPush = 0;
     let sentEncyclopedia = false;
@@ -613,21 +636,27 @@
       if (from !== session)
         return;
       connected = false;
+      notify();
       setTimeout(listen, RECONNECT_MS);
     };
     const listen = () => {
       const mine = ++session;
-      GM_xmlhttpRequest({
+      request = GM_xmlhttpRequest({
         method: "GET",
-        url: `${ORIGIN}/bridge/commands`,
+        url: `${origin}/bridge/commands`,
         responseType: "stream",
         onloadstart: (r) => {
           const body = r.response;
           if (body === null)
             return reconnect(mine);
-          read(body, mine).finally(() => reconnect(mine));
+          read(body, mine).catch(() => {}).finally(() => reconnect(mine));
         },
-        onerror: () => reconnect(mine)
+        onerror: () => {
+          if (mine === session)
+            error = `no agent server on ${origin}`;
+          notify();
+          reconnect(mine);
+        }
       });
     };
     const read = async (body, mine) => {
@@ -637,8 +666,10 @@
       for (;; ) {
         const { value, done } = await reader.read();
         if (done)
-          return;
-        buffer += decoder.decode(value, { stream: true });
+          buffer += `
+`;
+        else
+          buffer += decoder.decode(value, { stream: true });
         for (let nl = buffer.indexOf(`
 `);nl >= 0; nl = buffer.indexOf(`
 `)) {
@@ -648,12 +679,18 @@
             continue;
           try {
             const envelope = JSON.parse(line);
+            if (mine !== session)
+              return;
             if (envelope.hello) {
-              if (mine === session) {
-                connected = true;
-                sentEncyclopedia = false;
-              }
+              connected = true;
+              error = undefined;
+              sentEncyclopedia = false;
+              notify();
               continue;
+            }
+            if (typeof envelope.error === "string") {
+              error = envelope.error;
+              notify();
             }
             if (typeof envelope.id !== "number")
               continue;
@@ -662,6 +699,8 @@
             console.error("[tibobit] bad command from the agent server", line, e);
           }
         }
+        if (done)
+          return;
       }
     };
     setInterval(() => {
@@ -675,7 +714,7 @@
         const book = encyclopedia(link);
         if (book !== undefined) {
           sentEncyclopedia = true;
-          post("/bridge/encyclopedia", book).then((ok) => {
+          post(origin, "/bridge/encyclopedia", book).then((ok) => {
             if (!ok)
               sentEncyclopedia = false;
           });
@@ -688,9 +727,26 @@
         body = { capturedAt: Date.now(), screen: "title", commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` };
       }
       inFlight++;
-      post("/bridge/state", body).finally(() => inFlight--);
+      post(origin, "/bridge/state", body).finally(() => inFlight--);
     }, RUN_INTERVAL_MS / 2);
     listen();
+    return {
+      status: () => ({ port: Number(new URL(origin).port), state: connected ? "connected" : "connecting", error: connected ? undefined : error }),
+      connect: (port) => {
+        if (!validPort(port))
+          throw new Error(`not a port: ${port}`);
+        try {
+          localStorage.setItem(PORT_KEY, String(port));
+        } catch {}
+        origin = bridgeOrigin(port);
+        connected = false;
+        error = undefined;
+        request?.abort();
+        listen();
+        notify();
+      },
+      onChange: (listener) => listeners.add(listener)
+    };
   }
 
   // src/agent/control.ts
@@ -1227,8 +1283,8 @@
 }
 .tbh-header { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: pointer; font-weight: 700; color: #ffd36b; position: sticky; top: 0; background: rgba(17,14,10,.96); }
 .tbh-count { color: #c9b58a; font-weight: 400; }
-.tbh-collapsed:not(.tbh-choice) :is(.tbh-body, .tbh-stale),
-.tbh-choice:not(.tbh-peek) :is(.tbh-body, .tbh-stale) { display: none; }
+.tbh-collapsed:not(.tbh-choice) :is(.tbh-body, .tbh-stale, .tbh-conn),
+.tbh-choice:not(.tbh-peek) :is(.tbh-body, .tbh-stale, .tbh-conn) { display: none; }
 .tbh-body { padding: 0 6px 6px; }
 .tbh-empty { color: #a8977a; padding: 4px 2px; }
 .tbh-need { display: grid; grid-template-columns: 30px 24px 8px 1fr; align-items: center; gap: 4px; padding: 3px 2px; border-top: 1px solid rgba(255,255,255,.06); }
@@ -1236,6 +1292,18 @@
 .tbh-colon { color: #8d7c5c; }
 .tbh-opts { display: flex; flex-wrap: wrap; gap: 3px; }
 .tbh-stale { margin: 0 6px 6px; padding: 4px 6px; border-radius: 4px; background: rgba(227,138,127,.15); color: #f0b3aa; font-size: 11px; }
+.tbh-conn { padding: 6px 8px; border-top: 1px solid rgba(255,255,255,.08); user-select: auto; }
+.tbh-conn-row { display: flex; align-items: center; gap: 6px; }
+.tbh-conn-label { color: #c9b58a; flex: 1; }
+.tbh-port { width: 7ch; padding: 2px 4px; font: inherit; color: #f3e6c4; background: rgba(255,255,255,.06); border: 1px solid #6b5631; border-radius: 3px; -moz-appearance: textfield; }
+.tbh-port::-webkit-inner-spin-button, .tbh-port::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.tbh-port:focus { outline: 1px solid #ffd36b; }
+.tbh-port.tbh-invalid { border-color: #e38a7f; }
+.tbh-connect { padding: 2px 8px; font: inherit; font-weight: 700; color: #3a2600; background: #ffd36b; border: 0; border-radius: 3px; cursor: pointer; }
+.tbh-connect:hover { background: #ffe08f; }
+.tbh-conn-status { margin-top: 4px; font-size: 11px; color: #a8977a; overflow-wrap: anywhere; }
+.tbh-conn-status[data-state="ok"] { color: #7fe3a4; }
+.tbh-conn-status[data-state="error"] { color: #f0b3aa; }
 .tbh-badge { display: inline-block; padding: 0 4px; border-radius: 3px; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-align: center; }
 .tbh-badge-new { align-self: flex-start; background: #ff7ad9; color: #3d0630; margin: 0 0 2px; }
 .tbh-badge-evo { background: #ffd36b; color: #3a2600; }
@@ -1365,7 +1433,7 @@
     el.addEventListener("click", () => panel.classList.toggle(panel.classList.contains("tbh-choice") ? "tbh-peek" : "tbh-collapsed"));
     return el;
   }
-  function renderPanel(panel, v) {
+  function renderPanel(panel, content, v) {
     const rows = unpaired(v.d.combos, v.loadout);
     const paired = relevantCombos(v.d.combos, v.loadout).filter((c) => c.parts.every((p) => v.loadout.has(p.key)));
     const ready = paired.filter((c) => comboProgress(c, v.loadout, v.d.catalog).every((s) => s === "done"));
@@ -1383,10 +1451,42 @@
     const head = header(panel, counts);
     head.title = paired.map((c) => `${c.parts.map((p) => partTitle(v, p)).join(" + ")} → ${nameOf(v.d.catalog, c.result)}`).join(`
 `);
-    panel.replaceChildren(head, body);
+    content.replaceChildren(head, body);
   }
-  function renderProblem(panel, message) {
-    panel.replaceChildren(header(panel, "offline"), h("div", "tbh-stale", message));
+  function renderProblem(panel, content, message) {
+    content.replaceChildren(header(panel, "offline"), h("div", "tbh-stale", message));
+  }
+  function connectionRow(bridge) {
+    const input = h("input", "tbh-port");
+    input.type = "number";
+    input.min = "1";
+    input.max = "65535";
+    input.value = String(bridge.status().port);
+    input.setAttribute("aria-label", "Agent server port");
+    const button = h("button", "tbh-connect", "Connect");
+    const status = h("div", "tbh-conn-status");
+    const refresh = () => {
+      const s = bridge.status();
+      const text = s.state === "connected" ? `connected to :${s.port}` : s.error ?? `connecting to :${s.port}…`;
+      if (status.textContent !== text)
+        status.textContent = text;
+      status.dataset.state = s.state === "connected" ? "ok" : s.error === undefined ? "wait" : "error";
+    };
+    const connect = (e) => {
+      e.preventDefault();
+      const port = Number(input.value);
+      input.classList.toggle("tbh-invalid", !validPort(port));
+      if (!validPort(port))
+        return;
+      bridge.connect(port);
+    };
+    const row = h("form", "tbh-conn-row", h("span", "tbh-conn-label", "Agent port"), input, button);
+    row.noValidate = true;
+    row.addEventListener("submit", connect);
+    bridge.onChange(refresh);
+    input.addEventListener("input", () => input.classList.remove("tbh-invalid"));
+    refresh();
+    return h("div", "tbh-conn", row, status);
   }
   function offerKey2(card) {
     const tip = card.dataset.tip ?? "";
@@ -1430,19 +1530,25 @@
     }
     (card.querySelector(".ui-card-text") ?? card).append(box);
   }
-  function mount() {
+  function guardPanelKeys() {
+    for (const type of ["keydown", "keyup", "keypress"]) {
+      window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest("#tibo-helper") !== null && e.stopImmediatePropagation(), true);
+    }
+  }
+  function mount(footer) {
     const style = document.createElement("style");
     style.textContent = css;
     document.head.append(style);
-    const panel = h("div", "tbh-panel");
+    const content = h("div", "");
+    const panel = h("div", "tbh-panel", content, footer);
     panel.id = "tibo-helper";
     if (window.innerWidth < 700)
       panel.classList.add("tbh-collapsed");
     document.body.append(panel);
-    return panel;
+    return { panel, content };
   }
-  function startHelper(link, discovery) {
-    const panel = mount();
+  function startHelper(link, discovery, bridge) {
+    const { panel, content } = mount(connectionRow(bridge));
     const dropStaleTip = startTips();
     let panelSignature = "";
     let queued = false;
@@ -1465,7 +1571,7 @@
       if (d === undefined) {
         const problem = link.error === undefined ? "Reading the game's content..." : `Can't read the game's content: ${link.error}. The game changed; tibobit needs an update.`;
         if (panelSignature !== problem)
-          renderProblem(panel, problem);
+          renderProblem(panel, content, problem);
         panelSignature = problem;
         return;
       }
@@ -1479,7 +1585,7 @@
       const signature = `${[...loadout].join(",")}|${discovery.version}|${version}`;
       if (signature !== panelSignature) {
         panelSignature = signature;
-        renderPanel(panel, view);
+        renderPanel(panel, content, view);
       }
       for (const card of cards)
         annotateCard(card, view, version);
@@ -1504,9 +1610,9 @@
   var link = new GameLink;
   var discovery = new Discovery;
   var controller = new Controller(link);
+  guardPanelKeys();
   function start() {
-    startHelper(link, discovery);
-    startBridge(link, discovery, controller);
+    startHelper(link, discovery, startBridge(link, discovery, controller));
   }
   if (document.body === null)
     document.addEventListener("DOMContentLoaded", start, { once: true });

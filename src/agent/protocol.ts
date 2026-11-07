@@ -2,7 +2,12 @@
 // +y is down, and the player walks about 62 units per second at base speed.
 
 export const BRIDGE_PORT = 7357;
-export const BRIDGE_ORIGIN = `http://127.0.0.1:${BRIDGE_PORT}`;
+export const bridgeOrigin = (port: number) => `http://127.0.0.1:${port}`;
+export const BRIDGE_ORIGIN = bridgeOrigin(BRIDGE_PORT);
+
+export function validPort(port: number): boolean {
+  return Number.isInteger(port) && port >= 1 && port <= 65535;
+}
 
 export const DIRECTIONS = ["right", "down-right", "down", "down-left", "left", "up-left", "up", "up-right"] as const;
 export type Direction = (typeof DIRECTIONS)[number];

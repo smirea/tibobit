@@ -25,7 +25,9 @@ The same userscript lets a program play the game. A local server exposes the gam
 ./scripts/tibo.ts state       # one-screen summary; --json for the full snapshot
 ```
 
-Keep one tibo.dog tab open with the userscript installed. It connects within a few seconds of the server starting and reconnects on its own.
+Keep one tibo.dog tab open with the userscript installed. It connects within a few seconds of the server starting and reconnects on its own, including to a run already in progress.
+
+To use a server on another port, type the port into **Agent port** at the bottom of the Combos panel and press **Connect** (or Enter). The tab remembers the port, and the line under it says whether it is connected, still trying, or refused because another tab holds that server. Point the CLI at the same server with `./scripts/tibo.ts --port <port> <command>`, or `--server <url>`, or `TIBO_SERVER`.
 
 | Endpoint | What it does |
 | --- | --- |
@@ -58,7 +60,7 @@ The server only listens on 127.0.0.1 and sends no CORS headers, so other website
 
 The bot plays in lockstep: each step runs the game for `--step` seconds (default 0.35) and pauses it again (`"pause": true` on `move` and `goto`), so the model's thinking time costs no game time. `{"type":"speed","factor":4}` runs four simulation ticks per frame, so game time passes up to four times faster while the model thinks. By default the bot plays today's Daily (`--mode daily`), which has the same seed for everyone. `start` leaves a new run paused at tick 0, and lockstep commands land on exact ticks, so the same model on the same Daily replays the same game: two runs of the same 30 moves ended in identical states. That makes runs comparable across models and prompt changes. Run summaries go to `.runs/`, and `--trace` adds every question and answer.
 
-To run several games side by side, give each its own server port: `./scripts/agent-server.ts --port 7367`, `./scripts/headless.ts --bridge 7367 --port 7368`, then `./scripts/tibo-bot.ts --server http://127.0.0.1:7367 --reload http://127.0.0.1:7368/reload` (or `TIBO_SERVER=http://127.0.0.1:7367 ./scripts/tibo.ts state`). LM Studio must keep each model loaded (`lms load <model>`), or loading one on demand can cancel the other.
+To run several games side by side, give each its own server port: `./scripts/agent-server.ts --port 7367`, `./scripts/headless.ts --bridge 7367 --port 7368`, then `./scripts/tibo-bot.ts --server http://127.0.0.1:7367 --reload http://127.0.0.1:7368/reload` (or `./scripts/tibo.ts --port 7367 state`). LM Studio must keep each model loaded (`lms load <model>`), or loading one on demand can cancel the other.
 
 ## How it reads the game
 

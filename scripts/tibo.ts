@@ -1,7 +1,16 @@
 #!/usr/bin/env bun
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type CommandStatus, type PickupView, type Rel, type RunView, type Snapshot } from "../src/agent/protocol";
+import {
+  BRIDGE_ORIGIN as DEFAULT_ORIGIN,
+  type CommandStatus,
+  type PickupView,
+  type Rel,
+  type RunView,
+  type Snapshot,
+  bridgeOrigin,
+  validPort,
+} from "../src/agent/protocol";
 
-const USAGE = `usage: tibo <command>
+const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
 
   state [--json]                  one-screen summary of the game, or the full snapshot as JSON
   watch                           live summary, refreshed 4 times a second
@@ -17,18 +26,35 @@ const USAGE = `usage: tibo <command>
   dash [dir|degrees]
   start [easy|normal|hard|nightmare] [daily]   daily plays today's fixed-seed Daily
 
-Commands wait until they finish (except move without seconds); add --no-wait to return at once.`;
+Commands wait until they finish (except move without seconds); add --no-wait to return at once.
+The agent server defaults to $TIBO_SERVER, then ${DEFAULT_ORIGIN}; --port picks another one on 127.0.0.1.`;
 
 type Snap = Snapshot & { connected: boolean; ageMs: number };
 
-const SERVER = process.env.TIBO_SERVER ?? DEFAULT_ORIGIN;
+let server = DEFAULT_ORIGIN;
+
+function serverFrom(args: string[]): string {
+  const wantsPort = args.includes("--port");
+  const port = flag(args, "--port");
+  const wantsUrl = args.includes("--server");
+  const url = flag(args, "--server");
+  if (wantsPort && wantsUrl) throw new Error("pass --port or --server, not both");
+  if (wantsUrl) {
+    if (url === undefined || !URL.canParse(url)) throw new Error(`--server must be a URL such as ${DEFAULT_ORIGIN}, got ${url ?? "nothing"}`);
+    return url.replace(/\/$/, "");
+  }
+  if (!wantsPort) return process.env.TIBO_SERVER ?? DEFAULT_ORIGIN;
+  if (!validPort(Number(port))) throw new Error(`--port must be a number from 1 to 65535, got ${port ?? "nothing"}`);
+  return bridgeOrigin(Number(port));
+}
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${SERVER}${path}`, init);
+    res = await fetch(`${server}${path}`, init);
   } catch {
-    throw new Error(`the agent server is not running; start it with ./scripts/agent-server.ts`);
+    const port = new URL(server).port;
+    throw new Error(`no agent server at ${server}; start it with ./scripts/agent-server.ts${port === String(new URL(DEFAULT_ORIGIN).port) ? "" : ` --port ${port}`}`);
   }
   const body = (await res.json()) as T & { error?: string };
   if (!res.ok) throw new Error(body.error ?? `${res.status}`);
@@ -139,6 +165,7 @@ function parseArgs(args: string[]): unknown {
 
 async function main(argv: string[]) {
   const args = [...argv];
+  server = serverFrom(args);
   const json = args.includes("--json");
   const noWait = args.includes("--no-wait");
   const words = args.filter((a) => a !== "--json" && a !== "--no-wait");
