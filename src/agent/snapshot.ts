@@ -209,25 +209,55 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     .slice(0, MAX_POIS);
 
   const zoneKind = Object.fromEntries(Object.entries(enums.zoneKinds).map(([k, v]) => [v, k]));
-  const hazards: RunView["hazards"] = [];
+  const zoneShape = Object.fromEntries(Object.entries(enums.zoneShapes).map(([k, v]) => [v, k]));
+  const px = s.player.x[me] ?? 0;
+  const py = s.player.y[me] ?? 0;
+  // Each area answers "is this point (relative to the player) inside?" with the zone's real shape.
+  type Area = { view: RunView["hazards"][number]; contains: (x: number, y: number) => boolean };
+  const areas: Area[] = [];
   for (const h of s.world.activeHazards) {
     const rel = relTo(s, h.x, h.y);
     if (rel.dist - h.radius > HAZARD_RANGE) continue;
-    hazards.push({ ...rel, kind: h.kind, source: "terrain", radius: round(h.radius), inside: rel.dist <= h.radius });
+    const cx = h.x - px;
+    const cy = h.y - py;
+    areas.push({
+      view: { ...rel, kind: h.kind, source: "terrain", shape: "circle", radius: round(h.radius), inside: rel.dist <= h.radius },
+      contains: (x, y) => Math.hypot(x - cx, y - cy) <= h.radius,
+    });
   }
   for (const i of alive(s.zones)) {
     if (s.zones.hostile[i] !== 1) continue;
     const radius = s.zones.radius[i] ?? 0;
-    const rel = relTo(s, s.zones.x[i] ?? 0, s.zones.y[i] ?? 0);
-    hazards.push({
-      ...rel,
-      kind: zoneKind[s.zones.kind[i] ?? -1] ?? "unknown",
-      source: "attack",
-      radius: round(radius),
-      inside: rel.dist <= radius,
-      secondsLeft: round(s.zones.life[i] ?? 0),
+    const shape = zoneShape[s.zones.shape[i] ?? 0] ?? "circle";
+    const ax = (s.zones.x[i] ?? 0) - px;
+    const ay = (s.zones.y[i] ?? 0) - py;
+    const kind = zoneKind[s.zones.kind[i] ?? -1] ?? "unknown";
+    let contains = (x: number, y: number) => Math.hypot(x - ax, y - ay) <= radius;
+    let nearest = { x: ax, y: ay };
+    if (shape === "line") {
+      const angle = s.zones.angle[i] ?? 0;
+      const length = s.zones.length[i] ?? 0;
+      const ux = Math.cos(angle);
+      const uy = Math.sin(angle);
+      const closestOnLine = (x: number, y: number) => {
+        const t = Math.max(0, Math.min(length, (x - ax) * ux + (y - ay) * uy));
+        return { x: ax + ux * t, y: ay + uy * t };
+      };
+      contains = (x, y) => {
+        const c = closestOnLine(x, y);
+        return Math.hypot(x - c.x, y - c.y) <= radius;
+      };
+      nearest = closestOnLine(0, 0);
+    }
+    const rel = relTo(s, px + nearest.x, py + nearest.y);
+    if (rel.dist - radius > HAZARD_RANGE) continue;
+    const delay = s.zones.delay[i] ?? 0;
+    areas.push({
+      view: { ...rel, kind, source: "attack", shape, radius: round(radius), inside: contains(0, 0), ...(kind === "telegraph" ? { landsIn: round(delay) } : {}) },
+      contains,
     });
   }
+  const hazards = areas.map((a) => a.view);
 
   const bullets: RunView["bullets"]["nearest"] = [];
   for (const i of alive(s.bullets)) bullets.push({ ...relTo(s, s.bullets.x[i] ?? 0, s.bullets.y[i] ?? 0), radius: s.bullets.radius[i] ?? 0 });
@@ -242,13 +272,10 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
       const d = Math.min(...within(rows).map((r) => r.dist), Number.POSITIVE_INFINITY);
       return d <= SECTOR_RANGE ? round(d) : null;
     };
-    // Distance from a circle's center to the segment the player would walk in the next 60 units.
-    const crosses = (h: { dx: number; dy: number; radius: number }) => {
-      const t = Math.max(0, Math.min(PATH_AHEAD, h.dx * ux + h.dy * uy));
-      return Math.hypot(h.dx - ux * t, h.dy - uy * t) <= h.radius;
-    };
+    const path = [0.25, 0.5, 0.75, 1].map((f) => ({ x: ux * PATH_AHEAD * f, y: uy * PATH_AHEAD * f }));
+    const crosses = (a: Area) => path.some((p) => a.contains(p.x, p.y));
     const end = { x: ux * PATH_AHEAD, y: uy * PATH_AHEAD };
-    const holding = hazards.filter((h) => h.inside);
+    const holding = areas.filter((a) => a.view.inside);
     return {
       dir,
       enemiesNear: within(enemies).filter((e) => e.dist <= 60).length,
@@ -256,8 +283,8 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
       nearestEnemy: closest(enemies),
       nearestBoss: closest(bosses),
       nearestBullet: closest(bullets),
-      hazard: hazards.find((h) => !h.inside && crosses(h))?.kind ?? null,
-      leavesHazard: holding.length > 0 && holding.every((h) => Math.hypot(h.dx - end.x, h.dy - end.y) > h.radius),
+      hazard: areas.find((a) => !a.view.inside && crosses(a))?.view.kind ?? null,
+      leavesHazard: holding.length > 0 && holding.every((a) => !a.contains(end.x, end.y)),
     };
   });
   return {

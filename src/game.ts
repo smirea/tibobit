@@ -67,7 +67,7 @@ export type GameState = {
   enemies: Pool<"x" | "y" | "hp" | "maxHp" | "radius" | "def" | "flags" | "damage">;
   bosses: Pool<"x" | "y" | "hp" | "maxHp" | "radius" | "def">;
   pickups: Pool<"x" | "y" | "kind" | "source" | "value" | "charge">;
-  zones: Pool<"x" | "y" | "radius" | "kind" | "hostile" | "shape" | "life" | "maxLife" | "damage" | "delay">;
+  zones: Pool<"x" | "y" | "radius" | "kind" | "hostile" | "shape" | "life" | "maxLife" | "damage" | "delay" | "angle" | "length">;
   bullets: Pool<"x" | "y" | "radius" | "vx" | "vy" | "damage">;
   world: { activePois: Poi[]; activeHazards: Hazard[] };
   view: { width: number; height: number };
@@ -93,6 +93,7 @@ export type Game = {
 export type Enums = {
   pickupKinds: string[];
   zoneKinds: Record<string, number>;
+  zoneShapes: Record<string, number>;
   enemyFlags: Record<string, number>;
 };
 
@@ -159,8 +160,10 @@ function findEnums(module: Record<string, unknown>): Enums {
   const enemyFlags = values.find((v): v is Record<string, number> => isRecord(v) && typeof v.Elite === "number" && typeof v.Hidden === "number");
   if (pickupKinds === undefined) throw new Error("could not find the pickup kinds table");
   if (zoneKinds === undefined) throw new Error("could not find the zone kinds table");
+  const zoneShapes = values.find((v): v is Record<string, number> => isRecord(v) && v.circle === 0 && typeof v.line === "number" && typeof v.cone === "number");
+  if (zoneShapes === undefined) throw new Error("could not find the zone shapes table");
   if (enemyFlags === undefined) throw new Error("could not find the enemy flags table");
-  return { pickupKinds, zoneKinds, enemyFlags };
+  return { pickupKinds, zoneKinds, zoneShapes, enemyFlags };
 }
 
 function assertContent(value: unknown): asserts value is Content {

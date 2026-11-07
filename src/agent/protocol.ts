@@ -121,7 +121,12 @@ export type RunView = {
   pickups: { counts: Record<string, number>; chests: PickupView[]; nearest: PickupView[] };
   /** The 15 nearest unused points of interest. Standing inside one's circle charges it; `charge` and `chargeNeeded` are seconds. */
   pois: (Rel & { uid: number; kind: string; name: string; radius: number; inside: boolean; charge: number; chargeNeeded: number; used: boolean })[];
-  hazards: (Rel & { kind: string; source: "terrain" | "attack"; radius: number; inside: boolean; secondsLeft?: number })[];
+  /**
+   * Terrain patches and enemy attack zones. Positions are the zone's nearest point to the player.
+   * A "line" zone (a boss sweep or charge) is a band `radius` wide each side of a segment, so
+   * stepping sideways leaves it; `landsIn` is the seconds until a telegraphed attack hits.
+   */
+  hazards: (Rel & { kind: string; source: "terrain" | "attack"; shape: string; radius: number; inside: boolean; landsIn?: number })[];
   bullets: { total: number; nearest: (Rel & { radius: number })[] };
   /** Everything around the player bucketed by compass direction, nearest first within each. */
   sectors: SectorView[];
