@@ -2,10 +2,26 @@ import type { Discovery } from "../discovery";
 import type { GameLink } from "../game";
 import type { Controller } from "./control";
 import { encyclopedia } from "./encyclopedia";
-import { BRIDGE_PORT, type ChatMessage, type PageLine, type PilotState, bridgeOrigin, DEFAULT_PACE, parseCommand, type PilotChange, trimChat, validPort } from "./protocol";
+import { BRIDGE_PORT, type ChatMessage, type PageLine, type PilotState, bridgeOrigin, DEFAULT_SETTINGS, parseCommand, parsePilotChange, type PilotChange, type PilotSettings, trimChat, validPort } from "./protocol";
 import { inRun, snapshot } from "./snapshot";
 
 const PORT_KEY = "tibobit.bridgePort";
+const SETTINGS_KEY = "tibobit.pilotSettings";
+
+/** The bot settings chosen in this browser; the page sends them to every server it connects to. */
+function savedSettings(): PilotSettings {
+  try {
+    const c = parsePilotChange(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null"));
+    return {
+      pace: { planEvery: c.planEvery ?? DEFAULT_SETTINGS.pace.planEvery, actEvery: c.actEvery ?? DEFAULT_SETTINGS.pace.actEvery },
+      incognito: c.incognito ?? DEFAULT_SETTINGS.incognito,
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+const asChange = (s: PilotSettings): PilotChange => ({ ...s.pace, incognito: s.incognito });
 
 function savedPort(): number | undefined {
   try {
@@ -92,7 +108,8 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
   const notify = () => {
     for (const listener of listeners) listener();
   };
-  let pilot: PilotState = { state: "off", pace: DEFAULT_PACE };
+  let settings = savedSettings();
+  let pilot: PilotState = { state: "off", ...settings };
   const chat: ChatMessage[] = [];
   let inFlight = 0;
   let lastPush = 0;
@@ -102,7 +119,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
     if (from !== session) return;
     connected = false;
     // Without the server there is no bot, so nothing is driving the game any more.
-    receivePilot({ state: "off", pace: pilot.pace });
+    receivePilot({ state: "off", ...settings });
     notify();
     setTimeout(listen, RECONNECT_MS);
   };
@@ -168,6 +185,8 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
             sentEncyclopedia = false;
             // The server replays its chat backlog after the hello.
             chat.length = 0;
+            // This browser's settings win over whatever the server kept, so they survive its restarts.
+            void post(origin, "/pilot", asChange(settings));
             notify();
           } else if ("error" in envelope) {
             error = envelope.error;
@@ -229,6 +248,15 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
     },
     pilot: () => pilot,
     setPilot: (change) => {
+      const { on, ...rest } = change;
+      if (Object.keys(rest).length > 0) {
+        settings = { pace: { planEvery: rest.planEvery ?? settings.pace.planEvery, actEvery: rest.actEvery ?? settings.pace.actEvery }, incognito: rest.incognito ?? settings.incognito };
+        pilot = { ...pilot, ...settings };
+        try {
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify(asChange(settings)));
+        } catch {}
+        notify();
+      }
       if (!connected) return;
       void post(origin, "/pilot", change).then((ok) => {
         if (ok) return;

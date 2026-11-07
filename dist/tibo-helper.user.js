@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
-// @version      1.13.0
+// @version      1.14.0
 // @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
@@ -260,6 +260,30 @@
   }
   var DEFAULT_PACE = { planEvery: 5, actEvery: 0.3 };
   var PACE_LIMITS = { planEvery: { min: 1, max: 300, step: 1 }, actEvery: { min: 0.1, max: 5, step: 0.1 } };
+  var DEFAULT_SETTINGS = { pace: DEFAULT_PACE, incognito: false };
+  function parsePilotChange(input) {
+    const c = input ?? {};
+    const change = {};
+    for (const key of ["on", "incognito"]) {
+      if (c[key] === undefined)
+        continue;
+      if (typeof c[key] !== "boolean")
+        fail(`${key} must be true or false`);
+      change[key] = c[key];
+    }
+    for (const key of ["planEvery", "actEvery"]) {
+      if (c[key] === undefined)
+        continue;
+      const { min, max, step } = PACE_LIMITS[key];
+      const v = num(c[key], key);
+      if (v < min || v > max)
+        fail(`${key} must be from ${min} to ${max} seconds`);
+      change[key] = Number((Math.round(v / step) * step).toFixed(1));
+    }
+    if (Object.keys(change).length === 0)
+      fail('send {"on": true|false}, {"incognito": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
+    return change;
+  }
   var KEEP_PLANS = 500;
   var KEEP_OTHERS = 60;
   function trimChat(chat) {
@@ -730,6 +754,19 @@
 
   // src/agent/bridge.ts
   var PORT_KEY = "tibobit.bridgePort";
+  var SETTINGS_KEY = "tibobit.pilotSettings";
+  function savedSettings() {
+    try {
+      const c = parsePilotChange(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null"));
+      return {
+        pace: { planEvery: c.planEvery ?? DEFAULT_SETTINGS.pace.planEvery, actEvery: c.actEvery ?? DEFAULT_SETTINGS.pace.actEvery },
+        incognito: c.incognito ?? DEFAULT_SETTINGS.incognito
+      };
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
+  }
+  var asChange = (s) => ({ ...s.pace, incognito: s.incognito });
   function savedPort() {
     try {
       const port = Number(localStorage.getItem(PORT_KEY));
@@ -769,7 +806,8 @@
       for (const listener of listeners)
         listener();
     };
-    let pilot = { state: "off", pace: DEFAULT_PACE };
+    let settings = savedSettings();
+    let pilot = { state: "off", ...settings };
     const chat = [];
     let inFlight = 0;
     let lastPush = 0;
@@ -778,7 +816,7 @@
       if (from !== session)
         return;
       connected = false;
-      receivePilot({ state: "off", pace: pilot.pace });
+      receivePilot({ state: "off", ...settings });
       notify();
       setTimeout(listen, RECONNECT_MS);
     };
@@ -846,6 +884,7 @@
               error = undefined;
               sentEncyclopedia = false;
               chat.length = 0;
+              post(origin, "/pilot", asChange(settings));
               notify();
             } else if ("error" in envelope) {
               error = envelope.error;
@@ -910,6 +949,15 @@
       },
       pilot: () => pilot,
       setPilot: (change) => {
+        const { on, ...rest } = change;
+        if (Object.keys(rest).length > 0) {
+          settings = { pace: { planEvery: rest.planEvery ?? settings.pace.planEvery, actEvery: rest.actEvery ?? settings.pace.actEvery }, incognito: rest.incognito ?? settings.incognito };
+          pilot = { ...pilot, ...settings };
+          try {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(asChange(settings)));
+          } catch {}
+          notify();
+        }
         if (!connected)
           return;
         post(origin, "/pilot", change).then((ok) => {
@@ -1904,13 +1952,18 @@
 .tbh-conn-status { margin-top: 4px; font-size: 11px; color: #a8977a; overflow-wrap: anywhere; }
 .tbh-conn-status[data-state="ok"] { color: #7fe3a4; }
 .tbh-conn-status[data-state="error"] { color: #f0b3aa; }
-.tbh-wheel { display: block; width: 100%; margin-top: 6px; padding: 5px 8px; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
+.tbh-wheel { display: block; flex: 1; min-width: 0; padding: 5px 8px; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
   color: #f3e6c4; background: linear-gradient(180deg, #3b2f52, #2a2140); border: 1px solid #8e74c9; border-radius: 4px; }
 .tbh-wheel:hover:not(:disabled) { border-color: #c9a0ff; color: #fff; }
 .tbh-chat-tools { display: flex; align-items: center; gap: 6px; padding: 6px 6px 0; font-size: 11px; color: #c9b58a; }
 .tbh-giveback { flex: 1; min-width: 0; padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: inherit; font-weight: 800; cursor: pointer; color: #ffd6d0; background: rgba(227,138,127,.12); border: 1px solid #e38a7f; border-radius: 4px; }
 .tbh-giveback:hover:not(:disabled) { color: #fff; background: rgba(227,138,127,.24); }
 .tbh-wheel:disabled, .tbh-giveback:disabled { opacity: .5; cursor: default; }
+.tbh-wheel-row { display: flex; gap: 6px; margin-top: 6px; }
+.tbh-incognito { flex: none; margin-left: auto; padding: 4px 8px; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; color: #a8977a; background: transparent; border: 1px dashed #6b5631; border-radius: 4px; }
+.tbh-incognito:hover { color: #f3e6c4; border-style: solid; }
+.tbh-incognito[aria-pressed="true"] { color: #f3e6c4; background: #2a2a33; border: 1px solid #8d8da8; }
+.tbh-incognito[aria-pressed="true"]::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; vertical-align: 1px; border-radius: 50%; background: #c9c9e0; }
 .tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
 .tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chatbox { display: none; }
 .tbh-chatbox { border-top: 1px solid rgba(255,255,255,.08); }
@@ -2146,6 +2199,10 @@
     wheel.type = "button";
     wheel.addEventListener("click", () => bridge.setPilot({ on: true }));
     const wheelNote = h2("div", "tbh-wheel-note");
+    const incognito = h2("button", "tbh-incognito", "Incognito");
+    incognito.type = "button";
+    incognito.title = "The bot just plays: no notes, no review after the run. Turning it on mid-run deletes that run's notes.";
+    incognito.addEventListener("click", () => bridge.setPilot({ incognito: !bridge.pilot().incognito }));
     const refresh = () => {
       const s = bridge.status();
       const live = s.state === "connected";
@@ -2162,6 +2219,7 @@
       wheel.hidden = pilot.state !== "off";
       wheel.disabled = !live;
       wheel.title = live ? "" : "Start the agent server first: ./scripts/agent-server.ts";
+      incognito.setAttribute("aria-pressed", String(pilot.incognito));
       wheelNote.textContent = pilot.detail ?? "";
       wheelNote.hidden = pilot.detail === undefined;
     };
@@ -2182,7 +2240,7 @@
       refresh();
     });
     refresh();
-    return h2("div", "tbh-conn", row, status, wheel, wheelNote);
+    return h2("div", "tbh-conn", row, status, h2("div", "tbh-wheel-row", wheel, incognito), wheelNote);
   }
   function offerKey2(card) {
     const tip = card.dataset.tip ?? "";

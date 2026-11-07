@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, rm } from "node:fs/promises";
 import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ChatLine, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 
 const args = process.argv.slice(2);
@@ -39,6 +39,8 @@ const COACH = option("coach", "grok");
 const COACH_MODEL = option("coach-model", "grok-4.7-build-fast");
 // For "Grok take the wheel": play the run already in progress instead of starting a fresh one.
 const TAKEOVER = args.includes("--takeover");
+// Incognito runs just play: no notes file, no review, and they do not count toward experiments.
+const INCOGNITO = args.includes("--incognito");
 const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
 
@@ -46,7 +48,7 @@ const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.rep
  * `pace` is the panel's plan and action intervals, read every step so they can change mid-run, and
  * sent only to a bot the panel started.
  */
-type Snap = Snapshot & { connected: boolean; ageMs: number; pace?: PilotPace };
+type Snap = Snapshot & { connected: boolean; ageMs: number; pace?: PilotPace; incognito?: boolean };
 /** Seconds between planner calls while a goal is under way, and between steps (game time in lockstep, wall time live). */
 let pace: PilotPace = { planEvery: PLAN_EVERY, actEvery: STEP };
 
@@ -315,9 +317,10 @@ class RunNotes {
 
   /**
    * A run the bot took over from a person is not saved: its notes would credit the bot with
-   * someone else's opening, and the mode and difficulty it was started with are unknown.
+   * someone else's opening, and the mode and difficulty it was started with are unknown. Neither is
+   * an incognito run.
    */
-  constructor(r: RunView, strategy: string, readonly experiment?: Experiment, readonly saved = true) {
+  constructor(r: RunView, strategy: string, readonly experiment?: Experiment, public saved = true) {
     const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
     this.id = `${stamp}-${MODE}-${DIFFICULTY}-${r.seed}`;
     this.file = path.join(NOTES_DIR, `${this.id}.md`);
@@ -340,6 +343,12 @@ class RunNotes {
           ? "None: a serious run that follows strategy.md."
           : `**${experiment.name}**\n\nHypothesis: ${experiment.hypothesis}\n\nDirective: ${experiment.directive}`,
     };
+  }
+
+  /** Incognito was turned on mid-run: the notes so far go, and nothing more is written or reviewed. */
+  async discard() {
+    this.saved = false;
+    await rm(this.file, { force: true });
   }
 
   async write() {
@@ -1395,7 +1404,7 @@ async function main() {
   say({
     role: "system",
     time: now.run?.time ?? 0,
-    text: adopted ? `Taking over the run at ${clock(now.run?.time ?? 0)}.` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}.`,
+    text: `${adopted ? `Taking over the run at ${clock(now.run?.time ?? 0)}` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}`}${(now.incognito ?? INCOGNITO) ? ", incognito: no notes, no review" : ""}.`,
     detail: `Planner ${PLAN_MODEL}, action model ${MODEL}, run review by ${COACH === "none" ? "nobody" : COACH_NAME}. Run logs: ${LOG_DIR}`,
   });
   if (!adopted) await start();
@@ -1476,16 +1485,17 @@ async function main() {
       await Bun.sleep(100);
       continue;
     }
+    pace = s.pace ?? pace;
+    const incognito = s.incognito ?? INCOGNITO;
     if (notes === undefined || planner === undefined || runLog === undefined) {
-      // Chosen while the game is paused at tick 0, so the coach's wait does not cost game time.
-      const experiment = !adopted && (await experimentDue()) ? await chooseExperiment() : undefined;
-      notes = new RunNotes(r, await readStrategy(), experiment, !adopted);
+      const experiment = !adopted && !incognito && (await experimentDue()) ? await chooseExperiment() : undefined;
+      notes = new RunNotes(r, await readStrategy(), experiment, !adopted && !incognito);
       adopted = false;
       runLog = new RunLog(notes.log);
       planner = new Planner(notes, runLog);
       resetGoals();
       await notes.write();
-      console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}, notes ${notes.saved ? notes.file : "not saved (taken over mid-run)"}, log ${notes.log}`);
+      console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}, notes ${notes.saved ? notes.file : incognito ? "not saved (incognito)" : "not saved (taken over mid-run)"}, log ${notes.log}`);
       if (experiment !== undefined) console.log(`experiment run: ${experiment.name}: ${experiment.directive}`);
     }
     last = r;
@@ -1501,7 +1511,11 @@ async function main() {
     }
     steps++;
     timings.steps++;
-    pace = s.pace ?? pace;
+    if (incognito && notes.saved) {
+      await notes.discard();
+      console.log(`incognito: deleted ${notes.file}; this run gets no review`);
+      say({ role: "system", time: r.time, text: "Incognito: this run's notes are deleted, and it will not be reviewed." });
+    }
     if (!modeSet) await setMode();
     const stepStarted = performance.now();
     if (s.screen === "choice") await choose(r, planner, runLog);

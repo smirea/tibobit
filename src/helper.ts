@@ -186,6 +186,10 @@ function connectionRow(bridge: Bridge): HTMLElement {
   wheel.type = "button";
   wheel.addEventListener("click", () => bridge.setPilot({ on: true }));
   const wheelNote = h("div", "tbh-wheel-note");
+  const incognito = h("button", "tbh-incognito", "Incognito");
+  incognito.type = "button";
+  incognito.title = "The bot just plays: no notes, no review after the run. Turning it on mid-run deletes that run's notes.";
+  incognito.addEventListener("click", () => bridge.setPilot({ incognito: !bridge.pilot().incognito }));
 
   const refresh = () => {
     const s = bridge.status();
@@ -204,6 +208,7 @@ function connectionRow(bridge: Bridge): HTMLElement {
     wheel.hidden = pilot.state !== "off";
     wheel.disabled = !live;
     wheel.title = live ? "" : "Start the agent server first: ./scripts/agent-server.ts";
+    incognito.setAttribute("aria-pressed", String(pilot.incognito));
     wheelNote.textContent = pilot.detail ?? "";
     wheelNote.hidden = pilot.detail === undefined;
   };
@@ -225,7 +230,7 @@ function connectionRow(bridge: Bridge): HTMLElement {
     refresh();
   });
   refresh();
-  return h("div", "tbh-conn", row, status, wheel, wheelNote);
+  return h("div", "tbh-conn", row, status, h("div", "tbh-wheel-row", wheel, incognito), wheelNote);
 }
 
 function offerKey(card: HTMLElement): { key: Key; level: number } | undefined {

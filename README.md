@@ -22,7 +22,9 @@ The recipe rules mirror the game's own code. A base weapon evolves at its max le
 
 While the bot plays, the combos panel folds to its header, the agent port row sits under it, then **I'll do it myself** with the **Plan** and **Action** boxes beside it, and under those the bot's decisions:
 
-- **Plan** and **Action**, in seconds, set how often the planner is asked while a goal is under way (1 to 300 seconds, 5 by default) and how often the bot takes a step (0.1 to 5 seconds, 0.3 by default; real time). The bot reads them every step, and the server keeps them for the next time it takes the wheel.
+- **Plan** and **Action**, in seconds, set how often the planner is asked while a goal is under way (1 to 300 seconds, 5 by default) and how often the bot takes a step (0.1 to 5 seconds, 0.3 by default; real time). The bot reads them every step.
+- **Incognito**, beside **Grok take the wheel**, has the bot just play: it writes no notes file, no review runs after the run, and the run does not count toward experiments. Turning it on mid-run deletes that run's notes. Its dot shows while it is on. The CSV log in `/tmp/tibobit/` is still written.
+- The browser remembers **Plan**, **Action** and **Incognito** (localStorage) and sends them to the agent server each time the tab connects, so they survive reloads and server restarts.
 - **Plan**, pinned at the top, is the planner's latest decision with its game time: the card it took at a level-up, chest or shrine, and the goal it chose with the model's odds for it. Hover it to see, to the left of the panel, the cards and every goal it weighed with the model's odds as bars, the prompt (folded), and every earlier decision of the run; click one to open it. After the run, the coach's review appears here too.
 - **Action** rows, newest first, are the last 20 actions, one line each with its game time to a tenth of a second (`01:23.4`): a goal starting and ending, and each step the action model chose. Hover a row for its details. For a step, that is every move with the game's forecast and the model's hurt and usefulness bars beside its name, which move won or was ruled out, and the prompt at the end.
 
