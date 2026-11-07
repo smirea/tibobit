@@ -30,11 +30,19 @@ function wait(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// The game's own buttons; the helper's panel and port box are never pressed by an agent command.
 function button(label: string | RegExp): HTMLButtonElement | undefined {
   return [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => {
+    if (b.closest("#tibo-helper, [class*='tbh-']")) return false;
     const text = b.textContent?.trim() ?? "";
     return typeof label === "string" ? text === label : label.test(text);
   });
+}
+
+/** On a mode screen (difficulty buttons and Start), the Daily one also has a Leaderboard button. */
+function onModeScreen(mode: "openWorld" | "daily"): boolean | undefined {
+  if (button("Start") === undefined) return undefined;
+  return (button("Leaderboard") !== undefined) === (mode === "daily");
 }
 
 // Some menu buttons only answer a click and others only a focused Enter, so try both.
@@ -149,7 +157,7 @@ export class Controller {
     this.link.noteRunLink();
     // After a death the game walks through a few screens (a promo, a summary) before the title.
     // Advance through them, never pressing anything that leaves the game, such as "Try Grok Bot".
-    for (let i = 0; i < 15 && button(entry) === undefined; i++) {
+    for (let i = 0; i < 15 && button(entry) === undefined && onModeScreen(mode) !== true; i++) {
       if (i === 14) {
         const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
         throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
@@ -166,10 +174,12 @@ export class Controller {
       }
       await wait(1200);
     }
-    const open = button(entry);
-    if (open === undefined) throw new Error(`no ${mode} button on the title screen`);
-    await press(open);
-    if (!(await until(() => button("Start") !== undefined, 5000))) throw new Error(`the ${mode} screen did not open`);
+    if (onModeScreen(mode) !== true) {
+      const open = button(entry);
+      if (open === undefined) throw new Error(`no ${mode} button on the title screen`);
+      await press(open);
+      if (!(await until(() => button("Start") !== undefined, 5000))) throw new Error(`the ${mode} screen did not open`);
+    }
     const pick = button(new RegExp(`^${difficulty}$`, "i"));
     if (pick === undefined) throw new Error(`no ${difficulty} difficulty button`);
     pick.click();

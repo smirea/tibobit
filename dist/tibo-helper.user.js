@@ -839,9 +839,16 @@
   }
   function button(label) {
     return [...document.querySelectorAll("button")].find((b) => {
+      if (b.closest("#tibo-helper, [class*='tbh-']"))
+        return false;
       const text = b.textContent?.trim() ?? "";
       return typeof label === "string" ? text === label : label.test(text);
     });
+  }
+  function onModeScreen(mode) {
+    if (button("Start") === undefined)
+      return;
+    return button("Leaderboard") !== undefined === (mode === "daily");
   }
   async function press(el) {
     el.click();
@@ -961,7 +968,7 @@
         }
       }
       this.link.noteRunLink();
-      for (let i = 0;i < 15 && button(entry) === undefined; i++) {
+      for (let i = 0;i < 15 && button(entry) === undefined && onModeScreen(mode) !== true; i++) {
         if (i === 14) {
           const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
           throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
@@ -979,12 +986,14 @@
         }
         await wait(1200);
       }
-      const open = button(entry);
-      if (open === undefined)
-        throw new Error(`no ${mode} button on the title screen`);
-      await press(open);
-      if (!await until(() => button("Start") !== undefined, 5000))
-        throw new Error(`the ${mode} screen did not open`);
+      if (onModeScreen(mode) !== true) {
+        const open = button(entry);
+        if (open === undefined)
+          throw new Error(`no ${mode} button on the title screen`);
+        await press(open);
+        if (!await until(() => button("Start") !== undefined, 5000))
+          throw new Error(`the ${mode} screen did not open`);
+      }
       const pick = button(new RegExp(`^${difficulty}$`, "i"));
       if (pick === undefined)
         throw new Error(`no ${difficulty} difficulty button`);
