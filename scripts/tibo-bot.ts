@@ -704,6 +704,15 @@ async function main() {
           await fillLink(await api<Snap>("/state"));
           return;
         }
+      } else if (notes !== undefined) {
+        // tibo.dog reloads itself when it ships a new build, which drops the run with no death screen.
+        console.log(`run ${runs} was lost at ${last === undefined ? "the start" : clock(last.time)}: the game left it without a death screen`);
+        notes.link = "none (run lost)";
+        notes.outcome = `- Lost at ${last === undefined ? "the start" : clock(last.time)}: the game page left the run without a death screen (tibo.dog reloads itself for a new build).`;
+        notes.review = "No review: the run was cut off, not lost to the game.";
+        await notes.write();
+        notes = undefined;
+        coach = undefined;
       }
       await start();
       runs++;
