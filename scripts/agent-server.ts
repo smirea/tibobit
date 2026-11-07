@@ -33,7 +33,7 @@ function send(command: unknown): { id: number } {
 
 /**
  * Waits for a command to finish. A level-up or chest choice freezes game time, so a running
- * command also returns as soon as one opens (or the run ends) and the agent has to act.
+ * move or goto also returns as soon as one opens (or the run ends) and the agent has to act.
  */
 async function settled(id: number, limitMs: number): Promise<(CommandStatus & { interruptedBy?: string }) | undefined> {
   const end = Date.now() + limitMs;
@@ -41,7 +41,8 @@ async function settled(id: number, limitMs: number): Promise<(CommandStatus & { 
     const status = statusOf(id);
     if (status !== undefined && status.state !== "running") return status;
     const screen = latest?.snapshot.screen;
-    if (status !== undefined && (screen === "choice" || screen === "over")) return { ...status, interruptedBy: screen };
+    const moving = status?.command.type === "move" || status?.command.type === "goto";
+    if (status !== undefined && moving && (screen === "choice" || screen === "over")) return { ...status, interruptedBy: screen };
     const left = end - Date.now();
     if (left <= 0) return status;
     await new Promise<void>((resolve) => {
