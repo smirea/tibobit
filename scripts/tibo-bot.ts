@@ -38,7 +38,8 @@ const TAKEOVER = args.includes("--takeover");
 const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
 
-type Snap = Snapshot & { connected: boolean; ageMs: number };
+/** `live` is the server's "DO IT LIVE" switch, read every step so it can change mid-run. */
+type Snap = Snapshot & { connected: boolean; ageMs: number; live?: boolean };
 
 const PLANNER = COACH === "none" ? "none" : `${COACH} ${COACH_MODEL}`;
 /** A line for the panel's chat, shown while the bot has the wheel. Never awaited: the chat must not slow a step. */
@@ -80,6 +81,32 @@ async function timed<T>(phase: "state" | "decide" | "command", work: Promise<T>)
 
 const command = (c: unknown, timeoutSeconds = 30) =>
   timed("command", api<CommandStatus & { interruptedBy?: string }>(`/command?wait=1&timeout=${timeoutSeconds}`, c));
+/** Sends a command without waiting for it to finish, such as a move held until the next one. */
+const send = (c: unknown) => timed("command", api<{ id: number }>("/command", c));
+
+// Live play runs the game in real time and never pauses it: each move is held until the next
+// decision replaces it, and the coach thinks while the game goes on. A level-up or chest still
+// stops the game, as it does for a person.
+let playingLive: boolean | undefined;
+const LIVE_MIN_STEP_MS = 100;
+
+async function playLive(live: boolean, r: RunView) {
+  await command({ type: "speed", factor: live ? 1 : SPEED });
+  await command({ type: "forecast", live });
+  await command({ type: live ? "resume" : "pause" });
+  if (live || playingLive !== undefined)
+    say({ role: "system", time: r.time, text: live ? "DO IT LIVE: the game keeps running while the models think." : "Lockstep: the game waits while the models think." });
+  playingLive = live;
+}
+
+/** Waits until the server's live switch turns on, or `done` says to stop waiting. */
+async function untilLive(done: () => boolean) {
+  // Sleeps first: most steps ask the coach nothing, and those should not cost a request.
+  for (;;) {
+    await Bun.sleep(250);
+    if (done() || (await api<Snap>("/state")).live === true) return;
+  }
+}
 
 const latency: number[] = [];
 let trace: ((entry: unknown) => void) | undefined;
@@ -517,7 +544,7 @@ class Coach {
     const note = typeof reply.note === "string" ? reply.note : "";
     this.notes.timeline.push(`- **${clock(r.time)}** (${why}) ${note}${plan === undefined ? "" : ` Advice: ${plan.advice} Want: ${plan.want.join(", ")}.`}`);
     await this.notes.write();
-    if (typeof reply.infra === "string") await infraFeedback(this.notes.id, clock(r.time), reply.infra);
+    if (typeof reply.infra === "string" && this.notes.saved) await infraFeedback(this.notes.id, clock(r.time), reply.infra);
     console.log(`coach ${clock(r.time)} (${why}): ${note}`);
     say({
       role: "planner",
@@ -761,6 +788,7 @@ async function move(r: RunView) {
     detail: [`Tibo ${HURT_SCALE[Math.round(answers[choice]?.score ?? 0)] ?? "?"}`, `useful ${Math.round((answers[`useful:${choice}`]?.noul ?? 0) * 100)}%`, ...(ruledOut > 0 ? [`${ruledOut} costlier ${ruledOut === 1 ? "move" : "moves"} ruled out`] : [])].join(" · "),
   });
   if (dash) await command({ type: "dash", dir });
+  if (playingLive) return dir === undefined ? command({ type: "stop" }) : send({ type: "move", dir });
   return command(dir === undefined ? { type: "goto", to: { dx: 0, dy: 0 }, stay: STEP, pause: true } : { type: "move", dir, seconds: STEP, pause: true });
 }
 
@@ -854,6 +882,8 @@ async function start(): Promise<void> {
     if (started.state !== "done") throw new Error(`could not start a run: ${started.detail ?? started.state}`);
   }
   await command({ type: "speed", factor: SPEED });
+  // A new run waits paused at tick 0 at lockstep speed, so the next step applies the mode again.
+  playingLive = undefined;
 }
 
 let recordCrash: ((e: unknown) => Promise<void>) | undefined;
@@ -869,6 +899,7 @@ async function main() {
   let notes: RunNotes | undefined;
   let reviewing: RunNotes | undefined;
   let coach: Coach | undefined;
+  let consulting: Promise<void> | undefined;
   let last: RunView | undefined;
   const recent: string[] = [];
   // The previous run's notes wait for its share link, which appears while the next run starts.
@@ -1008,11 +1039,23 @@ async function main() {
     }
     steps++;
     timings.steps++;
-    await coach.consult(r);
+    const live = s.live === true;
+    if (live !== playingLive) await playLive(live, r);
+    const stepStarted = performance.now();
+    const asking = (consulting ??= coach
+      .consult(r)
+      .catch((e: unknown) => console.error("coach consult failed:", e instanceof Error ? e.message : e))
+      .finally(() => {
+        consulting = undefined;
+      }));
+    // Lockstep holds the paused game until the coach answers, unless DO IT LIVE is pressed meanwhile;
+    // then the answer lands whenever it comes, as it does in live play.
+    if (!live) await Promise.race([asking, untilLive(() => consulting !== asking)]);
     recent.push(situation(r));
     if (recent.length > 4) recent.shift();
     if (s.screen === "choice") await choose(r);
     else await move(r);
+    if (live) await Bun.sleep(Math.max(0, LIVE_MIN_STEP_MS - (performance.now() - stepStarted)));
   }
 }
 

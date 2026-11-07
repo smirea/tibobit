@@ -42,11 +42,20 @@ export const css = `
 .tbh-conn-status { margin-top: 4px; font-size: 11px; color: #a8977a; overflow-wrap: anywhere; }
 .tbh-conn-status[data-state="ok"] { color: #7fe3a4; }
 .tbh-conn-status[data-state="error"] { color: #f0b3aa; }
-.tbh-wheel { display: block; width: 100%; margin-top: 6px; padding: 5px 8px; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
+.tbh-wheel-row { display: flex; gap: 6px; margin-top: 6px; }
+.tbh-wheel { flex: 1; padding: 5px 8px; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
   color: #f3e6c4; background: linear-gradient(180deg, #3b2f52, #2a2140); border: 1px solid #8e74c9; border-radius: 4px; }
 .tbh-wheel:hover:not(:disabled) { border-color: #c9a0ff; color: #fff; }
 .tbh-wheel[data-state="on"] { color: #ffd6d0; background: rgba(227,138,127,.12); border-color: #e38a7f; }
-.tbh-wheel:disabled { opacity: .5; cursor: default; }
+.tbh-wheel:disabled, .tbh-live:disabled { opacity: .5; cursor: default; }
+.tbh-live { flex: none; padding: 5px 8px; font: inherit; font-weight: 900; letter-spacing: .04em; cursor: pointer;
+  color: #ffb4a8; background: transparent; border: 1px dashed #e38a7f; border-radius: 4px; }
+.tbh-live[hidden] { display: none; }
+.tbh-live:hover:not(:disabled) { color: #fff; border-style: solid; }
+.tbh-live[aria-pressed="true"] { color: #fff; background: #d8362a; border: 1px solid #ff6a5a; box-shadow: 0 0 10px rgba(255,80,60,.6); animation: tbh-onair 1.2s ease-in-out infinite; }
+.tbh-live[aria-pressed="true"]::before { content: "● "; }
+@keyframes tbh-onair { 50% { box-shadow: 0 0 2px rgba(255,80,60,.3); } }
+@media (prefers-reduced-motion: reduce) { .tbh-live[aria-pressed="true"] { animation: none; } }
 .tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
 .tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chat { display: none; }
 .tbh-chat { display: flex; flex-direction: column; gap: 4px; max-height: min(52vh, 460px); overflow-y: auto; padding: 6px; border-top: 1px solid rgba(255,255,255,.08); user-select: text; overscroll-behavior: contain; }

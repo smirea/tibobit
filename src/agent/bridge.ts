@@ -29,8 +29,8 @@ export type Bridge = {
   connect(port: number): void;
   /** Whether the server's bot is playing for this tab ("Grok take the wheel"). */
   pilot(): PilotState;
-  /** Asks the server to start or stop the bot; the new state arrives over the stream. */
-  setPilot(on: boolean): void;
+  /** Asks the server to start or stop the bot, or to play live; the new state arrives over the stream. */
+  setPilot(change: { on?: boolean; live?: boolean }): void;
   /** The bot's chat, oldest first; a message whose `count` grows keeps its id and position. */
   chat(): readonly ChatMessage[];
   onChange(listener: () => void): void;
@@ -93,7 +93,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
   const notify = () => {
     for (const listener of listeners) listener();
   };
-  let pilot: PilotState = { state: "off" };
+  let pilot: PilotState = { state: "off", live: false };
   const chat: ChatMessage[] = [];
   let inFlight = 0;
   let lastPush = 0;
@@ -103,7 +103,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
     if (from !== session) return;
     connected = false;
     // Without the server there is no bot, so nothing is driving the game any more.
-    receivePilot({ state: "off" });
+    receivePilot({ state: "off", live: pilot.live });
     notify();
     setTimeout(listen, RECONNECT_MS);
   };
@@ -229,11 +229,11 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
       notify();
     },
     pilot: () => pilot,
-    setPilot: (on) => {
+    setPilot: (change) => {
       if (!connected) return;
-      void post(origin, "/pilot", { on }).then((ok) => {
+      void post(origin, "/pilot", change).then((ok) => {
         if (ok) return;
-        pilot = { ...pilot, detail: `the agent server on ${origin} would not ${on ? "start" : "stop"} the bot; restart it with this version of scripts/agent-server.ts` };
+        pilot = { ...pilot, detail: `the agent server on ${origin} refused ${JSON.stringify(change)}; restart it with this version of scripts/agent-server.ts` };
         notify();
       });
     },

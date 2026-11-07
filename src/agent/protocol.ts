@@ -43,6 +43,12 @@ export type Command =
   /** Run the simulation `factor` ticks per frame (1 to 8). Movement input still applies to every tick. */
   | { type: "speed"; factor: number }
   /**
+   * `live` keeps the sim forecasts (`forecast`, `standingForecast`) coming while the game runs,
+   * a few times a second, for an agent that does not pause between steps. Off, they only appear
+   * while the game is paused.
+   */
+  | { type: "forecast"; live: boolean }
+  /**
    * From the title screen, the end screen or mid-run, start a new run. `mode` "daily" plays
    * today's Daily, which has the same seed and build for everyone, so runs are comparable. The
    * new run waits paused at tick 0; use `resume` or a `move`/`goto` with `pause` to play it.
@@ -255,6 +261,9 @@ export function parseCommand(input: unknown): Command {
       if (!Number.isInteger(factor) || factor < 1 || factor > 8) fail("factor must be a whole number from 1 to 8");
       return { type: "speed", factor };
     }
+    case "forecast":
+      if (typeof c.live !== "boolean") fail("live must be true or false");
+      return { type: "forecast", live: c.live as boolean };
     case "dash":
       return c.dir === undefined ? { type: "dash" } : { type: "dash", dir: heading(c.dir, "dir") };
     case "start": {
@@ -270,7 +279,7 @@ export function parseCommand(input: unknown): Command {
     case "summary":
       return { type: c.type };
     default:
-      return fail("type must be move, goto, stop, choose, dash, pause, resume, speed, start or summary");
+      return fail("type must be move, goto, stop, choose, dash, pause, resume, speed, forecast, start or summary");
   }
 }
 
@@ -282,7 +291,8 @@ export function parseCommand(input: unknown): Command {
  */
 export const PILOT_ROLES = ["planner", "actor", "action", "system"] as const;
 export type PilotRole = (typeof PILOT_ROLES)[number];
-export type PilotState = { state: "off" | "on" | "stopping"; detail?: string };
+/** `live` ("DO IT LIVE"): the bot plays without pausing the game while its models think. */
+export type PilotState = { state: "off" | "on" | "stopping"; live: boolean; detail?: string };
 /** What the bot says; the server stamps it into a ChatMessage. */
 export type ChatLine = { role: PilotRole; text: string; detail?: string; model?: string; time?: number };
 /** `count` is how many moves an action message stands for: the server folds a run of moves into one message. */

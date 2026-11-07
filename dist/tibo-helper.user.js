@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
-// @version      1.8.0
+// @version      1.9.0
 // @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
@@ -234,6 +234,10 @@
           fail("factor must be a whole number from 1 to 8");
         return { type: "speed", factor };
       }
+      case "forecast":
+        if (typeof c.live !== "boolean")
+          fail("live must be true or false");
+        return { type: "forecast", live: c.live };
       case "dash":
         return c.dir === undefined ? { type: "dash" } : { type: "dash", dir: heading(c.dir, "dir") };
       case "start": {
@@ -251,7 +255,7 @@
       case "summary":
         return { type: c.type };
       default:
-        return fail("type must be move, goto, stop, choose, dash, pause, resume, speed, start or summary");
+        return fail("type must be move, goto, stop, choose, dash, pause, resume, speed, forecast, start or summary");
     }
   }
 
@@ -414,12 +418,14 @@
     }
   }
   var forecastCache;
+  var LIVE_FORECAST_TICKS = 12;
   function simForecast(link, game) {
     const s = game.state;
-    if (link.forecast === undefined || !s.paused || s.over || s.choiceQueue.length > 0)
+    if (link.forecast === undefined || s.over || s.choiceQueue.length > 0 || !(s.paused || link.liveForecast))
       return;
-    if (forecastCache?.game === game && forecastCache.tick === s.tick)
-      return forecastCache.outlook;
+    const cached = forecastCache?.game === game ? forecastCache : undefined;
+    if (cached !== undefined && (cached.tick === s.tick || !s.paused && s.tick > cached.tick && s.tick - cached.tick < LIVE_FORECAST_TICKS))
+      return cached.outlook;
     const inputs = [...DIRECTIONS.map((_, i) => ({ x: Math.cos(i * Math.PI / 4), y: Math.sin(i * Math.PI / 4) })), { x: 0, y: 0 }];
     const outlook = link.forecast(game, inputs, SIM_FORECAST_TICKS).map((f) => ({
       seconds: SIM_FORECAST_TICKS / 60,
@@ -751,7 +757,7 @@
       for (const listener of listeners)
         listener();
     };
-    let pilot = { state: "off" };
+    let pilot = { state: "off", live: false };
     const chat = [];
     let inFlight = 0;
     let lastPush = 0;
@@ -760,7 +766,7 @@
       if (from !== session)
         return;
       connected = false;
-      receivePilot({ state: "off" });
+      receivePilot({ state: "off", live: pilot.live });
       notify();
       setTimeout(listen, RECONNECT_MS);
     };
@@ -892,13 +898,13 @@
         notify();
       },
       pilot: () => pilot,
-      setPilot: (on) => {
+      setPilot: (change) => {
         if (!connected)
           return;
-        post(origin, "/pilot", { on }).then((ok) => {
+        post(origin, "/pilot", change).then((ok) => {
           if (ok)
             return;
-          pilot = { ...pilot, detail: `the agent server on ${origin} would not ${on ? "start" : "stop"} the bot; restart it with this version of scripts/agent-server.ts` };
+          pilot = { ...pilot, detail: `the agent server on ${origin} refused ${JSON.stringify(change)}; restart it with this version of scripts/agent-server.ts` };
           notify();
         });
       },
@@ -975,6 +981,7 @@
       if (this.active !== undefined)
         this.finish(this.active.status, "replaced");
       this.link.speed = 1;
+      this.link.liveForecast = false;
       if (inRun(this.link))
         this.link.game?.setPaused(false);
     }
@@ -1044,6 +1051,10 @@
           return;
         case "speed":
           this.link.speed = command.factor;
+          this.finish(status, "done");
+          return;
+        case "forecast":
+          this.link.liveForecast = command.live;
           this.finish(status, "done");
           return;
         case "start":
@@ -1389,6 +1400,7 @@
     steer;
     inPool;
     speed = 1;
+    liveForecast = false;
     pauseAtStart = false;
     forecast;
     runLink;
@@ -1620,11 +1632,20 @@
 .tbh-conn-status { margin-top: 4px; font-size: 11px; color: #a8977a; overflow-wrap: anywhere; }
 .tbh-conn-status[data-state="ok"] { color: #7fe3a4; }
 .tbh-conn-status[data-state="error"] { color: #f0b3aa; }
-.tbh-wheel { display: block; width: 100%; margin-top: 6px; padding: 5px 8px; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
+.tbh-wheel-row { display: flex; gap: 6px; margin-top: 6px; }
+.tbh-wheel { flex: 1; padding: 5px 8px; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
   color: #f3e6c4; background: linear-gradient(180deg, #3b2f52, #2a2140); border: 1px solid #8e74c9; border-radius: 4px; }
 .tbh-wheel:hover:not(:disabled) { border-color: #c9a0ff; color: #fff; }
 .tbh-wheel[data-state="on"] { color: #ffd6d0; background: rgba(227,138,127,.12); border-color: #e38a7f; }
-.tbh-wheel:disabled { opacity: .5; cursor: default; }
+.tbh-wheel:disabled, .tbh-live:disabled { opacity: .5; cursor: default; }
+.tbh-live { flex: none; padding: 5px 8px; font: inherit; font-weight: 900; letter-spacing: .04em; cursor: pointer;
+  color: #ffb4a8; background: transparent; border: 1px dashed #e38a7f; border-radius: 4px; }
+.tbh-live[hidden] { display: none; }
+.tbh-live:hover:not(:disabled) { color: #fff; border-style: solid; }
+.tbh-live[aria-pressed="true"] { color: #fff; background: #d8362a; border: 1px solid #ff6a5a; box-shadow: 0 0 10px rgba(255,80,60,.6); animation: tbh-onair 1.2s ease-in-out infinite; }
+.tbh-live[aria-pressed="true"]::before { content: "● "; }
+@keyframes tbh-onair { 50% { box-shadow: 0 0 2px rgba(255,80,60,.3); } }
+@media (prefers-reduced-motion: reduce) { .tbh-live[aria-pressed="true"] { animation: none; } }
 .tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
 .tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chat { display: none; }
 .tbh-chat { display: flex; flex-direction: column; gap: 4px; max-height: min(52vh, 460px); overflow-y: auto; padding: 6px; border-top: 1px solid rgba(255,255,255,.08); user-select: text; overscroll-behavior: contain; }
@@ -1811,7 +1832,11 @@
     const status = h("div", "tbh-conn-status");
     const wheel = h("button", "tbh-wheel");
     wheel.type = "button";
-    wheel.addEventListener("click", () => bridge.setPilot(bridge.pilot().state === "off"));
+    wheel.addEventListener("click", () => bridge.setPilot({ on: bridge.pilot().state === "off" }));
+    const live = h("button", "tbh-live", "DO IT LIVE");
+    live.type = "button";
+    live.title = "Play without pausing: the models think while the game keeps running";
+    live.addEventListener("click", () => bridge.setPilot({ live: !bridge.pilot().live }));
     const wheelNote = h("div", "tbh-wheel-note");
     const refresh = () => {
       const s = bridge.status();
@@ -1826,6 +1851,9 @@
       wheel.dataset.state = pilot.state;
       wheel.disabled = s.state !== "connected" || pilot.state === "stopping";
       wheel.title = s.state === "connected" ? "" : "Start the agent server first: ./scripts/agent-server.ts";
+      live.hidden = pilot.state !== "on";
+      live.setAttribute("aria-pressed", String(pilot.live));
+      live.disabled = s.state !== "connected";
       wheelNote.textContent = pilot.detail ?? "";
       wheelNote.hidden = pilot.detail === undefined;
     };
@@ -1843,7 +1871,7 @@
     bridge.onChange(refresh);
     input.addEventListener("input", () => input.classList.remove("tbh-invalid"));
     refresh();
-    return h("div", "tbh-conn", row, status, wheel, wheelNote);
+    return h("div", "tbh-conn", row, status, h("div", "tbh-wheel-row", wheel, live), wheelNote);
   }
   var ROLE_LABELS = { planner: "Planner", actor: "Actor", action: "Action", system: "Bot" };
   var clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;

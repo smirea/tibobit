@@ -26,7 +26,9 @@ While the bot plays, the combos panel folds to its header and the bot's models t
 - **Actor** (the decision model) says which level-up or chest card it took and what was offered.
 - **Action** (the decision model) shows the latest move, how badly it expects it to hurt Tibo and how useful it is. A run of moves between two planner or actor messages shares one message, with a move count.
 
-A run the bot takes over from you writes no notes and gets no review, so the learning loop in `gameplay/` only learns from runs the bot played from the start.
+A run the bot takes over from you writes no notes, feedback or review, so the learning loop in `gameplay/` only learns from runs the bot played from the start.
+
+**DO IT LIVE**, next to **Take the wheel back** while the bot plays, stops it pausing the game. By default the bot plays in lockstep. The game runs for a third of a second, then waits while the models choose the next move, and it waits for the planner's answer too. Live, the game runs at normal speed the whole time. Each move is held until the next decision replaces it, and the planner thinks while the game goes on, so its advice arrives a minute or two of game time after it was asked. The game only stops where it stops for a person, on level-up, chest and shrine choices. Pressing the button again goes back to lockstep, mid-run or while the planner thinks. The server remembers the setting for the next time the bot takes the wheel. While live, the page forecasts damage a few times a second during play, which costs a few frames per second.
 
 ## Agent API
 
@@ -53,6 +55,7 @@ Commands, also available as `./scripts/tibo.ts <verb>`:
 - `{"type":"move","dir":"left","seconds":2}` holds a direction. `dir` is one of the eight compass words (`up-left` and so on) or degrees, where 0 is right and 90 is down. Without `seconds` it holds until the next movement command.
 - `{"type":"goto","to":{"x":120,"y":-40}}` walks to a world position. `to` can also be `{"dx","dy"}` relative to where you stand, `{"poi":uid}` for a point of interest, or `{"pickup":uid}` for a chest or other pickup. `stay` holds still after arriving, either for a number of seconds or with `"done"` until the target is used up. Shrines, chests and most points of interest only open after you stand on them for their `chargeNeeded` seconds, so `{"type":"goto","to":{"poi":16},"stay":"done"}` is the usual way to take one.
 - `{"type":"choose","index":0}` picks an option of the open level-up, chest or shrine choice. Options carry `recommended` (the game's own suggestion), `unseen`, and `combos`: every recipe the option is part of, with the partner, whether you hold it (`partnerHeld`) or banished it (`partnerBanished`), whether picking completes it (`ready`), and whether you have ever made the result (`made`).
+- `{"type":"forecast","live":true}` keeps the `forecast` and `standingForecast` fields coming while the game runs, at most every 12 ticks. Without it they only appear while the game is paused.
 - `{"type":"dash","dir":"up"}`, `{"type":"stop"}`, `{"type":"pause"}`, `{"type":"resume"}`, `{"type":"speed","factor":4}`, and `{"type":"start","mode":"daily","difficulty":"easy"}` to start a run (Open World by default, or today's Daily) from the title screen, the end screen or mid-run. A started run waits paused at tick 0.
 - Add `"pause": true` to `move` or `goto` to run the game only for that command: it resumes a paused game and pauses it again on the tick the command finishes.
 

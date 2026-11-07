@@ -185,12 +185,16 @@ function toJson(value: unknown): unknown {
 
 let forecastCache: { game: Game; tick: number; outlook: ForecastView[] } | undefined;
 
-// Only while the game is paused between agent steps: the snapshot is pushed many times per tick then,
-// and forecasting a running game would slow it down.
+// While the game is paused between agent steps, once per tick: the snapshot is pushed many times per
+// tick then. A running game is forecast only on request (`forecast` live), and then at most every
+// LIVE_FORECAST_TICKS, because each forecast runs the sim nine times over and would slow the game;
+// in between, snapshots repeat the last one, a fraction of a second old.
+const LIVE_FORECAST_TICKS = 12;
 function simForecast(link: GameLink, game: Game): ForecastView[] | undefined {
   const s = game.state;
-  if (link.forecast === undefined || !s.paused || s.over || s.choiceQueue.length > 0) return undefined;
-  if (forecastCache?.game === game && forecastCache.tick === s.tick) return forecastCache.outlook;
+  if (link.forecast === undefined || s.over || s.choiceQueue.length > 0 || !(s.paused || link.liveForecast)) return undefined;
+  const cached = forecastCache?.game === game ? forecastCache : undefined;
+  if (cached !== undefined && (cached.tick === s.tick || (!s.paused && s.tick > cached.tick && s.tick - cached.tick < LIVE_FORECAST_TICKS))) return cached.outlook;
   const inputs = [...DIRECTIONS.map((_, i) => ({ x: Math.cos((i * Math.PI) / 4), y: Math.sin((i * Math.PI) / 4) })), { x: 0, y: 0 }];
   const outlook = link.forecast(game, inputs, SIM_FORECAST_TICKS).map((f) => ({
     seconds: SIM_FORECAST_TICKS / 60,

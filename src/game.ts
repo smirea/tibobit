@@ -247,6 +247,8 @@ export class GameLink {
   inPool: InPool | undefined;
   /** Simulation ticks per game frame; above 1 the game runs faster than real time. */
   speed = 1;
+  /** Forecast while the game runs, not only while it is paused; see the `forecast` command. */
+  liveForecast = false;
   /** Pause the next new run before its first tick, so agents start every run from tick 0. */
   pauseAtStart = false;
   /** Runs a copy of the game forward once per input, each held for `ticks`; the real game is untouched. */

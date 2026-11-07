@@ -180,7 +180,11 @@ function connectionRow(bridge: Bridge): HTMLElement {
   const status = h("div", "tbh-conn-status");
   const wheel = h("button", "tbh-wheel");
   wheel.type = "button";
-  wheel.addEventListener("click", () => bridge.setPilot(bridge.pilot().state === "off"));
+  wheel.addEventListener("click", () => bridge.setPilot({ on: bridge.pilot().state === "off" }));
+  const live = h("button", "tbh-live", "DO IT LIVE");
+  live.type = "button";
+  live.title = "Play without pausing: the models think while the game keeps running";
+  live.addEventListener("click", () => bridge.setPilot({ live: !bridge.pilot().live }));
   const wheelNote = h("div", "tbh-wheel-note");
 
   const refresh = () => {
@@ -194,6 +198,9 @@ function connectionRow(bridge: Bridge): HTMLElement {
     wheel.dataset.state = pilot.state;
     wheel.disabled = s.state !== "connected" || pilot.state === "stopping";
     wheel.title = s.state === "connected" ? "" : "Start the agent server first: ./scripts/agent-server.ts";
+    live.hidden = pilot.state !== "on";
+    live.setAttribute("aria-pressed", String(pilot.live));
+    live.disabled = s.state !== "connected";
     wheelNote.textContent = pilot.detail ?? "";
     wheelNote.hidden = pilot.detail === undefined;
   };
@@ -212,7 +219,7 @@ function connectionRow(bridge: Bridge): HTMLElement {
   bridge.onChange(refresh);
   input.addEventListener("input", () => input.classList.remove("tbh-invalid"));
   refresh();
-  return h("div", "tbh-conn", row, status, wheel, wheelNote);
+  return h("div", "tbh-conn", row, status, h("div", "tbh-wheel-row", wheel, live), wheelNote);
 }
 
 const ROLE_LABELS: Record<PilotRole, string> = { planner: "Planner", actor: "Actor", action: "Action", system: "Bot" };

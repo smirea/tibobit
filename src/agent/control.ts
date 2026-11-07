@@ -86,6 +86,7 @@ export class Controller {
   release() {
     if (this.active !== undefined) this.finish(this.active.status, "replaced");
     this.link.speed = 1;
+    this.link.liveForecast = false;
     if (inRun(this.link)) this.link.game?.setPaused(false);
   }
 
@@ -149,6 +150,10 @@ export class Controller {
         return;
       case "speed":
         this.link.speed = command.factor;
+        this.finish(status, "done");
+        return;
+      case "forecast":
+        this.link.liveForecast = command.live;
         this.finish(status, "done");
         return;
       case "start":

@@ -43,10 +43,10 @@ function say(input: unknown) {
   toPage({ chat: message });
 }
 
-let pilot: PilotState = { state: "off" };
+let pilot: PilotState = { state: "off", live: false };
 let bot: Subprocess<"ignore", "inherit", "pipe"> | undefined;
-function setPilot(next: PilotState) {
-  pilot = next;
+function setPilot(next: Omit<PilotState, "live"> & { live?: boolean }) {
+  pilot = { live: pilot.live, ...next };
   toPage({ pilot });
 }
 
@@ -94,7 +94,8 @@ async function jsonBody(req: Request): Promise<unknown> {
 
 function state() {
   if (latest === undefined) return undefined;
-  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, ...latest.snapshot };
+  // `live` tells a running bot, every step, whether to pause the game while it thinks.
+  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, live: pilot.live, ...latest.snapshot };
 }
 
 function statusOf(id: number): CommandStatus | undefined {
@@ -144,7 +145,8 @@ GET  /state          latest game snapshot (positions are world units, +x right, 
 GET  /encyclopedia   every weapon, passive, item, recipe, enemy, boss, point of interest and biome
 POST /command        JSON command, see src/agent/protocol.ts; add ?wait=1 to block until it finishes
 WS   /ws             pushes every snapshot; send a JSON command to run it
-POST /pilot          {"on": true} starts the bot for the tab ("Grok take the wheel"), {"on": false} stops it
+POST /pilot          {"on": true} starts the bot for the tab ("Grok take the wheel"), {"on": false} stops it;
+                     {"live": true} ("DO IT LIVE") has it play without pausing the game while it thinks
 POST /pilot/say      the bot's chat line for the panel: {"role": "planner" | "actor" | "action" | "system", "text", "detail"?, "model"?, "time"?}
 `;
 
@@ -207,15 +209,18 @@ const server = Bun.serve({
           return s === undefined ? errorResponse("no snapshot yet; is the tibo.dog tab open?", 503) : Response.json(s);
         }
         case "POST /pilot": {
-          let on: unknown;
+          let body: { on?: unknown; live?: unknown };
           try {
-            on = ((await jsonBody(req)) as { on?: unknown } | null)?.on;
+            body = ((await jsonBody(req)) ?? {}) as typeof body;
           } catch (e) {
             return errorResponse(e);
           }
-          if (typeof on !== "boolean") return errorResponse("on must be true or false");
-          if (on) startPilot();
-          else stopPilot();
+          const { on, live } = body;
+          if ((on !== undefined && typeof on !== "boolean") || (live !== undefined && typeof live !== "boolean") || (on === undefined && live === undefined))
+            return errorResponse('send {"on": true|false} and/or {"live": true|false}');
+          if (live !== undefined && live !== pilot.live) setPilot({ ...pilot, live });
+          if (on === true) startPilot();
+          if (on === false) stopPilot();
           return Response.json(pilot);
         }
         case "POST /pilot/say":
