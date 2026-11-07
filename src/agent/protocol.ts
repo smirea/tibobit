@@ -146,6 +146,8 @@ export type SectorView = {
   nearestEnemy: number | null;
   nearestBoss: number | null;
   nearestBullet: number | null;
+  /** Enemy bullets within 60 units this way. */
+  bulletsNear: number;
   /** A terrain hazard or attack zone the player is not already in overlaps the next 60 units this way. */
   hazard: string | null;
   /** The player stands in a hazard, and 60 units this way is clear of it. */

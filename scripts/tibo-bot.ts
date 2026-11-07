@@ -166,12 +166,21 @@ const HAZARD_WORDS: Record<string, string> = {
 };
 const hazardWords = (kind: string) => HAZARD_WORDS[kind] ?? `a ${kind} patch that hurts Tibo`;
 
+// The direction opposite the nearest boss, or one step either side of it.
+function awayFromBoss(r: RunView, dir: Direction): string | undefined {
+  const boss = r.bosses[0];
+  if (boss === undefined || boss.dist > 300) return undefined;
+  const offset = (DIRECTIONS.indexOf(dir) - DIRECTIONS.indexOf(boss.dir) + 8) % 8;
+  return offset >= 3 && offset <= 5 ? `away from the ${boss.name} boss` : undefined;
+}
+
 // Threats come first: the models weigh the start of a description most.
 function describe(r: RunView, s: SectorView): string {
   const boss = r.bosses.find((b) => b.dir === s.dir);
   const parts = [
     boss !== undefined && boss.dist < 250 ? `toward the ${boss.name} boss only ${Math.round(boss.dist)} away, which hurts Tibo on contact` : "",
-    s.nearestBullet !== null && s.nearestBullet < 80 ? `an enemy bullet ${Math.round(s.nearestBullet)} away` : "",
+    s.bulletsNear > 1 ? `${s.bulletsNear} enemy bullets within 60` : s.nearestBullet !== null && s.nearestBullet < 80 ? `an enemy bullet ${Math.round(s.nearestBullet)} away` : "",
+    awayFromBoss(r, s.dir) ?? "",
     s.hazard !== null ? `into ${hazardWords(s.hazard)}` : "",
     s.leavesHazard ? "out of the danger Tibo stands in" : "",
     s.enemiesNear > 0 ? `${plural(s.enemiesNear, "enemy")} close` : "no enemies close",

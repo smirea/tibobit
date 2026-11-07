@@ -293,6 +293,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
       nearestEnemy: closest(enemies),
       nearestBoss: closest(bosses),
       nearestBullet: closest(bullets),
+      bulletsNear: within(bullets).filter((b) => b.dist <= 60).length,
       hazard: areas.find((a) => !a.view.inside && crosses(a))?.view.kind ?? null,
       leavesHazard: holding.length > 0 && holding.every((a) => !a.contains(end.x, end.y)),
     };
