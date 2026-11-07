@@ -295,18 +295,16 @@ export type PilotRole = (typeof PILOT_ROLES)[number];
 export type PilotPace = { planEvery: number; actEvery: number };
 export const DEFAULT_PACE: PilotPace = { planEvery: 5, actEvery: 0.3 };
 export const PACE_LIMITS = { planEvery: { min: 1, max: 300, step: 1 }, actEvery: { min: 0.1, max: 5, step: 0.1 } } as const;
-/** `live` ("DO IT LIVE"): the bot plays without pausing the game while its models think. */
-export type PilotState = { state: "off" | "on" | "stopping"; live: boolean; pace: PilotPace; detail?: string };
-export type PilotChange = { on?: boolean; live?: boolean } & Partial<PilotPace>;
+export type PilotState = { state: "off" | "on" | "stopping"; pace: PilotPace; detail?: string };
+export type PilotChange = { on?: boolean } & Partial<PilotPace>;
 
 /** Validates a change to the pilot from the panel or a script; throws with a message a caller can act on. */
 export function parsePilotChange(input: unknown): PilotChange {
   const c = (input ?? {}) as Record<string, unknown>;
   const change: PilotChange = {};
-  for (const key of ["on", "live"] as const) {
-    if (c[key] === undefined) continue;
-    if (typeof c[key] !== "boolean") fail(`${key} must be true or false`);
-    change[key] = c[key] as boolean;
+  if (c.on !== undefined) {
+    if (typeof c.on !== "boolean") fail("on must be true or false");
+    change.on = c.on;
   }
   for (const key of ["planEvery", "actEvery"] as const) {
     if (c[key] === undefined) continue;
@@ -315,7 +313,7 @@ export function parsePilotChange(input: unknown): PilotChange {
     if (v < min || v > max) fail(`${key} must be from ${min} to ${max} seconds`);
     change[key] = Number((Math.round(v / step) * step).toFixed(1));
   }
-  if (Object.keys(change).length === 0) fail('send {"on": true|false}, {"live": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
+  if (Object.keys(change).length === 0) fail('send {"on": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
   return change;
 }
 /** One move the action model weighed: the game's own forecast, the model's scores, and what became of it. */

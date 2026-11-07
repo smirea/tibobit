@@ -49,24 +49,16 @@ export const css = `
 .tbh-wheel { display: block; width: 100%; margin-top: 6px; padding: 5px 8px; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
   color: #f3e6c4; background: linear-gradient(180deg, #3b2f52, #2a2140); border: 1px solid #8e74c9; border-radius: 4px; }
 .tbh-wheel:hover:not(:disabled) { border-color: #c9a0ff; color: #fff; }
-.tbh-chat-tools { display: flex; gap: 6px; padding: 6px 6px 0; }
-.tbh-giveback { flex: 1; padding: 5px 8px; font: inherit; font-weight: 800; cursor: pointer; color: #ffd6d0; background: rgba(227,138,127,.12); border: 1px solid #e38a7f; border-radius: 4px; }
+.tbh-chat-tools { display: flex; align-items: center; gap: 6px; padding: 6px 6px 0; font-size: 11px; color: #c9b58a; }
+.tbh-giveback { flex: 1; min-width: 0; padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: inherit; font-weight: 800; cursor: pointer; color: #ffd6d0; background: rgba(227,138,127,.12); border: 1px solid #e38a7f; border-radius: 4px; }
 .tbh-giveback:hover:not(:disabled) { color: #fff; background: rgba(227,138,127,.24); }
-.tbh-wheel:disabled, .tbh-live:disabled, .tbh-giveback:disabled { opacity: .5; cursor: default; }
-.tbh-live { flex: none; padding: 5px 8px; font: inherit; font-weight: 900; letter-spacing: .04em; cursor: pointer;
-  color: #ffb4a8; background: transparent; border: 1px dashed #e38a7f; border-radius: 4px; }
-.tbh-live:hover:not(:disabled) { color: #fff; border-style: solid; }
-.tbh-live[aria-pressed="true"] { color: #fff; background: #d8362a; border: 1px solid #ff6a5a; box-shadow: 0 0 10px rgba(255,80,60,.6); }
-.tbh-live[aria-pressed="true"]::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; vertical-align: 1px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 0 rgba(255,255,255,.8); animation: tbh-live-pulse 1.6s ease-out infinite; }
-@keyframes tbh-live-pulse { 70% { box-shadow: 0 0 0 6px rgba(255,255,255,0); } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); } }
-@media (prefers-reduced-motion: reduce) { .tbh-live[aria-pressed="true"]::before { animation: none; } }
+.tbh-wheel:disabled, .tbh-giveback:disabled { opacity: .5; cursor: default; }
 .tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
 .tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chatbox { display: none; }
 .tbh-chatbox { border-top: 1px solid rgba(255,255,255,.08); }
-.tbh-pace { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 6px 0; font-size: 11px; color: #c9b58a; }
-.tbh-pace-field { --role: #c9a0ff; display: inline-flex; align-items: center; gap: 5px; }
+.tbh-pace-field { --role: #c9a0ff; flex: none; display: inline-flex; align-items: center; gap: 3px; }
 .tbh-pace-action { --role: #7fa8ff; }
-.tbh-pace-input { width: 4.2em; padding: 2px 4px; font: inherit; color: #f3e6c4; background: rgba(0,0,0,.35); border: 1px solid #6b5631; border-radius: 3px; }
+.tbh-pace-input { width: 2.8em; padding: 2px 3px; font: inherit; color: #f3e6c4; background: rgba(0,0,0,.35); border: 1px solid #6b5631; border-radius: 3px; }
 .tbh-pace-input:focus { outline: none; border-color: var(--role); }
 .tbh-pace-input:disabled { opacity: .5; }
 .tbh-plan { --role: #c9a0ff; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin: 6px 6px 0; padding: 5px 7px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(201,160,255,.1); overflow-wrap: anywhere; }

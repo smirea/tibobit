@@ -43,10 +43,10 @@ const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
 
 /**
- * `live` is the server's "DO IT LIVE" switch, read every step so it can change mid-run, and `pace`
- * the panel's plan and action intervals, sent only to a bot the panel started.
+ * `pace` is the panel's plan and action intervals, read every step so they can change mid-run, and
+ * sent only to a bot the panel started.
  */
-type Snap = Snapshot & { connected: boolean; ageMs: number; live?: boolean; pace?: PilotPace };
+type Snap = Snapshot & { connected: boolean; ageMs: number; pace?: PilotPace };
 /** Seconds between planner calls while a goal is under way, and between steps (game time in lockstep, wall time live). */
 let pace: PilotPace = { planEvery: PLAN_EVERY, actEvery: STEP };
 
@@ -115,17 +115,18 @@ async function send(c: unknown) {
 }
 
 // Live play runs the game in real time and never pauses it: each move is held until the next
-// decision replaces it, and the coach thinks while the game goes on. A level-up or chest still
-// stops the game, as it does for a person.
-let playingLive: boolean | undefined;
+// decision replaces it. A level-up or chest still stops the game, as it does for a person.
+// `--lockstep` instead runs the game a step at a time and pauses it while the models think, so the
+// same model on the same Daily replays the same game.
+const LIVE = !args.includes("--lockstep");
+/** Whether this run's game has been set to play live or in lockstep; a new run starts unset. */
+let modeSet = false;
 
-async function playLive(live: boolean, r: RunView) {
-  await command({ type: "speed", factor: live ? 1 : SPEED });
-  await command({ type: "forecast", live });
-  await command({ type: live ? "resume" : "pause" });
-  if (live || playingLive !== undefined)
-    say({ role: "system", time: r.time, text: live ? "DO IT LIVE: the game keeps running while the models think." : "Lockstep: the game waits while the models think." });
-  playingLive = live;
+async function setMode() {
+  await command({ type: "speed", factor: LIVE ? 1 : SPEED });
+  await command({ type: "forecast", live: LIVE });
+  await command({ type: LIVE ? "resume" : "pause" });
+  modeSet = true;
 }
 
 const latency: number[] = [];
@@ -879,7 +880,7 @@ async function pursue(s: Snap, r: RunView, log: RunLog, planner: Planner) {
 
 async function walkOn(p: Pursuit, r: RunView, aim: Aim, status: CommandStatus | undefined, log: RunLog) {
   const order = aim.to !== undefined ? { type: "goto", to: aim.to, stay: "done" } : { type: "move", dir: aim.heading };
-  if (playingLive) {
+  if (LIVE) {
     // Live, one command steers until the goal changes; it is only sent again if it changes or ends.
     const key = JSON.stringify(order);
     if (p.sent === key && (status === undefined || status.state === "running")) return;
@@ -1091,7 +1092,7 @@ async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog) {
     ms,
   });
   if (dash) await command({ type: "dash", dir });
-  if (playingLive) return dir === undefined ? command({ type: "stop" }) : send({ type: "move", dir });
+  if (LIVE) return dir === undefined ? command({ type: "stop" }) : send({ type: "move", dir });
   return command(dir === undefined ? { type: "goto", to: { dx: 0, dy: 0 }, stay: pace.actEvery, pause: true } : { type: "move", dir, seconds: pace.actEvery, pause: true });
 }
 
@@ -1343,8 +1344,8 @@ async function start(): Promise<void> {
     if (started.state !== "done") throw new Error(`could not start a run: ${started.detail ?? started.state}`);
   }
   await command({ type: "speed", factor: SPEED });
-  // A new run waits paused at tick 0 at lockstep speed, so the next step applies the mode again.
-  playingLive = undefined;
+  // A new run waits paused at tick 0 at lockstep speed, so the next step sets the mode again.
+  modeSet = false;
 }
 
 let recordCrash: ((e: unknown) => Promise<void>) | undefined;
@@ -1500,9 +1501,8 @@ async function main() {
     }
     steps++;
     timings.steps++;
-    const live = s.live === true;
     pace = s.pace ?? pace;
-    if (live !== playingLive) await playLive(live, r);
+    if (!modeSet) await setMode();
     const stepStarted = performance.now();
     if (s.screen === "choice") await choose(r, planner, runLog);
     else {
@@ -1510,7 +1510,7 @@ async function main() {
       if (why !== undefined) await planner.plan(r, why);
       await pursue(s, r, runLog, planner);
     }
-    if (live) await Bun.sleep(Math.max(0, pace.actEvery * 1000 - (performance.now() - stepStarted)));
+    if (LIVE) await Bun.sleep(Math.max(0, pace.actEvery * 1000 - (performance.now() - stepStarted)));
   }
 }
 

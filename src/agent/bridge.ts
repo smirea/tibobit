@@ -29,7 +29,7 @@ export type Bridge = {
   connect(port: number): void;
   /** Whether the server's bot is playing for this tab ("Grok take the wheel"). */
   pilot(): PilotState;
-  /** Asks the server to start or stop the bot, or to play live; the new state arrives over the stream. */
+  /** Asks the server to start or stop the bot, or to change its pace; the new state arrives over the stream. */
   setPilot(change: PilotChange): void;
   /** The bot's chat, oldest first; a message whose `count` grows keeps its id and position. */
   chat(): readonly ChatMessage[];
@@ -92,7 +92,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
   const notify = () => {
     for (const listener of listeners) listener();
   };
-  let pilot: PilotState = { state: "off", live: false, pace: DEFAULT_PACE };
+  let pilot: PilotState = { state: "off", pace: DEFAULT_PACE };
   const chat: ChatMessage[] = [];
   let inFlight = 0;
   let lastPush = 0;
@@ -102,7 +102,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
     if (from !== session) return;
     connected = false;
     // Without the server there is no bot, so nothing is driving the game any more.
-    receivePilot({ state: "off", live: pilot.live, pace: pilot.pace });
+    receivePilot({ state: "off", pace: pilot.pace });
     notify();
     setTimeout(listen, RECONNECT_MS);
   };

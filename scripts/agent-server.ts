@@ -42,11 +42,11 @@ function say(input: unknown) {
   toPage({ chat: message });
 }
 
-let pilot: PilotState = { state: "off", live: false, pace: DEFAULT_PACE };
+let pilot: PilotState = { state: "off", pace: DEFAULT_PACE };
 let bot: Subprocess<"ignore", "inherit", "pipe"> | undefined;
-/** `live` and `pace` outlast the bot, so the next time it takes the wheel it plays the same way. */
-function setPilot(next: Omit<PilotState, "live" | "pace"> & Partial<Pick<PilotState, "live" | "pace">>) {
-  pilot = { live: pilot.live, pace: pilot.pace, ...next };
+/** `pace` outlasts the bot, so the next time it takes the wheel it plays the same way. */
+function setPilot(next: Omit<PilotState, "pace"> & Partial<Pick<PilotState, "pace">>) {
+  pilot = { pace: pilot.pace, ...next };
   toPage({ pilot });
 }
 
@@ -94,10 +94,9 @@ async function jsonBody(req: Request): Promise<unknown> {
 
 function state() {
   if (latest === undefined) return undefined;
-  // `live` tells a running bot, every step, whether to pause the game while it thinks, and `pace`
-  // how often to plan and act. Only a bot the panel started follows the pace; one started by hand
-  // keeps its own flags.
-  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, live: pilot.live, ...(pilot.state === "off" ? {} : { pace: pilot.pace }), ...latest.snapshot };
+  // `pace` tells a running bot, every step, how often to plan and act. Only a bot the panel started
+  // follows it; one started by hand keeps its own flags.
+  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, ...(pilot.state === "off" ? {} : { pace: pilot.pace }), ...latest.snapshot };
 }
 
 function statusOf(id: number): CommandStatus | undefined {
@@ -148,7 +147,6 @@ GET  /encyclopedia   every weapon, passive, item, recipe, enemy, boss, point of 
 POST /command        JSON command, see src/agent/protocol.ts; add ?wait=1 to block until it finishes
 WS   /ws             pushes every snapshot; send a JSON command to run it
 POST /pilot          {"on": true} starts the bot for the tab ("Grok take the wheel"), {"on": false} stops it;
-                     {"live": true} ("DO IT LIVE") has it play without pausing the game while it thinks;
                      {"planEvery": 15, "actEvery": 0.3} sets how often, in seconds, it plans and takes a step
 POST /pilot/say      the bot's chat line for the panel: {"role": "planner" | "action" | "system", "text", "detail"?, "model"?, "time"?}
 `;
@@ -218,9 +216,9 @@ const server = Bun.serve({
           } catch (e) {
             return errorResponse(e);
           }
-          const { on, live, planEvery, actEvery } = change;
-          if (live !== undefined || planEvery !== undefined || actEvery !== undefined)
-            setPilot({ ...pilot, live: live ?? pilot.live, pace: { planEvery: planEvery ?? pilot.pace.planEvery, actEvery: actEvery ?? pilot.pace.actEvery } });
+          const { on, planEvery, actEvery } = change;
+          if (planEvery !== undefined || actEvery !== undefined)
+            setPilot({ ...pilot, pace: { planEvery: planEvery ?? pilot.pace.planEvery, actEvery: actEvery ?? pilot.pace.actEvery } });
           if (on === true) startPilot();
           if (on === false) stopPilot();
           return Response.json(pilot);

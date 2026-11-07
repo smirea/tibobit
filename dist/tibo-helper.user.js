@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
-// @version      1.12.0
+// @version      1.13.0
 // @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
@@ -769,7 +769,7 @@
       for (const listener of listeners)
         listener();
     };
-    let pilot = { state: "off", live: false, pace: DEFAULT_PACE };
+    let pilot = { state: "off", pace: DEFAULT_PACE };
     const chat = [];
     let inFlight = 0;
     let lastPush = 0;
@@ -778,7 +778,7 @@
       if (from !== session)
         return;
       connected = false;
-      receivePilot({ state: "off", live: pilot.live, pace: pilot.pace });
+      receivePilot({ state: "off", pace: pilot.pace });
       notify();
       setTimeout(listen, RECONNECT_MS);
     };
@@ -1768,11 +1768,6 @@
     const giveBack = h("button", "tbh-giveback");
     giveBack.type = "button";
     giveBack.addEventListener("click", () => bridge.setPilot({ on: false }));
-    const live = h("button", "tbh-live", "DO IT LIVE");
-    live.type = "button";
-    live.title = "Play without pausing: the models think while the game keeps running";
-    live.addEventListener("click", () => bridge.setPilot({ live: !bridge.pilot().live }));
-    const tools = h("div", "tbh-chat-tools", giveBack, live);
     const paceInput = (key) => {
       const { min, max, step } = PACE_LIMITS[key];
       const input = h("input", "tbh-pace-input");
@@ -1789,7 +1784,7 @@
     };
     const planEvery = paceInput("planEvery");
     const actEvery = paceInput("actEvery");
-    const paceRow = h("div", "tbh-pace", h("label", "tbh-pace-field", h("span", "tbh-plan-label", "Plan"), "every", planEvery, "s"), h("label", "tbh-pace-field tbh-pace-action", h("span", "tbh-plan-label", "Action"), "every", actEvery, "s"));
+    const tools = h("div", "tbh-chat-tools", giveBack, h("label", "tbh-pace-field", h("span", "tbh-plan-label", "Plan"), planEvery, "s"), h("label", "tbh-pace-field tbh-pace-action", h("span", "tbh-plan-label", "Action"), actEvery, "s"));
     const plan = h("div", "tbh-plan");
     const list = h("div", "tbh-actions");
     list.setAttribute("aria-live", "polite");
@@ -1798,12 +1793,10 @@
     let shownPlan;
     const render = () => {
       const pilot = bridge.pilot();
-      const label = pilot.state === "stopping" ? "Handing the wheel back…" : "Give me back the wheel";
+      const label = pilot.state === "stopping" ? "Handing the wheel back…" : "I'll do it myself";
       if (giveBack.textContent !== label)
         giveBack.textContent = label;
       giveBack.disabled = pilot.state !== "on";
-      live.setAttribute("aria-pressed", String(pilot.live));
-      live.disabled = pilot.state !== "on";
       for (const [input, value] of [
         [planEvery, pilot.pace.planEvery],
         [actEvery, pilot.pace.actEvery]
@@ -1852,7 +1845,7 @@
         return insp.leave();
       insp.show({ kind: "action", id: Number(el.dataset.id) }, el);
     });
-    const box = h("div", "tbh-chatbox", tools, paceRow, plan, list, insp.box);
+    const box = h("div", "tbh-chatbox", tools, plan, list, insp.box);
     box.addEventListener("pointerleave", () => {
       hovered = undefined;
       insp.leave();
@@ -1914,24 +1907,16 @@
 .tbh-wheel { display: block; width: 100%; margin-top: 6px; padding: 5px 8px; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
   color: #f3e6c4; background: linear-gradient(180deg, #3b2f52, #2a2140); border: 1px solid #8e74c9; border-radius: 4px; }
 .tbh-wheel:hover:not(:disabled) { border-color: #c9a0ff; color: #fff; }
-.tbh-chat-tools { display: flex; gap: 6px; padding: 6px 6px 0; }
-.tbh-giveback { flex: 1; padding: 5px 8px; font: inherit; font-weight: 800; cursor: pointer; color: #ffd6d0; background: rgba(227,138,127,.12); border: 1px solid #e38a7f; border-radius: 4px; }
+.tbh-chat-tools { display: flex; align-items: center; gap: 6px; padding: 6px 6px 0; font-size: 11px; color: #c9b58a; }
+.tbh-giveback { flex: 1; min-width: 0; padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: inherit; font-weight: 800; cursor: pointer; color: #ffd6d0; background: rgba(227,138,127,.12); border: 1px solid #e38a7f; border-radius: 4px; }
 .tbh-giveback:hover:not(:disabled) { color: #fff; background: rgba(227,138,127,.24); }
-.tbh-wheel:disabled, .tbh-live:disabled, .tbh-giveback:disabled { opacity: .5; cursor: default; }
-.tbh-live { flex: none; padding: 5px 8px; font: inherit; font-weight: 900; letter-spacing: .04em; cursor: pointer;
-  color: #ffb4a8; background: transparent; border: 1px dashed #e38a7f; border-radius: 4px; }
-.tbh-live:hover:not(:disabled) { color: #fff; border-style: solid; }
-.tbh-live[aria-pressed="true"] { color: #fff; background: #d8362a; border: 1px solid #ff6a5a; box-shadow: 0 0 10px rgba(255,80,60,.6); }
-.tbh-live[aria-pressed="true"]::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; vertical-align: 1px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 0 rgba(255,255,255,.8); animation: tbh-live-pulse 1.6s ease-out infinite; }
-@keyframes tbh-live-pulse { 70% { box-shadow: 0 0 0 6px rgba(255,255,255,0); } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); } }
-@media (prefers-reduced-motion: reduce) { .tbh-live[aria-pressed="true"]::before { animation: none; } }
+.tbh-wheel:disabled, .tbh-giveback:disabled { opacity: .5; cursor: default; }
 .tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
 .tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chatbox { display: none; }
 .tbh-chatbox { border-top: 1px solid rgba(255,255,255,.08); }
-.tbh-pace { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 6px 0; font-size: 11px; color: #c9b58a; }
-.tbh-pace-field { --role: #c9a0ff; display: inline-flex; align-items: center; gap: 5px; }
+.tbh-pace-field { --role: #c9a0ff; flex: none; display: inline-flex; align-items: center; gap: 3px; }
 .tbh-pace-action { --role: #7fa8ff; }
-.tbh-pace-input { width: 4.2em; padding: 2px 4px; font: inherit; color: #f3e6c4; background: rgba(0,0,0,.35); border: 1px solid #6b5631; border-radius: 3px; }
+.tbh-pace-input { width: 2.8em; padding: 2px 3px; font: inherit; color: #f3e6c4; background: rgba(0,0,0,.35); border: 1px solid #6b5631; border-radius: 3px; }
 .tbh-pace-input:focus { outline: none; border-color: var(--role); }
 .tbh-pace-input:disabled { opacity: .5; }
 .tbh-plan { --role: #c9a0ff; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin: 6px 6px 0; padding: 5px 7px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(201,160,255,.1); overflow-wrap: anywhere; }

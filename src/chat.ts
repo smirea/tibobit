@@ -246,12 +246,6 @@ export function chatBox(bridge: Bridge): HTMLElement {
   const giveBack = h("button", "tbh-giveback");
   giveBack.type = "button";
   giveBack.addEventListener("click", () => bridge.setPilot({ on: false }));
-  const live = h("button", "tbh-live", "DO IT LIVE");
-  live.type = "button";
-  live.title = "Play without pausing: the models think while the game keeps running";
-  live.addEventListener("click", () => bridge.setPilot({ live: !bridge.pilot().live }));
-  const tools = h("div", "tbh-chat-tools", giveBack, live);
-
   const paceInput = (key: keyof PilotPace) => {
     const { min, max, step } = PACE_LIMITS[key];
     const input = h("input", "tbh-pace-input");
@@ -267,11 +261,12 @@ export function chatBox(bridge: Bridge): HTMLElement {
   };
   const planEvery = paceInput("planEvery");
   const actEvery = paceInput("actEvery");
-  const paceRow = h(
+  const tools = h(
     "div",
-    "tbh-pace",
-    h("label", "tbh-pace-field", h("span", "tbh-plan-label", "Plan"), "every", planEvery, "s"),
-    h("label", "tbh-pace-field tbh-pace-action", h("span", "tbh-plan-label", "Action"), "every", actEvery, "s"),
+    "tbh-chat-tools",
+    giveBack,
+    h("label", "tbh-pace-field", h("span", "tbh-plan-label", "Plan"), planEvery, "s"),
+    h("label", "tbh-pace-field tbh-pace-action", h("span", "tbh-plan-label", "Action"), actEvery, "s"),
   );
 
   const plan = h("div", "tbh-plan");
@@ -283,11 +278,9 @@ export function chatBox(bridge: Bridge): HTMLElement {
 
   const render = () => {
     const pilot = bridge.pilot();
-    const label = pilot.state === "stopping" ? "Handing the wheel back…" : "Give me back the wheel";
+    const label = pilot.state === "stopping" ? "Handing the wheel back…" : "I'll do it myself";
     if (giveBack.textContent !== label) giveBack.textContent = label;
     giveBack.disabled = pilot.state !== "on";
-    live.setAttribute("aria-pressed", String(pilot.live));
-    live.disabled = pilot.state !== "on";
     // Typing in a box is not interrupted by the server echoing the value back.
     for (const [input, value] of [
       [planEvery, pilot.pace.planEvery],
@@ -338,7 +331,7 @@ export function chatBox(bridge: Bridge): HTMLElement {
     if (el === null) return insp.leave();
     insp.show({ kind: "action", id: Number(el.dataset.id) }, el);
   });
-  const box = h("div", "tbh-chatbox", tools, paceRow, plan, list, insp.box);
+  const box = h("div", "tbh-chatbox", tools, plan, list, insp.box);
   box.addEventListener("pointerleave", () => {
     hovered = undefined;
     insp.leave();
