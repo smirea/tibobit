@@ -23,6 +23,7 @@ Understanding comes first, and the score second. A run that settles a question b
 - The in-game models are small and fast. Write short, plain sentences. Name cards, spots and enemies exactly as the game does.
 - Put the game knowledge the planner needs into planner.state: the held game beliefs that matter now, most important first, each with its reason in a few words. A disproved belief has no place there. Keep it under about 60 lines.
 - To test a strategy, write it into planner.state as a plain directive near the top. A directive the planner never sees in the state cannot change its picks.
+- A directive that fires only when something is listed (a chest, food) does nothing until it is listed. Chests on the open world may not be listed before about 1:30. Write the default goal for the time before that, and for low health (for example evade under 40%), into the directive, and say in the intent what the planner will do meanwhile.
 - Every state block costs the models attention. Include what this run's question needs, and leave out blocks it does not need.
 - The beliefs about the planner and the action model say how these decision models read a prompt. Follow them, and when a run shows one is wrong, that is a finding.
 - Knobs change how goals and moves work. Move one only when it is what the run tests.
