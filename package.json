@@ -6,6 +6,7 @@
     "build": "bun scripts/build.ts",
     "check": "tsc --noEmit",
     "server": "bun scripts/agent-server.ts",
+    "agent-server": "bun --watch scripts/agent-server.ts",
     "test": "bun test"
   },
   "devDependencies": {

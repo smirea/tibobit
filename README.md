@@ -37,6 +37,7 @@ The same userscript lets a program play the game. A local server exposes the gam
 
 ```sh
 ./scripts/agent-server.ts     # listens on http://127.0.0.1:7357
+bun run agent-server          # the same, restarting whenever its code changes
 ./scripts/tibo.ts state       # one-screen summary; --json for the full snapshot
 ```
 
