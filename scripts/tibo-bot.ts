@@ -179,6 +179,12 @@ const REVIEW_TIMEOUT_MS = 900_000;
 const LATEST_NOTES = 3;
 const MODE_NAME = MODE === "daily" ? "daily" : "world";
 const WIN_SECONDS = 1200;
+// Read once at startup: the code this process runs, whatever is committed while it plays.
+const BOT_CODE = (() => {
+  const git = (...a: string[]) => Bun.spawnSync(["git", ...a], { cwd: import.meta.dir }).stdout.toString().trim();
+  const head = git("log", "-1", "--format=%h %s");
+  return `${head || "unknown"}${git("status", "--porcelain", "--", ".") === "" ? "" : " (with uncommitted changes in scripts/)"}`;
+})();
 
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 const csvField = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
@@ -959,6 +965,7 @@ async function pursue(s: Snap, r: RunView, log: RunLog, planner: Planner) {
       // The page walks on its own here, so a hit the forecast missed would otherwise leave no row.
       const lost = log.lostSince(r);
       if (lost >= 1) log.write(r, { event: "walk", model: "none", goal: p.id, action: aim.heading === "stay" ? "stand on the goal" : `walk ${aim.heading}`, reason: "the way to the goal cost no more than the cheapest move" });
+      if (aim.heading !== undefined && aim.heading !== "stay" && dashWorthAsking(r)) await dashOnTheWay(r, p, aim.heading, log);
       return walkOn(p, r, aim, status, log);
     }
     p.sent = undefined;
@@ -1100,6 +1107,25 @@ function goalWords(p: Pursuit, aim: Aim): string {
   return aim.heading === "stay" ? `${p.title.toLowerCase()}: stay where Tibo stands, ${aim.progress}` : `${p.title.toLowerCase()}, ${aim.progress}`;
 }
 
+/** A dash charge, a dash template, and an enemy or bullet close enough that dashing could matter. */
+function dashWorthAsking(r: RunView): boolean {
+  return templates.action.dash.trim() !== "" && r.player.dashCharges > 0 && r.sectors.some((x) => x.enemiesNear > 0 || (x.nearestBullet ?? 999) < 40);
+}
+
+/**
+ * The page is walking Tibo to its goal without a model, which is when crowds land most of their
+ * hits, so the action model still gets the dash question; a yes dashes the way Tibo walks.
+ */
+async function dashOnTheWay(r: RunView, p: Pursuit, heading: Direction, log: RunLog) {
+  const vars = stateVars(r, { goal: goalWords(p, { heading, progress: "" }) });
+  const started = performance.now();
+  const answers = await decide(render(templates.action.state, vars), { dash: { type: "noul", instructions: render(templates.action.dash, vars) } });
+  const odds = answers.dash?.noul ?? 0;
+  if (odds <= 0.5) return;
+  log.write(r, { event: "move", model: MODEL, goal: p.id, action: `dash ${heading}`, reason: "the page was walking to the goal, and the action model said to dash", detail: `dash asked on a walked step: ${Math.round(odds * 100)}%, dashed`, ms: Math.round(performance.now() - started) });
+  await command({ type: "dash", dir: heading });
+}
+
 /** The way to the goal costs more than the safest move: the action model picks this step. */
 async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog) {
   const goal = goalWords(p, aim);
@@ -1123,7 +1149,7 @@ async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog) {
     questions[key] = { type: "score", instructions: ask(templates.action.hurt, text), criteria: HURT_SCALE };
     questions[`useful:${key}`] = { type: "noul", instructions: ask(templates.action.useful, text) };
   }
-  const canDash = templates.action.dash.trim() !== "" && r.player.dashCharges > 0 && r.sectors.some((x) => x.enemiesNear > 0 || (x.nearestBullet ?? 999) < 40);
+  const canDash = dashWorthAsking(r);
   if (canDash) questions.dash = { type: "noul", instructions: render(templates.action.dash, vars) };
   const started = performance.now();
   const answers = await decide(state, questions);
@@ -1625,7 +1651,7 @@ async function main() {
     if (notes === undefined || planner === undefined || runLog === undefined) {
       // A run in progress is played with the latest templates: planning would stall it.
       const skip = adopted ? "taken over mid-run" : incognito ? "incognito" : undefined;
-      const setup: RunSetup = { started: new Date(), difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: r.seed, planner: PLAN_MODEL, action: MODEL, coach: COACH === "none" ? "none" : COACH_NAME };
+      const setup: RunSetup = { started: new Date(), difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: r.seed, planner: PLAN_MODEL, action: MODEL, coach: COACH === "none" ? "none" : COACH_NAME, bot: BOT_CODE };
       const { plan, prompts } = await planRun(setup, skip);
       templates = plan.templates;
       notes = new RunNotes(setup, plan, prompts, skip === undefined);

@@ -430,7 +430,8 @@ export async function touchExperiments(ids: string[], change: (row: ExperimentRo
 // review markers. `--review` and the next plan read a notes file back from these same headings.
 
 export type Surface = "headless" | "browser";
-export type RunSetup = { started: Date; difficulty: string; mode: "daily" | "world"; surface: Surface; seed: string; planner: string; action: string; coach: string };
+/** `bot` is the commit of the bot code that played, so a review can tell whether a fix had landed. */
+export type RunSetup = { started: Date; difficulty: string; mode: "daily" | "world"; surface: Surface; seed: string; planner: string; action: string; coach: string; bot: string };
 export type RunPlan = { source: string; intent: string; testing: string[]; templates: Templates };
 export type RunEnd = { lived: number; level?: number; kills?: number; ending: string; outcome: string[] };
 export type NotesContent = { setup: RunSetup; plan: RunPlan; end: RunEnd; link: string; log: string; prompts: string; picks: string[]; review: string };
@@ -464,6 +465,7 @@ export function renderNotes(n: NotesContent): string {
     `| Planner | ${setup.planner} |`,
     `| Action model | ${setup.action} |`,
     `| Coach | ${setup.coach} |`,
+    `| Bot code | ${setup.bot} |`,
     `| Coach prompts | ${n.prompts} |`,
     `| Templates from | ${plan.source} |`,
     `| Log | ${n.log} |`,
