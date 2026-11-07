@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import path from "node:path";
 import type { ServerWebSocket, Subprocess } from "bun";
-import { BRIDGE_PORT, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, parseChatLine, parseCommand } from "../src/agent/protocol";
+import { BRIDGE_PORT, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, DEFAULT_PACE, type PilotChange, parseChatLine, parseCommand, parsePilotChange, trimChat } from "../src/agent/protocol";
 
 const KEEPALIVE_MS = 5_000;
 const option = (name: string, fallback: string) => {
@@ -13,7 +13,6 @@ const WAIT_LIMIT_MS = 120_000;
 // The bot "Grok take the wheel" runs: Jev moves and picks, grok plans. Override with
 // --pilot "<tibo-bot.ts flags>", such as --pilot "--model laya@q8_0" for LM Studio.
 const PILOT_ARGS = option("pilot", "--decider openrouter --model typesafe/jev-1.14-20261014 --mode daily --difficulty nightmare").split(/\s+/).filter(Boolean);
-const CHAT_BACKLOG = 200;
 
 let latest: { snapshot: Snapshot } | undefined;
 let book: Encyclopedia | undefined;
@@ -32,30 +31,22 @@ function say(input: unknown) {
   const at = line.key === undefined ? -1 : chat.findIndex((m) => m.key === line.key);
   const earlier = chat[at];
   if (earlier !== undefined) {
-    const message: ChatMessage = { ...line, id: earlier.id, count: 1, at: Date.now() };
+    const message: ChatMessage = { ...line, id: earlier.id, at: Date.now() };
     chat[at] = message;
     toPage({ chat: message });
     return;
   }
-  const last = chat.at(-1);
-  // The action model answers a few times a second, which would bury the planner and the actor, so
-  // its moves between two of their messages are one message showing the latest. An errand keeps
-  // its own message, which it rewrites by key as it goes.
-  if (last !== undefined && line.role === "action" && last.role === "action" && last.key === undefined && line.key === undefined) {
-    Object.assign(last, line, { count: last.count + 1, at: Date.now() });
-    toPage({ chat: last });
-    return;
-  }
-  const message: ChatMessage = { ...line, id: nextChatId++, count: 1, at: Date.now() };
+  const message: ChatMessage = { ...line, id: nextChatId++, at: Date.now() };
   chat.push(message);
-  if (chat.length > CHAT_BACKLOG) chat.splice(0, chat.length - CHAT_BACKLOG);
+  trimChat(chat);
   toPage({ chat: message });
 }
 
-let pilot: PilotState = { state: "off", live: false };
+let pilot: PilotState = { state: "off", live: false, pace: DEFAULT_PACE };
 let bot: Subprocess<"ignore", "inherit", "pipe"> | undefined;
-function setPilot(next: Omit<PilotState, "live"> & { live?: boolean }) {
-  pilot = { live: pilot.live, ...next };
+/** `live` and `pace` outlast the bot, so the next time it takes the wheel it plays the same way. */
+function setPilot(next: Omit<PilotState, "live" | "pace"> & Partial<Pick<PilotState, "live" | "pace">>) {
+  pilot = { live: pilot.live, pace: pilot.pace, ...next };
   toPage({ pilot });
 }
 
@@ -103,8 +94,10 @@ async function jsonBody(req: Request): Promise<unknown> {
 
 function state() {
   if (latest === undefined) return undefined;
-  // `live` tells a running bot, every step, whether to pause the game while it thinks.
-  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, live: pilot.live, ...latest.snapshot };
+  // `live` tells a running bot, every step, whether to pause the game while it thinks, and `pace`
+  // how often to plan and act. Only a bot the panel started follows the pace; one started by hand
+  // keeps its own flags.
+  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, live: pilot.live, ...(pilot.state === "off" ? {} : { pace: pilot.pace }), ...latest.snapshot };
 }
 
 function statusOf(id: number): CommandStatus | undefined {
@@ -155,8 +148,9 @@ GET  /encyclopedia   every weapon, passive, item, recipe, enemy, boss, point of 
 POST /command        JSON command, see src/agent/protocol.ts; add ?wait=1 to block until it finishes
 WS   /ws             pushes every snapshot; send a JSON command to run it
 POST /pilot          {"on": true} starts the bot for the tab ("Grok take the wheel"), {"on": false} stops it;
-                     {"live": true} ("DO IT LIVE") has it play without pausing the game while it thinks
-POST /pilot/say      the bot's chat line for the panel: {"role": "planner" | "actor" | "action" | "system", "text", "detail"?, "model"?, "time"?}
+                     {"live": true} ("DO IT LIVE") has it play without pausing the game while it thinks;
+                     {"planEvery": 15, "actEvery": 0.3} sets how often, in seconds, it plans and takes a step
+POST /pilot/say      the bot's chat line for the panel: {"role": "planner" | "action" | "system", "text", "detail"?, "model"?, "time"?}
 `;
 
 const server = Bun.serve({
@@ -218,16 +212,15 @@ const server = Bun.serve({
           return s === undefined ? errorResponse("no snapshot yet; is the tibo.dog tab open?", 503) : Response.json(s);
         }
         case "POST /pilot": {
-          let body: { on?: unknown; live?: unknown };
+          let change: PilotChange;
           try {
-            body = ((await jsonBody(req)) ?? {}) as typeof body;
+            change = parsePilotChange(await jsonBody(req));
           } catch (e) {
             return errorResponse(e);
           }
-          const { on, live } = body;
-          if ((on !== undefined && typeof on !== "boolean") || (live !== undefined && typeof live !== "boolean") || (on === undefined && live === undefined))
-            return errorResponse('send {"on": true|false} and/or {"live": true|false}');
-          if (live !== undefined && live !== pilot.live) setPilot({ ...pilot, live });
+          const { on, live, planEvery, actEvery } = change;
+          if (live !== undefined || planEvery !== undefined || actEvery !== undefined)
+            setPilot({ ...pilot, live: live ?? pilot.live, pace: { planEvery: planEvery ?? pilot.pace.planEvery, actEvery: actEvery ?? pilot.pace.actEvery } });
           if (on === true) startPilot();
           if (on === false) stopPilot();
           return Response.json(pilot);

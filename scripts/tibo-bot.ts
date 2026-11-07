@@ -1,15 +1,17 @@
 #!/usr/bin/env bun
-// Plays tibo.dog through the agent server with a local decision model (LM Studio's
-// /v1/systemone). This file describes the game to the model and turns its answers into commands.
-// The model makes every choice (where to move, what to pick); the file only removes options the
-// game itself rules out: cards Tibo cannot take, and moves the game's own simulation says cost
-// clearly more health over the next second than the cheapest one.
+// Plays tibo.dog through the agent server in three layers. strategy.md is the game knowledge,
+// rewritten after every run from the run's log. The planner (grok) reads it with the whole state
+// and the game's descriptions, picks every level-up, chest and shrine option, and sets short-term
+// goals. The action model (a System One decision model) steps around danger on the way to the
+// goal, told only the goal and what each move costs. The file removes only options the game itself
+// rules out: cards Tibo cannot take, and moves the game's own simulation says cost clearly more
+// health over the next second than the cheapest one.
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ChatLine, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type ForecastView, type Inspect, type MoveOption, type OptionView, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ChatLine, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {
@@ -17,8 +19,8 @@ const option = (name: string, fallback: string) => {
   return i >= 0 ? (args[i + 1] ?? fallback) : fallback;
 };
 const MODEL = option("model", "h2o-lightning-4b@q8_0");
-// Level-up picks are rare (a few dozen a run), so they can afford a slower, stronger model.
-const PICK_MODEL = option("pick-model", MODEL);
+// The decision model's planner persona, which picks cards and goals; the same model unless named.
+const PLAN_MODEL = option("plan-model", MODEL);
 const SERVER = option("server", process.env.TIBO_SERVER ?? DEFAULT_ORIGIN);
 // A System One decisions endpoint: LM Studio locally, or OpenRouter's (`--decider openrouter`),
 // which serves TypeSafe's Jev models and needs OPENROUTER_API_KEY.
@@ -27,49 +29,44 @@ const DECIDER = DECIDERS[option("decider", "lmstudio")] ?? option("decider", "lm
 const DECIDER_KEY = new URL(DECIDER).hostname === "openrouter.ai" ? process.env.OPENROUTER_API_KEY : undefined;
 if (new URL(DECIDER).hostname === "openrouter.ai" && !DECIDER_KEY) throw new Error("--decider openrouter needs OPENROUTER_API_KEY (in .env.local, managed by env-manager)");
 const STEP = Number(option("step", "0.35"));
+const PLAN_EVERY = Number(option("plan-every", "15"));
 const RUNS = Number(option("runs", "1"));
 const DIFFICULTY = option("difficulty", "easy");
 const MODE = option("mode", "daily");
 const SPEED = Number(option("speed", "4"));
+// The coach (grok) only works after a run: it reviews it and names the next experiment.
 const COACH = option("coach", "grok");
 const COACH_MODEL = option("coach-model", "grok-4.7-build-fast");
 // For "Grok take the wheel": play the run already in progress instead of starting a fresh one.
 const TAKEOVER = args.includes("--takeover");
 const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
-// Everything the bot sees, asks, answers and sends, one JSON line each, for reading a run back
-// step by step. Outside the repo on purpose: a 20-minute run writes about 100 MB.
-const FULL_LOG = option("full-log", path.join("/tmp", "tibobit", `${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}-${process.pid}.jsonl`));
-await mkdir(path.dirname(FULL_LOG), { recursive: true });
-let gameTime: number | undefined;
-/** Appends one entry to the full log, stamped with wall-clock and game time. */
-function record(event: string, fields: Record<string, unknown> = {}) {
-  appendFileSync(FULL_LOG, `${JSON.stringify({ at: new Date().toISOString(), time: gameTime, event, ...fields })}\n`);
-}
 
-/** `live` is the server's "DO IT LIVE" switch, read every step so it can change mid-run. */
-type Snap = Snapshot & { connected: boolean; ageMs: number; live?: boolean };
+/**
+ * `live` is the server's "DO IT LIVE" switch, read every step so it can change mid-run, and `pace`
+ * the panel's plan and action intervals, sent only to a bot the panel started.
+ */
+type Snap = Snapshot & { connected: boolean; ageMs: number; live?: boolean; pace?: PilotPace };
+/** Seconds between planner calls while a goal is under way, and between steps (game time in lockstep, wall time live). */
+let pace: PilotPace = { planEvery: PLAN_EVERY, actEvery: STEP };
 
-const PLANNER = COACH === "none" ? "none" : `${COACH} ${COACH_MODEL}`;
+const COACH_NAME = `${COACH} ${COACH_MODEL}`;
 let chatQueue = Promise.resolve();
 /**
  * A line for the panel's chat, shown while the bot has the wheel. Never awaited, so the chat cannot
  * slow a step, but sent in order, so a late streamed update never overwrites a final message.
  */
-function say(line: ChatLine, logged = line.stream === undefined) {
-  // Streamed reasoning and errand progress rewrite a message several times a second; the full
-  // log keeps only their final form (and each step's own entry).
-  if (logged) record("chat", { line });
+function say(line: ChatLine) {
   const body = JSON.stringify(line);
   chatQueue = chatQueue.then(() => fetch(`${SERVER}/pilot/say`, { method: "POST", headers: { "content-type": "application/json" }, body }).then(() => undefined, () => undefined));
 }
 
-/** One planner message, rewritten as the coach reads its prompt, thinks, and answers. */
-class PlannerBubble {
+/** One coach message, rewritten as the coach reads its prompt, thinks, and answers. */
+class CoachBubble {
   private static made = 0;
   private line: ChatLine;
   constructor(text: string, time?: number) {
-    this.line = { role: "planner", model: PLANNER, text, key: `planner-${process.pid}-${PlannerBubble.made++}`, ...(time === undefined ? {} : { time }) };
+    this.line = { role: "planner", model: COACH_NAME, text, key: `coach-${process.pid}-${CoachBubble.made++}`, ...(time === undefined ? {} : { time }) };
   }
   set(fields: Partial<ChatLine>) {
     this.line = { ...this.line, ...fields };
@@ -110,22 +107,17 @@ async function timed<T>(phase: "state" | "decide" | "command", work: Promise<T>)
 }
 
 async function command(c: unknown, timeoutSeconds = 30) {
-  const result = await timed("command", api<CommandStatus & { interruptedBy?: string }>(`/command?wait=1&timeout=${timeoutSeconds}`, c));
-  record("command", { command: c, result: { id: result.id, state: result.state, detail: result.detail, interruptedBy: result.interruptedBy } });
-  return result;
+  return timed("command", api<CommandStatus & { interruptedBy?: string }>(`/command?wait=1&timeout=${timeoutSeconds}`, c));
 }
 /** Sends a command without waiting for it to finish, such as a move held until the next one. */
 async function send(c: unknown) {
-  const sent = await timed("command", api<{ id: number }>("/command", c));
-  record("command", { command: c, id: sent.id });
-  return sent;
+  return timed("command", api<{ id: number }>("/command", c));
 }
 
 // Live play runs the game in real time and never pauses it: each move is held until the next
 // decision replaces it, and the coach thinks while the game goes on. A level-up or chest still
 // stops the game, as it does for a person.
 let playingLive: boolean | undefined;
-const LIVE_MIN_STEP_MS = 100;
 
 async function playLive(live: boolean, r: RunView) {
   await command({ type: "speed", factor: live ? 1 : SPEED });
@@ -134,15 +126,6 @@ async function playLive(live: boolean, r: RunView) {
   if (live || playingLive !== undefined)
     say({ role: "system", time: r.time, text: live ? "DO IT LIVE: the game keeps running while the models think." : "Lockstep: the game waits while the models think." });
   playingLive = live;
-}
-
-/** Waits until the server's live switch turns on, or `done` says to stop waiting. */
-async function untilLive(done: () => boolean) {
-  // Sleeps first: most steps ask the coach nothing, and those should not cost a request.
-  for (;;) {
-    await Bun.sleep(250);
-    if (done() || (await api<Snap>("/state")).live === true) return;
-  }
 }
 
 const latency: number[] = [];
@@ -164,7 +147,6 @@ async function decide(state: string, questions: Record<string, Question>, model 
     }
   }
   latency.push(performance.now() - started);
-  record("decision", { model, ms: Math.round(performance.now() - started), state, questions, answers: json.answers, error: json.error });
   if (json.answers === undefined) throw new Error(`decision model error: ${JSON.stringify(json.error ?? json).slice(0, 300)}`);
   // A score is an index into its criteria; as a share of the scale it reads like a noul.
   for (const [key, q] of Object.entries(questions)) {
@@ -175,9 +157,7 @@ async function decide(state: string, questions: Record<string, Question>, model 
 }
 
 // ---- Learning loop -------------------------------------------------------------------------
-// A large model (the coach) reads the generic strategy and this run's notes at checkpoints,
-// writes a note, and hands the decision model one line of advice plus a list of upgrades to
-// favour. After the run it reviews the notes and stats and rewrites the strategy for the next.
+// After a run the coach reviews its log, notes and stats and rewrites strategy.md for the next.
 const GAMEPLAY = path.join(import.meta.dir, "..", "gameplay");
 const STRATEGY_FILE = path.join(GAMEPLAY, "strategy.md");
 const NOTES_DIR = path.join(GAMEPLAY, "notes");
@@ -190,21 +170,8 @@ const EXPERIMENTS_CSV = path.join(GAMEPLAY, "experiments.csv");
 const EXPERIMENT_EVERY = Number(option("experiment-every", "3"));
 const FORCED_EXPERIMENT = option("experiment", "");
 type Experiment = { name: string; hypothesis: string; directive: string };
-const CHECKPOINTS = [30, 150, 300, 480, 660, 840, 1020, 1140];
-const COACH_COOLDOWN = 45;
-// A post-run review rewrites two files in one reply, which can take grok a few minutes. A consult
-// during the run holds the paused game, so it gets less.
+// A post-run review rewrites three files in one reply, which can take grok a few minutes.
 const REVIEW_TIMEOUT_MS = 900_000;
-const CONSULT_TIMEOUT_MS = 180_000;
-const URGENT_COOLDOWN = 10;
-const LOW_HEALTH = 0.5;
-
-type Plan = { want: string[]; otherwise: "reroll" | "choose"; advice: string; at: number };
-// The coach's advice line lapses after this many game seconds, so a stale instruction cannot
-// stay in force while the situation changes; its upgrade list stays until the next consult.
-const ADVICE_SECONDS = 90;
-let plan: Plan | undefined;
-const inPlan = (name: string) => plan?.want.some((w) => w.toLowerCase() === name.toLowerCase()) ?? false;
 
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -243,32 +210,24 @@ async function experimentDue(): Promise<boolean> {
   return finished.length === EXPERIMENT_EVERY - 1 && finished.every((t) => !t.includes("| Run type | experiment"));
 }
 
+// The coach names the next experiment at the end of each review, so no model is asked when a run starts.
+const NEXT_EXPERIMENT_FILE = path.join(GAMEPLAY, "next-experiment.json");
+
 async function chooseExperiment(): Promise<Experiment | undefined> {
-  const bubble = new PlannerBubble("Thinking: this run is an experiment; choosing which…");
-  const reply = await askCoach(
-    [
-      "You coach a bot that plays tibo.dog, and the next run is an experiment run.",
-      GAME_RULES,
-      `Goal of the serious runs: survive 20 minutes on ${DIFFICULTY} in today's ${MODE === "daily" ? "Daily (the same seed every attempt today)" : "Open World"}.`,
-      "Experiment runs exist to escape a local maximum: they play one high-level strategy on purpose, even where the serious strategy disagrees, to learn which of its ideas hold and which do not.",
-      "The experiment list:",
-      await readExperiments(),
-      "Results of earlier experiment runs (CSV):",
-      await experimentLog(),
-      "The serious strategy now:",
-      await readStrategy(),
-      "Finished runs in this mode, longest first:",
-      await runHistory(),
-      FORCED_EXPERIMENT === "" ? "Pick the experiment that would teach the most now: untried ideas first, or a retry where a result was unclear. You may also invent a new one." : `Run the experiment named "${FORCED_EXPERIMENT}".`,
-      "Answer from these facts alone; do not browse, search or use tools.",
-      'Reply with only JSON: {"name": "the experiment name as in the list", "hypothesis": "one sentence: what you expect to happen and why", "directive": "the high-level strategy for this run in two to four sentences, written for the coach that advises the bot during the run: what to pick, where to walk, and what to give up"}',
-    ].join("\n\n"),
-    CONSULT_TIMEOUT_MS,
-    bubble,
-  );
-  if (reply === undefined || typeof reply.name !== "string" || typeof reply.directive !== "string") return undefined;
-  bubble.set({ text: `Experiment run: ${reply.name}`, detail: reply.directive });
-  return { name: reply.name, hypothesis: typeof reply.hypothesis === "string" ? reply.hypothesis : "", directive: reply.directive };
+  const file = Bun.file(NEXT_EXPERIMENT_FILE);
+  const next = (await file.exists()) ? ((await file.json()) as Partial<Experiment>) : undefined;
+  if (FORCED_EXPERIMENT !== "" && next?.name !== FORCED_EXPERIMENT) {
+    // A named experiment plays its entry in experiments.md as written.
+    const entry = (await readExperiments()).split("\n\n").find((p) => p.includes(`**${FORCED_EXPERIMENT}**`));
+    if (entry === undefined) throw new Error(`--experiment ${FORCED_EXPERIMENT} is not in ${EXPERIMENTS_FILE}`);
+    return { name: FORCED_EXPERIMENT, hypothesis: "", directive: entry.replace(/\s+/g, " ").trim() };
+  }
+  if (typeof next?.name !== "string" || typeof next.directive !== "string") {
+    console.log(`an experiment run is due but ${NEXT_EXPERIMENT_FILE} names none; playing a serious run`);
+    return undefined;
+  }
+  say({ role: "system", time: 0, text: `Experiment run: ${next.name}`, detail: next.directive });
+  return { name: next.name, hypothesis: next.hypothesis ?? "", directive: next.directive };
 }
 
 const csvField = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
@@ -286,7 +245,7 @@ const STREAM_TAIL = 900;
  * Runs the coach CLI once and returns the JSON object in its reply, or undefined. Its reasoning
  * and reply stream into `bubble` as they arrive, and hovering the bubble shows the prompt.
  */
-async function askCoach(prompt: string, timeoutMs: number, bubble: PlannerBubble): Promise<Record<string, unknown> | undefined> {
+async function askCoach(prompt: string, timeoutMs: number, bubble: CoachBubble): Promise<Record<string, unknown> | undefined> {
   if (COACH === "none") return undefined;
   const started = performance.now();
   bubble.set({ inspect: { kind: "prompt", prompt } });
@@ -345,6 +304,8 @@ async function askCoach(prompt: string, timeoutMs: number, bubble: PlannerBubble
 class RunNotes {
   readonly id: string;
   readonly file: string;
+  /** The run's CSV log, one row per model call; outside the repo, see LOG_DIR. */
+  readonly log: string;
   link = "pending: written once the game shows the run summary";
   timeline: string[] = [];
   outcome = "(the run is in progress)";
@@ -359,18 +320,20 @@ class RunNotes {
     const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
     this.id = `${stamp}-${MODE}-${DIFFICULTY}-${r.seed}`;
     this.file = path.join(NOTES_DIR, `${this.id}.md`);
+    this.log = path.join(LOG_DIR, `${this.id}.csv`);
     this.fields = {
       title: `Run ${stamp.slice(0, 10)} ${stamp.slice(11, 16).replace("-", ":")}, ${MODE} ${DIFFICULTY}`,
       date: new Date().toISOString(),
       mode: MODE,
       difficulty: DIFFICULTY,
       seed: r.seed,
-      model: PICK_MODEL === MODEL ? MODEL : `${MODEL} (moves), ${PICK_MODEL} (picks)`,
-      coach: COACH === "none" ? "none" : `${COACH} ${COACH_MODEL}`,
-      step: String(STEP),
+      model: PLAN_MODEL === MODEL ? MODEL : `${MODEL} (moves), ${PLAN_MODEL} (plans and picks)`,
+      coach: COACH === "none" ? "none" : COACH_NAME,
+      step: String(pace.actEvery),
       speed: String(SPEED),
       strategy: `strategy.md ${createHash("sha1").update(strategy).digest("hex").slice(0, 8)}`,
       kind: experiment === undefined ? "serious" : `experiment: ${experiment.name}`,
+      log: this.log,
       experiment:
         experiment === undefined
           ? "None: a serious run that follows strategy.md."
@@ -392,34 +355,121 @@ class RunNotes {
   }
 }
 
-const where = (x: { dist: number; dir: string } | undefined) => (x === undefined ? "none in sight" : `${Math.round(x.dist)} away to the ${x.dir}`);
-
-function digest(r: RunView): string {
-  const p = r.player;
-  return [
-    `Time ${clock(r.time)}, health ${Math.round(p.hp)}/${Math.round(p.maxHp)}, level ${p.level}, gold ${p.gold}, ${r.enemies.total} enemies around.`,
-    `Weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
-    `Passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
-    `Items: ${r.loadout.items.map((i) => `${i.name} x${i.count}`).join(", ") || "none"}.`,
-    `Recipes in reach: ${r.combos.map((c) => `${c.name} (${c.parts.map((x) => `${x.name} ${x.state}`).join(" + ")})`).join("; ") || "none"}.`,
-    `Unpaired: ${r.unpaired.map((u) => `${u.name} needs one of ${u.options.map((o) => o.name).join(", ")}`).join("; ") || "none"}.`,
-    `Tibo stands: ${spotLine(r) ?? "on no chest or point of interest"}. ${errand === undefined ? "No errand under way" : `Errand under way: ${errand.text}`}.`,
-    `Bosses: ${r.bosses.map((b) => `${b.name} ${Math.round(b.dist)} away, ${Math.round(b.hp)}/${Math.round(b.maxHp)} hp`).join("; ") || "none"}.`,
-    `Hurt in the last 3 seconds by: ${Object.entries(p.hurtBy).map(([k, v]) => `${k} ${v}`).join(", ") || "nothing"}.`,
-    `Nearest chest: ${where(r.pickups.chests[0])}. Nearest food: ${where(r.pickups.nearest.find((x) => x.kind === "heal"))}. Nearest shrine to stand in: ${where(r.pois.find((x) => x.chargeNeeded > 0))}.`,
-    `Attacks on the ground: ${r.hazards.filter((h) => h.source === "attack").slice(0, 4).map((h) => `${h.shape} ${h.kind} ${Math.round(h.dist)} away to the ${h.dir}${h.landsIn === undefined ? "" : `, lands in ${h.landsIn}s`}`).join("; ") || "none"}.`,
-    ...(r.choice === undefined ? [] : [`Open ${r.choice.kind} choice: ${r.choice.options.map((o) => o.name).join(", ")}.`]),
-    `Enemies by direction (within 60 / within 150): ${r.sectors.map((x) => `${x.dir} ${x.enemiesNear}/${x.enemiesFar}`).join(", ")}.`,
-    `Health 30 seconds ago: ${healthHistory[0]?.hp ?? "unknown"}%.`,
-    `Level-up picks since the last consult: ${pickLog.splice(0).join("; ") || "none"}.`,
-  ].join("\n");
-}
+const pct = (part: number, whole: number) => Math.round((100 * part) / Math.max(1, whole));
+const near = (r: RunView) => r.sectors.reduce((n, s) => n + s.enemiesNear, 0);
 
 const GAME_RULES = [
-  "tibo.dog is a survivors-like game. Weapons fire on their own; the player only walks, dashes, and picks level-up upgrades and chest rewards.",
+  "tibo.dog is a survivors-like game. Weapons fire on their own; the player only walks, dashes, and picks level-up upgrades, chest rewards and shrine options.",
   "A base weapon at max level plus its catalyst (a passive or an item) evolves at the next chest; evolved weapons are much stronger. Two evolved weapons can sometimes fuse into a union.",
-  "A small local decision model plays every step. It only sees one line of advice from you, and a mark on level-up options whose exact names you list in want.",
+  "During a run, a small fast decision model plays in two personas. As the planner it reads strategy.md (the game knowledge) and the whole state before every decision, picks every level-up, chest and shrine option, and weighs every goal Tibo could take on next, one at a time: a chest to open, a shrine or other spot to charge, food to eat, xp gems to collect, a direction to explore, or a spell of evading. The highest-rated goal wins. As the action model it steers each step toward the goal, seeing only the goal and what each move costs over the next second.",
 ].join("\n");
+
+// ---- Run log -------------------------------------------------------------------------------
+// One CSV row per model call and per goal that starts or ends, with the player's state at that
+// moment, so a run can be read back decision by decision. The post-run review reads it.
+const LOG_DIR = option("log-dir", "/tmp/tibobit");
+// Numbers first and free text last, so a reader splitting on commas gets the numbers right.
+const LOG_COLUMNS = [
+  "time",
+  "seconds",
+  "wall",
+  "event",
+  "model",
+  "ms",
+  "hp",
+  "max_hp",
+  "hp_lost",
+  "level",
+  "xp_pct",
+  "gold",
+  "x",
+  "y",
+  "dash",
+  "enemies",
+  "enemies_near",
+  "goal",
+  "action",
+  "reason",
+  "detail",
+  "bosses",
+  "hurt_by",
+  "standing_on",
+  "underfoot",
+  "chests",
+  "food",
+  "pois",
+  "weapons",
+  "passives",
+  "items",
+  "options",
+] as const;
+type LogEvent = "plan" | "pick" | "move" | "goal" | "run_end";
+type LogRow = { event: LogEvent; model?: string; reason?: string; goal?: string; action?: string; options?: string; detail?: string; ms?: number };
+
+class RunLog {
+  /** Health at the previous row, for `hp_lost`. */
+  private hp: number | undefined;
+  constructor(readonly file: string) {
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, `${LOG_COLUMNS.join(",")}\n`);
+  }
+
+  write(r: RunView | undefined, row: LogRow) {
+    const p = r?.player;
+    const lost = p === undefined || this.hp === undefined ? "" : String(Math.max(0, Math.round(this.hp - p.hp)));
+    if (p !== undefined) this.hp = p.hp;
+    const at = (x: { dist: number; dir: string }) => `${Math.round(x.dist)} ${x.dir}`;
+    const state: Partial<Record<(typeof LOG_COLUMNS)[number], string | number>> =
+      r === undefined || p === undefined
+        ? {}
+        : {
+            time: clock(r.time),
+            seconds: r.time,
+            hp: Math.round(p.hp),
+            max_hp: Math.round(p.maxHp),
+            hp_lost: lost,
+            level: p.level,
+            xp_pct: pct(p.xp, p.xpNext),
+            gold: p.gold,
+            x: Math.round(p.x),
+            y: Math.round(p.y),
+            dash: p.dashCharges,
+            enemies: r.enemies.total,
+            enemies_near: near(r),
+            bosses: r.bosses.map((b) => `${b.name} ${at(b)} ${pct(b.hp, b.maxHp)}%`).join("; "),
+            hurt_by: Object.entries(p.hurtBy).map(([k, v]) => `${k} ${v}`).join("; "),
+            standing_on: spotLine(r) ?? "",
+            underfoot: r.hazards.filter((h) => h.inside).map((h) => h.kind).join("; "),
+            chests: r.pickups.chests.slice(0, 3).map(at).join("; "),
+            food: r.pickups.nearest.filter((x) => x.kind === "heal").slice(0, 2).map(at).join("; "),
+            pois: r.pois.filter((x) => x.chargeNeeded > 0).slice(0, 4).map((x) => `${x.name} ${at(x)}`).join("; "),
+            weapons: r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join("; "),
+            passives: r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join("; "),
+            items: r.loadout.items.map((i) => `${i.name} x${i.count}`).join("; "),
+          };
+    const values = { ...state, ...row, wall: new Date().toISOString().slice(11, 19) } as Record<string, string | number | undefined>;
+    appendFileSync(this.file, `${LOG_COLUMNS.map((c) => csvField(String(values[c] ?? ""))).join(",")}\n`);
+  }
+}
+
+/** The run log for the review, cut to fit: moves that cost nothing go first when it is long. */
+async function logForReview(file: string): Promise<string> {
+  const f = Bun.file(file);
+  if (!(await f.exists())) return "(no log: it was not found)";
+  const text = await f.text();
+  if (text.length <= REVIEW_LOG_CHARS) return text;
+  const lines = text.trimEnd().split("\n");
+  const header = (lines[0] ?? "").split(",");
+  const event = header.indexOf("event");
+  const lost = header.indexOf("hp_lost");
+  const kept = lines.filter((l, i) => {
+    const cells = l.split(",");
+    return i === 0 || cells[event] !== "move" || Number(cells[lost]) > 0;
+  });
+  const cut = kept.join("\n");
+  return cut.length <= REVIEW_LOG_CHARS ? `${cut}\n(moves that cost no health left out)` : `${cut.slice(0, REVIEW_LOG_CHARS)}\n(cut off at ${REVIEW_LOG_CHARS} characters)`;
+}
+const REVIEW_LOG_CHARS = 400_000;
 
 /** One line per finished run in gameplay/notes: how long it lasted and what it carried. */
 async function runHistory(): Promise<string> {
@@ -460,11 +510,14 @@ function weaponTable(rows: { time: number; held: number }[]): string {
     .join("; ");
 }
 
+type Moment = { time?: unknown; happened?: unknown; better?: unknown };
+
 /**
- * Asks the coach to review a finished run, rewrites strategy.md from its answer and files its
- * infrastructure suggestions. Returns the review paragraph.
+ * Asks the coach to review a finished run from its log, rewrites strategy.md from its answer and
+ * files its infrastructure suggestions. Returns the review: a paragraph and the moments that
+ * decided the run.
  */
-async function reviewRun(timeline: string, outcome: string, recent: string[], runId: string, endTime: string, experiment?: Experiment): Promise<string | undefined> {
+async function reviewRun(timeline: string, outcome: string, log: string, runId: string, endTime: string, experiment?: Experiment): Promise<string | undefined> {
   if (COACH === "none") return undefined;
   const experimentReply =
     experiment === undefined
@@ -474,11 +527,10 @@ async function reviewRun(timeline: string, outcome: string, recent: string[], ru
     "You coach a bot that plays tibo.dog, and a run just ended.",
     GAME_RULES,
     `Goal: survive 20 minutes on ${DIFFICULTY} in today's ${MODE === "daily" ? "Daily (the same seed every attempt today)" : "Open World"}.`,
-    "Current strategy file:",
+    "Current strategy file, the game knowledge the planner reads before every decision:",
     await readStrategy(),
     "Every finished run in this mode so far, longest first. Compare builds and timings across runs before trusting a lesson from one run:",
     await runHistory(),
-    "Every Build rule must agree with this history. A rule that refuses the weapons the longest runs held, or narrows the build below what those runs had, is wrong: rewrite it.",
     "The experiment list:",
     await readExperiments(),
     "Results of earlier experiment runs (CSV):",
@@ -486,15 +538,20 @@ async function reviewRun(timeline: string, outcome: string, recent: string[], ru
     experiment === undefined
       ? "This was a serious run that followed the strategy file."
       : `This was an experiment run, not a serious one: **${experiment.name}**. Hypothesis: ${experiment.hypothesis} Directive it played: ${experiment.directive} Judge the experiment on what it was testing, not on survival alone, and take into strategy.md only the parts that held up.`,
-    "This run's notes:",
+    "Picks this run:",
     timeline || "(none)",
     "Outcome:",
     outcome,
-    ...(recent.length === 0 ? [] : ["The last few situations the decision model saw:", recent.join("\n---\n")]),
+    "This run's log: one row per model call (plan: the planner chose the next goal; pick: the planner took a level-up, chest or shrine option; move: the action model chose a step because the way to the goal was costly), with the odds it gave each option, and one row per goal that started or ended, with the player's state at that moment. hp_lost is health lost since the row before.",
+    log,
+    "Go through the log: find the points that decided the run, good or bad, and what should have happened instead.",
+    "Then choose the experiment the next experiment run will play: the one that would teach the most now, untried ideas first, or a retry where a result was unclear. You may also invent one and add it to the list.",
     "Answer from these facts alone; do not browse, search or use tools.",
-    'Reply with only JSON: {"review": "a short paragraph: why the run ended, what worked, what to change", "strategy": "the full updated strategy.md in Markdown. Keep it generic advice for future runs (seed-specific facts only where the Daily repeats), keep its sections, stay under 70 lines, and add one dated line to Lessons", "infra": ["concrete suggestions to improve the data or controls the bot has"], "experiments": "the full updated experiments.md: keep its intro, add new ideas this run suggests, and under each idea record its status and what runs so far showed and why"' + experimentReply + "}",
+    'Reply with only JSON: {"review": "a short paragraph: why the run ended, what worked, what to change", "moments": [5 to 12 objects {"time": "m:ss", "happened": "what was decided and what came of it", "better": "what the planner or the action model should have done instead, or \\"right call\\" for a decision worth repeating"}], "strategy": "the full updated strategy.md in Markdown: the game knowledge the planner reads before every pick and every goal. The planner is a small model, so write short, plain rules it can apply directly, naming cards and spots exactly as the game does. Generalize from this run and the history into advice that holds across runs: which picks to make in which order, which goals to set in which phase of a run (chests, shrines, food, gems, exploring, evading) and which to avoid. Seed-specific facts only where the Daily repeats. Keep its sections, stay under 70 lines, and add one dated line to Lessons", "infra": ["concrete suggestions to improve the data or controls the bot has"], "experiments": "the full updated experiments.md: keep its intro, add new ideas this run suggests, and under each idea record its status and what runs so far showed and why", "next_experiment": {"name": "the experiment name exactly as in the list", "hypothesis": "one sentence: what you expect to happen and why", "directive": "the high-level strategy for that run in two to four short sentences, for the small planner model: what to pick, which goals to favour, and what to give up"}' +
+      experimentReply +
+      "}",
   ].join("\n\n");
-  const bubble = new PlannerBubble("Reviewing the run and rewriting the strategy…");
+  const bubble = new CoachBubble("Reviewing the run and rewriting the strategy…");
   const reply = await askCoach(prompt, REVIEW_TIMEOUT_MS, bubble);
   if (reply === undefined) return undefined;
   if (typeof reply.strategy === "string" && reply.strategy.trimStart().startsWith("# Strategy") && reply.strategy.length < 12_000) {
@@ -506,6 +563,11 @@ async function reviewRun(timeline: string, outcome: string, recent: string[], ru
     await Bun.write(EXPERIMENTS_FILE, `${reply.experiments.trim()}\n`);
     console.log("experiments.md updated");
   }
+  const next = reply.next_experiment as Partial<Experiment> | undefined;
+  if (typeof next?.name === "string" && typeof next.directive === "string") {
+    await Bun.write(NEXT_EXPERIMENT_FILE, `${JSON.stringify({ name: next.name, hypothesis: next.hypothesis ?? "", directive: next.directive }, null, 2)}\n`);
+    console.log(`next experiment: ${next.name}`);
+  }
   const result = reply.experiment as Record<string, unknown> | undefined;
   if (experiment !== undefined && result !== undefined) {
     const field = (k: string) => (typeof result[k] === "string" ? String(result[k]).replace(/\s+/g, " ") : "");
@@ -515,7 +577,9 @@ async function reviewRun(timeline: string, outcome: string, recent: string[], ru
   }
   if (typeof reply.review !== "string") return undefined;
   bubble.set({ text: reply.review });
-  return reply.review;
+  const moments = Array.isArray(reply.moments) ? (reply.moments as Moment[]) : [];
+  const lines = moments.filter((m) => typeof m.happened === "string").map((m) => `- **${String(m.time ?? "?")}** ${String(m.happened)} Better: ${String(m.better ?? "?")}`);
+  return lines.length === 0 ? reply.review : `${reply.review}\n\n### Moments\n\n${lines.join("\n")}`;
 }
 
 /** `--review <notes.md>`: review a finished run whose review never got written (the bot was stopped mid-review). */
@@ -531,124 +595,306 @@ async function reviewNotesFile(file: string) {
     name === undefined
       ? undefined
       : { name, hypothesis: experimentText.match(/Hypothesis: (.*)/)?.[1] ?? "", directive: experimentText.match(/Directive: (.*)/)?.[1] ?? "" };
-  const review = await reviewRun(section("Timeline"), outcome, [], path.basename(file, ".md"), time, experiment);
+  const logFile = text.match(/\| Log \| (.+?) \|/)?.[1] ?? "";
+  const review = await reviewRun(section("Timeline"), outcome, await logForReview(logFile), path.basename(file, ".md"), time, experiment);
   if (review === undefined) throw new Error("the coach gave no review");
   await Bun.write(file, text.replace(/## Review\n\n[\s\S]*$/, `## Review\n\n${review}\n`));
   console.log(`reviewed ${file}`);
 }
 
-class Coach {
-  private nextCheckpoint = 0;
-  private lastAsked = Number.NEGATIVE_INFINITY;
-  private sawBoss = false;
-  private lowHealth = false;
-  private critical = false;
-  private bleeding = false;
-  private bossClose = false;
-  private attack = false;
-  private evolved = 0;
-  calls = 0;
+// ---- What the game says about things -------------------------------------------------------
+// The planner reads the game's own description of every card it holds or is offered.
+type Book = Map<string, string>;
+let book: Book | undefined;
 
-  constructor(private notes: RunNotes) {}
-
-  /** The reason to consult the coach now, if there is one. */
-  private reason(r: RunView): string | undefined {
-    const evolved = r.loadout.weapons.filter((w) => w.max === 1).length;
-    const low = r.player.hp / r.player.maxHp < LOW_HEALTH;
-    const checkpoint = CHECKPOINTS[this.nextCheckpoint];
-    let why: string | undefined;
-    const attack = r.hazards.some((h) => h.source === "attack" && h.landsIn !== undefined && h.dist < 120);
-    const bossClose = r.bosses.some((b) => b.dist < 50);
-    const critical = r.player.hp / r.player.maxHp < 0.15;
-    const then = healthHistory[0];
-    const bleeding = then !== undefined && then.hp - (r.player.hp / r.player.maxHp) * 100 >= 33;
-    const cooled = r.time - this.lastAsked >= COACH_COOLDOWN;
-    // Emergencies may re-ask sooner, so a stale line cannot ride through a collapse.
-    const urgentCooled = r.time - this.lastAsked >= URGENT_COOLDOWN;
-    if (!this.sawBoss && r.bosses.length > 0) why = `a boss appeared: ${r.bosses[0]?.name}`;
-    else if (critical && !this.critical && urgentCooled) why = "health dropped below 15%";
-    else if (bleeding && !this.bleeding && urgentCooled) why = "health fell by a third within 30 seconds";
-    else if (bossClose && !this.bossClose && urgentCooled) why = "a boss came within 50 units";
-    else if (attack && !this.attack && urgentCooled) why = "a boss attack is telegraphed nearby";
-    else if (low && !this.lowHealth && cooled) why = "health dropped below half";
-    else if (evolved > this.evolved && r.time - this.lastAsked >= COACH_COOLDOWN) why = "a weapon evolved";
-    else if (checkpoint !== undefined && r.time >= checkpoint) why = `checkpoint at ${clock(checkpoint)}`;
-    this.sawBoss ||= r.bosses.length > 0;
-    this.lowHealth = low;
-    this.critical = critical;
-    this.bleeding = bleeding;
-    this.bossClose = bossClose;
-    this.attack = attack;
-    this.evolved = Math.max(this.evolved, evolved);
-    while (CHECKPOINTS[this.nextCheckpoint] !== undefined && r.time >= (CHECKPOINTS[this.nextCheckpoint] ?? 0)) this.nextCheckpoint++;
-    return why;
-  }
-
-  // Awaited while the game is paused, so a checkpoint always lands on the same tick.
-  async consult(r: RunView) {
-    const why = this.reason(r);
-    if (why === undefined || COACH === "none") return;
-    this.lastAsked = r.time;
-    this.calls++;
-    const bubble = new PlannerBubble(`Thinking: ${why}…`, r.time);
-    const prompt = [
-      "You coach a bot that plays tibo.dog.",
-      GAME_RULES,
-      `Goal: survive 20 minutes on ${DIFFICULTY} in today's ${MODE === "daily" ? "Daily (the same seed every attempt today)" : "Open World"}.`,
-      ...(this.notes.experiment === undefined
-        ? ["Strategy file, learned from earlier runs:", await readStrategy()]
-        : [
-            `This run is an experiment: **${this.notes.experiment.name}**. Hypothesis: ${this.notes.experiment.hypothesis}`,
-            `Play this directive for the whole run, even where the strategy file disagrees, so the experiment tests what it set out to: ${this.notes.experiment.directive}`,
-            "Strategy file, for background only:",
-            await readStrategy(),
-          ]),
-      "Finished runs in this mode, longest first:",
-      await runHistory(),
-      "Notes so far this run:",
-      this.notes.timeline.join("\n") || "(none yet)",
-      `You are asked now because ${why}. State now:`,
-      digest(r),
-      "Answer from these facts alone; do not browse, search or use tools.",
-      'Reply with only JSON: {"want": [up to 8 exact weapon, passive or item names, best first. This list is binding: whenever a level-up offers any name on it, only those can be taken, so include the weapons to keep levelling as well as the passives you want], "otherwise": "reroll" or "choose": what a level-up that offers nothing on want does. reroll spends a reroll (or skips) instead of filling a slot with an unplanned card; choose lets the decision model pick the strongest card", "advice": "one short sentence for the decision model about the next minute or two; it stays in force for 90 seconds, so never name a compass direction or a countdown", "note": "one or two sentences for the run notes: what is happening and what to watch", "infra": "one concrete suggestion to improve the data or controls the bot has, or an empty string"}',
-    ].join("\n\n");
-    const reply = await askCoach(prompt, CONSULT_TIMEOUT_MS, bubble);
-    if (reply === undefined) return;
-    if (Array.isArray(reply.want) && typeof reply.advice === "string")
-      plan = { want: reply.want.map(String), otherwise: reply.otherwise === "reroll" ? "reroll" : "choose", advice: reply.advice, at: r.time };
-    const note = typeof reply.note === "string" ? reply.note : "";
-    this.notes.timeline.push(`- **${clock(r.time)}** (${why}) ${note}${plan === undefined ? "" : ` Advice: ${plan.advice} Want: ${plan.want.join(", ")}.`}`);
-    await this.notes.write();
-    if (typeof reply.infra === "string" && this.notes.saved) await infraFeedback(this.notes.id, clock(r.time), reply.infra);
-    console.log(`coach ${clock(r.time)} (${why}): ${note}`);
-    bubble.set({
-      text: plan === undefined ? note || "(no plan)" : plan.advice,
-      detail: [`Asked because ${why}.`, note, plan === undefined ? "" : `Want: ${plan.want.join(", ")}${plan.otherwise === "reroll" ? "; reroll anything else" : ""}`].filter(Boolean).join("\n"),
-    });
-  }
-
-  async review(lastRun: NonNullable<Snapshot["lastRun"]>, last: RunView | undefined, recent: string[]) {
-    if (!this.notes.saved) return;
-    const damage = Object.entries(lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ");
-    this.notes.outcome = [
-      `- Survived **${clock(lastRun.time)}** (${lastRun.time}s), level ${lastRun.level}, ${lastRun.kills} kills.`,
-      `- Damage taken by source: ${damage || "none recorded"}.`,
-      ...(last === undefined
-        ? []
-        : [
-            `- Final weapons: ${last.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ")}.`,
-            `- Final passives: ${last.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ")}.`,
-          ]),
-      `- Coach consulted ${this.calls} times.`,
-    ].join("\n");
-    await this.notes.write();
-    const review = await reviewRun(this.notes.timeline.join("\n"), this.notes.outcome, recent, this.notes.id, clock(lastRun.time), this.notes.experiment);
-    if (review === undefined) return;
-    this.notes.review = review;
-    await this.notes.write();
+async function readBook(): Promise<Book> {
+  if (book !== undefined) return book;
+  try {
+    const e = await api<Encyclopedia>("/encyclopedia");
+    const out: Book = new Map();
+    for (const [kind, defs] of [
+      ["weapon", e.weapons],
+      ["passive", e.passives],
+      ["item", e.items],
+    ] as const)
+      for (const d of defs as { id?: string; description?: string }[]) if (d.id !== undefined && d.description !== undefined) out.set(`${kind}:${d.id}`, d.description);
+    book = out;
+    return out;
+  } catch (e) {
+    // Asked again next time: the page sends the encyclopedia a moment after it connects.
+    console.error("no encyclopedia yet:", e instanceof Error ? e.message : e);
+    return new Map();
   }
 }
 
+const said = (b: Book, kind: string, id: string) => {
+  const d = b.get(`${kind}:${id}`);
+  return d === undefined ? "" : `: ${d.replace(/\s+/g, " ").trim()}`;
+};
+
+// ---- Goals ---------------------------------------------------------------------------------
+// The planner sets goals, things to collect or places to explore for, by the ids it is shown.
+// The page walks Tibo to the goal on its own while the way there costs no more than the safest
+// move, by the game's own forecast. When it costs more, the action model picks the step, told
+// only the goal and what each move costs. A goal ends when it is used up, reached, stuck or late.
+type Goal = { kind: "chest" | "poi" | "food"; uid: number } | { kind: "explore"; dir: Direction } | { kind: "gems" } | { kind: "evade" };
+type TargetGoal = Extract<Goal, { uid: number }>;
+type Pursuit = {
+  goal: Goal;
+  id: string;
+  title: string;
+  since: number;
+  deadline: number;
+  /** The least work left so far (distance, plus seconds of charging as distance) and when. */
+  best: { left: number; time: number };
+  origin: { x: number; y: number };
+  /** Chests listed before the goal began; exploring ends on any other. */
+  known: Set<string>;
+  /** A target is only "used up" once it was seen: one missing from the start was never there. */
+  seen: boolean;
+  commandId?: number;
+  /** The command now steering it, to send it again only when it changes or ends. */
+  sent?: string;
+};
+/** Where a goal points now. `heading` is absent while evading, which always asks the action model. */
+type Aim = { heading?: Direction | "stay"; left?: number; progress: string; to?: { pickup: number } | { poi: number } };
+type Ended = { done: string; success: boolean };
+type Outcome = { time: number; id: string; title: string; outcome: string; success: boolean };
+
+const GOAL_SPEED = 45;
+const GOAL_SLACK = 10;
+const GOAL_STUCK_SECONDS = 6;
+const EXPLORE_DISTANCE = 300;
+const GEMS_SECONDS = 12;
+const EVADE_SECONDS = 8;
+const PLAN_RANGE = 600;
+const ON_CHEST = 14;
+// A target given up on is marked for the planner and skipped by the bot's own goals for a while: a
+// Potato Crate charges nothing without the gold for it.
+const GIVE_UP_SECONDS = 45;
+// A lockstep goal step ends by timing out, and food collected on touch ends as "gone" before the
+// goto counts it as reached; the next step's look at the target tells which it was.
+const STEP_OVER = new Set(["timeout", "the target is gone"]);
+
+let pursuit: Pursuit | undefined;
+const outcomes: Outcome[] = [];
+const giveUps = new Map<string, number>();
+// Every chest listed so far this run; exploring ends on one never listed before. Spots are not
+// counted: the map is dense with them, and exploring stopped every second or two on a new one.
+const everListed = new Set<string>();
+
+function resetGoals() {
+  pursuit = undefined;
+  outcomes.length = 0;
+  giveUps.clear();
+  everListed.clear();
+}
+
+function goalId(g: Goal): string {
+  switch (g.kind) {
+    case "chest":
+      return `C${g.uid}`;
+    case "poi":
+      return `P${g.uid}`;
+    case "food":
+      return `F${g.uid}`;
+    case "explore":
+      return `explore ${g.dir}`;
+    default:
+      return g.kind;
+  }
+}
+
+const TARGET_KINDS = { C: "chest", P: "poi", F: "food" } as const;
+
+function parseGoal(text: string): Goal | undefined {
+  const id = text.trim();
+  const target = id.match(/^([CPF])(\d+)$/i);
+  if (target !== null) return { kind: TARGET_KINDS[(target[1] ?? "C").toUpperCase() as keyof typeof TARGET_KINDS], uid: Number(target[2]) };
+  const dir = id.match(/^explore\s+(.+)$/i)?.[1]?.toLowerCase();
+  if (dir !== undefined) return (DIRECTIONS as readonly string[]).includes(dir) ? { kind: "explore", dir: dir as Direction } : undefined;
+  return id === "gems" || id === "evade" ? { kind: id } : undefined;
+}
+
+const onChest = (c: RunView["pickups"]["chests"][number]) => c.dist <= ON_CHEST;
+// The name alone hides what a spot does: standing in a Beetle Nest wakes an elite.
+const poiWhat = (p: RunView["pois"][number]) => (p.description === "" ? "" : ` (${p.description.replace(/\.$/, "").replace(/\. /g, "; ").toLowerCase()})`);
+
+/** Where Tibo stands, as "on a chest, 1 of 3 seconds into opening it", or undefined when on nothing. */
+function spotLine(r: RunView): string | undefined {
+  const chest = r.pickups.chests.find(onChest);
+  if (chest !== undefined) return `on a chest, ${chest.charge ?? 0} of ${chest.chargeNeeded ?? 1} seconds into opening it`;
+  const inside = r.pois.find((p) => p.inside);
+  if (inside === undefined) return undefined;
+  return `inside the ${inside.name}${poiWhat(inside)}${inside.chargeNeeded > 0 ? `, charged ${inside.charge} of ${inside.chargeNeeded} seconds` : ""}`;
+}
+
+type Located = { dist: number; dir: Direction; arrived: boolean; charging: number; progress: string; name: string };
+
+function locate(r: RunView, g: TargetGoal): Located | undefined {
+  if (g.kind === "poi") {
+    const p = r.pois.find((x) => x.uid === g.uid);
+    return p === undefined ? undefined : { dist: p.dist, dir: p.dir, arrived: p.inside, charging: p.chargeNeeded - p.charge, progress: `${p.charge} of ${p.chargeNeeded}s charged`, name: `the ${p.name}` };
+  }
+  if (g.kind === "chest") {
+    const c = r.pickups.chests.find((x) => x.uid === g.uid);
+    return c === undefined
+      ? undefined
+      : { dist: c.dist, dir: c.dir, arrived: onChest(c), charging: (c.chargeNeeded ?? 1) - (c.charge ?? 0), progress: `${c.charge ?? 0} of ${c.chargeNeeded ?? 1}s opened`, name: "the chest" };
+  }
+  const f = r.pickups.nearest.find((x) => x.uid === g.uid);
+  return f === undefined ? undefined : { dist: f.dist, dir: f.dir, arrived: false, charging: 0, progress: "", name: "the food" };
+}
+
+const TARGET_DONE = { chest: "opened", poi: "charged and used", food: "eaten" } as const;
+
+function goalTitle(g: Goal, r: RunView): string {
+  switch (g.kind) {
+    case "chest":
+      return "Open the chest";
+    case "poi":
+      return `Charge the ${r.pois.find((p) => p.uid === g.uid)?.name ?? "spot"}`;
+    case "food":
+      return "Eat the food";
+    case "explore":
+      return `Explore ${g.dir}`;
+    case "gems":
+      return "Collect xp gems";
+    case "evade":
+      return "Keep away from enemies";
+  }
+}
+
+
+function aimAt(p: Pursuit, r: RunView): Aim | Ended {
+  const g = p.goal;
+  const age = r.time - p.since;
+  switch (g.kind) {
+    case "chest":
+    case "poi":
+    case "food": {
+      const t = locate(r, g);
+      if (t === undefined) return p.seen ? { done: TARGET_DONE[g.kind], success: true } : { done: "it is not there", success: false };
+      p.seen = true;
+      return { heading: t.arrived ? "stay" : t.dir, left: t.dist + t.charging * GOAL_SPEED, progress: t.arrived ? t.progress : `${Math.round(t.dist)} away to the ${t.dir}`, to: g.kind === "poi" ? { poi: g.uid } : { pickup: g.uid } };
+    }
+    case "explore": {
+      const found = r.pickups.chests.find((c) => !p.known.has(`C${c.uid}`) && c.dist < PLAN_RANGE);
+      if (found !== undefined) return { done: `found a chest ${Math.round(found.dist)} away to the ${found.dir}`, success: true };
+      const walked = Math.hypot(r.player.x - p.origin.x, r.player.y - p.origin.y);
+      if (walked >= EXPLORE_DISTANCE) return { done: `walked ${EXPLORE_DISTANCE} units and found nothing new`, success: true };
+      return { heading: g.dir, left: EXPLORE_DISTANCE - walked, progress: `${Math.round(walked)} of ${EXPLORE_DISTANCE} walked` };
+    }
+    case "gems": {
+      const best = [...r.sectors].sort((a, b) => b.xpNear - a.xpNear)[0];
+      if (best === undefined || best.xpNear === 0) return { done: "no gems left nearby", success: true };
+      if (age >= GEMS_SECONDS) return { done: `collected for ${GEMS_SECONDS} seconds`, success: true };
+      return { heading: best.dir, progress: `${best.xpNear} gems to the ${best.dir}` };
+    }
+    case "evade":
+      if (age >= EVADE_SECONDS) return { done: `kept clear for ${EVADE_SECONDS} seconds`, success: true };
+      return { progress: `${Math.ceil(EVADE_SECONDS - age)}s left` };
+  }
+}
+
+function begin(goal: Goal, r: RunView, log: RunLog) {
+  const title = goalTitle(goal, r);
+  const p: Pursuit = {
+    goal,
+    id: goalId(goal),
+    title,
+    since: r.time,
+    deadline: r.time,
+    best: { left: Number.POSITIVE_INFINITY, time: r.time },
+    origin: { x: r.player.x, y: r.player.y },
+    known: new Set(everListed),
+    seen: false,
+  };
+  const aim = aimAt(p, r);
+  const seconds = goal.kind === "gems" ? GEMS_SECONDS : goal.kind === "evade" ? EVADE_SECONDS : "left" in aim && aim.left !== undefined ? aim.left / GOAL_SPEED : 0;
+  p.deadline = r.time + seconds + GOAL_SLACK;
+  pursuit = p;
+  log.write(r, { event: "goal", goal: p.id, action: "start", detail: title });
+  say({ role: "action", model: "goal", time: r.time, text: title, detail: "done" in aim ? aim.done : aim.progress });
+}
+
+/** `dropped`: the planner chose another goal before this one ended. */
+type Result = "done" | "failed" | "dropped";
+const RESULT_WORDS: Record<Result, string> = { done: "done", failed: "gave up", dropped: "dropped" };
+
+function finish(r: RunView, log: RunLog, outcome: string, result: Result) {
+  const p = pursuit;
+  if (p === undefined) return;
+  pursuit = undefined;
+  outcomes.push({ time: r.time, id: p.id, title: p.title, outcome, success: result !== "failed" });
+  if (outcomes.length > 30) outcomes.shift();
+  if (result === "failed" && "uid" in p.goal) giveUps.set(p.id, r.time + GIVE_UP_SECONDS);
+  log.write(r, { event: "goal", goal: p.id, action: result, detail: outcome });
+  say({ role: "action", model: "goal", time: r.time, text: `${p.title}: ${RESULT_WORDS[result]}`, detail: `${outcome} · ${Math.round(r.time - p.since)}s` });
+}
+
+/** The planner's goal takes over, unless it is the one already under way. */
+function setGoal(goal: Goal, r: RunView, log: RunLog) {
+  if (pursuit?.id === goalId(goal)) return;
+  if (pursuit !== undefined) finish(r, log, "the planner chose another goal", "dropped");
+  begin(goal, r, log);
+}
+
+/** Why the current goal ends now, if it does. */
+function ending(p: Pursuit, r: RunView, aim: Aim | Ended, status: CommandStatus | undefined): Ended | undefined {
+  if ("done" in aim) return aim;
+  if (status?.command.type === "goto" && status.state === "done") return { done: TARGET_DONE[(p.goal as TargetGoal).kind], success: true };
+  if (status?.state === "failed" && !STEP_OVER.has(status.detail ?? "")) return { done: `the game said: ${status.detail ?? "failed"}`, success: false };
+  if (r.time > p.deadline) return { done: `still not done after ${Math.round(r.time - p.since)} seconds`, success: false };
+  if (aim.left === undefined) return undefined;
+  if (aim.left < p.best.left - 1) p.best = { left: aim.left, time: r.time };
+  else if (r.time - p.best.time > GOAL_STUCK_SECONDS)
+    return { done: aim.heading === "stay" ? `standing there did nothing for ${GOAL_STUCK_SECONDS} seconds (it may cost gold Tibo lacks)` : `no closer for ${GOAL_STUCK_SECONDS} seconds`, success: false };
+  return undefined;
+}
+
+/** One step toward the current goal: walk on while it is safe, else ask the action model. */
+async function pursue(s: Snap, r: RunView, log: RunLog, planner: Planner) {
+  for (const c of r.pickups.chests) everListed.add(`C${c.uid}`);
+  for (let starts = 0; ; starts++) {
+    if (pursuit === undefined) await planner.plan(r, outcomes.length === 0 ? "the run started" : "the last goal ended");
+    const p = pursuit as Pursuit | undefined;
+    if (p === undefined) throw new Error("the planner set no goal");
+    const status = p.commandId === undefined ? undefined : s.commands.find((c) => c.id === p.commandId);
+    const aim = aimAt(p, r);
+    const ended = ending(p, r, aim, status);
+    if (ended !== undefined && starts < 3) {
+      finish(r, log, ended.done, ended.success ? "done" : "failed");
+      continue;
+    }
+    if ("done" in aim) return;
+    const cost = aim.heading === undefined ? undefined : moveCost(r, aim.heading);
+    const cheapest = cheapestMove(r);
+    const clear = aim.heading !== undefined && (cost === undefined || cheapest === undefined || cost <= cheapest + AFFORDABLE_EXTRA_DAMAGE);
+    if (clear) return walkOn(p, r, aim, status, log);
+    p.sent = undefined;
+    return steer(r, p, aim, log);
+  }
+}
+
+async function walkOn(p: Pursuit, r: RunView, aim: Aim, status: CommandStatus | undefined, log: RunLog) {
+  const order = aim.to !== undefined ? { type: "goto", to: aim.to, stay: "done" } : { type: "move", dir: aim.heading };
+  if (playingLive) {
+    // Live, one command steers until the goal changes; it is only sent again if it changes or ends.
+    const key = JSON.stringify(order);
+    if (p.sent === key && (status === undefined || status.state === "running")) return;
+    p.commandId = (await send(order.type === "goto" ? { ...order, timeout: Math.max(1, p.deadline - r.time) } : order)).id;
+    p.sent = key;
+    return;
+  }
+  // Lockstep walks a step at a time, so the forecast is checked between steps.
+  const result = await command(order.type === "goto" ? { ...order, timeout: pace.actEvery, pause: true } : { ...order, seconds: pace.actEvery, pause: true });
+  p.commandId = result.id;
+  const ended = ending(p, r, aim, result);
+  if (ended !== undefined) finish(r, log, ended.done, ended.success ? "done" : "failed");
+}
+
+// ---- Action model --------------------------------------------------------------------------
 const plural = (n: number, one: string) => `${n} ${n === 1 ? one : one.replace(/y$/, "ie")}${n === 1 ? "" : "s"}`;
 
 function sourceWords(source: string): string {
@@ -659,68 +905,17 @@ function sourceWords(source: string): string {
   return hazardWords(source);
 }
 
-// Health samples by game time, to tell the model whether it is bleeding.
+// Health samples by game time, to tell the planner whether Tibo is bleeding.
 const healthHistory: { time: number; hp: number }[] = [];
 
-function healthTrend(r: RunView): string[] {
-  const pct = Math.round((r.player.hp / r.player.maxHp) * 100);
+function healthTrend(r: RunView): string {
+  const now = pct(r.player.hp, r.player.maxHp);
   if (healthHistory.length > 0 && (healthHistory.at(-1)?.time ?? 0) > r.time) healthHistory.length = 0;
-  healthHistory.push({ time: r.time, hp: pct });
+  healthHistory.push({ time: r.time, hp: now });
   while (healthHistory.length > 1 && (healthHistory[1]?.time ?? 0) <= r.time - 30) healthHistory.shift();
   const then = healthHistory[0];
-  if (then === undefined || r.time - then.time < 20 || Math.abs(then.hp - pct) < 10) return [];
-  return [`Health went from ${then.hp}% to ${pct}% over the last ${Math.round(r.time - then.time)} seconds.`];
-}
-
-// A complete recipe evolves at the next chest, which makes the nearest chest worth the walk.
-function readyLine(r: RunView): string[] {
-  const ready = r.combos.filter((c) => c.ready && c.kind !== "union").map((c) => c.name);
-  if (ready.length === 0) return [];
-  const chest = r.pickups.chests[0];
-  return [`The next chest evolves ${ready.join(" and ")}; ${chest === undefined ? "no chest is in sight" : `the nearest chest is ${Math.round(chest.dist)} away to the ${chest.dir}`}.`];
-}
-
-function hurtLine(r: RunView): string[] {
-  const sources = Object.entries(r.player.hurtBy).sort((a, b) => b[1] - a[1]).slice(0, 2);
-  return sources.length === 0 ? [] : [`In the last 3 seconds Tibo was hurt by ${sources.map(([k]) => sourceWords(k)).join(" and ")}.`];
-}
-
-function situation(r: RunView): string {
-  const p = r.player;
-  const hp = Math.round((p.hp / p.maxHp) * 100);
-  const near = r.sectors.reduce((n, s) => n + s.enemiesNear, 0);
-  return [
-    `Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only chooses where to walk.`,
-    `Time ${Math.floor(r.time / 60)}:${String(Math.floor(r.time % 60)).padStart(2, "0")}. Health ${hp}%${hp < 40 ? ", which is low" : ""}. Level ${p.level}. ${plural(near, "enemy")} within 60 units, ${plural(r.enemies.total, "enemy")} around.`,
-    ...(r.bosses.length > 0 ? [`Boss ${r.bosses[0]?.name} is ${Math.round(r.bosses[0]?.dist ?? 0)} units away to the ${r.bosses[0]?.dir}.`] : []),
-    ...r.hazards
-      .filter((h) => h.inside)
-      .slice(0, 1)
-      .map((h) =>
-        h.landsIn === undefined
-          ? `Tibo is standing in ${hazardWords(h.kind)}.`
-          : `Tibo is standing where a boss attack lands in ${h.landsIn.toFixed(1)} seconds, and must step out of it.`,
-      ),
-    `Weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}. Passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
-    ...(spotLine(r) === undefined ? [] : [`Tibo stands ${spotLine(r)}.`]),
-    ...errandNews(r),
-    ...hurtLine(r),
-    ...healthTrend(r),
-    ...readyLine(r),
-    ...(plan === undefined || r.time - plan.at > ADVICE_SECONDS ? [] : [`Plan: ${plan.advice}`]),
-  ].join("\n");
-}
-
-// The name alone hides what a spot does: standing in a Beetle Nest wakes an elite.
-const poiWhat = (p: RunView["pois"][number]) => (p.description === "" ? "" : ` (${p.description.replace(/\.$/, "").replace(/\. /g, "; ").toLowerCase()})`);
-
-function sights(r: RunView, dir: Direction): string[] {
-  const out: string[] = [];
-  for (const c of r.pickups.chests) if (c.dir === dir && c.dist < 300) out.push(`a chest ${Math.round(c.dist)} away`);
-  for (const p of r.pickups.nearest)
-    if (p.dir === dir && p.dist < 200 && p.kind !== "gold") out.push(p.kind === "heal" ? `food that heals Tibo ${Math.round(p.dist)} away` : `a ${p.kind} pickup ${Math.round(p.dist)} away`);
-  for (const p of r.pois) if (p.dir === dir && p.dist < 300 && p.chargeNeeded > 0) out.push(`a ${p.name} ${Math.round(p.dist)} away${poiWhat(p)}`);
-  return out.slice(0, 2);
+  if (then === undefined || r.time - then.time < 20 || Math.abs(then.hp - now) < 10) return "";
+  return `, ${then.hp > now ? "down" : "up"} from ${then.hp}% ${Math.round(r.time - then.time)} seconds ago`;
 }
 
 const HAZARD_WORDS: Record<string, string> = {
@@ -731,14 +926,6 @@ const HAZARD_WORDS: Record<string, string> = {
   chill: "an icy patch that slows Tibo",
 };
 const hazardWords = (kind: string) => HAZARD_WORDS[kind] ?? `a ${kind} patch that hurts Tibo`;
-
-// The direction opposite the nearest boss, or one step either side of it.
-function awayFromBoss(r: RunView, dir: Direction): string | undefined {
-  const boss = r.bosses[0];
-  if (boss === undefined || boss.dist > 300) return undefined;
-  const offset = (DIRECTIONS.indexOf(dir) - DIRECTIONS.indexOf(boss.dir) + 8) % 8;
-  return offset >= 3 && offset <= 5 ? `away from the ${boss.name} boss` : undefined;
-}
 
 // Words, not percentages: on 50 replayed states Laya picked a move within 2% of the least
 // damaging one 90% of the time with these words, 80% with "would lose N%", and 38% when the
@@ -759,154 +946,42 @@ function outlook(r: RunView, f: ForecastView): string {
     .join(" and ")}`;
 }
 
-// Threats come first: the models weigh the start of a description most.
-function describe(r: RunView, s: SectorView): string {
+function bearing(dir: Direction, goal: Direction | "stay" | undefined): string {
+  if (goal === undefined) return "";
+  if (goal === "stay") return "off the spot Tibo is holding for its goal";
+  const i = DIRECTIONS.indexOf(dir);
+  const j = DIRECTIONS.indexOf(goal);
+  const off = Math.min((i - j + 8) % 8, (j - i + 8) % 8);
+  return off === 0 ? "straight toward the goal" : off === 1 ? "roughly toward the goal" : off === 2 ? "sideways to the goal" : "away from the goal";
+}
+
+// Only what the next steps need: the forecast first (the models weigh the start of a description
+// most), then what it cannot see, and where the goal lies.
+function describe(r: RunView, s: SectorView, goal: Direction | "stay" | undefined): string {
   const boss = r.bosses.find((b) => b.dir === s.dir);
-  // The sim forecast is exact, so it replaces the rough bullet and contact guesses when present.
-  const parts = [
+  return [
     s.forecast === undefined ? "" : outlook(r, s.forecast),
     boss !== undefined && boss.dist < 250 ? `toward the ${boss.name} boss only ${Math.round(boss.dist)} away, which hurts Tibo on contact` : "",
-    s.forecast !== undefined ? "" : s.bulletHits > 0 ? `${plural(s.bulletHits, "enemy bullet")} would hit Tibo` : s.bulletsNear > 0 ? "enemy bullets nearby but none on course to hit" : "",
+    s.forecast !== undefined ? "" : s.bulletHits > 0 ? `${plural(s.bulletHits, "enemy bullet")} would hit Tibo` : "",
     s.forecast !== undefined ? "" : s.enemyTouches > 0 ? `${plural(s.enemyTouches, "enemy")} would bump into Tibo and hurt it` : "",
-    awayFromBoss(r, s.dir) ?? "",
     s.hazard !== null ? `into ${hazardWords(s.hazard)}` : "",
     s.leavesHazard ? "out of the danger Tibo stands in" : "",
-    r.hazards.some((h) => h.inside && h.source === "attack") && s.clearOfAttacks ? "clear of every boss attack" : "",
     s.enemiesNear > 0 ? `${plural(s.enemiesNear, "enemy")} close` : "no enemies close",
-    s.enemiesFar > s.enemiesNear ? `${s.enemiesFar - s.enemiesNear} more further out` : "",
-    ...sights(r, s.dir),
-    s.xpNear >= 3 ? `${s.xpNear} xp gems to collect` : "",
-  ];
-  return parts.filter(Boolean).join(", ");
+    bearing(s.dir, goal),
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
-// Chests and shrines only open after Tibo stands on them for a moment, so standing still says so.
 // "Stand still" must carry the threats around Tibo too, or it reads as the safest move in a swarm.
-function standing(r: RunView): string {
-  const near = r.sectors.reduce((n, x) => n + x.enemiesNear, 0);
-  const crowd = near > 0 ? ` with ${plural(near, "enemy")} within 60 units closing in` : "";
+function standing(r: RunView, goal: Direction | "stay" | undefined): string {
+  const crowd = near(r) > 0 ? ` with ${plural(near(r), "enemy")} within 60 units closing in` : "";
   const forecast = r.standingForecast === undefined ? "" : `, where ${outlook(r, r.standingForecast).replace(/^Tibo /, "it ")}`;
-  const touches = r.standingForecast === undefined && r.standingEnemyTouches > 0 ? `, where ${plural(r.standingEnemyTouches, "enemy")} would bump into Tibo and hurt it` : "";
-  const hits = r.standingForecast === undefined && r.standingBulletHits > 0 ? `, where ${plural(r.standingBulletHits, "enemy bullet")} would hit Tibo` : "";
   const under = r.hazards.find((h) => h.inside);
   const inAttack = under === undefined ? "" : under.landsIn === undefined ? `, staying in ${hazardWords(under.kind)}` : `, staying where a boss attack lands in ${under.landsIn.toFixed(1)} seconds`;
-  return `${standingSpot(r)}${crowd}${forecast}${touches}${hits}${inAttack}`;
-}
-
-function standingSpot(r: RunView): string {
   const spot = spotLine(r);
-  return spot === undefined ? "stand still" : `stand still ${spot}`;
-}
-
-const onChest = (c: RunView["pickups"]["chests"][number]) => c.dist <= ON_CHEST;
-const ON_CHEST = 14;
-
-/** Where Tibo stands, as "on a chest, 1 of 3 seconds into opening it", or undefined when on nothing. */
-function spotLine(r: RunView): string | undefined {
-  const chest = r.pickups.chests.find(onChest);
-  if (chest !== undefined) return `on a chest, ${chest.charge ?? 0} of ${chest.chargeNeeded ?? 1} seconds into opening it`;
-  const inside = r.pois.find((p) => p.inside);
-  if (inside === undefined) return undefined;
-  return `inside the ${inside.name}${poiWhat(inside)}${inside.chargeNeeded > 0 ? `, charged ${inside.charge} of ${inside.chargeNeeded} seconds` : ""}`;
-}
-
-// ---- Errands -------------------------------------------------------------------------------
-// Walking to a chest and standing on it takes a dozen single steps, and asking the decision model
-// each time is slow and jittery. An errand is one choice ("go to chest 1") that the page then
-// steers on its own, at the game's 60 ticks a second, until the target is used up. No model is
-// asked meanwhile. The bot still checks every step that the way on costs no more than the safest
-// move, by the same forecast that rules out single moves, and drops the errand when it does.
-type ErrandTarget = { pickup: number } | { poi: number };
-type Errand = {
-  key: string;
-  /** Short, for the chat: "Go to chest 1". */
-  title: string;
-  /** For the model: where it is, what Tibo does there, and what it is for. */
-  text: string;
-  to: ErrandTarget;
-  /** The heading of its first second, which the forecast prices. */
-  heading: Direction | "stay";
-  done: string;
-};
-/** `best` is the least work left so far (distance, plus charging seconds as walking distance) and when. */
-type Running = Errand & { since: number; deadline: number; best: { left: number; time: number }; line: ChatLine; commandId?: number };
-/** `charging` is the seconds of standing still left once there. */
-type Located = { dist: number; dir: Direction; arrived: boolean; charging: number; progress: string };
-
-const ERRAND_RANGE = 400;
-const FOOD_RANGE = 300;
-const FOOD_BELOW = 0.7;
-// Tibo walks about 62 units a second; an errand that takes far longer than the walk is stuck.
-const ERRAND_SPEED = 45;
-const ERRAND_SLACK = 8;
-const ERRAND_STUCK_SECONDS = 4;
-// An outcome stays in the model's situation this long, so the next move knows what just happened.
-const ERRAND_NEWS_SECONDS = 6;
-// A target an errand gave up on is not offered again for a while: a Potato Crate charges nothing
-// without the gold for it, and the model walked back into one every ten seconds.
-const ERRAND_RETRY_SECONDS = 45;
-const giveUps = new Map<string, number>();
-const targetId = (to: ErrandTarget) => ("poi" in to ? `poi:${to.poi}` : `pickup:${to.pickup}`);
-const workLeft = (at: Located) => at.dist + at.charging * ERRAND_SPEED;
-
-// A lockstep errand step ends by timing out, and a pickup collected on touch ends as "gone"
-// before the goto counts it as reached; the next step's look at the target tells which it was.
-const STEP_OVER = new Set(["timeout", "the target is gone"]);
-
-let errand: Running | undefined;
-let lastErrand: { text: string; time: number } | undefined;
-
-function errands(r: RunView): Errand[] {
-  return candidateErrands(r).filter((e) => (giveUps.get(targetId(e.to)) ?? Number.NEGATIVE_INFINITY) <= r.time);
-}
-
-function candidateErrands(r: RunView): Errand[] {
-  const out: Errand[] = [];
-  r.pickups.chests
-    .filter((c) => c.dist < ERRAND_RANGE)
-    .slice(0, 2)
-    .forEach((c, i) => {
-      const name = `chest ${i + 1}`;
-      const left = `${c.charge ?? 0} of ${c.chargeNeeded ?? 1} seconds done`;
-      out.push(
-        onChest(c)
-          ? { key: `chest${i + 1}`, title: `Stand on ${name}`, text: `stay on ${name}, which Tibo stands on, until it opens (${left})`, to: { pickup: c.uid }, heading: "stay", done: `Opened ${name}` }
-          : { key: `chest${i + 1}`, title: `Go to ${name}`, text: `walk to ${name}, ${Math.round(c.dist)} away to the ${c.dir}, and stand on it until it opens`, to: { pickup: c.uid }, heading: c.dir, done: `Opened ${name}` },
-      );
-    });
-  r.pois
-    .filter((p) => p.chargeNeeded > 0 && p.dist < ERRAND_RANGE)
-    .slice(0, 2)
-    .forEach((p, i) => {
-      const what = poiWhat(p);
-      out.push(
-        p.inside
-          ? { key: `spot${i + 1}`, title: `Stand in the ${p.name}`, text: `stay inside the ${p.name}${what} until it is charged (${p.charge} of ${p.chargeNeeded} seconds)`, to: { poi: p.uid }, heading: "stay", done: `Charged the ${p.name}` }
-          : { key: `spot${i + 1}`, title: `Go to the ${p.name}`, text: `walk to the ${p.name}${what}, ${Math.round(p.dist)} away to the ${p.dir}, and stand in it for ${p.chargeNeeded} seconds`, to: { poi: p.uid }, heading: p.dir, done: `Charged the ${p.name}` },
-      );
-    });
-  const food = r.pickups.nearest.find((x) => x.kind === "heal" && x.dist < FOOD_RANGE);
-  if (food !== undefined && r.player.hp / r.player.maxHp < FOOD_BELOW)
-    out.push({ key: "food", title: "Go to the food", text: `walk to the food ${Math.round(food.dist)} away to the ${food.dir}, which heals Tibo`, to: { pickup: food.uid }, heading: food.dir, done: "Ate the food" });
-  return out;
-}
-
-function locate(r: RunView, to: ErrandTarget): Located | undefined {
-  if ("poi" in to) {
-    const p = r.pois.find((x) => x.uid === to.poi);
-    return p === undefined ? undefined : { dist: p.dist, dir: p.dir, arrived: p.inside, charging: p.chargeNeeded - p.charge, progress: `${p.charge} of ${p.chargeNeeded}s charged` };
-  }
-  const chest = r.pickups.chests.find((x) => x.uid === to.pickup);
-  if (chest !== undefined)
-    return { dist: chest.dist, dir: chest.dir, arrived: onChest(chest), charging: (chest.chargeNeeded ?? 1) - (chest.charge ?? 0), progress: `${chest.charge ?? 0} of ${chest.chargeNeeded ?? 1}s opened` };
-  const loose = r.pickups.nearest.find((x) => x.uid === to.pickup);
-  return loose === undefined ? undefined : { dist: loose.dist, dir: loose.dir, arrived: false, charging: 0, progress: "" };
-}
-
-function errandNews(r: RunView): string[] {
-  if (errand !== undefined) return [`Tibo is busy: ${errand.text}.`];
-  if (lastErrand === undefined || r.time - lastErrand.time > ERRAND_NEWS_SECONDS) return [];
-  return [`Just now: ${lastErrand.text}.`];
+  const purpose = goal === "stay" ? ", which is what the goal needs" : goal === undefined ? "" : ", no closer to the goal";
+  return `stand still${spot === undefined ? "" : ` ${spot}`}${crowd}${forecast}${inAttack}${purpose}`;
 }
 
 /** What a move costs over the next second as a share of max health, from the game's own simulation. */
@@ -918,82 +993,6 @@ function moveCost(r: RunView, heading: Direction | "stay"): number | undefined {
 function cheapestMove(r: RunView): number | undefined {
   const costs = [...DIRECTIONS, "stay" as const].map((h) => moveCost(r, h));
   return costs.every((c) => c !== undefined) ? Math.min(...(costs as number[])) : undefined;
-}
-
-function startErrand(e: Errand, r: RunView, inspect: Inspect) {
-  const there = locate(r, e.to);
-  const seconds = (there?.dist ?? 0) / ERRAND_SPEED + (there?.charging ?? 0) + ERRAND_SLACK;
-  errand = {
-    ...e,
-    since: r.time,
-    deadline: r.time + seconds,
-    best: { left: there === undefined ? 0 : workLeft(there), time: r.time },
-    line: { role: "action", model: MODEL, time: r.time, text: e.title, key: `errand-${process.pid}-${r.tick}`, inspect, detail: there?.progress ?? "" },
-  };
-  lastErrand = undefined;
-  record("errand", { phase: "start", errand: { key: e.key, text: e.text, to: e.to, heading: e.heading }, deadline: errand.deadline });
-  say(errand.line);
-}
-
-/** `retry` false keeps the target off the menu for a while: the errand failed, not just paused for danger. */
-function endErrand(r: RunView, outcome: string, success: boolean, retry = true) {
-  if (errand === undefined) return;
-  const e = errand;
-  errand = undefined;
-  if (!retry) giveUps.set(targetId(e.to), r.time + ERRAND_RETRY_SECONDS);
-  lastErrand = { text: success ? e.done.toLowerCase() : `gave up on "${e.title}" because ${outcome}`, time: r.time };
-  record("errand", { phase: "end", key: e.key, success, outcome, seconds: Math.round((r.time - e.since) * 10) / 10 });
-  say({ ...e.line, text: success ? e.done : `${e.title}: stopped`, detail: success ? `${Math.round(r.time - e.since)}s` : outcome });
-}
-
-/**
- * One step of the errand under way: drop it if it is done, stuck, late or has turned costly, and
- * otherwise let the page steer it on. True when the errand used this step.
- */
-async function followErrand(s: Snap, r: RunView): Promise<boolean> {
-  const e = errand;
-  if (e === undefined) return false;
-  const there = locate(r, e.to);
-  const status = e.commandId === undefined ? undefined : s.commands.find((c) => c.id === e.commandId);
-  if (there === undefined || status?.state === "done") {
-    endErrand(r, "done", true);
-    return false;
-  }
-  if (status?.state === "failed" && !STEP_OVER.has(status.detail ?? "")) {
-    endErrand(r, `the game said: ${status.detail ?? "failed"}`, false, false);
-    return false;
-  }
-  if (r.time > e.deadline) {
-    endErrand(r, `still not done after ${Math.round(r.time - e.since)} seconds`, false, false);
-    return false;
-  }
-  if (workLeft(there) < e.best.left - 1) e.best = { left: workLeft(there), time: r.time };
-  else if (r.time - e.best.time > ERRAND_STUCK_SECONDS) {
-    endErrand(r, there.arrived ? `standing there charged nothing for ${ERRAND_STUCK_SECONDS} seconds (it may cost gold Tibo lacks)` : `no closer than ${Math.round(there.dist)} units for ${ERRAND_STUCK_SECONDS} seconds`, false, false);
-    return false;
-  }
-  const heading = there.arrived ? "stay" : there.dir;
-  const cost = moveCost(r, heading);
-  const cheapest = cheapestMove(r);
-  if (cost !== undefined && cheapest !== undefined && cost > cheapest + AFFORDABLE_EXTRA_DAMAGE) {
-    const f = heading === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === heading)?.forecast;
-    endErrand(r, `${heading === "stay" ? "staying put" : `walking ${heading}`} would cost ${f?.dead ? "Tibo's life" : `${Math.round((cost - cheapest) * 100)}% more health`} than the safest move`, false);
-    return false;
-  }
-  e.line = { ...e.line, time: r.time, detail: [there.arrived ? there.progress : `${Math.round(there.dist)} away to the ${there.dir}`, `${Math.round(r.time - e.since)}s`].filter(Boolean).join(" · ") };
-  say(e.line, false);
-  const go = { type: "goto", to: e.to, stay: "done" };
-  if (playingLive) {
-    // Live, one goto runs until the target is used up; it is only sent again if something replaced it.
-    if (e.commandId === undefined || (status !== undefined && status.state !== "running")) e.commandId = (await send({ ...go, timeout: Math.max(1, e.deadline - r.time) })).id;
-    return true;
-  }
-  // Lockstep runs the errand a step at a time, so the forecast is checked between steps.
-  const result = await command({ ...go, timeout: STEP, pause: true });
-  e.commandId = result.id;
-  if (result.state === "done") endErrand(r, "done", true);
-  else if (result.state === "failed" && !STEP_OVER.has(result.detail ?? "")) endErrand(r, `the game said: ${result.detail ?? "failed"}`, false, false);
-  return true;
 }
 
 // Small decision models judge one concrete option far better than they rank nine at once, so
@@ -1008,45 +1007,41 @@ const HURT_SCALE = ["takes no damage", "gets scratched", "gets badly hurt", "get
 const AFFORDABLE_EXTRA_DAMAGE = 0.02;
 const SAFE_ENOUGH = 0.5;
 
-async function move(r: RunView) {
-  // Errands come first: a tie on usefulness goes to the errand, which spares the next dozen steps.
-  const offeredErrands = errands(r);
+function goalWords(p: Pursuit, aim: Aim): string {
+  if (p.goal.kind === "evade") return "keep away from enemies";
+  if (p.goal.kind === "explore") return `walk ${p.goal.dir} to look for chests and shrines`;
+  if (p.goal.kind === "gems") return `collect the xp gems, most of them to the ${aim.heading}`;
+  return aim.heading === "stay" ? `${p.title.toLowerCase()}: stay where Tibo stands, ${aim.progress}` : `${p.title.toLowerCase()}, ${aim.progress}`;
+}
+
+/** The way to the goal costs more than the safest move: the action model picks this step. */
+async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog) {
+  const goal = goalWords(p, aim);
   const moves: Record<string, string> = {};
-  const headings: Record<string, Direction | "stay"> = {};
-  for (const e of offeredErrands) {
-    const sector = r.sectors.find((x) => x.dir === e.heading);
-    moves[e.key] = `${e.text}; its first second ${e.heading === "stay" || sector === undefined ? `is to ${standing(r)}` : `walks ${e.heading}: ${describe(r, sector)}`}`;
-    headings[e.key] = e.heading;
-  }
-  for (const s of r.sectors) {
-    moves[s.dir] = `walk ${s.dir}: ${describe(r, s)}`;
-    headings[s.dir] = s.dir;
-  }
-  moves.stay = standing(r);
-  headings.stay = "stay";
+  for (const s of r.sectors) moves[s.dir] = `walk ${s.dir}: ${describe(r, s, aim.heading)}`;
+  moves.stay = standing(r, aim.heading);
   // The game's own simulation prices every move for the next second, and Laya cannot weigh those
   // prices: on replayed states it rated a fatal move safest in 4 of 8, and it stood in hot oil
   // forecast "very badly hurt" for ten seconds while every step out was "scratched" (its danger
   // score tracks how many threats a description lists, not which). So moves that cost clearly
-  // more than the cheapest are not offered, like a card Tibo cannot afford; the model chooses
-  // among the rest on what the forecast cannot see (bosses closing in, crowds further out, loot).
-  const cost = (k: string) => moveCost(r, headings[k] ?? "stay");
+  // more than the cheapest are not offered, like a card Tibo cannot afford.
+  const cost = (k: string) => moveCost(r, k === "stay" ? "stay" : (k as Direction));
   const offered = { ...moves };
   const cheapest = cheapestMove(r);
   if (cheapest !== undefined) for (const k of Object.keys(moves)) if ((cost(k) ?? 0) > cheapest + AFFORDABLE_EXTRA_DAMAGE) delete moves[k];
-  const state = situation(r);
-
-  // One request per step: how badly each move hurts (a score on a scale, which Jev and Laya both
-  // weigh better than a yes/no "danger" question) and whether it leads somewhere useful. The bot
-  // keeps the moves rated about as safe as the safest and takes the most useful of those.
+  const hp = pct(r.player.hp, r.player.maxHp);
+  const state = [`Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.`, `Goal: ${goal}.`, `Health ${hp}%${hp < 40 ? ", which is low" : ""}.`].join("\n");
+  const usefulness = p.goal.kind === "evade" ? "Does it take Tibo away from enemies, toward open ground?" : `Does it bring Tibo closer to its goal (${goal})?`;
   const questions: Record<string, Question> = {};
   for (const [key, text] of Object.entries(moves)) {
     questions[key] = { type: "score", instructions: `If Tibo does this: ${text}. How badly does it hurt Tibo in the next second?`, criteria: HURT_SCALE };
-    questions[`useful:${key}`] = { type: "noul", instructions: `If Tibo does this: ${text}. Does it bring Tibo toward something useful, like food when hurt, a chest, a shrine to stand in, or xp gems to level up?` };
+    questions[`useful:${key}`] = { type: "noul", instructions: `If Tibo does this: ${text}. ${usefulness}` };
   }
   const canDash = r.player.dashCharges > 0 && r.sectors.some((x) => x.enemiesNear > 0 || (x.nearestBullet ?? 999) < 40);
   if (canDash) questions.dash = { type: "noul", instructions: "Is Tibo about to be hit or surrounded, so a quick dash away would save it?" };
+  const started = performance.now();
   const answers = await decide(state, questions);
+  const ms = Math.round(performance.now() - started);
   const risk = (k: string) => answers[k]?.noul ?? 1;
   const safest = Math.min(...Object.keys(moves).map(risk));
   const safe = Object.keys(moves).filter((k) => risk(k) <= safest + SAFE_MARGIN && (risk(k) < SAFE_ENOUGH || risk(k) === safest));
@@ -1055,8 +1050,7 @@ async function move(r: RunView) {
   const dash = dir !== undefined && (answers.dash?.noul ?? 0) > 0.5;
   const ruledOut = Object.keys(offered).length - Object.keys(moves).length;
   const forecast = (k: string) => {
-    const h = headings[k] ?? "stay";
-    const f = h === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === h)?.forecast;
+    const f = k === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === k)?.forecast;
     return f === undefined ? undefined : f.dead ? "dead" : f.damage === 0 ? "no damage" : `-${Math.round(f.damage)} hp`;
   };
   const weighed: MoveOption[] = Object.entries(offered).map(([k, description]) => {
@@ -1064,7 +1058,7 @@ async function move(r: RunView) {
     const hurt = answers[k]?.score;
     const useful = answers[`useful:${k}`]?.noul;
     return {
-      move: k === "stay" ? "stand still" : (offeredErrands.find((e) => e.key === k)?.title.toLowerCase() ?? k),
+      move: k === "stay" ? "stand still" : k,
       description,
       ...(f === undefined ? {} : { forecast: f }),
       ...(hurt === undefined ? {} : { hurt }),
@@ -1072,31 +1066,41 @@ async function move(r: RunView) {
       outcome: k === choice ? "chosen" : !(k in moves) ? "ruled out" : safe.includes(k) ? "safe" : "risky",
     };
   });
-  const inspect: Inspect = { kind: "moves", situation: state, moves: weighed, ...(answers.dash?.noul === undefined ? {} : { dash: answers.dash.noul }) };
-  const picked = offeredErrands.find((e) => e.key === choice);
-  if (picked !== undefined) {
-    startErrand(picked, r, inspect);
-    return;
-  }
+  const move = dir === undefined ? "stand still" : `${dash ? "dash" : "walk"} ${dir}`;
   say({
     role: "action",
     model: MODEL,
     time: r.time,
-    text: dir === undefined ? "Stand still" : `${dash ? "Dash" : "Walk"} ${dir}`,
-    inspect,
-    detail: [`Tibo ${HURT_SCALE[Math.round(answers[choice]?.score ?? 0)] ?? "?"}`, `useful ${Math.round((answers[`useful:${choice}`]?.noul ?? 0) * 100)}%`, ...(ruledOut > 0 ? [`${ruledOut} costlier ${ruledOut === 1 ? "move" : "moves"} ruled out`] : [])].join(" · "),
+    text: `${move[0]?.toUpperCase()}${move.slice(1)}`,
+    inspect: {
+      kind: "moves",
+      situation: state,
+      questions: ["For each move: If Tibo does this: <the move>. How badly does it hurt Tibo in the next second? (takes no damage, gets scratched, gets badly hurt, gets very badly hurt, dies)", `For each move: If Tibo does this: <the move>. ${usefulness}`, ...(canDash ? ["Is Tibo about to be hit or surrounded, so a quick dash away would save it?"] : [])],
+      moves: weighed,
+      ...(answers.dash?.noul === undefined ? {} : { dash: answers.dash.noul }),
+    },
+    detail: [`for: ${p.title}`, `Tibo ${HURT_SCALE[Math.round(answers[choice]?.score ?? 0)] ?? "?"}`, ...(ruledOut > 0 ? [`${ruledOut} costlier ${ruledOut === 1 ? "move" : "moves"} ruled out`] : [])].join(" · "),
+  });
+  log.write(r, {
+    event: "move",
+    model: MODEL,
+    reason: `the way to the goal (${aim.heading ?? "none"}) costs more than the safest move`,
+    goal: p.id,
+    action: move,
+    options: weighed.map((w) => `${w.move} ${w.forecast ?? "?"} hurt ${w.hurt ?? "-"} useful ${w.useful === undefined ? "-" : Math.round(w.useful * 100)}%${w.outcome === "ruled out" ? " (ruled out)" : ""}`).join("; "),
+    ms,
   });
   if (dash) await command({ type: "dash", dir });
   if (playingLive) return dir === undefined ? command({ type: "stop" }) : send({ type: "move", dir });
-  return command(dir === undefined ? { type: "goto", to: { dx: 0, dy: 0 }, stay: STEP, pause: true } : { type: "move", dir, seconds: STEP, pause: true });
+  return command(dir === undefined ? { type: "goto", to: { dx: 0, dy: 0 }, stay: pace.actEvery, pause: true } : { type: "move", dir, seconds: pace.actEvery, pause: true });
 }
 
-// Every level-up offer and what was taken, for the coach to see between consults.
-const pickLog: string[] = [];
-
-// Picks that did nothing (an item Tibo cannot afford, say) for the choice now open, so the model
-// is told instead of picking them forever.
-let deadPicks: { signature: string; names: Set<string> } = { signature: "", names: new Set() };
+// ---- Planner -------------------------------------------------------------------------------
+// The planner is the decision model in a second persona. Before every decision it reads the game
+// knowledge (strategy.md, which the coach rewrites after each run) and the whole player state. It
+// picks every level-up, chest and shrine option, and weighs every goal Tibo could take on next,
+// one question each; the most promising becomes the goal. It is asked when a goal ends, at every
+// choice, when a boss appears, and every pace.planEvery seconds, so a better goal can take over.
 
 function cardKind(r: RunView, o: OptionView): string {
   const held = [...r.loadout.weapons, ...r.loadout.passives].find((x) => x.name === o.name);
@@ -1110,67 +1114,214 @@ function cardKind(r: RunView, o: OptionView): string {
 // Shrine and chest options join their lines with "|", and some start with an empty one.
 const cardName = (o: OptionView) => o.name.split(/\s*\|\s*/).find((part) => part !== "") ?? o.label;
 
-async function choose(r: RunView) {
+function plannerState(r: RunView, b: Book): string {
+  const p = r.player;
+  const owned = (kind: string, xs: { id: string; name: string; level: number; max: number }[]) => xs.map((x) => `\n  - ${x.name} ${x.level}/${x.max}${said(b, kind, x.id)}`).join("") || " none";
+  const ready = r.combos.filter((c) => c.ready && c.kind !== "union").map((c) => c.name);
+  const crowd = [...r.sectors].sort((a, z) => z.enemiesFar - a.enemiesFar);
+  return [
+    `Time ${clock(r.time)}. Health ${Math.round(p.hp)}/${Math.round(p.maxHp)} (${pct(p.hp, p.maxHp)}%${healthTrend(r)}). Level ${p.level}, ${pct(p.xp, p.xpNext)}% of the way to the next. Gold ${p.gold}. Dash charges ${p.dashCharges}.`,
+    `Weapons (${r.loadout.weapons.length} of 6 slots):${owned("weapon", r.loadout.weapons)}`,
+    `Passives (${r.loadout.passives.length} of 6 slots):${owned("passive", r.loadout.passives)}`,
+    `Items:${r.loadout.items.map((i) => `\n  - ${i.name} x${i.count}${said(b, "item", i.id)}`).join("") || " none"}`,
+    ...(r.loadout.banished.length === 0 ? [] : [`Banished this run: ${r.loadout.banished.join(", ")}.`]),
+    `Recipes in reach: ${r.combos.map((c) => `${c.name} (${c.parts.map((x) => `${x.name} ${x.state}${x.have === undefined ? "" : ` ${x.have}/${x.max}`}`).join(" + ")})`).join("; ") || "none"}.`,
+    ready.length === 0 ? "No recipe is complete yet." : `The next chest opened evolves ${ready.join(" and ")}.`,
+    `Tibo stands ${spotLine(r) ?? "on no chest or spot"}.${r.hazards.some((h) => h.inside) ? ` Underfoot: ${r.hazards.filter((h) => h.inside).map((h) => hazardWords(h.kind)).join(", ")}.` : ""}`,
+    `Hurt in the last 3 seconds by: ${Object.entries(p.hurtBy).map(([k, v]) => `${sourceWords(k)} ${v}`).join(", ") || "nothing"}.`,
+    `Bosses: ${r.bosses.map((x) => `${x.name} ${Math.round(x.dist)} away to the ${x.dir}, ${pct(x.hp, x.maxHp)}% health`).join("; ") || "none"}.`,
+    `Enemies: ${r.enemies.total} around, ${near(r)} within 60. Most within 150 to the ${crowd[0]?.dir} (${crowd[0]?.enemiesFar}), fewest to the ${crowd.at(-1)?.dir} (${crowd.at(-1)?.enemiesFar}).`,
+    `Current goal: ${pursuit === undefined ? "none" : `${pursuit.title}, since ${clock(pursuit.since)}`}.`,
+    `Recent goals: ${outcomes.slice(-6).map((o) => `${clock(o.time)} ${o.title}: ${o.outcome}`).join("; ") || "none yet"}.`,
+  ].join("\n");
+}
+
+type GoalOption = { goal: Goal; text: string };
+
+/** Every goal Tibo could take on next, in words the model can weigh one at a time. */
+function goalOptions(r: RunView): GoalOption[] {
+  const given = (id: string) => {
+    const until = giveUps.get(id);
+    const last = [...outcomes].reverse().find((o) => o.id === id && !o.success);
+    return until === undefined || until <= r.time || last === undefined ? "" : `; Tibo gave up on it at ${clock(last.time)} because ${last.outcome}`;
+  };
+  const ready = r.combos.filter((c) => c.ready && c.kind !== "union").map((c) => c.name);
+  const gems = r.sectors.reduce((n, s) => n + s.xpNear, 0);
+  const gemSide = [...r.sectors].sort((a, z) => z.xpNear - a.xpNear)[0];
+  return [
+    ...r.pickups.chests
+      .filter((c) => c.dist < PLAN_RANGE)
+      .slice(0, 4)
+      .map((c) => ({
+        goal: { kind: "chest" as const, uid: c.uid },
+        text: `${onChest(c) ? "stay on the chest Tibo stands on" : `walk to the chest ${Math.round(c.dist)} away to the ${c.dir} and stand on it`} for ${c.chargeNeeded ?? 1} seconds to open it, which gives a free pick${ready.length === 0 ? "" : ` and evolves ${ready.join(" and ")}`}${given(`C${c.uid}`)}`,
+      })),
+    ...r.pois
+      .filter((x) => x.chargeNeeded > 0 && x.dist < PLAN_RANGE)
+      .slice(0, 6)
+      .map((x) => ({
+        goal: { kind: "poi" as const, uid: x.uid },
+        text: `${x.inside ? `stay inside the ${x.name}` : `walk to the ${x.name} ${Math.round(x.dist)} away to the ${x.dir} and stand inside it`} for ${x.chargeNeeded} seconds${x.description === "" ? "" : ` (${x.description.replace(/\.$/, "")})`}${given(`P${x.uid}`)}`,
+      })),
+    ...r.pickups.nearest
+      .filter((x) => x.kind === "heal" && x.dist < PLAN_RANGE)
+      .slice(0, 2)
+      .map((x) => ({ goal: { kind: "food" as const, uid: x.uid }, text: `walk to the food ${Math.round(x.dist)} away to the ${x.dir}, which heals Tibo` })),
+    ...(gems === 0 ? [] : [{ goal: { kind: "gems" as const }, text: `collect the ${gems} xp gems nearby, most of them to the ${gemSide?.dir}, for up to ${GEMS_SECONDS} seconds` }]),
+    ...r.sectors.map((s) => ({
+      goal: { kind: "explore" as const, dir: s.dir },
+      text: `explore ${s.dir}: walk ${EXPLORE_DISTANCE} units that way, stopping at the first new chest, toward ${plural(s.enemiesFar, "enemy")} within 150`,
+    })),
+    { goal: { kind: "evade" }, text: `keep away from enemies for ${EVADE_SECONDS} seconds` },
+  ];
+}
+
+type PlanAnswer = { pick?: OptionView; goal: Goal; ms: number; cards?: CardOption[]; goals: CardOption[] };
+
+class Planner {
+  calls = 0;
+  private lastAsked = Number.NEGATIVE_INFINITY;
+  private sawBoss = false;
+
+  constructor(
+    private notes: RunNotes,
+    private log: RunLog,
+  ) {}
+
+  /** Why to plan again while a goal is under way, if anything. */
+  due(r: RunView): string | undefined {
+    let why: string | undefined;
+    if (!this.sawBoss && r.bosses.length > 0) why = `a boss appeared: ${r.bosses[0]?.name}`;
+    else if (r.time - this.lastAsked >= pace.planEvery) why = `${pace.planEvery} seconds passed`;
+    this.sawBoss ||= r.bosses.length > 0;
+    return why;
+  }
+
+  /** Picks among `options` when a choice is open, and sets the next goal. */
+  async plan(r: RunView, why: string, options?: OptionView[]): Promise<PlanAnswer> {
+    this.lastAsked = r.time;
+    this.calls++;
+    const b = await readBook();
+    const experiment = this.notes.experiment;
+    const state = [
+      "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.",
+      `The aim: survive 20 minutes on ${DIFFICULTY}.`,
+      ...(experiment === undefined ? [] : [`This run tests a strategy, so follow it even where the knowledge below disagrees: ${experiment.directive}`]),
+      "Game knowledge from earlier runs:",
+      await readStrategy(),
+      `Asked now because ${why}. State now:`,
+      plannerState(r, b),
+    ].join("\n\n");
+    const goals = goalOptions(r);
+    const questions: Record<string, Question> = {};
+    for (const [i, g] of goals.entries()) questions[`goal:${i}`] = { type: "noul", instructions: `If Tibo's next goal is to ${g.text}: is that the best thing for Tibo to do now, to survive and grow stronger?` };
+    // The decision API reads a choice's keys, not their descriptions: replayed picks did not change
+    // at all when a note was added to the description, and Laya took a new weapon in 4 of 6 offers
+    // once the key said so. So everything the model should weigh goes into the key.
+    const keys = new Map<string, OptionView>();
+    for (const o of options ?? []) {
+      const notes = [
+        cardKind(r, o),
+        ...o.combos.filter((c) => c.partnerHeld).map((c) => `pairs with your ${c.partner.name} into ${c.name}${c.ready ? " right away" : ""}`),
+        o.recommended ? "the game recommends it" : "",
+        said(b, o.type, o.id).replace(/^: /, ""),
+      ].filter(Boolean);
+      keys.set(`${o.index}: ${o.type === "other" ? cardName(o) : o.name}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`, o);
+    }
+    const kind = r.choice?.kind === "levelUp" ? "level-up" : (r.choice?.kind ?? "choice");
+    const question = `Tibo is at a ${kind}. Which option does the game knowledge favour, and makes Tibo strongest?`;
+    if (options !== undefined) questions.pick = { type: "choice", instructions: question, criteria: Object.fromEntries([...keys].map(([k, o]) => [k, o.label])) };
+    const started = performance.now();
+    const answers = await decide(state, questions, PLAN_MODEL);
+    const ms = Math.round(performance.now() - started);
+
+    const score = (i: number) => answers[`goal:${i}`]?.noul ?? 0;
+    const best = goals.map((_, i) => i).sort((x, y) => score(y) - score(x))[0] ?? goals.length - 1;
+    const goal = goals[best]?.goal ?? { kind: "evade" };
+    const pickKey = answers.pick?.choice;
+    const pick = options === undefined ? undefined : (keys.get(pickKey ?? "") ?? [...keys].find(([k]) => k.split(":")[0] === (pickKey ?? "").split(":")[0])?.[1] ?? options[0]);
+    const cards: CardOption[] | undefined =
+      options === undefined
+        ? undefined
+        : [...keys].map(([k, o]) => {
+            const probability = answers.pick?.probabilities?.[k];
+            return { card: cardName(o), notes: k.slice(k.indexOf(": ") + 2), ...(probability === undefined ? {} : { probability }), chosen: o === pick };
+          });
+    const weighed: CardOption[] = goals.map((g, i) => ({ card: goalTitle(g.goal, r), notes: g.text, probability: score(i), chosen: i === best }));
+    setGoal(goal, r, this.log);
+
+    const title = goalTitle(goal, r);
+    say({
+      role: "planner",
+      model: PLAN_MODEL,
+      time: r.time,
+      text: [pick === undefined ? "" : `Take ${cardName(pick)}.`, `Goal: ${title} (${Math.round(score(best) * 100)}%).`].filter(Boolean).join(" "),
+      detail: `Asked because ${why}.`,
+      inspect: {
+        kind: "plan",
+        prompt: [state, ...(options === undefined ? [] : [question]), "For each goal: If Tibo's next goal is to …: is that the best thing for Tibo to do now, to survive and grow stronger?"].join("\n\n"),
+        ...(cards === undefined ? {} : { choices: cards }),
+        goals: weighed,
+      },
+    });
+    const odds = (xs: CardOption[]) => xs.map((x) => `${x.card} ${x.probability === undefined ? "?" : Math.round(x.probability * 100)}%`).join("; ");
+    this.log.write(r, {
+      event: pick === undefined ? "plan" : "pick",
+      model: PLAN_MODEL,
+      reason: why,
+      goal: goalId(goal),
+      action: pick === undefined ? title : cardName(pick),
+      options: cards === undefined ? odds(weighed) : `${odds(cards)} | goals: ${odds(weighed)}`,
+      ms,
+    });
+    if (pick !== undefined) {
+      this.notes.timeline.push(`- **${clock(r.time)}** ${kind}: took ${cardName(pick)} from ${options?.map(cardName).join(", ")}.`);
+      await this.notes.write();
+    }
+    return { ...(pick === undefined ? {} : { pick }), goal, ms, ...(cards === undefined ? {} : { cards }), goals: weighed };
+  }
+
+  async review(lastRun: NonNullable<Snapshot["lastRun"]>, last: RunView | undefined) {
+    if (!this.notes.saved) return;
+    const damage = Object.entries(lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ");
+    this.notes.outcome = [
+      `- Survived **${clock(lastRun.time)}** (${lastRun.time}s), level ${lastRun.level}, ${lastRun.kills} kills.`,
+      `- Damage taken by source: ${damage || "none recorded"}.`,
+      ...(last === undefined
+        ? []
+        : [
+            `- Final weapons: ${last.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ")}.`,
+            `- Final passives: ${last.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ")}.`,
+          ]),
+      `- Planner asked ${this.calls} times.`,
+    ].join("\n");
+    await this.notes.write();
+    const review = await reviewRun(this.notes.timeline.join("\n"), this.notes.outcome, await logForReview(this.log.file), this.notes.id, clock(lastRun.time), this.notes.experiment);
+    if (review === undefined) return;
+    this.notes.review = review;
+    await this.notes.write();
+  }
+}
+
+// ---- Picks ---------------------------------------------------------------------------------
+// Picks that did nothing (an item Tibo cannot afford, say) for the choice now open, so they are
+// not taken again and again.
+let deadPicks: { signature: string; names: Set<string> } = { signature: "", names: new Set() };
+
+async function choose(r: RunView, planner: Planner, log: RunLog) {
   const options = r.choice?.options ?? [];
   if (options.length === 0) throw new Error(`a ${r.choice?.kind} choice with no options`);
   const signature = `${r.tick}|${options.map((o) => o.name).join("|")}`;
   if (deadPicks.signature !== signature) deadPicks = { signature, names: new Set() };
-  // The coach's upgrade list is its plan; when the row offers any of it, the pick is among those.
-  // Only options that can be taken: a model shown an unaffordable card picks it again and again.
   const takeable = options.filter((o) => o.available && !deadPicks.names.has(o.name));
   if (takeable.length === 0) throw new Error(`every option of this ${r.choice?.kind} was tried without closing it: ${options.map((o) => o.name).join(", ")}`);
-  const wanted = takeable.filter((o) => inPlan(o.name));
-  // The coach decides what a row without any wanted card is worth: a reroll or skip, or a free pick.
-  const escape = takeable.filter((o) => o.type === "other" && /^(Reroll|Skip)\b/.test(o.name));
-  const fallback = plan?.otherwise === "reroll" && escape.length > 0 ? escape.slice(0, 1) : takeable;
-  const considered = wanted.length > 0 ? wanted : fallback;
-  // The decision API reads a choice's keys, not their descriptions: replayed picks did not change
-  // at all when a note was added to the description, and Laya took a new weapon in 4 of 6 offers
-  // once the key said so. So everything the model should weigh goes into the key.
-  const criteria: Record<string, string> = {};
-  for (const o of considered) {
-    const notes = [
-      cardKind(r, o),
-      inPlan(o.name) ? "in the coach's plan" : "",
-      ...o.combos.filter((c) => c.partnerHeld).map((c) => `pairs with your ${c.partner.name} into ${c.name}${c.ready ? " right away" : ""}`),
-      o.recommended ? "the game recommends it" : "",
-    ].filter(Boolean);
-    const name = o.type === "other" ? cardName(o) : o.name;
-    criteria[`${o.index}: ${name}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`] = o.label;
-  }
-  // A single wanted card needs no question: the coach already chose it.
-  const only = considered.length === 1 ? considered[0] : undefined;
-  const question = r.choice?.kind === "levelUp" ? "Tibo levelled up. Which upgrade makes Tibo strongest?" : `Tibo is at a ${r.choice?.kind}. Which option makes Tibo strongest?`;
-  const state = situation(r);
-  const { pick } = only !== undefined ? { pick: { choice: `${only.index}: ${only.name}` } } : await decide(state, { pick: { type: "choice", instructions: question, criteria } }, PICK_MODEL);
-  const picked = considered.find((o) => o.index === Number((pick?.choice ?? "").split(":")[0])) ?? considered[0];
-  const index = picked?.index ?? 0;
-  const sure = pick !== undefined && "confidence" in pick ? pick.confidence : undefined;
-  const probabilities = pick !== undefined && "probabilities" in pick ? pick.probabilities : undefined;
-  const cards: CardOption[] = options.map((o) => {
-    const key = Object.keys(criteria).find((k) => k.startsWith(`${o.index}: `));
-    const left = !o.available || deadPicks.names.has(o.name) ? "cannot be taken" : "left out: the planner's list names other cards";
-    const probability = key === undefined ? undefined : probabilities?.[key];
-    return { card: cardName(o), notes: key === undefined ? left : key.slice(key.indexOf(": ") + 2), ...(probability === undefined ? {} : { probability }), chosen: o.index === index };
-  });
-  say({
-    role: "actor",
-    model: PICK_MODEL,
-    time: r.time,
-    text: `Take ${picked === undefined ? `option ${index}` : cardName(picked)}`,
-    inspect: { kind: "cards", situation: state, question: only === undefined ? question : `${question} (not asked: the only card on the planner's list)`, cards },
-    detail: [
-      `${r.choice?.kind === "levelUp" ? "Level up" : `At a ${r.choice?.kind}`}: ${options.map(cardName).join(", ")}`,
-      only !== undefined ? "the only card on the planner's list" : wanted.length > 0 ? "from the planner's list" : sure === undefined ? "" : `${Math.round(sure * 100)}% sure`,
-    ]
-      .filter(Boolean)
-      .join("\n"),
-  });
-  if (picked !== undefined) deadPicks.names.add(picked.name);
-  pickLog.push(
-    `${clock(r.time)} ${r.choice?.kind}: offered ${options.map((o) => o.name).join(", ")}; took ${picked?.name ?? index}${wanted.length > 0 ? " (from the want list)" : ""}; slots weapons ${r.loadout.weapons.length}/6, passives ${r.loadout.passives.length}/6`,
-  );
-  return command({ type: "choose", index });
+  const kind = r.choice?.kind === "levelUp" ? "level-up" : (r.choice?.kind ?? "choice");
+  let picked = takeable.length === 1 ? takeable[0] : undefined;
+  if (picked === undefined) picked = (await planner.plan(r, `a ${kind} choice opened`, takeable)).pick;
+  else log.write(r, { event: "pick", model: "none", reason: kind, action: cardName(picked), detail: "the only option that can be taken" });
+  if (picked === undefined) throw new Error(`no ${kind} option was picked`);
+  deadPicks.names.add(picked.name);
+  return command({ type: "choose", index: picked.index });
 }
 
 let rescuedLink: string | undefined;
@@ -1202,17 +1353,14 @@ async function main() {
   let steps = 0;
   let notes: RunNotes | undefined;
   let reviewing: RunNotes | undefined;
-  let coach: Coach | undefined;
-  let consulting: Promise<void> | undefined;
+  let planner: Planner | undefined;
+  let runLog: RunLog | undefined;
   let last: RunView | undefined;
-  const recent: string[] = [];
   // The previous run's notes wait for its share link, which appears while the next run starts.
   let awaitingLink: { notes: RunNotes; known: string | undefined } | undefined;
-  console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, speed x${SPEED}, coach ${COACH}, log ${LOG}, full log ${FULL_LOG}`);
-  record("config", { model: MODEL, pickModel: PICK_MODEL, decider: DECIDER, mode: MODE, difficulty: DIFFICULTY, step: STEP, speed: SPEED, coach: PLANNER, takeover: TAKEOVER, args });
+  console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, speed x${SPEED}, planner ${PLAN_MODEL}, coach ${COACH === "none" ? "none" : COACH_NAME}, run logs in ${LOG_DIR}`);
   // A run the bot is stopped in the middle of says so in its notes instead of staying "in progress".
   const stop = async (signal: string) => {
-    record("stop", { signal });
     if (reviewing !== undefined) {
       reviewing.review = `Interrupted: the bot was stopped (${signal}) before the review finished. Rerun it with ./scripts/tibo-bot.ts --review ${reviewing.file}`;
       await reviewing.write();
@@ -1228,7 +1376,6 @@ async function main() {
   process.on("SIGINT", () => void stop("SIGINT"));
   process.on("SIGTERM", () => void stop("SIGTERM"));
   recordCrash = async (e) => {
-    record("crash", { error: e instanceof Error ? (e.stack ?? e.message) : String(e) });
     if (notes === undefined) return;
     notes.link = "none (bot crashed)";
     notes.outcome = `- Crashed at ${last === undefined ? "the start" : clock(last.time)}: ${e instanceof Error ? e.message : String(e)}`;
@@ -1241,8 +1388,9 @@ async function main() {
   let adopted = TAKEOVER && now.run !== undefined && now.screen !== "over" && now.screen !== "title";
   say({
     role: "system",
+    time: now.run?.time ?? 0,
     text: adopted ? `Taking over the run at ${clock(now.run?.time ?? 0)}.` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}.`,
-    detail: `Planner ${PLANNER}, actor ${PICK_MODEL}, action model ${MODEL}. Full log: ${FULL_LOG}`,
+    detail: `Planner ${PLAN_MODEL}, action model ${MODEL}, run review by ${COACH === "none" ? "nobody" : COACH_NAME}. Run logs: ${LOG_DIR}`,
   });
   if (!adopted) await start();
   runs = 1;
@@ -1259,19 +1407,16 @@ async function main() {
 
   for (;;) {
     const s = await timed("state", api<Snap>("/state"));
-    gameTime = s.run?.time;
-    const p = s.run?.player;
-    record("step", { screen: s.screen, live: s.live, ageMs: s.ageMs, ...(p === undefined ? {} : { hp: p.hp, x: p.x, y: p.y, level: p.level }), errand: errand?.line.detail === undefined ? errand?.key : `${errand.key}: ${errand.line.detail}`, ...(s.lastRun === undefined ? {} : { lastRun: s.lastRun }) });
     if (!s.connected) throw new Error("the game tab is not connected to the agent server");
     await fillLink(s);
     if (s.screen === "title" || s.screen === "over") {
-      if (s.screen === "over" && s.lastRun !== undefined && runs > 0 && notes !== undefined && coach !== undefined) {
+      if (s.screen === "over" && s.lastRun !== undefined && runs > 0 && notes !== undefined && planner !== undefined && runLog !== undefined) {
         const avg = latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length);
         console.log(`run ${runs} ended at ${s.lastRun.time}s, level ${s.lastRun.level}, ${s.lastRun.kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
         say({ role: "system", time: s.lastRun.time, text: `Run over at ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills.` });
         console.log(`  damage taken: ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}`);
-        record("run-end", { notes: notes.id, ...s.lastRun, steps, coachCalls: coach.calls, avgDecisionMs: Math.round(avg) });
-        log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty: DIFFICULTY, notes: notes.id, ...s.lastRun, steps, coachCalls: coach.calls, avgDecisionMs: Math.round(avg) })}\n`);
+        runLog.write(last, { event: "run_end", detail: `survived ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills; damage by ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}` });
+        log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty: DIFFICULTY, notes: notes.id, runLog: runLog.file, ...s.lastRun, steps, plannerCalls: planner.calls, avgDecisionMs: Math.round(avg) })}\n`);
         log.flush();
         // The run is over; a stop from here on must not mark it aborted, only note the missing review.
         const ended = notes;
@@ -1289,10 +1434,11 @@ async function main() {
           console.log(`run summary showed no link (${summary.detail ?? summary.state}); it is read again when the next run starts`);
           awaitingLink = { notes: ended, known: s.lastRunLink };
         }
-        await coach.review(s.lastRun, last, recent);
+        await planner.review(s.lastRun, last);
         reviewing = undefined;
-        console.log(`notes: ${ended.file}`);
-        coach = undefined;
+        console.log(`notes: ${ended.file}, log: ${runLog.file}`);
+        planner = undefined;
+        runLog = undefined;
         if (runs >= RUNS) {
           if (awaitingLink !== undefined) {
             await start();
@@ -1308,18 +1454,15 @@ async function main() {
         notes.review = "No review: the run was cut off, not lost to the game.";
         await notes.write();
         notes = undefined;
-        coach = undefined;
+        planner = undefined;
+        runLog = undefined;
       }
       await start();
       runs++;
       steps = 0;
-      plan = undefined;
-      errand = undefined;
-      lastErrand = undefined;
-      giveUps.clear();
+      resetGoals();
       lastReport = -1;
       latency.length = 0;
-      recent.length = 0;
       continue;
     }
     const r = s.run;
@@ -1327,14 +1470,16 @@ async function main() {
       await Bun.sleep(100);
       continue;
     }
-    if (notes === undefined || coach === undefined) {
+    if (notes === undefined || planner === undefined || runLog === undefined) {
       // Chosen while the game is paused at tick 0, so the coach's wait does not cost game time.
-      const experiment = !adopted && COACH !== "none" && (await experimentDue()) ? await chooseExperiment() : undefined;
+      const experiment = !adopted && (await experimentDue()) ? await chooseExperiment() : undefined;
       notes = new RunNotes(r, await readStrategy(), experiment, !adopted);
       adopted = false;
-      coach = new Coach(notes);
+      runLog = new RunLog(notes.log);
+      planner = new Planner(notes, runLog);
+      resetGoals();
       await notes.write();
-      console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}, notes ${notes.saved ? notes.file : "not saved (taken over mid-run)"}`);
+      console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}, notes ${notes.saved ? notes.file : "not saved (taken over mid-run)"}, log ${notes.log}`);
       if (experiment !== undefined) console.log(`experiment run: ${experiment.name}: ${experiment.directive}`);
     }
     last = r;
@@ -1351,29 +1496,16 @@ async function main() {
     steps++;
     timings.steps++;
     const live = s.live === true;
+    pace = s.pace ?? pace;
     if (live !== playingLive) await playLive(live, r);
     const stepStarted = performance.now();
-    const asking = (consulting ??= coach
-      .consult(r)
-      .catch((e: unknown) => console.error("coach consult failed:", e instanceof Error ? e.message : e))
-      .finally(() => {
-        consulting = undefined;
-      }));
-    // Lockstep holds the paused game until the coach answers, unless DO IT LIVE is pressed meanwhile;
-    // then the answer lands whenever it comes, as it does in live play.
-    if (!live) await Promise.race([asking, untilLive(() => consulting !== asking)]);
-    recent.push(situation(r));
-    if (recent.length > 4) recent.shift();
-    if (s.screen === "choice") {
-      record("snapshot", { run: r, commands: s.commands });
-      await choose(r);
-    } else if (!(await followErrand(s, r))) {
-      record("snapshot", { run: r, commands: s.commands });
-      await move(r);
-      // A newly chosen errand takes its first step now, so lockstep never runs a step without input.
-      if (errand !== undefined) await followErrand(s, r);
+    if (s.screen === "choice") await choose(r, planner, runLog);
+    else {
+      const why = pursuit === undefined ? undefined : planner.due(r);
+      if (why !== undefined) await planner.plan(r, why);
+      await pursue(s, r, runLog, planner);
     }
-    if (live) await Bun.sleep(Math.max(0, LIVE_MIN_STEP_MS - (performance.now() - stepStarted)));
+    if (live) await Bun.sleep(Math.max(0, pace.actEvery * 1000 - (performance.now() - stepStarted)));
   }
 }
 

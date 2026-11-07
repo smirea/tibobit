@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
-// @version      1.10.0
+// @version      1.11.0
 // @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
@@ -256,6 +256,19 @@
         return { type: c.type };
       default:
         return fail("type must be move, goto, stop, choose, dash, pause, resume, speed, forecast, start or summary");
+    }
+  }
+  var DEFAULT_PACE = { planEvery: 15, actEvery: 0.3 };
+  var PACE_LIMITS = { planEvery: { min: 1, max: 300, step: 1 }, actEvery: { min: 0.1, max: 5, step: 0.1 } };
+  var KEEP_PLANS = 500;
+  var KEEP_OTHERS = 60;
+  function trimChat(chat) {
+    let plans = 0;
+    let others = 0;
+    for (let i = chat.length - 1;i >= 0; i--) {
+      const keep = chat[i]?.role === "planner" ? ++plans <= KEEP_PLANS : ++others <= KEEP_OTHERS;
+      if (!keep)
+        chat.splice(i, 1);
     }
   }
 
@@ -732,7 +745,6 @@
   var IDLE_INTERVAL_MS = 500;
   var RECONNECT_MS = 3000;
   var MAX_IN_FLIGHT = 4;
-  var CHAT_LIMIT = 200;
   function post(origin, path, body) {
     return new Promise((resolve) => GM_xmlhttpRequest({
       method: "POST",
@@ -757,7 +769,7 @@
       for (const listener of listeners)
         listener();
     };
-    let pilot = { state: "off", live: false };
+    let pilot = { state: "off", live: false, pace: DEFAULT_PACE };
     const chat = [];
     let inFlight = 0;
     let lastPush = 0;
@@ -766,7 +778,7 @@
       if (from !== session)
         return;
       connected = false;
-      receivePilot({ state: "off", live: pilot.live });
+      receivePilot({ state: "off", live: pilot.live, pace: pilot.pace });
       notify();
       setTimeout(listen, RECONNECT_MS);
     };
@@ -805,8 +817,7 @@
         chat[at] = message;
       else
         chat.push(message);
-      if (chat.length > CHAT_LIMIT)
-        chat.splice(0, chat.length - CHAT_LIMIT);
+      trimChat(chat);
     };
     const read = async (body, mine) => {
       const reader = body.getReader();
@@ -1588,10 +1599,12 @@
   }
 
   // src/chat.ts
-  var ROLE_LABELS = { planner: "Planner", actor: "Actor", action: "Action", system: "Bot" };
+  var ROLE_LABELS = { planner: "Plan", action: "Action", system: "Bot" };
+  var ACTION_ROWS = 20;
   var HIDE_DELAY_MS = 200;
   var MIN_SIDE_ROOM = 300;
   var clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+  var fine = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
   var percent = (v) => `${Math.round(v * 100)}%`;
   function h(tag, className, ...children) {
     const el = document.createElement(tag);
@@ -1608,48 +1621,68 @@
     return h("section", "tbh-insp-section", h("h4", "", title), ...body);
   }
   var pre = (text, className = "") => h("pre", `tbh-insp-pre ${className}`.trim(), text);
-  function inspectBody(inspect) {
+  function folded(title, text, className = "") {
+    return h("details", "tbh-insp-fold", h("summary", "", title), pre(text, className));
+  }
+  function oddsRows(options) {
+    return options.map((c) => h("div", `tbh-opt ${c.chosen ? "tbh-opt-chosen" : c.probability === undefined ? "tbh-opt-ruled-out" : "tbh-opt-safe"}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name", c.card), ...c.chosen ? [h("span", "tbh-opt-outcome", "chosen")] : []), ...c.probability === undefined ? [] : [h("div", "tbh-opt-scores", meter(percent(c.probability), c.probability, "tbh-meter-useful tbh-meter-wide"))], ...c.notes === "" ? [] : [h("div", "tbh-opt-desc", c.notes)]));
+  }
+  function inspectBody(m) {
+    const words = [h("div", "tbh-insp-text", m.text), ...m.detail === undefined ? [] : [h("div", "tbh-opt-desc", m.detail)]];
+    const inspect = m.inspect;
+    if (inspect === undefined)
+      return words;
     switch (inspect.kind) {
+      case "plan":
+        return [
+          ...words,
+          ...inspect.choices === undefined ? [] : [section("Choices", ...oddsRows(inspect.choices))],
+          section("Goals", ...oddsRows([...inspect.goals].sort((a, b) => (b.probability ?? 0) - (a.probability ?? 0)))),
+          folded("Prompt", inspect.prompt)
+        ];
       case "prompt":
         return [
-          section("Prompt", pre(inspect.prompt)),
-          ...inspect.reasoning === undefined ? [] : [section("Reasoning", pre(inspect.reasoning, "tbh-insp-thought"))],
-          ...inspect.reply === undefined ? [] : [section("Reply", pre(inspect.reply))]
+          ...words,
+          ...inspect.reasoning === undefined ? [] : [folded("Reasoning", inspect.reasoning, "tbh-insp-thought")],
+          ...inspect.reply === undefined ? [] : [folded("Reply", inspect.reply)],
+          folded("Prompt", inspect.prompt)
         ];
       case "moves": {
         const rows = inspect.moves.map((m) => h("div", `tbh-opt tbh-opt-${m.outcome.replace(" ", "-")}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name", m.move), h("span", "tbh-opt-outcome", m.outcome), ...m.forecast === undefined ? [] : [h("span", `tbh-chip${m.forecast === "no damage" ? " tbh-chip-ok" : ""}`, m.forecast)]), ...m.hurt === undefined && m.useful === undefined ? [] : [
           h("div", "tbh-opt-scores", ...m.hurt === undefined ? [] : [meter(`hurt ${m.hurt.toFixed(1)}/4`, m.hurt / 4, "tbh-meter-hurt")], ...m.useful === undefined ? [] : [meter(`useful ${percent(m.useful)}`, m.useful, "tbh-meter-useful")])
         ], h("div", "tbh-opt-desc", m.description)));
         return [
+          ...words,
           section("Moves", ...rows, ...inspect.dash === undefined ? [] : [h("div", "tbh-opt-desc", `Dash to escape? ${percent(inspect.dash)} (dashes above 50%)`)]),
-          section("Situation", pre(inspect.situation))
+          section("Prompt", pre([inspect.situation, ...inspect.questions ?? []].join(`
+
+`)))
         ];
       }
-      case "cards": {
-        const rows = inspect.cards.map((c) => h("div", `tbh-opt ${c.chosen ? "tbh-opt-chosen" : c.probability === undefined ? "tbh-opt-ruled-out" : "tbh-opt-safe"}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name", c.card), ...c.chosen ? [h("span", "tbh-opt-outcome", "chosen")] : []), ...c.probability === undefined ? [] : [h("div", "tbh-opt-scores", meter(percent(c.probability), c.probability, "tbh-meter-useful"))], h("div", "tbh-opt-desc", c.notes)));
-        return [section(inspect.question, ...rows), section("Situation", pre(inspect.situation))];
-      }
+      case "cards":
+        return [...words, section(inspect.question, ...oddsRows(inspect.cards)), section("Prompt", pre(inspect.situation))];
     }
   }
-  function inspector(panel, latest) {
+  function inspector(panel, messages) {
     const box = h("div", "tbh-insp");
     box.hidden = true;
     let showing;
+    let anchor;
     let reading = false;
     let hideTimer;
-    const place = (anchor) => {
+    const place = (at) => {
       const side = panel().getBoundingClientRect();
       const margin = 8;
       if (side.left < MIN_SIDE_ROOM) {
-        const at = anchor.getBoundingClientRect();
-        const above = at.top > window.innerHeight - at.bottom;
+        const rect = at.getBoundingClientRect();
+        const above = rect.top > window.innerHeight - rect.bottom;
         Object.assign(box.style, {
           left: `${margin}px`,
           right: `${margin}px`,
           width: "auto",
-          top: above ? "auto" : `${at.bottom + margin}px`,
-          bottom: above ? `${window.innerHeight - at.top + margin}px` : "auto",
-          maxHeight: `${(above ? at.top : window.innerHeight - at.bottom) - 2 * margin}px`
+          top: above ? "auto" : `${rect.bottom + margin}px`,
+          bottom: above ? `${window.innerHeight - rect.top + margin}px` : "auto",
+          maxHeight: `${(above ? rect.top : window.innerHeight - rect.bottom) - 2 * margin}px`
         });
         return;
       }
@@ -1659,17 +1692,36 @@
       box.style.left = `${side.left - margin - width}px`;
       box.style.right = "auto";
       box.style.maxHeight = `${window.innerHeight - 2 * margin}px`;
-      const top = anchor.getBoundingClientRect().top;
+      const top = at.getBoundingClientRect().top;
       box.style.top = `${Math.max(margin, Math.min(top, window.innerHeight - box.offsetHeight - margin))}px`;
     };
-    const render = (m, anchor) => {
-      if (m.inspect === undefined)
+    const plans = () => messages().filter((m) => m.role === "planner");
+    const render = () => {
+      if (showing === undefined || anchor === undefined)
         return;
+      const all = plans();
+      const want = showing;
+      const m = want.kind === "plan" ? all.find((x) => x.id === want.id) ?? all.at(-1) : messages().find((x) => x.id === want.id);
+      if (m === undefined) {
+        box.hidden = true;
+        return;
+      }
       const scroll = box.scrollTop;
-      const head = h("div", "tbh-insp-head", h("span", `tbh-msg-role tbh-role-${m.role}`, ROLE_LABELS[m.role]), ...m.model === undefined ? [] : [h("span", "tbh-msg-model", m.model)], ...m.time === undefined ? [] : [h("span", "tbh-msg-time", clock(m.time))]);
-      box.replaceChildren(head, ...inspectBody(m.inspect));
+      const head = h("div", "tbh-insp-head", ...m.time === undefined ? [] : [h("span", "tbh-msg-time", m.role === "planner" ? clock(m.time) : fine(m.time))], h("span", `tbh-msg-role tbh-role-${m.role}`, ROLE_LABELS[m.role]), ...m.model === undefined ? [] : [h("span", "tbh-msg-model", m.model)]);
+      const history = want.kind === "plan" && all.length > 1 ? [
+        section("All decisions", ...[...all].reverse().map((x) => {
+          const item = h("button", `tbh-insp-past${x.id === m.id ? " tbh-insp-past-on" : ""}`, h("span", "tbh-row-time", x.time === undefined ? "" : clock(x.time)), h("span", "", x.text));
+          item.type = "button";
+          item.addEventListener("click", () => {
+            showing = { kind: "plan", id: x.id };
+            render();
+            box.scrollTop = 0;
+          });
+          return item;
+        }))
+      ] : [];
+      box.replaceChildren(head, ...inspectBody(m), ...history);
       box.hidden = false;
-      showing = { id: m.id, inspect: m.inspect };
       place(anchor);
       box.scrollTop = scroll;
     };
@@ -1692,29 +1744,26 @@
     });
     return {
       box,
-      hover(el, m) {
+      show(target, at) {
         clearTimeout(hideTimer);
         reading = false;
+        showing = target;
+        anchor = at;
         box.scrollTop = 0;
-        render(m, el);
+        render();
       },
       leave: hide,
-      refresh(el, m) {
-        if (showing?.id !== m.id || reading || showing.inspect === m.inspect)
+      refresh(anchorFor) {
+        if (showing === undefined || reading)
           return;
-        render(m, el);
-      },
-      forget(id) {
-        if (showing?.id === id && !reading)
-          box.hidden = true;
-      },
-      latest
+        anchor = anchorFor(showing) ?? anchor;
+        render();
+      }
     };
   }
-  function chatMessage(m) {
-    const head = h("div", "tbh-msg-head", h("span", "tbh-msg-role", ROLE_LABELS[m.role]), ...m.model === undefined ? [] : [h("span", "tbh-msg-model", m.model)], ...m.time === undefined ? [] : [h("span", "tbh-msg-time", clock(m.time))]);
-    const text = h("div", "tbh-msg-text", m.text, ...m.count > 1 ? [h("span", "tbh-msg-count", `${m.count} moves`)] : []);
-    const el = h("div", `tbh-msg tbh-msg-${m.role}${m.inspect === undefined ? "" : " tbh-msg-inspectable"}`, head, text, ...m.stream === undefined ? [] : [h("div", "tbh-msg-stream", h("span", "", m.stream, h("b", "tbh-cursor", "▍")))], ...m.detail === undefined ? [] : [h("div", "tbh-msg-detail", m.detail)]);
+  function actionRow(m) {
+    const el = h("div", `tbh-row tbh-row-${m.role}${m.inspect === undefined ? "" : " tbh-row-inspectable"}`, h("span", "tbh-row-time", m.time === undefined ? "" : fine(m.time)), h("span", "tbh-row-text", m.text), ...m.detail === undefined ? [] : [h("span", "tbh-row-detail", m.detail)]);
+    el.dataset.id = String(m.id);
     return el;
   }
   function chatBox(bridge) {
@@ -1726,10 +1775,29 @@
     live.title = "Play without pausing: the models think while the game keeps running";
     live.addEventListener("click", () => bridge.setPilot({ live: !bridge.pilot().live }));
     const tools = h("div", "tbh-chat-tools", giveBack, live);
-    const list = h("div", "tbh-chat");
+    const paceInput = (key) => {
+      const { min, max, step } = PACE_LIMITS[key];
+      const input = h("input", "tbh-pace-input");
+      Object.assign(input, { type: "number", min: String(min), max: String(max), step: String(step), inputMode: "decimal" });
+      input.addEventListener("change", () => {
+        const v = Number(input.value);
+        if (!Number.isFinite(v) || input.value === "")
+          return;
+        const clamped = Number(Math.min(max, Math.max(min, Math.round(v / step) * step)).toFixed(1));
+        input.value = String(clamped);
+        bridge.setPilot({ [key]: clamped });
+      });
+      return input;
+    };
+    const planEvery = paceInput("planEvery");
+    const actEvery = paceInput("actEvery");
+    const paceRow = h("div", "tbh-pace", h("label", "tbh-pace-field", h("span", "tbh-plan-label", "Plan"), "every", planEvery, "s"), h("label", "tbh-pace-field tbh-pace-action", h("span", "tbh-plan-label", "Action"), "every", actEvery, "s"));
+    const plan = h("div", "tbh-plan");
+    const list = h("div", "tbh-actions");
     list.setAttribute("aria-live", "polite");
-    const shown = new Map;
-    const insp = inspector(() => list.closest(".tbh-panel") ?? list, (id) => shown.get(id)?.message);
+    const rows = new Map;
+    const insp = inspector(() => plan.closest(".tbh-panel") ?? plan, () => bridge.chat());
+    let shownPlan;
     const render = () => {
       const pilot = bridge.pilot();
       const label = pilot.state === "stopping" ? "Handing the wheel back…" : "Give me back the wheel";
@@ -1738,48 +1806,62 @@
       giveBack.disabled = pilot.state !== "on";
       live.setAttribute("aria-pressed", String(pilot.live));
       live.disabled = pilot.state !== "on";
+      for (const [input, value] of [
+        [planEvery, pilot.pace.planEvery],
+        [actEvery, pilot.pace.actEvery]
+      ]) {
+        input.disabled = pilot.state !== "on";
+        if (document.activeElement !== input && input.value !== String(value))
+          input.value = String(value);
+      }
       const messages = bridge.chat();
-      const ids = new Set(messages.map((m) => m.id));
-      for (const [id, { el }] of shown) {
-        if (ids.has(id))
-          continue;
-        el.remove();
-        shown.delete(id);
-        insp.forget(id);
+      const latest = [...messages].reverse().find((m) => m.role === "planner");
+      if (latest !== shownPlan || latest === undefined) {
+        shownPlan = latest;
+        plan.replaceChildren(h("span", "tbh-plan-label", "Plan"), ...latest?.time === undefined ? [] : [h("span", "tbh-row-time", clock(latest.time))], h("span", "tbh-plan-text", latest?.text ?? "Waiting for the planner…"), ...latest?.stream === undefined ? [] : [h("div", "tbh-plan-stream", h("span", "", latest.stream, h("b", "tbh-cursor", "▍")))]);
+        plan.classList.toggle("tbh-row-inspectable", latest !== undefined);
       }
-      const following = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
-      for (const message of messages) {
-        const before = shown.get(message.id);
+      const actions = messages.filter((m) => m.role !== "planner").slice(-ACTION_ROWS).reverse();
+      const ids = new Set(actions.map((m) => m.id));
+      for (const [id] of rows)
+        if (!ids.has(id))
+          rows.delete(id);
+      const els = actions.map((message) => {
+        const before = rows.get(message.id);
         if (before?.message === message)
-          continue;
-        const el = chatMessage(message);
-        el.dataset.id = String(message.id);
-        if (before === undefined)
-          list.append(el);
-        else
-          before.el.replaceWith(el);
-        shown.set(message.id, { el, message });
-        insp.refresh(el, message);
-      }
-      if (following)
-        list.scrollTop = list.scrollHeight;
+          return before.el;
+        const el = actionRow(message);
+        rows.set(message.id, { el, message });
+        return el;
+      });
+      if (els.length !== list.children.length || els.some((el, i) => list.children[i] !== el))
+        list.replaceChildren(...els);
+      insp.refresh((target) => target.kind === "plan" ? plan : rows.get(target.id)?.el);
     };
-    const messageAt = (target) => {
-      const el = target instanceof Element ? target.closest(".tbh-msg-inspectable") : null;
-      const message = el === null ? undefined : insp.latest(Number(el.dataset.id));
-      return el === null || message === undefined ? undefined : { el, message };
-    };
-    list.addEventListener("pointerover", (e) => {
-      const hit = messageAt(e.target);
-      if (hit === undefined)
-        return insp.leave();
-      if (messageAt(e.relatedTarget)?.el !== hit.el)
-        insp.hover(hit.el, hit.message);
+    let hovered;
+    plan.addEventListener("pointerenter", () => {
+      if (shownPlan === undefined || hovered === plan)
+        return;
+      hovered = plan;
+      insp.show({ kind: "plan" }, plan);
     });
-    list.addEventListener("pointerleave", () => insp.leave());
+    list.addEventListener("pointerover", (e) => {
+      const el = e.target instanceof Element ? e.target.closest(".tbh-row") : null;
+      if (el === hovered)
+        return;
+      hovered = el ?? undefined;
+      if (el === null)
+        return insp.leave();
+      insp.show({ kind: "action", id: Number(el.dataset.id) }, el);
+    });
+    const box = h("div", "tbh-chatbox", tools, paceRow, plan, list, insp.box);
+    box.addEventListener("pointerleave", () => {
+      hovered = undefined;
+      insp.leave();
+    });
     bridge.onChange(render);
     render();
-    return h("div", "tbh-chatbox", tools, list, insp.box);
+    return box;
   }
 
   // src/style.ts
@@ -1841,18 +1923,33 @@
 .tbh-live { flex: none; padding: 5px 8px; font: inherit; font-weight: 900; letter-spacing: .04em; cursor: pointer;
   color: #ffb4a8; background: transparent; border: 1px dashed #e38a7f; border-radius: 4px; }
 .tbh-live:hover:not(:disabled) { color: #fff; border-style: solid; }
-.tbh-live[aria-pressed="true"] { color: #fff; background: #d8362a; border: 1px solid #ff6a5a; box-shadow: 0 0 10px rgba(255,80,60,.6); animation: tbh-onair 1.2s ease-in-out infinite; }
-.tbh-live[aria-pressed="true"]::before { content: "● "; }
-@keyframes tbh-onair { 50% { box-shadow: 0 0 2px rgba(255,80,60,.3); } }
-@media (prefers-reduced-motion: reduce) { .tbh-live[aria-pressed="true"] { animation: none; } }
+.tbh-live[aria-pressed="true"] { color: #fff; background: #d8362a; border: 1px solid #ff6a5a; box-shadow: 0 0 10px rgba(255,80,60,.6); }
+.tbh-live[aria-pressed="true"]::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; vertical-align: 1px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 0 rgba(255,255,255,.8); animation: tbh-live-pulse 1.6s ease-out infinite; }
+@keyframes tbh-live-pulse { 70% { box-shadow: 0 0 0 6px rgba(255,255,255,0); } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); } }
+@media (prefers-reduced-motion: reduce) { .tbh-live[aria-pressed="true"]::before { animation: none; } }
 .tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
 .tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chatbox { display: none; }
 .tbh-chatbox { border-top: 1px solid rgba(255,255,255,.08); }
-.tbh-chat { display: flex; flex-direction: column; gap: 4px; max-height: min(52vh, 460px); overflow-y: auto; padding: 6px; user-select: text; overscroll-behavior: contain; }
-.tbh-msg-inspectable { cursor: help; }
-.tbh-msg-inspectable:hover { outline: 1px solid color-mix(in srgb, var(--role) 55%, transparent); }
+.tbh-pace { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 6px 0; font-size: 11px; color: #c9b58a; }
+.tbh-pace-field { --role: #c9a0ff; display: inline-flex; align-items: center; gap: 5px; }
+.tbh-pace-action { --role: #7fa8ff; }
+.tbh-pace-input { width: 4.2em; padding: 2px 4px; font: inherit; color: #f3e6c4; background: rgba(0,0,0,.35); border: 1px solid #6b5631; border-radius: 3px; }
+.tbh-pace-input:focus { outline: none; border-color: var(--role); }
+.tbh-pace-input:disabled { opacity: .5; }
+.tbh-plan { --role: #c9a0ff; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin: 6px 6px 0; padding: 5px 7px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(201,160,255,.1); overflow-wrap: anywhere; }
+.tbh-plan-label { color: var(--role); font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.tbh-plan-text { flex: 1 1 60%; min-width: 0; white-space: pre-wrap; }
 /* The newest reasoning sits at the bottom; older lines scroll out of the top. */
-.tbh-msg-stream { margin-top: 3px; max-height: 7.5em; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 10.5px; font-style: italic; color: #b9a6d9; }
+.tbh-plan-stream { flex-basis: 100%; max-height: 6em; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; white-space: pre-wrap; font-size: 10.5px; font-style: italic; color: #b9a6d9; }
+.tbh-actions { display: flex; flex-direction: column; gap: 1px; max-height: min(46vh, 420px); overflow-y: auto; padding: 4px 6px 6px; user-select: text; overscroll-behavior: contain; }
+.tbh-actions:empty::before { content: "Waiting for the bot…"; color: #a8977a; }
+.tbh-row { --role: #7fa8ff; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding: 1px 6px 2px; border-left: 3px solid var(--role); border-radius: 0 4px 4px 0; overflow-wrap: anywhere; }
+.tbh-row-system { --role: #6b5631; color: #c9b58a; }
+.tbh-row-time { flex: none; font-size: 10px; color: #8d7c5c; font-variant-numeric: tabular-nums; }
+.tbh-row-text { font-weight: 700; }
+.tbh-row-detail { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: #a8977a; }
+.tbh-row-inspectable { cursor: help; }
+.tbh-row-inspectable:hover { background: rgba(255,255,255,.05); outline: 1px solid color-mix(in srgb, var(--role) 55%, transparent); }
 .tbh-cursor { font-style: normal; font-weight: 400; color: var(--role); animation: tbh-blink 1s steps(1) infinite; }
 @keyframes tbh-blink { 50% { opacity: 0; } }
 
@@ -1860,7 +1957,7 @@
   box-shadow: 0 6px 24px rgba(0,0,0,.6); font: 11.5px/1.4 ui-monospace, Menlo, Consolas, monospace; user-select: text; overscroll-behavior: contain; }
 .tbh-insp[hidden] { display: none; }
 .tbh-insp-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; font-size: 10.5px; color: #8d7c5c; }
-.tbh-role-planner { --role: #c9a0ff; } .tbh-role-actor { --role: #5ee8c0; } .tbh-role-action { --role: #7fa8ff; } .tbh-role-system { --role: #a8977a; }
+.tbh-role-planner { --role: #c9a0ff; } .tbh-role-action { --role: #7fa8ff; } .tbh-role-system { --role: #a8977a; }
 .tbh-insp-section { margin-top: 8px; }
 .tbh-insp-section > h4 { margin: 0 0 4px; font: inherit; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #c9b58a; }
 .tbh-insp-pre { margin: 0; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 10.5px; background: rgba(255,255,255,.04); border-radius: 4px; }
@@ -1883,21 +1980,17 @@
 .tbh-meter-track > i { display: block; height: 100%; }
 .tbh-meter-hurt i { background: #e38a7f; } .tbh-meter-useful i { background: #7fa8ff; }
 .tbh-opt-desc { margin-top: 2px; font-size: 10.5px; color: #a8977a; white-space: pre-wrap; overflow-wrap: anywhere; }
-.tbh-chat:empty::before { content: "Waiting for the bot…"; color: #a8977a; }
-.tbh-msg { --role: #a8977a; padding: 4px 6px 5px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(255,255,255,.045); overflow-wrap: anywhere; }
-.tbh-msg-planner { --role: #c9a0ff; background: rgba(201,160,255,.09); }
-.tbh-msg-actor { --role: #5ee8c0; background: rgba(94,232,192,.07); }
-.tbh-msg-action { --role: #7fa8ff; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding-block: 2px 3px; background: transparent; }
-.tbh-msg-system { --role: #6b5631; color: #c9b58a; }
-.tbh-msg-head { display: flex; align-items: baseline; gap: 6px; font-size: 10px; color: #8d7c5c; }
 .tbh-msg-role { color: var(--role); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .tbh-msg-model { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tbh-msg-time { margin-left: auto; }
-.tbh-msg-text { white-space: pre-wrap; }
-.tbh-msg-count { margin-left: 5px; color: var(--role); font-size: 10.5px; font-weight: 700; }
-.tbh-msg-detail { white-space: pre-wrap; font-size: 10.5px; color: #a8977a; }
-.tbh-msg-action .tbh-msg-model { display: none; }
-.tbh-msg-action .tbh-msg-detail { flex-basis: 100%; }
+.tbh-msg-time { font-variant-numeric: tabular-nums; }
+.tbh-insp-text { white-space: pre-wrap; font-weight: 700; }
+.tbh-insp-fold { margin-top: 8px; }
+.tbh-insp-fold > summary { cursor: pointer; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #c9b58a; }
+.tbh-insp-fold > .tbh-insp-pre { margin-top: 4px; }
+.tbh-insp-past { display: flex; gap: 6px; width: 100%; padding: 2px 4px; text-align: left; font: inherit; font-size: 10.5px; color: #e4d4ae; background: none; border: 0; border-radius: 3px; cursor: pointer; }
+.tbh-insp-past:hover { background: rgba(255,255,255,.06); }
+.tbh-insp-past-on { background: rgba(201,160,255,.14); }
+.tbh-meter-wide .tbh-meter-track { width: 120px; }
 .tbh-badge { display: inline-block; padding: 0 4px; border-radius: 3px; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-align: center; }
 .tbh-badge-new { align-self: flex-start; background: #ff7ad9; color: #3d0630; margin: 0 0 2px; }
 .tbh-badge-evo { background: #ffd36b; color: #3a2600; }
@@ -2161,7 +2254,7 @@
     style.textContent = css;
     document.head.append(style);
     const content = h2("div", "tbh-content");
-    const panel = h2("div", "tbh-panel", content, chat, footer);
+    const panel = h2("div", "tbh-panel", content, footer, chat);
     panel.id = "tibo-helper";
     if (window.innerWidth < 700)
       panel.classList.add("tbh-collapsed");

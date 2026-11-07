@@ -294,7 +294,8 @@ function mount(chat: HTMLElement, footer: HTMLElement): { panel: HTMLElement; co
   style.textContent = css;
   document.head.append(style);
   const content = h("div", "tbh-content");
-  const panel = h("div", "tbh-panel", content, chat, footer);
+  // The port row sits above the bot's controls while it plays, and at the panel's foot otherwise.
+  const panel = h("div", "tbh-panel", content, footer, chat);
   panel.id = "tibo-helper";
   if (window.innerWidth < 700) panel.classList.add("tbh-collapsed");
   document.body.append(panel);

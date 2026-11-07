@@ -12,6 +12,7 @@ Run link: {{link}}
 | Bot | step {{step}}s, speed x{{speed}} |
 | Strategy | {{strategy}} |
 | Run type | {{kind}} |
+| Log | {{log}} |
 
 ## Experiment
 
@@ -19,7 +20,7 @@ Run link: {{link}}
 
 ## Timeline
 
-Coach notes taken during the run, by game time.
+Every level-up, chest and shrine pick, by game time.
 
 {{timeline}}
 

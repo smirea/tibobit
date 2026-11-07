@@ -2,7 +2,7 @@ import type { Discovery } from "../discovery";
 import type { GameLink } from "../game";
 import type { Controller } from "./control";
 import { encyclopedia } from "./encyclopedia";
-import { BRIDGE_PORT, type ChatMessage, type PageLine, type PilotState, bridgeOrigin, parseCommand, validPort } from "./protocol";
+import { BRIDGE_PORT, type ChatMessage, type PageLine, type PilotState, bridgeOrigin, DEFAULT_PACE, parseCommand, type PilotChange, trimChat, validPort } from "./protocol";
 import { inRun, snapshot } from "./snapshot";
 
 const PORT_KEY = "tibobit.bridgePort";
@@ -30,7 +30,7 @@ export type Bridge = {
   /** Whether the server's bot is playing for this tab ("Grok take the wheel"). */
   pilot(): PilotState;
   /** Asks the server to start or stop the bot, or to play live; the new state arrives over the stream. */
-  setPilot(change: { on?: boolean; live?: boolean }): void;
+  setPilot(change: PilotChange): void;
   /** The bot's chat, oldest first; a message whose `count` grows keeps its id and position. */
   chat(): readonly ChatMessage[];
   onChange(listener: () => void): void;
@@ -54,7 +54,6 @@ const RUN_INTERVAL_MS = 33;
 const IDLE_INTERVAL_MS = 500;
 const RECONNECT_MS = 3000;
 const MAX_IN_FLIGHT = 4;
-const CHAT_LIMIT = 200;
 
 function post(origin: string, path: string, body: unknown): Promise<boolean> {
   return new Promise((resolve) =>
@@ -93,7 +92,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
   const notify = () => {
     for (const listener of listeners) listener();
   };
-  let pilot: PilotState = { state: "off", live: false };
+  let pilot: PilotState = { state: "off", live: false, pace: DEFAULT_PACE };
   const chat: ChatMessage[] = [];
   let inFlight = 0;
   let lastPush = 0;
@@ -103,7 +102,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
     if (from !== session) return;
     connected = false;
     // Without the server there is no bot, so nothing is driving the game any more.
-    receivePilot({ state: "off", live: pilot.live });
+    receivePilot({ state: "off", live: pilot.live, pace: pilot.pace });
     notify();
     setTimeout(listen, RECONNECT_MS);
   };
@@ -144,7 +143,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
     const at = chat.findIndex((m) => m.id === message.id);
     if (at >= 0) chat[at] = message;
     else chat.push(message);
-    if (chat.length > CHAT_LIMIT) chat.splice(0, chat.length - CHAT_LIMIT);
+    trimChat(chat);
   };
 
   const read = async (body: ReadableStream<Uint8Array>, mine: number) => {

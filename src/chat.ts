@@ -1,12 +1,15 @@
 import type { Bridge } from "./agent/bridge";
-import type { ChatMessage, Inspect, PilotRole } from "./agent/protocol";
+import { type CardOption, type ChatMessage, type Inspect, PACE_LIMITS, type PilotPace, type PilotRole } from "./agent/protocol";
 
-const ROLE_LABELS: Record<PilotRole, string> = { planner: "Planner", actor: "Actor", action: "Action", system: "Bot" };
+const ROLE_LABELS: Record<PilotRole, string> = { planner: "Plan", action: "Action", system: "Bot" };
+const ACTION_ROWS = 20;
 const HIDE_DELAY_MS = 200;
 // Narrower than this to the panel's left, the inspector covers the screen's top instead (phones).
 const MIN_SIDE_ROOM = 300;
 
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+/** Game time to a tenth of a second, as 01:23.4. */
+const fine = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
 const percent = (v: number) => `${Math.round(v * 100)}%`;
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
@@ -28,13 +31,41 @@ function section(title: string, ...body: Node[]): HTMLElement {
 
 const pre = (text: string, className = "") => h("pre", `tbh-insp-pre ${className}`.trim(), text);
 
-function inspectBody(inspect: Inspect): Node[] {
+function folded(title: string, text: string, className = ""): HTMLElement {
+  return h("details", "tbh-insp-fold", h("summary", "", title), pre(text, className));
+}
+
+/** Options with the model's odds as bars, the chosen one marked. */
+function oddsRows(options: CardOption[]): HTMLElement[] {
+  return options.map((c) =>
+    h(
+      "div",
+      `tbh-opt ${c.chosen ? "tbh-opt-chosen" : c.probability === undefined ? "tbh-opt-ruled-out" : "tbh-opt-safe"}`,
+      h("div", "tbh-opt-head", h("span", "tbh-opt-name", c.card), ...(c.chosen ? [h("span", "tbh-opt-outcome", "chosen")] : [])),
+      ...(c.probability === undefined ? [] : [h("div", "tbh-opt-scores", meter(percent(c.probability), c.probability, "tbh-meter-useful tbh-meter-wide"))]),
+      ...(c.notes === "" ? [] : [h("div", "tbh-opt-desc", c.notes)]),
+    ),
+  );
+}
+
+function inspectBody(m: ChatMessage): Node[] {
+  const words = [h("div", "tbh-insp-text", m.text), ...(m.detail === undefined ? [] : [h("div", "tbh-opt-desc", m.detail)])];
+  const inspect: Inspect | undefined = m.inspect;
+  if (inspect === undefined) return words;
   switch (inspect.kind) {
+    case "plan":
+      return [
+        ...words,
+        ...(inspect.choices === undefined ? [] : [section("Choices", ...oddsRows(inspect.choices))]),
+        section("Goals", ...oddsRows([...inspect.goals].sort((a, b) => (b.probability ?? 0) - (a.probability ?? 0)))),
+        folded("Prompt", inspect.prompt),
+      ];
     case "prompt":
       return [
-        section("Prompt", pre(inspect.prompt)),
-        ...(inspect.reasoning === undefined ? [] : [section("Reasoning", pre(inspect.reasoning, "tbh-insp-thought"))]),
-        ...(inspect.reply === undefined ? [] : [section("Reply", pre(inspect.reply))]),
+        ...words,
+        ...(inspect.reasoning === undefined ? [] : [folded("Reasoning", inspect.reasoning, "tbh-insp-thought")]),
+        ...(inspect.reply === undefined ? [] : [folded("Reply", inspect.reply)]),
+        folded("Prompt", inspect.prompt),
       ];
     case "moves": {
       const rows = inspect.moves.map((m) =>
@@ -62,51 +93,45 @@ function inspectBody(inspect: Inspect): Node[] {
         ),
       );
       return [
-        section(
-          "Moves",
-          ...rows,
-          ...(inspect.dash === undefined ? [] : [h("div", "tbh-opt-desc", `Dash to escape? ${percent(inspect.dash)} (dashes above 50%)`)]),
-        ),
-        section("Situation", pre(inspect.situation)),
+        ...words,
+        section("Moves", ...rows, ...(inspect.dash === undefined ? [] : [h("div", "tbh-opt-desc", `Dash to escape? ${percent(inspect.dash)} (dashes above 50%)`)])),
+        section("Prompt", pre([inspect.situation, ...(inspect.questions ?? [])].join("\n\n"))),
       ];
     }
-    case "cards": {
-      const rows = inspect.cards.map((c) =>
-        h(
-          "div",
-          `tbh-opt ${c.chosen ? "tbh-opt-chosen" : c.probability === undefined ? "tbh-opt-ruled-out" : "tbh-opt-safe"}`,
-          h("div", "tbh-opt-head", h("span", "tbh-opt-name", c.card), ...(c.chosen ? [h("span", "tbh-opt-outcome", "chosen")] : [])),
-          ...(c.probability === undefined ? [] : [h("div", "tbh-opt-scores", meter(percent(c.probability), c.probability, "tbh-meter-useful"))]),
-          h("div", "tbh-opt-desc", c.notes),
-        ),
-      );
-      return [section(inspect.question, ...rows), section("Situation", pre(inspect.situation))];
-    }
+    case "cards":
+      return [...words, section(inspect.question, ...oddsRows(inspect.cards)), section("Prompt", pre(inspect.situation))];
   }
 }
 
-/** Shows what a model was asked and what it weighed, beside the panel, while a chat message is hovered. */
-function inspector(panel: () => HTMLElement, latest: (id: number) => ChatMessage | undefined) {
+type Showing = { kind: "plan"; id?: number } | { kind: "action"; id: number };
+
+/**
+ * Shows, beside the panel, what a model was asked and what it weighed while its row is hovered.
+ * For the plan row that is the latest decision, followed by every earlier one, any of which can be
+ * opened by clicking it.
+ */
+function inspector(panel: () => HTMLElement, messages: () => readonly ChatMessage[]) {
   const box = h("div", "tbh-insp");
   box.hidden = true;
-  let showing: { id: number; inspect: Inspect } | undefined;
+  let showing: Showing | undefined;
+  let anchor: Element | undefined;
   let reading = false;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const place = (anchor: Element) => {
+  const place = (at: Element) => {
     const side = panel().getBoundingClientRect();
     const margin = 8;
     if (side.left < MIN_SIDE_ROOM) {
-      // No room beside the panel: above or below the message, whichever has more room, never over it.
-      const at = anchor.getBoundingClientRect();
-      const above = at.top > window.innerHeight - at.bottom;
+      // No room beside the panel: above or below the row, whichever has more room, never over it.
+      const rect = at.getBoundingClientRect();
+      const above = rect.top > window.innerHeight - rect.bottom;
       Object.assign(box.style, {
         left: `${margin}px`,
         right: `${margin}px`,
         width: "auto",
-        top: above ? "auto" : `${at.bottom + margin}px`,
-        bottom: above ? `${window.innerHeight - at.top + margin}px` : "auto",
-        maxHeight: `${(above ? at.top : window.innerHeight - at.bottom) - 2 * margin}px`,
+        top: above ? "auto" : `${rect.bottom + margin}px`,
+        bottom: above ? `${window.innerHeight - rect.top + margin}px` : "auto",
+        maxHeight: `${(above ? rect.top : window.innerHeight - rect.bottom) - 2 * margin}px`,
       });
       return;
     }
@@ -116,17 +141,49 @@ function inspector(panel: () => HTMLElement, latest: (id: number) => ChatMessage
     box.style.left = `${side.left - margin - width}px`;
     box.style.right = "auto";
     box.style.maxHeight = `${window.innerHeight - 2 * margin}px`;
-    const top = anchor.getBoundingClientRect().top;
+    const top = at.getBoundingClientRect().top;
     box.style.top = `${Math.max(margin, Math.min(top, window.innerHeight - box.offsetHeight - margin))}px`;
   };
 
-  const render = (m: ChatMessage, anchor: Element) => {
-    if (m.inspect === undefined) return;
+  const plans = () => messages().filter((m) => m.role === "planner");
+
+  const render = () => {
+    if (showing === undefined || anchor === undefined) return;
+    const all = plans();
+    const want = showing;
+    const m = want.kind === "plan" ? (all.find((x) => x.id === want.id) ?? all.at(-1)) : messages().find((x) => x.id === want.id);
+    if (m === undefined) {
+      box.hidden = true;
+      return;
+    }
     const scroll = box.scrollTop;
-    const head = h("div", "tbh-insp-head", h("span", `tbh-msg-role tbh-role-${m.role}`, ROLE_LABELS[m.role]), ...(m.model === undefined ? [] : [h("span", "tbh-msg-model", m.model)]), ...(m.time === undefined ? [] : [h("span", "tbh-msg-time", clock(m.time))]));
-    box.replaceChildren(head, ...inspectBody(m.inspect));
+    const head = h(
+      "div",
+      "tbh-insp-head",
+      ...(m.time === undefined ? [] : [h("span", "tbh-msg-time", m.role === "planner" ? clock(m.time) : fine(m.time))]),
+      h("span", `tbh-msg-role tbh-role-${m.role}`, ROLE_LABELS[m.role]),
+      ...(m.model === undefined ? [] : [h("span", "tbh-msg-model", m.model)]),
+    );
+    const history =
+      want.kind === "plan" && all.length > 1
+        ? [
+            section(
+              "All decisions",
+              ...[...all].reverse().map((x) => {
+                const item = h("button", `tbh-insp-past${x.id === m.id ? " tbh-insp-past-on" : ""}`, h("span", "tbh-row-time", x.time === undefined ? "" : clock(x.time)), h("span", "", x.text));
+                item.type = "button";
+                item.addEventListener("click", () => {
+                  showing = { kind: "plan", id: x.id };
+                  render();
+                  box.scrollTop = 0;
+                });
+                return item;
+              }),
+            ),
+          ]
+        : [];
+    box.replaceChildren(head, ...inspectBody(m), ...history);
     box.hidden = false;
-    showing = { id: m.id, inspect: m.inspect };
     place(anchor);
     box.scrollTop = scroll;
   };
@@ -151,48 +208,39 @@ function inspector(panel: () => HTMLElement, latest: (id: number) => ChatMessage
 
   return {
     box,
-    hover(el: HTMLElement, m: ChatMessage) {
+    show(target: Showing, at: Element) {
       clearTimeout(hideTimer);
       reading = false;
+      showing = target;
+      anchor = at;
       box.scrollTop = 0;
-      render(m, el);
+      render();
     },
     leave: hide,
-    /** A hovered message that changed (an action folding in its next move, a planner answering) shows its newest version, unless the pointer is in the box being read. */
-    refresh(el: HTMLElement, m: ChatMessage) {
-      if (showing?.id !== m.id || reading || showing.inspect === m.inspect) return;
-      render(m, el);
+    /** A shown message that changed shows its newest version, unless the pointer is in the box being read. */
+    refresh(anchorFor: (target: Showing) => Element | undefined) {
+      if (showing === undefined || reading) return;
+      anchor = anchorFor(showing) ?? anchor;
+      render();
     },
-    forget(id: number) {
-      if (showing?.id === id && !reading) box.hidden = true;
-    },
-    latest,
   };
 }
 
-function chatMessage(m: ChatMessage): HTMLElement {
-  const head = h(
-    "div",
-    "tbh-msg-head",
-    h("span", "tbh-msg-role", ROLE_LABELS[m.role]),
-    ...(m.model === undefined ? [] : [h("span", "tbh-msg-model", m.model)]),
-    ...(m.time === undefined ? [] : [h("span", "tbh-msg-time", clock(m.time))]),
-  );
-  const text = h("div", "tbh-msg-text", m.text, ...(m.count > 1 ? [h("span", "tbh-msg-count", `${m.count} moves`)] : []));
+function actionRow(m: ChatMessage): HTMLElement {
   const el = h(
     "div",
-    `tbh-msg tbh-msg-${m.role}${m.inspect === undefined ? "" : " tbh-msg-inspectable"}`,
-    head,
-    text,
-    ...(m.stream === undefined ? [] : [h("div", "tbh-msg-stream", h("span", "", m.stream, h("b", "tbh-cursor", "▍")))]),
-    ...(m.detail === undefined ? [] : [h("div", "tbh-msg-detail", m.detail)]),
+    `tbh-row tbh-row-${m.role}${m.inspect === undefined ? "" : " tbh-row-inspectable"}`,
+    h("span", "tbh-row-time", m.time === undefined ? "" : fine(m.time)),
+    h("span", "tbh-row-text", m.text),
+    ...(m.detail === undefined ? [] : [h("span", "tbh-row-detail", m.detail)]),
   );
+  el.dataset.id = String(m.id);
   return el;
 }
 
 /**
- * The bot's planner, actor and action model as a chat that follows the newest message unless
- * scrolled up, under the buttons that steer the bot while it plays.
+ * The bot's models while it plays: its latest plan pinned at the top, and the latest actions under
+ * it, newest first. Hovering either shows what the model was asked and what it weighed.
  */
 export function chatBox(bridge: Bridge): HTMLElement {
   const giveBack = h("button", "tbh-giveback");
@@ -204,10 +252,34 @@ export function chatBox(bridge: Bridge): HTMLElement {
   live.addEventListener("click", () => bridge.setPilot({ live: !bridge.pilot().live }));
   const tools = h("div", "tbh-chat-tools", giveBack, live);
 
-  const list = h("div", "tbh-chat");
+  const paceInput = (key: keyof PilotPace) => {
+    const { min, max, step } = PACE_LIMITS[key];
+    const input = h("input", "tbh-pace-input");
+    Object.assign(input, { type: "number", min: String(min), max: String(max), step: String(step), inputMode: "decimal" });
+    input.addEventListener("change", () => {
+      const v = Number(input.value);
+      if (!Number.isFinite(v) || input.value === "") return;
+      const clamped = Number(Math.min(max, Math.max(min, Math.round(v / step) * step)).toFixed(1));
+      input.value = String(clamped);
+      bridge.setPilot({ [key]: clamped });
+    });
+    return input;
+  };
+  const planEvery = paceInput("planEvery");
+  const actEvery = paceInput("actEvery");
+  const paceRow = h(
+    "div",
+    "tbh-pace",
+    h("label", "tbh-pace-field", h("span", "tbh-plan-label", "Plan"), "every", planEvery, "s"),
+    h("label", "tbh-pace-field tbh-pace-action", h("span", "tbh-plan-label", "Action"), "every", actEvery, "s"),
+  );
+
+  const plan = h("div", "tbh-plan");
+  const list = h("div", "tbh-actions");
   list.setAttribute("aria-live", "polite");
-  const shown = new Map<number, { el: HTMLElement; message: ChatMessage }>();
-  const insp = inspector(() => list.closest<HTMLElement>(".tbh-panel") ?? list, (id) => shown.get(id)?.message);
+  const rows = new Map<number, { el: HTMLElement; message: ChatMessage }>();
+  const insp = inspector(() => plan.closest<HTMLElement>(".tbh-panel") ?? plan, () => bridge.chat());
+  let shownPlan: ChatMessage | undefined;
 
   const render = () => {
     const pilot = bridge.pilot();
@@ -216,42 +288,63 @@ export function chatBox(bridge: Bridge): HTMLElement {
     giveBack.disabled = pilot.state !== "on";
     live.setAttribute("aria-pressed", String(pilot.live));
     live.disabled = pilot.state !== "on";
+    // Typing in a box is not interrupted by the server echoing the value back.
+    for (const [input, value] of [
+      [planEvery, pilot.pace.planEvery],
+      [actEvery, pilot.pace.actEvery],
+    ] as const) {
+      input.disabled = pilot.state !== "on";
+      if (document.activeElement !== input && input.value !== String(value)) input.value = String(value);
+    }
 
     const messages = bridge.chat();
-    const ids = new Set(messages.map((m) => m.id));
-    for (const [id, { el }] of shown) {
-      if (ids.has(id)) continue;
-      el.remove();
-      shown.delete(id);
-      insp.forget(id);
+    const latest = [...messages].reverse().find((m) => m.role === "planner");
+    if (latest !== shownPlan || latest === undefined) {
+      shownPlan = latest;
+      plan.replaceChildren(
+        h("span", "tbh-plan-label", "Plan"),
+        ...(latest?.time === undefined ? [] : [h("span", "tbh-row-time", clock(latest.time))]),
+        h("span", "tbh-plan-text", latest?.text ?? "Waiting for the planner…"),
+        ...(latest?.stream === undefined ? [] : [h("div", "tbh-plan-stream", h("span", "", latest.stream, h("b", "tbh-cursor", "▍")))]),
+      );
+      plan.classList.toggle("tbh-row-inspectable", latest !== undefined);
     }
-    const following = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
-    for (const message of messages) {
-      const before = shown.get(message.id);
-      if (before?.message === message) continue;
-      const el = chatMessage(message);
-      el.dataset.id = String(message.id);
-      if (before === undefined) list.append(el);
-      else before.el.replaceWith(el);
-      shown.set(message.id, { el, message });
-      insp.refresh(el, message);
-    }
-    if (following) list.scrollTop = list.scrollHeight;
+
+    const actions = messages.filter((m) => m.role !== "planner").slice(-ACTION_ROWS).reverse();
+    const ids = new Set(actions.map((m) => m.id));
+    for (const [id] of rows) if (!ids.has(id)) rows.delete(id);
+    const els = actions.map((message) => {
+      const before = rows.get(message.id);
+      if (before?.message === message) return before.el;
+      const el = actionRow(message);
+      rows.set(message.id, { el, message });
+      return el;
+    });
+    if (els.length !== list.children.length || els.some((el, i) => list.children[i] !== el)) list.replaceChildren(...els);
+    insp.refresh((target) => (target.kind === "plan" ? plan : rows.get(target.id)?.el));
   };
 
-  const messageAt = (target: EventTarget | null) => {
-    const el = target instanceof Element ? target.closest<HTMLElement>(".tbh-msg-inspectable") : null;
-    const message = el === null ? undefined : insp.latest(Number(el.dataset.id));
-    return el === null || message === undefined ? undefined : { el, message };
-  };
-  list.addEventListener("pointerover", (e) => {
-    const hit = messageAt(e.target);
-    if (hit === undefined) return insp.leave();
-    if (messageAt(e.relatedTarget)?.el !== hit.el) insp.hover(hit.el, hit.message);
+  // Moving within one row fires pointerover again for each child; only a new row starts over.
+  let hovered: Element | undefined;
+  plan.addEventListener("pointerenter", () => {
+    if (shownPlan === undefined || hovered === plan) return;
+    hovered = plan;
+    insp.show({ kind: "plan" }, plan);
   });
-  list.addEventListener("pointerleave", () => insp.leave());
+  list.addEventListener("pointerover", (e) => {
+    const el = e.target instanceof Element ? e.target.closest<HTMLElement>(".tbh-row") : null;
+    if (el === hovered) return;
+    hovered = el ?? undefined;
+    if (el === null) return insp.leave();
+    insp.show({ kind: "action", id: Number(el.dataset.id) }, el);
+  });
+  const box = h("div", "tbh-chatbox", tools, paceRow, plan, list, insp.box);
+  box.addEventListener("pointerleave", () => {
+    hovered = undefined;
+    insp.leave();
+  });
 
   bridge.onChange(render);
   render();
-  return h("div", "tbh-chatbox", tools, list, insp.box);
+  return box;
 }

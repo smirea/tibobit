@@ -285,14 +285,39 @@ export function parseCommand(input: unknown): Command {
 
 /**
  * "Grok take the wheel": the agent server runs scripts/tibo-bot.ts for the tab, and the bot's
- * models talk in the panel. The planner is the coach (grok), which sets the plan at checkpoints;
- * the actor is the decision model picking level-up and chest cards; the action model is the
- * decision model choosing each step's move.
+ * models talk in the panel. The planner is the decision model choosing cards and goals (and, between
+ * runs, the coach reviewing them); the action model is the decision model steering a step, and
+ * action messages also report goals starting and ending.
  */
-export const PILOT_ROLES = ["planner", "actor", "action", "system"] as const;
+export const PILOT_ROLES = ["planner", "action", "system"] as const;
 export type PilotRole = (typeof PILOT_ROLES)[number];
+/** How often, in seconds, the bot asks its planner while a goal is under way, and takes a step. */
+export type PilotPace = { planEvery: number; actEvery: number };
+export const DEFAULT_PACE: PilotPace = { planEvery: 15, actEvery: 0.3 };
+export const PACE_LIMITS = { planEvery: { min: 1, max: 300, step: 1 }, actEvery: { min: 0.1, max: 5, step: 0.1 } } as const;
 /** `live` ("DO IT LIVE"): the bot plays without pausing the game while its models think. */
-export type PilotState = { state: "off" | "on" | "stopping"; live: boolean; detail?: string };
+export type PilotState = { state: "off" | "on" | "stopping"; live: boolean; pace: PilotPace; detail?: string };
+export type PilotChange = { on?: boolean; live?: boolean } & Partial<PilotPace>;
+
+/** Validates a change to the pilot from the panel or a script; throws with a message a caller can act on. */
+export function parsePilotChange(input: unknown): PilotChange {
+  const c = (input ?? {}) as Record<string, unknown>;
+  const change: PilotChange = {};
+  for (const key of ["on", "live"] as const) {
+    if (c[key] === undefined) continue;
+    if (typeof c[key] !== "boolean") fail(`${key} must be true or false`);
+    change[key] = c[key] as boolean;
+  }
+  for (const key of ["planEvery", "actEvery"] as const) {
+    if (c[key] === undefined) continue;
+    const { min, max, step } = PACE_LIMITS[key];
+    const v = num(c[key], key);
+    if (v < min || v > max) fail(`${key} must be from ${min} to ${max} seconds`);
+    change[key] = Number((Math.round(v / step) * step).toFixed(1));
+  }
+  if (Object.keys(change).length === 0) fail('send {"on": true|false}, {"live": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
+  return change;
+}
 /** One move the action model weighed: the game's own forecast, the model's scores, and what became of it. */
 export type MoveOption = {
   move: string;
@@ -305,10 +330,14 @@ export type MoveOption = {
   outcome: "chosen" | "safe" | "risky" | "ruled out";
 };
 export type CardOption = { card: string; notes: string; probability?: number; chosen: boolean };
-/** What hovering a chat message shows: the question a model got and what it weighed. */
+/**
+ * What hovering a chat message shows: the question a model got and what it weighed. A plan carries
+ * the cards it chose among and every goal it weighed, each with the model's odds.
+ */
 export type Inspect =
   | { kind: "prompt"; prompt: string; reasoning?: string; reply?: string }
-  | { kind: "moves"; situation: string; moves: MoveOption[]; dash?: number }
+  | { kind: "plan"; prompt: string; choices?: CardOption[]; goals: CardOption[] }
+  | { kind: "moves"; situation: string; questions?: string[]; moves: MoveOption[]; dash?: number }
   | { kind: "cards"; situation: string; question: string; cards: CardOption[] };
 /**
  * What the bot says; the server stamps it into a ChatMessage. A line with a `key` replaces the
@@ -316,8 +345,23 @@ export type Inspect =
  * reasoning so far until the final text replaces it.
  */
 export type ChatLine = { role: PilotRole; text: string; detail?: string; model?: string; time?: number; key?: string; stream?: string; inspect?: Inspect };
-/** `count` is how many moves an action message stands for: the server folds a run of moves into one message. */
-export type ChatMessage = ChatLine & { id: number; count: number; at: number };
+export type ChatMessage = ChatLine & { id: number; at: number };
+
+const KEEP_PLANS = 500;
+const KEEP_OTHERS = 60;
+
+/**
+ * Drops the oldest messages beyond what the panel shows: every planner decision of a run (its
+ * history is inspectable) but only the latest actions, which come several a second.
+ */
+export function trimChat(chat: ChatMessage[]) {
+  let plans = 0;
+  let others = 0;
+  for (let i = chat.length - 1; i >= 0; i--) {
+    const keep = chat[i]?.role === "planner" ? ++plans <= KEEP_PLANS : ++others <= KEEP_OTHERS;
+    if (!keep) chat.splice(i, 1);
+  }
+}
 /** One line of the server's held-open stream to the page. */
 export type PageLine = { hello: true } | { error: string } | Envelope | { chat: ChatMessage } | { pilot: PilotState };
 
@@ -334,7 +378,7 @@ export function parseChatLine(input: unknown): ChatLine {
   const key = optionalString(c.key, "key");
   const stream = optionalString(c.stream, "stream");
   const inspect = c.inspect as Inspect | undefined;
-  if (inspect !== undefined && !["prompt", "moves", "cards"].includes((inspect as { kind?: unknown } | null)?.kind as string)) fail("inspect.kind must be prompt, moves or cards");
+  if (inspect !== undefined && !["prompt", "plan", "moves", "cards"].includes((inspect as { kind?: unknown } | null)?.kind as string)) fail("inspect.kind must be prompt, plan, moves or cards");
   return {
     role: c.role as PilotRole,
     text: c.text,

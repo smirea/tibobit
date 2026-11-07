@@ -56,18 +56,33 @@ export const css = `
 .tbh-live { flex: none; padding: 5px 8px; font: inherit; font-weight: 900; letter-spacing: .04em; cursor: pointer;
   color: #ffb4a8; background: transparent; border: 1px dashed #e38a7f; border-radius: 4px; }
 .tbh-live:hover:not(:disabled) { color: #fff; border-style: solid; }
-.tbh-live[aria-pressed="true"] { color: #fff; background: #d8362a; border: 1px solid #ff6a5a; box-shadow: 0 0 10px rgba(255,80,60,.6); animation: tbh-onair 1.2s ease-in-out infinite; }
-.tbh-live[aria-pressed="true"]::before { content: "● "; }
-@keyframes tbh-onair { 50% { box-shadow: 0 0 2px rgba(255,80,60,.3); } }
-@media (prefers-reduced-motion: reduce) { .tbh-live[aria-pressed="true"] { animation: none; } }
+.tbh-live[aria-pressed="true"] { color: #fff; background: #d8362a; border: 1px solid #ff6a5a; box-shadow: 0 0 10px rgba(255,80,60,.6); }
+.tbh-live[aria-pressed="true"]::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; vertical-align: 1px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 0 rgba(255,255,255,.8); animation: tbh-live-pulse 1.6s ease-out infinite; }
+@keyframes tbh-live-pulse { 70% { box-shadow: 0 0 0 6px rgba(255,255,255,0); } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); } }
+@media (prefers-reduced-motion: reduce) { .tbh-live[aria-pressed="true"]::before { animation: none; } }
 .tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
 .tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chatbox { display: none; }
 .tbh-chatbox { border-top: 1px solid rgba(255,255,255,.08); }
-.tbh-chat { display: flex; flex-direction: column; gap: 4px; max-height: min(52vh, 460px); overflow-y: auto; padding: 6px; user-select: text; overscroll-behavior: contain; }
-.tbh-msg-inspectable { cursor: help; }
-.tbh-msg-inspectable:hover { outline: 1px solid color-mix(in srgb, var(--role) 55%, transparent); }
+.tbh-pace { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 6px 0; font-size: 11px; color: #c9b58a; }
+.tbh-pace-field { --role: #c9a0ff; display: inline-flex; align-items: center; gap: 5px; }
+.tbh-pace-action { --role: #7fa8ff; }
+.tbh-pace-input { width: 4.2em; padding: 2px 4px; font: inherit; color: #f3e6c4; background: rgba(0,0,0,.35); border: 1px solid #6b5631; border-radius: 3px; }
+.tbh-pace-input:focus { outline: none; border-color: var(--role); }
+.tbh-pace-input:disabled { opacity: .5; }
+.tbh-plan { --role: #c9a0ff; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin: 6px 6px 0; padding: 5px 7px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(201,160,255,.1); overflow-wrap: anywhere; }
+.tbh-plan-label { color: var(--role); font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.tbh-plan-text { flex: 1 1 60%; min-width: 0; white-space: pre-wrap; }
 /* The newest reasoning sits at the bottom; older lines scroll out of the top. */
-.tbh-msg-stream { margin-top: 3px; max-height: 7.5em; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 10.5px; font-style: italic; color: #b9a6d9; }
+.tbh-plan-stream { flex-basis: 100%; max-height: 6em; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; white-space: pre-wrap; font-size: 10.5px; font-style: italic; color: #b9a6d9; }
+.tbh-actions { display: flex; flex-direction: column; gap: 1px; max-height: min(46vh, 420px); overflow-y: auto; padding: 4px 6px 6px; user-select: text; overscroll-behavior: contain; }
+.tbh-actions:empty::before { content: "Waiting for the bot…"; color: #a8977a; }
+.tbh-row { --role: #7fa8ff; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding: 1px 6px 2px; border-left: 3px solid var(--role); border-radius: 0 4px 4px 0; overflow-wrap: anywhere; }
+.tbh-row-system { --role: #6b5631; color: #c9b58a; }
+.tbh-row-time { flex: none; font-size: 10px; color: #8d7c5c; font-variant-numeric: tabular-nums; }
+.tbh-row-text { font-weight: 700; }
+.tbh-row-detail { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: #a8977a; }
+.tbh-row-inspectable { cursor: help; }
+.tbh-row-inspectable:hover { background: rgba(255,255,255,.05); outline: 1px solid color-mix(in srgb, var(--role) 55%, transparent); }
 .tbh-cursor { font-style: normal; font-weight: 400; color: var(--role); animation: tbh-blink 1s steps(1) infinite; }
 @keyframes tbh-blink { 50% { opacity: 0; } }
 
@@ -75,7 +90,7 @@ export const css = `
   box-shadow: 0 6px 24px rgba(0,0,0,.6); font: 11.5px/1.4 ui-monospace, Menlo, Consolas, monospace; user-select: text; overscroll-behavior: contain; }
 .tbh-insp[hidden] { display: none; }
 .tbh-insp-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; font-size: 10.5px; color: #8d7c5c; }
-.tbh-role-planner { --role: #c9a0ff; } .tbh-role-actor { --role: #5ee8c0; } .tbh-role-action { --role: #7fa8ff; } .tbh-role-system { --role: #a8977a; }
+.tbh-role-planner { --role: #c9a0ff; } .tbh-role-action { --role: #7fa8ff; } .tbh-role-system { --role: #a8977a; }
 .tbh-insp-section { margin-top: 8px; }
 .tbh-insp-section > h4 { margin: 0 0 4px; font: inherit; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #c9b58a; }
 .tbh-insp-pre { margin: 0; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 10.5px; background: rgba(255,255,255,.04); border-radius: 4px; }
@@ -98,21 +113,17 @@ export const css = `
 .tbh-meter-track > i { display: block; height: 100%; }
 .tbh-meter-hurt i { background: #e38a7f; } .tbh-meter-useful i { background: #7fa8ff; }
 .tbh-opt-desc { margin-top: 2px; font-size: 10.5px; color: #a8977a; white-space: pre-wrap; overflow-wrap: anywhere; }
-.tbh-chat:empty::before { content: "Waiting for the bot…"; color: #a8977a; }
-.tbh-msg { --role: #a8977a; padding: 4px 6px 5px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(255,255,255,.045); overflow-wrap: anywhere; }
-.tbh-msg-planner { --role: #c9a0ff; background: rgba(201,160,255,.09); }
-.tbh-msg-actor { --role: #5ee8c0; background: rgba(94,232,192,.07); }
-.tbh-msg-action { --role: #7fa8ff; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding-block: 2px 3px; background: transparent; }
-.tbh-msg-system { --role: #6b5631; color: #c9b58a; }
-.tbh-msg-head { display: flex; align-items: baseline; gap: 6px; font-size: 10px; color: #8d7c5c; }
 .tbh-msg-role { color: var(--role); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .tbh-msg-model { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tbh-msg-time { margin-left: auto; }
-.tbh-msg-text { white-space: pre-wrap; }
-.tbh-msg-count { margin-left: 5px; color: var(--role); font-size: 10.5px; font-weight: 700; }
-.tbh-msg-detail { white-space: pre-wrap; font-size: 10.5px; color: #a8977a; }
-.tbh-msg-action .tbh-msg-model { display: none; }
-.tbh-msg-action .tbh-msg-detail { flex-basis: 100%; }
+.tbh-msg-time { font-variant-numeric: tabular-nums; }
+.tbh-insp-text { white-space: pre-wrap; font-weight: 700; }
+.tbh-insp-fold { margin-top: 8px; }
+.tbh-insp-fold > summary { cursor: pointer; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #c9b58a; }
+.tbh-insp-fold > .tbh-insp-pre { margin-top: 4px; }
+.tbh-insp-past { display: flex; gap: 6px; width: 100%; padding: 2px 4px; text-align: left; font: inherit; font-size: 10.5px; color: #e4d4ae; background: none; border: 0; border-radius: 3px; cursor: pointer; }
+.tbh-insp-past:hover { background: rgba(255,255,255,.06); }
+.tbh-insp-past-on { background: rgba(201,160,255,.14); }
+.tbh-meter-wide .tbh-meter-track { width: 120px; }
 .tbh-badge { display: inline-block; padding: 0 4px; border-radius: 3px; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-align: center; }
 .tbh-badge-new { align-self: flex-start; background: #ff7ad9; color: #3d0630; margin: 0 0 2px; }
 .tbh-badge-evo { background: #ffd36b; color: #3a2600; }
