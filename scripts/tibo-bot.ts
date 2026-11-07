@@ -148,11 +148,11 @@ class RunNotes {
   private fields: Record<string, string>;
 
   constructor(r: RunView, strategy: string) {
-    const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 16);
+    const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
     this.id = `${stamp}-${MODE}-${DIFFICULTY}-${r.seed}`;
     this.file = path.join(NOTES_DIR, `${this.id}.md`);
     this.fields = {
-      title: `Run ${stamp.slice(0, 10)} ${stamp.slice(11).replace("-", ":")}, ${MODE} ${DIFFICULTY}`,
+      title: `Run ${stamp.slice(0, 10)} ${stamp.slice(11, 16).replace("-", ":")}, ${MODE} ${DIFFICULTY}`,
       date: new Date().toISOString(),
       mode: MODE,
       difficulty: DIFFICULTY,
@@ -205,6 +205,49 @@ const GAME_RULES = [
   "A base weapon at max level plus its catalyst (a passive or an item) evolves at the next chest; evolved weapons are much stronger. Two evolved weapons can sometimes fuse into a union.",
   "A small local decision model plays every step. It only sees one line of advice from you, and a mark on level-up options whose exact names you list in want.",
 ].join("\n");
+
+/**
+ * Asks the coach to review a finished run, rewrites strategy.md from its answer and files its
+ * infrastructure suggestions. Returns the review paragraph.
+ */
+async function reviewRun(timeline: string, outcome: string, recent: string[], runId: string, endTime: string): Promise<string | undefined> {
+  if (COACH === "none") return undefined;
+  const prompt = [
+    "You coach a bot that plays tibo.dog, and a run just ended.",
+    GAME_RULES,
+    `Goal: survive 20 minutes on ${DIFFICULTY} in today's ${MODE === "daily" ? "Daily (the same seed every attempt today)" : "Open World"}.`,
+    "Current strategy file:",
+    await readStrategy(),
+    "This run's notes:",
+    timeline || "(none)",
+    "Outcome:",
+    outcome,
+    ...(recent.length === 0 ? [] : ["The last few situations the decision model saw:", recent.join("\n---\n")]),
+    "Answer from these facts alone; do not browse, search or use tools.",
+    'Reply with only JSON: {"review": "a short paragraph: why the run ended, what worked, what to change", "strategy": "the full updated strategy.md in Markdown. Keep it generic advice for future runs (seed-specific facts only where the Daily repeats), keep its sections, stay under 70 lines, and add one dated line to Lessons", "infra": ["concrete suggestions to improve the data or controls the bot has"]}',
+  ].join("\n\n");
+  const reply = await askCoach(prompt);
+  if (reply === undefined) return undefined;
+  if (typeof reply.strategy === "string" && reply.strategy.trimStart().startsWith("# Strategy") && reply.strategy.length < 12_000) {
+    await Bun.write(STRATEGY_FILE, `${reply.strategy.trim()}\n`);
+    console.log("strategy.md updated");
+  }
+  if (Array.isArray(reply.infra)) for (const s of reply.infra) await infraFeedback(runId, endTime, String(s));
+  return typeof reply.review === "string" ? reply.review : undefined;
+}
+
+/** `--review <notes.md>`: review a finished run whose review never got written (the bot was stopped mid-review). */
+async function reviewNotesFile(file: string) {
+  const text = await Bun.file(file).text();
+  const section = (name: string) => text.match(new RegExp(`## ${name}\\n\\n([\\s\\S]*?)(?=\\n## |$)`))?.[1]?.trim() ?? "";
+  const outcome = section("Outcome");
+  if (!outcome.includes("Survived")) throw new Error(`${file} has no finished outcome to review`);
+  const time = outcome.match(/Survived \*\*([\d:]+)\*\*/)?.[1] ?? "";
+  const review = await reviewRun(section("Timeline"), outcome, [], path.basename(file, ".md"), time);
+  if (review === undefined) throw new Error("the coach gave no review");
+  await Bun.write(file, text.replace(/## Review\n\n[\s\S]*$/, `## Review\n\n${review}\n`));
+  console.log(`reviewed ${file}`);
+}
 
 class Coach {
   private nextCheckpoint = 0;
@@ -294,32 +337,10 @@ class Coach {
       `- Coach consulted ${this.calls} times.`,
     ].join("\n");
     await this.notes.write();
-    if (COACH === "none") return;
-    const strategy = await readStrategy();
-    const prompt = [
-      "You coach a bot that plays tibo.dog, and a run just ended.",
-      GAME_RULES,
-      `Goal: survive 20 minutes on ${DIFFICULTY} in today's ${MODE === "daily" ? "Daily (the same seed every attempt today)" : "Open World"}.`,
-      "Current strategy file:",
-      strategy,
-      "This run's notes:",
-      this.notes.timeline.join("\n") || "(none)",
-      "Outcome:",
-      this.notes.outcome,
-      "The last few situations the decision model saw:",
-      recent.join("\n---\n"),
-      "Answer from these facts alone; do not browse, search or use tools.",
-      'Reply with only JSON: {"review": "a short paragraph: why the run ended, what worked, what to change", "strategy": "the full updated strategy.md in Markdown. Keep it generic advice for future runs (seed-specific facts only where the Daily repeats), keep its sections, stay under 70 lines, and add one dated line to Lessons", "infra": ["concrete suggestions to improve the data or controls the bot has"]}',
-    ].join("\n\n");
-    const reply = await askCoach(prompt);
-    if (reply === undefined) return;
-    if (typeof reply.review === "string") this.notes.review = reply.review;
+    const review = await reviewRun(this.notes.timeline.join("\n"), this.notes.outcome, recent, this.notes.id, clock(lastRun.time));
+    if (review === undefined) return;
+    this.notes.review = review;
     await this.notes.write();
-    if (typeof reply.strategy === "string" && reply.strategy.trimStart().startsWith("# Strategy") && reply.strategy.length < 12_000) {
-      await Bun.write(STRATEGY_FILE, `${reply.strategy.trim()}\n`);
-      console.log("strategy.md updated");
-    }
-    if (Array.isArray(reply.infra)) for (const s of reply.infra) await infraFeedback(this.notes.id, clock(lastRun.time), String(s));
   }
 }
 
@@ -537,6 +558,7 @@ async function main() {
   let lastReport = -1;
   let steps = 0;
   let notes: RunNotes | undefined;
+  let reviewing: RunNotes | undefined;
   let coach: Coach | undefined;
   let last: RunView | undefined;
   const recent: string[] = [];
@@ -545,6 +567,10 @@ async function main() {
   console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, speed x${SPEED}, coach ${COACH}, log ${LOG}`);
   // A run the bot is stopped in the middle of says so in its notes instead of staying "in progress".
   const stop = async (signal: string) => {
+    if (reviewing !== undefined) {
+      reviewing.review = `Interrupted: the bot was stopped (${signal}) before the review finished. Rerun it with ./scripts/tibo-bot.ts --review ${reviewing.file}`;
+      await reviewing.write();
+    }
     if (notes !== undefined) {
       notes.link = "none (run aborted)";
       notes.outcome = `- Aborted at ${last === undefined ? "the start" : clock(last.time)}: the bot was stopped (${signal}).`;
@@ -578,10 +604,14 @@ async function main() {
         console.log(`  damage taken: ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}`);
         log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty: DIFFICULTY, notes: notes.id, ...s.lastRun, steps, coachCalls: coach.calls, avgDecisionMs: Math.round(avg) })}\n`);
         log.flush();
-        await coach.review(s.lastRun, last, recent);
-        console.log(`notes: ${notes.file}`);
-        awaitingLink = { notes, known: s.lastRunLink };
+        // The run is over; a stop from here on must not mark it aborted, only note the missing review.
+        const ended = notes;
+        reviewing = ended;
         notes = undefined;
+        await coach.review(s.lastRun, last, recent);
+        reviewing = undefined;
+        console.log(`notes: ${ended.file}`);
+        awaitingLink = { notes: ended, known: s.lastRunLink };
         coach = undefined;
         if (runs >= RUNS) {
           // Starting walks through the end screens, which is where the game shows the share link.
@@ -631,4 +661,6 @@ async function main() {
   }
 }
 
-await main();
+const reviewTarget = option("review", "");
+if (reviewTarget !== "") await reviewNotesFile(reviewTarget);
+else await main();

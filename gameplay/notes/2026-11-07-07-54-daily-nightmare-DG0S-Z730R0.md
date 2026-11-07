@@ -1,6 +1,6 @@
 # Run 2026-11-07 07:54, daily nightmare
 
-Run link: none (run aborted)
+Run link: none (lost when the bot was stopped mid-review)
 
 | | |
 | --- | --- |
@@ -28,8 +28,11 @@ Coach notes taken during the run, by game time.
 
 ## Outcome
 
-- Aborted at 11:24: the bot was stopped (SIGTERM).
+- Survived **11:24** (684.7s), level 42, 26074 kills.
+- Damage taken by source: enemy:harvest-mouse 83, boss:great-wireworm 83, enemy:field-rat 76, enemy:fry-fly 38, Hot oil 15, boss:fryer-king 12, enemy:crumb-ant 1.
+- Weapons at 10:00: Overgrowth 1/1, Reset Button 1/8, Frozen Fries 8/8, Tailgate Fries 6/8, Tot Toss 5/8, Afterburner Fries 3/8.
+- Tibo died at 11:24: health was 100% at 11:08, then field rats and harvest mice took 79% of it in under ten seconds while the model stood still with 11 enemies within 60. (This outcome was restored from the bot log after a stop handler bug overwrote it; the death itself was real.)
 
 ## Review
 
-No review: the run was stopped, not lost.
+Died at 11:24 in a standstill: health was 100% at 11:08, then field rats and harvest mice took 79% in under ten seconds with 11 enemies within 60. Overgrowth at 3:59 passed Late Blight and the bar stayed full through the Wireworm, but the 0:30 line still named Seeker Sprouts, so Fertilizer was skipped at 1:10 and 1:57; Gravy Heart was refused; Frozen Fries, Tailgate Fries, Tot Toss, and Reset Button filled the weapon bar; Afterburner Fries was only 5/8 and Jet Fryer never arrived. Reroll was first said at 11:00, and that chest line was still the plan through the burst. Next run the advice names Fertilizer only until it is owned, the level-up clause is the named card, else Gravy Heart then the other three sustain cards, else reroll, from the first pick, and any enemies inside 60 mean keep walking with the chest left out of the line once health falls.
