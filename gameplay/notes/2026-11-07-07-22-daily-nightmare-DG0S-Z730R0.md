@@ -1,6 +1,6 @@
 # Run 2026-11-07 07:22, daily nightmare
 
-Run link: pending: written once the game shows the run summary
+Run link: none (run aborted)
 
 | | |
 | --- | --- |
@@ -20,8 +20,8 @@ Coach notes taken during the run, by game time.
 
 ## Outcome
 
-(the run is in progress)
+- Aborted: the bot was restarted to load the coach digest and picks log changes.
 
 ## Review
 
-(written after the run)
+No review: the run was stopped, not lost.
