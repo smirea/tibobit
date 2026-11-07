@@ -2,9 +2,16 @@
 // imported a second time returns the instance the game already uses, so importing the game's
 // own chunks gives live access to its classes and content tables without parsing anything.
 
-export type WeaponDef = { id: string; tier: "base" | "evolved" | "union"; levels?: unknown[]; from?: string | string[]; catalyst?: string };
-export type PassiveDef = { id: string; maxLevel: number };
-export type ItemDef = { id: string; tier: "base" | "evolved"; from?: string; catalyst?: string };
+export type WeaponDef = {
+  id: string;
+  tier: "base" | "evolved" | "union";
+  levels?: unknown[];
+  from?: string | string[];
+  catalyst?: string;
+};
+export type PassiveDef = { id: string; maxLevel: number; stat?: string; perLevel?: number };
+export type ItemDef = { id: string; tier: "base" | "evolved"; from?: string; catalyst?: string; rarity?: number };
+export type EnemyDef = { id: string; hp: number; speed: number; damage: number; radius: number };
 
 export type Content = {
   baseWeapons: WeaponDef[];
@@ -15,12 +22,34 @@ export type Content = {
   items: ItemDef[];
   evolvedItems: ItemDef[];
   allItems: ItemDef[];
-  enemies: { id: string }[];
+  enemies: EnemyDef[];
   bossIds: string[];
 };
 
+/** The game's global content table: every definition regardless of which updates a run enables. */
+export type Table = Content & {
+  enemyAt(index: number): EnemyDef;
+  bossIdAt(index: number): string;
+  biomes: { id: string }[];
+  pois: { id?: string; kind?: string }[];
+};
+
 export type Offer = { type: "weapon" | "passive" | "item"; id: string; level?: number; isNew?: boolean };
-export type Choice = { kind: string; offers?: Offer[]; rewards?: unknown[]; level?: number };
+export type Choice = { kind: string; offers?: Offer[]; rewards?: unknown[]; level?: number; gold?: number };
+
+type Column<T = number> = { [index: number]: T | undefined; length: number };
+export type SlotPool = { count: number; slotAt(n: number): number; isAlive(slot: number): boolean; id(slot: number): number; has(id: number): boolean };
+export type Pool<F extends string> = { pool: SlotPool } & Record<F, Column>;
+
+export type Poi = {
+  id: string;
+  kind: string;
+  x: number;
+  y: number;
+  radius: number;
+  state: { uid: number; used: boolean; charge: number; armed: boolean; goneAt: number };
+};
+export type Hazard = { kind: string; x: number; y: number; radius: number; strength: number };
 
 export type GameState = {
   loadout: {
@@ -31,7 +60,18 @@ export type GameState = {
     weapons: { def: WeaponDef; level: number }[];
     passives: { def: PassiveDef; level: number }[];
     items: Map<string, number>;
+    stats: { maxHp: number; moveSpeed: number };
   };
+  player: Pool<"x" | "y" | "fx" | "fy" | "hp" | "invuln" | "dashCharges" | "dashCd" | "moving">;
+  me: number;
+  enemies: Pool<"x" | "y" | "hp" | "maxHp" | "radius" | "def" | "flags" | "damage">;
+  bosses: Pool<"x" | "y" | "hp" | "maxHp" | "radius" | "def">;
+  pickups: Pool<"x" | "y" | "kind" | "source" | "value" | "charge">;
+  zones: Pool<"x" | "y" | "radius" | "kind" | "hostile" | "shape" | "life" | "maxLife" | "damage" | "delay">;
+  bullets: Pool<"x" | "y" | "radius" | "vx" | "vy" | "damage">;
+  world: { activePois: Poi[]; activeHazards: Hazard[] };
+  view: { width: number; height: number };
+  cfg: { activation: { seconds: Record<string, number>; pickupRadius: Record<string, number> } };
   bigUpdate: Record<string, boolean>;
   choiceQueue: Choice[];
   over: boolean;
@@ -40,15 +80,34 @@ export type GameState = {
   runClock: number;
 };
 
-export type Game = { state: GameState };
+export type Game = {
+  state: GameState;
+  setInput(x: number, y: number): void;
+  setPaused(paused: boolean): void;
+  dash(x: number, y: number): void;
+};
+
+/** Enum tables the game exports from its boot chunk, found by shape rather than by minified name. */
+export type Enums = {
+  pickupKinds: string[];
+  zoneKinds: Record<string, number>;
+  enemyFlags: Record<string, number>;
+};
 
 export type Messages = Record<string, string[]>;
+
+/** While set, replaces the player's movement input every simulation tick. */
+export type Steer = (game: Game) => { x: number; y: number } | undefined;
 
 const SIM_CHUNK = /\/assets\/sim-[\w-]+\.js$/;
 const ENGLISH_CHUNK = /\/assets\/i18n-en-[\w.-]+\.js$/;
 
-function isGameClass(value: unknown): value is { prototype: { step: () => unknown; choose: unknown } } {
-  return typeof value === "function" && typeof value.prototype?.step === "function" && typeof value.prototype?.choose === "function";
+type GamePrototype = { step(): unknown; setInput(x: number, y: number): unknown; choose: unknown };
+
+function isGameClass(value: unknown): value is { prototype: GamePrototype } {
+  if (typeof value !== "function") return false;
+  const proto = value.prototype as Partial<GamePrototype> | undefined;
+  return typeof proto?.step === "function" && typeof proto.setInput === "function" && typeof proto.choose === "function";
 }
 
 function findGameClass(ns: Record<string, unknown>) {
@@ -60,36 +119,55 @@ function findGameClass(ns: Record<string, unknown>) {
   throw new Error("the sim chunk no longer exports a Game class");
 }
 
-// The content registry is built by a function the sim chunk imports and calls as
-// `x(e.bigUpdate).baseWeapons`. Its exported name is minified per build, so find the local
-// name at that call site and follow the import clause to the module that exports it.
-async function findContentFn(simUrl: string): Promise<(bigUpdate: Record<string, boolean>) => Content> {
-  const source = await (await fetch(simUrl)).text();
-  const local = source.match(/([\w$]+)\(e\.bigUpdate\)\.baseWeapons/)?.[1];
-  if (local === undefined) throw new Error("could not find the content registry call in the sim chunk");
+/** Resolves a minified local binding in a chunk to the module and export it was imported from. */
+async function importBinding(source: string, sourceUrl: string, local: string): Promise<{ value: unknown; module: Record<string, unknown> }> {
   for (const clause of source.matchAll(/import\{([^}]*)\}from"([^"]+)"/g)) {
     for (const binding of (clause[1] ?? "").split(",")) {
       const [exported = "", as] = binding.split(" as ");
       if ((as ?? exported) !== local) continue;
-      const mod = (await import(new URL(clause[2] ?? "", simUrl).href)) as Record<string, unknown>;
-      const fn = mod[exported];
-      if (typeof fn !== "function") throw new Error(`content registry export ${exported} is not a function`);
-      return fn as (bigUpdate: Record<string, boolean>) => Content;
+      const module = (await import(new URL(clause[2] ?? "", sourceUrl).href)) as Record<string, unknown>;
+      return { value: module[exported], module };
     }
   }
   throw new Error(`could not find where the sim chunk imports ${local}`);
 }
 
+function localAt(source: string, pattern: RegExp, what: string): string {
+  const local = source.match(pattern)?.[1];
+  if (local === undefined) throw new Error(`could not find the ${what} in the sim chunk`);
+  return local;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function findEnums(module: Record<string, unknown>): Enums {
+  const values = Object.values(module);
+  const pickupKinds = values.find(
+    (v): v is string[] => Array.isArray(v) && v[0] === "xp" && v.includes("gold") && v.includes("chest"),
+  );
+  const zoneKinds = values.find((v): v is Record<string, number> => isRecord(v) && typeof v.telegraph === "number" && typeof v.hazardPool === "number");
+  const enemyFlags = values.find((v): v is Record<string, number> => isRecord(v) && typeof v.Elite === "number" && typeof v.Hidden === "number");
+  if (pickupKinds === undefined) throw new Error("could not find the pickup kinds table");
+  if (zoneKinds === undefined) throw new Error("could not find the zone kinds table");
+  if (enemyFlags === undefined) throw new Error("could not find the enemy flags table");
+  return { pickupKinds, zoneKinds, enemyFlags };
+}
+
 function assertContent(value: unknown): asserts value is Content {
   const c = value as Partial<Record<keyof Content, unknown>>;
-  for (const key of ["baseWeapons", "evolutions", "unions", "passives", "items", "evolvedItems", "allWeapons", "allItems"] as const)
+  for (const key of ["baseWeapons", "evolutions", "unions", "passives", "items", "evolvedItems", "allWeapons", "allItems", "enemies", "bossIds"] as const)
     if (!Array.isArray(c[key])) throw new Error(`content registry has no ${key} list`);
 }
 
 export class GameLink {
   game: Game | undefined;
+  table: Table | undefined;
+  enums: Enums | undefined;
   messages: Messages = {};
   error: string | undefined;
+  steer: Steer | undefined;
   private contentFn: ((bigUpdate: Record<string, boolean>) => Content) | undefined;
   private seen = new Set<string>();
   private listeners = new Set<() => void>();
@@ -100,10 +178,15 @@ export class GameLink {
     }).observe({ type: "resource", buffered: true });
   }
 
+  get ready(): boolean {
+    return this.contentFn !== undefined && this.table !== undefined && this.enums !== undefined;
+  }
+
   onChange(fn: () => void) {
     this.listeners.add(fn);
   }
 
+  /** The content enabled for the current run. */
   content(): Content | undefined {
     if (this.game === undefined || this.contentFn === undefined) return undefined;
     try {
@@ -114,6 +197,10 @@ export class GameLink {
       this.fail(e);
       return undefined;
     }
+  }
+
+  message(key: string): string | undefined {
+    return this.messages[key]?.[0];
   }
 
   private changed() {
@@ -139,7 +226,7 @@ export class GameLink {
     const ns = (await import(url)) as Record<string, unknown>;
     const Game = findGameClass(ns);
     const link = this;
-    const step = Game.prototype.step;
+    const { step, setInput } = Game.prototype;
     Game.prototype.step = function (this: Game) {
       if (link.game !== this) {
         link.game = this;
@@ -147,14 +234,29 @@ export class GameLink {
       }
       return step.call(this);
     };
-    this.contentFn = await findContentFn(url);
+    Game.prototype.setInput = function (this: Game, x: number, y: number) {
+      const override = link.steer?.(this);
+      return setInput.call(this, override?.x ?? x, override?.y ?? y);
+    };
+
+    const source = await (await fetch(url)).text();
+    // The registry function is called as `x(e.bigUpdate).baseWeapons` and the global table as
+    // `w.enemyAt(...)`. Their exported names are minified per build, so follow the import clauses.
+    const contentFn = await importBinding(source, url, localAt(source, /([\w$]+)\(e\.bigUpdate\)\.baseWeapons/, "content registry call"));
+    if (typeof contentFn.value !== "function") throw new Error("the content registry is not a function");
+    const table = await importBinding(source, url, localAt(source, /([\w$]+)\.enemyAt\(/, "content table"));
+    if (!isRecord(table.value) || typeof table.value.enemyAt !== "function") throw new Error("the content table has no enemyAt");
+    assertContent(table.value);
+    this.enums = findEnums(table.module);
+    this.table = table.value as Table;
+    this.contentFn = contentFn.value as (bigUpdate: Record<string, boolean>) => Content;
     this.changed();
   }
 
   private async loadMessages(url: string) {
     const ns = (await import(url)) as Record<string, unknown>;
     for (const value of Object.values(ns)) {
-      if (value === null || typeof value !== "object" || !Object.keys(value).some((k) => k.startsWith("content."))) continue;
+      if (!isRecord(value) || !Object.keys(value).some((k) => k.startsWith("content."))) continue;
       Object.assign(this.messages, value);
     }
     this.changed();

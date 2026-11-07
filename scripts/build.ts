@@ -11,10 +11,11 @@ const header = `// ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
 // @version      ${version}
-// @description  Lists the evolutions your current loadout can reach and annotates level-up cards with combos and undiscovered picks.
+// @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @connect      127.0.0.1
 // @updateURL    ${rawUrl}
 // @downloadURL  ${rawUrl}
 // ==/UserScript==
