@@ -422,14 +422,19 @@ function describe(r: RunView, s: SectorView): string {
     s.enemiesNear > 0 ? `${plural(s.enemiesNear, "enemy")} close` : "no enemies close",
     s.enemiesFar > s.enemiesNear ? `${s.enemiesFar - s.enemiesNear} more further out` : "",
     ...sights(r, s.dir),
+    s.xpNear >= 3 ? `${s.xpNear} xp gems to collect` : "",
   ];
   return parts.filter(Boolean).join(", ");
 }
 
 // Chests and shrines only open after Tibo stands on them for a moment, so standing still says so.
+// "Stand still" must carry the threats around Tibo too, or it reads as the safest move in a swarm.
 function standing(r: RunView): string {
+  const near = r.sectors.reduce((n, x) => n + x.enemiesNear, 0);
+  const crowd = near > 0 ? ` with ${plural(near, "enemy")} within 60 units closing in` : "";
   const hits = r.standingBulletHits > 0 ? `, where ${plural(r.standingBulletHits, "enemy bullet")} would hit Tibo` : "";
-  return `${standingSpot(r)}${hits}`;
+  const inAttack = r.hazards.some((h) => h.inside) ? ", inside the danger Tibo stands in" : "";
+  return `${standingSpot(r)}${crowd}${hits}${inAttack}`;
 }
 
 function standingSpot(r: RunView): string {
@@ -467,7 +472,7 @@ async function move(r: RunView) {
   let choice = safe.sort((x, y) => risk(x) - risk(y))[0] ?? "stay";
   if (safe.length > 1) {
     const useful: Record<string, Question> = {};
-    for (const k of safe) useful[k] = { type: "noul", instructions: `If Tibo does this: ${moves[k]}. Does it bring Tibo toward something useful, like food when hurt, a chest, or a shrine to stand in?` };
+    for (const k of safe) useful[k] = { type: "noul", instructions: `If Tibo does this: ${moves[k]}. Does it bring Tibo toward something useful, like food when hurt, a chest, a shrine to stand in, or xp gems to level up?` };
     const gain = await decide(state, useful);
     choice = safe.sort((x, y) => (gain[y]?.noul ?? 0) - (gain[x]?.noul ?? 0))[0] ?? choice;
   }

@@ -168,6 +168,8 @@ export type SectorView = {
   clearOfAttacks: boolean;
   /** Enemy bullets that would hit the player within 0.6 seconds if it walks this way, from their current paths. */
   bulletHits: number;
+  /** XP gems within 120 units this way. */
+  xpNear: number;
 };
 
 /** `charge` and `chargeNeeded` (seconds) appear on pickups you open by standing on them. */

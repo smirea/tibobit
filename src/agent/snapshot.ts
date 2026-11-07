@@ -26,6 +26,7 @@ const PATH_AHEAD = 60;
 const HURT_WINDOW_TICKS = 180;
 const PLAYER_SPEED = 62;
 const FORECAST_SECONDS = 0.6;
+const XP_RANGE = 120;
 
 // Cumulative damage by source at recent ticks, to report what hurt the player lately.
 let hurtHistory: { tick: number; totals: Map<string, number> }[] = [];
@@ -220,11 +221,16 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
   const activation = s.cfg.activation.seconds;
   const counts: Record<string, number> = {};
   const chests: PickupView[] = [];
+  const gems: Rel[] = [];
   const loose: PickupView[] = [];
   for (const i of alive(s.pickups)) {
     const kind = enums.pickupKinds[s.pickups.kind[i] ?? -1] ?? "unknown";
     counts[kind] = (counts[kind] ?? 0) + 1;
-    if (kind === "xp") continue;
+    if (kind === "xp") {
+      const rel = relTo(s, s.pickups.x[i] ?? 0, s.pickups.y[i] ?? 0);
+      if (rel.dist <= XP_RANGE) gems.push(rel);
+      continue;
+    }
     const needed = activation[kind];
     const view: PickupView = {
       ...relTo(s, s.pickups.x[i] ?? 0, s.pickups.y[i] ?? 0),
@@ -360,6 +366,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
       leavesHazard: holding.length > 0 && holding.every((a) => !a.contains(end.x, end.y)),
       clearOfAttacks: areas.every((a) => a.view.source !== "attack" || !a.contains(end.x, end.y)),
       bulletHits: hitsWalking(ux, uy),
+      xpNear: within(gems).length,
     };
   });
   return {

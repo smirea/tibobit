@@ -1,0 +1,35 @@
+# Run 2026-11-07 07:54, daily nightmare
+
+Run link: none (run aborted)
+
+| | |
+| --- | --- |
+| Date | 2026-11-07T07:54:31.156Z |
+| Mode | daily nightmare |
+| Seed | DG0S-Z730R0 |
+| Decision model | laya@q8_0 (moves), h2o-lightning-4b@q8_0 (picks) |
+| Coach | grok grok-4.7-build-fast |
+| Bot | step 0.35s, speed x4 |
+| Strategy | strategy.md daab5f7e |
+
+## Timeline
+
+Coach notes taken during the run, by game time.
+
+- **0:30** (checkpoint at 0:30) Full health at 0:30 with Seeker Sprouts 2/8 and Fertilizer still missing, so the first level-ups go to Fertilizer, then the four sustain passives, and only then more sprouts. Direction bins are empty despite 20 enemies, and the shrine is a skip; the first boss circle is the thing to step off. Advice: Leave any telegraph and hot oil first, then food if health is falling, otherwise keep moving off the densest side and skip shrines and chests; take Fertilizer over Hash Rush, Hearty Helping, Gravy Heart, or Starch Plating, and otherwise level only Seeker Sprouts. Want: Fertilizer, Hash Rush, Hearty Helping, Gravy Heart, Starch Plating.
+- **2:00** (a boss appeared: amusing) Sprouts are 8/8 and health is steady, but Fertilizer was skipped at 1:10 and 1:57, so Overgrowth still has no catalyst while Amusing is up and the shrine is a skip. Watch the next level-up for Fertilizer and step off Amusing's circle before anything else. Advice: Leave any telegraph and hot oil first, then food only if health is falling, otherwise keep moving off the densest side and skip shrines and chests; take Fertilizer over the four sustain passives and refuse every other weapon or passive. Want: Fertilizer, Hash Rush, Hearty Helping, Gravy Heart, Starch Plating.
+- **2:30** (checkpoint at 2:30) Sprouts are 8/8 and health is full, but Fertilizer is still missing after the 1:10 and 1:57 skips, while Hot Start, Gravy Splash, and Slow Cooker already took levels. The nearby chest evolves nothing until Fertilizer is owned; Hot Start is already the Jet Fryer catalyst, so do not level it further. Advice: Leave any telegraph and hot oil first, then food if health is falling, otherwise keep moving off the densest side and skip shrines; take Fertilizer over Hash Rush, Hearty Helping, Gravy Heart, or Starch Plating, refuse every other weapon or passive, and open a chest only after Fertilizer is owned. Want: Fertilizer, Hash Rush, Hearty Helping, Gravy Heart, Starch Plating.
+- **3:59** (a weapon evolved) Overgrowth is in and health recovered to full, with no boss and an empty near ring. The nearby chest evolves nothing until Afterburner Fries is 8, Hot Start is already owned, and The Masher's circle comes before any chest or shrine. Advice: Leave any telegraph and hot oil first, then food if health is falling, otherwise keep moving off the densest side and skip shrines and chests; take Afterburner Fries over Hash Rush, Hearty Helping, Gravy Heart, or Starch Plating, and refuse every other weapon or passive. Want: Afterburner Fries, Hash Rush, Hearty Helping, Gravy Heart, Starch Plating.
+- **5:00** (checkpoint at 5:00) Overgrowth is in with full health and Hot Start already owned, but Afterburner Fries is still missing and the 4:02 and 4:17 level-ups leaked into Slow Cooker and Chives. The nearby chest evolves nothing until Afterburner Fries is 8, so leave Late Blight's telegraph and skip the chest and shrine. Advice: Leave any telegraph and hot oil first, then food if health is falling, otherwise keep moving off the densest side and skip shrines and chests; take Afterburner Fries over Hash Rush, Hearty Helping, Gravy Heart, or Starch Plating, and refuse every other weapon or passive. Want: Afterburner Fries, Hash Rush, Hearty Helping, Gravy Heart, Starch Plating.
+- **7:02** (a boss attack is telegraphed nearby) Overgrowth is in at full health with Sir Strawman's telegraph on the tile, but Afterburner Fries has still never been offered while Frozen Fries reached 6/8 and Hot Start, Chives, Slow Cooker, and Gravy Splash all maxed. The chest evolves nothing until Afterburner Fries is 8, so the next level-ups are that weapon or the four sustain passives only. Advice: Leave any telegraph and hot oil first, then food if health is falling, otherwise keep moving off the densest side and skip shrines and any chest until Afterburner Fries is 8; take Afterburner Fries over Hash Rush, Hearty Helping, Gravy Heart, or Starch Plating, and refuse every other weapon or passive. Want: Afterburner Fries, Hash Rush, Hearty Helping, Gravy Heart, Starch Plating.
+- **8:00** (checkpoint at 8:00) Overgrowth is in at full health with The Fryer King up, but Afterburner Fries has still never been offered while Frozen Fries is 6/8 and Hot Start, Chives, Slow Cooker, and Gravy Splash are maxed. The nearby chest evolves nothing until Afterburner Fries is 8; watch Fryer King circles and hot oil, and spend every level-up on that weapon or the four sustain passives. Advice: Leave any telegraph and hot oil first, then food if health is falling, otherwise keep moving off the densest side and skip shrines and any chest until Afterburner Fries is 8; take Afterburner Fries over Hash Rush, Hearty Helping, Gravy Heart, or Starch Plating, and refuse every other weapon or passive. Want: Afterburner Fries, Hash Rush, Hearty Helping, Gravy Heart, Starch Plating.
+- **10:02** (a boss came within 50 units) Overgrowth is in at full health with the Great Wireworm close, but Afterburner Fries is only 3/8 while Tot Toss, Tailgate Fries, Frozen Fries, and Reset Button took the recent level-ups and Gravy Heart was refused. The chest evolves nothing until Afterburner Fries is 8; watch Wireworm circles and spend every level-up on that weapon or the four sustain passives. Advice: Leave any telegraph and hot oil first, then step away from a close boss body, then food if health is falling, otherwise keep moving off the densest side and skip shrines and any chest until Afterburner Fries is 8; take Afterburner Fries over Hash Rush, Hearty Helping, Gravy Heart, or Starch Plating, and refuse every other weapon or passive. Want: Afterburner Fries, Hash Rush, Hearty Helping, Gravy Heart, Starch Plating.
+- **11:00** (checkpoint at 11:00) Afterburner Fries is 5/8 with Hot Start already maxed, health is full, and the near ring is empty, so the chest evolves nothing until that weapon is 8. Tot Toss is 5/8 with Chives maxed, so keep refusing it or the next chest can become Tot Gatling instead of Jet Fryer. Advice: Leave any telegraph and hot oil first, then step away from a close boss body, then food if health is falling, otherwise keep moving off the densest side, skip shrines, and open a chest only once Afterburner Fries is 8; take Afterburner Fries over Hash Rush, Hearty Helping, Gravy Heart, or Starch Plating, and reroll when none of those are offered. Want: Afterburner Fries, Hash Rush, Hearty Helping, Gravy Heart, Starch Plating.
+
+## Outcome
+
+- Aborted at 11:24: the bot was stopped (SIGTERM).
+
+## Review
+
+No review: the run was stopped, not lost.

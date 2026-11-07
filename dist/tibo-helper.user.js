@@ -280,6 +280,7 @@
   var HURT_WINDOW_TICKS = 180;
   var PLAYER_SPEED = 62;
   var FORECAST_SECONDS = 0.6;
+  var XP_RANGE = 120;
   var hurtHistory = [];
   function recentHurt(s) {
     const totals = new Map(s.run.damageTakenBySource);
@@ -449,12 +450,17 @@
     const activation = s.cfg.activation.seconds;
     const counts = {};
     const chests = [];
+    const gems = [];
     const loose = [];
     for (const i of alive(s.pickups)) {
       const kind = enums.pickupKinds[s.pickups.kind[i] ?? -1] ?? "unknown";
       counts[kind] = (counts[kind] ?? 0) + 1;
-      if (kind === "xp")
+      if (kind === "xp") {
+        const rel = relTo(s, s.pickups.x[i] ?? 0, s.pickups.y[i] ?? 0);
+        if (rel.dist <= XP_RANGE)
+          gems.push(rel);
         continue;
+      }
       const needed = activation[kind];
       const view = {
         ...relTo(s, s.pickups.x[i] ?? 0, s.pickups.y[i] ?? 0),
@@ -579,7 +585,8 @@
         hazard: areas.find((a) => !a.view.inside && crosses(a))?.view.kind ?? null,
         leavesHazard: holding.length > 0 && holding.every((a) => !a.contains(end.x, end.y)),
         clearOfAttacks: areas.every((a) => a.view.source !== "attack" || !a.contains(end.x, end.y)),
-        bulletHits: hitsWalking(ux, uy)
+        bulletHits: hitsWalking(ux, uy),
+        xpNear: within(gems).length
       };
     });
     return {
