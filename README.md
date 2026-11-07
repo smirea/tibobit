@@ -39,13 +39,24 @@ Commands, also available as `./scripts/tibo.ts <verb>`:
 - `{"type":"move","dir":"left","seconds":2}` holds a direction. `dir` is one of the eight compass words (`up-left` and so on) or degrees, where 0 is right and 90 is down. Without `seconds` it holds until the next movement command.
 - `{"type":"goto","to":{"x":120,"y":-40}}` walks to a world position. `to` can also be `{"dx","dy"}` relative to where you stand, `{"poi":uid}` for a point of interest, or `{"pickup":uid}` for a chest or other pickup. `stay` holds still after arriving, either for a number of seconds or with `"done"` until the target is used up. Shrines, chests and most points of interest only open after you stand on them for their `chargeNeeded` seconds, so `{"type":"goto","to":{"poi":16},"stay":"done"}` is the usual way to take one.
 - `{"type":"choose","index":0}` picks an option of the open level-up, chest or shrine choice. Options carry `recommended` (the game's own suggestion), `unseen`, and `combos`: every recipe the option is part of, with the partner, whether you hold it (`partnerHeld`), whether picking completes it (`ready`), and whether you have ever made the result (`made`).
-- `{"type":"dash","dir":"up"}`, `{"type":"stop"}`, `{"type":"pause"}`, `{"type":"resume"}`, and `{"type":"start","difficulty":"easy"}` to start an Open World run from the title or end screen.
+- `{"type":"dash","dir":"up"}`, `{"type":"stop"}`, `{"type":"pause"}`, `{"type":"resume"}`, `{"type":"speed","factor":4}`, and `{"type":"start","difficulty":"easy"}` to start an Open World run from the title or end screen.
+- Add `"pause": true` to `move` or `goto` to run the game only for that command: it resumes a paused game and pauses it again on the tick the command finishes.
+
+The snapshot's `sectors` summarise every direction (enemies within 60 and 150 units, nearest enemy, boss and bullet, and any hazard in the way), and `lastRun` reports time, level and kills once a run ends.
 
 Positions are world units. `x` grows to the right and `y` grows downward, and the player walks about 62 units a second at base speed. Every listed thing carries `dx`, `dy`, `dist`, a compass `dir` from the player, and `onScreen`. Things off screen are the ones the game points at with arrows at the screen edge.
 
 A level-up or chest choice freezes game time, so a waiting command returns early with `interruptedBy: "choice"` and resumes after you choose. Steering for `goto` and `move` runs inside the page at the game's 60 ticks a second, so it does not depend on network latency. Snapshots reach the server about 100ms after the game state they describe, because Tampermonkey takes about 80ms to deliver each request from the page. Commands reach the page in a few milliseconds over a held-open stream. The full types are in `src/agent/protocol.ts`.
 
 The server only listens on 127.0.0.1 and sends no CORS headers, so other websites cannot drive the game. The userscript reaches it through Tampermonkey's `GM_xmlhttpRequest`, which tibo.dog's content security policy does not block.
+
+## Headless play and the decision-model bot
+
+`./scripts/headless.ts` runs tibo.dog in a headless Chromium with the userscript, so a bot can play without a visible browser. It reuses the newest Playwright headless shell on the machine, and serves `GET http://127.0.0.1:7358/screenshot` for a look at the game.
+
+`./scripts/tibo-bot.ts` plays through the agent server with a local decision model served by LM Studio at `/v1/systemone` (for example `--model h2o-lightning-4b@q8_0` or `--model laya@q8_0`). Each step it asks the model one question: which of the eight directions to walk, or to stand still, with each option described by what lies that way. On a level-up it asks which card to take. The bot only describes the game and carries out the answers. Every few game minutes it asks `grok` for a short plan in the background, which the decision model sees as context (`--planner none` turns that off).
+
+The bot plays in lockstep: each step runs the game for `--step` seconds (default 0.35) and pauses it again (`"pause": true` on `move` and `goto`), so the model's thinking time costs no game time. `{"type":"speed","factor":4}` runs four simulation ticks per frame, so game time passes up to four times faster while the model thinks. Run summaries go to `.runs/`.
 
 ## How it reads the game
 

@@ -78,6 +78,7 @@ export type GameState = {
   paused: boolean;
   tick: number;
   runClock: number;
+  run: { timeSec: number; level: number; kills: number };
 };
 
 export type Game = {
@@ -175,6 +176,8 @@ export class GameLink {
   icons: IconSheet | undefined;
   error: string | undefined;
   steer: Steer | undefined;
+  /** Simulation ticks per game frame; above 1 the game runs faster than real time. */
+  speed = 1;
   private contentFn: ((bigUpdate: Record<string, boolean>) => Content) | undefined;
   private seen = new Set<string>();
   private listeners = new Set<() => void>();
@@ -242,7 +245,14 @@ export class GameLink {
         link.game = this;
         link.changed();
       }
-      return step.call(this);
+      const result = step.call(this);
+      // Extra ticks re-steer before each one, so agent commands stay tick-exact at any speed.
+      for (let i = 1; i < link.speed; i++) {
+        const override = link.steer?.(this);
+        if (override !== undefined) setInput.call(this, override.x, override.y);
+        step.call(this);
+      }
+      return result;
     };
     Game.prototype.setInput = function (this: Game, x: number, y: number) {
       const override = link.steer?.(this);

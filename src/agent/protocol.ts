@@ -13,21 +13,27 @@ export type Heading = Direction | number;
 export type Target = { x: number; y: number } | { dx: number; dy: number } | { poi: number } | { pickup: number };
 
 export type Command =
-  /** Hold a direction. Without `seconds` it holds until another movement command or `stop`. */
-  | { type: "move"; dir: Heading; seconds?: number }
+  /**
+   * Hold a direction. Without `seconds` it holds until another movement command or `stop`.
+   * `pause` (on move and goto) runs the game for this command only: it resumes a paused game
+   * and pauses it again on the tick the command finishes, so a slow agent can play in lockstep.
+   */
+  | { type: "move"; dir: Heading; seconds?: number; pause?: boolean }
   /**
    * Walk to a point and optionally stand there. `within` is the arrival distance (default: half
    * the target's activation radius, or 6). `stay` holds still for that many seconds after
    * arriving, or until the point of interest or pickup is used up when it is "done". Chests,
    * items and most points of interest only open after standing on them for `chargeNeeded`.
    */
-  | { type: "goto"; to: Target; within?: number; stay?: number | "done"; timeout?: number }
+  | { type: "goto"; to: Target; within?: number; stay?: number | "done"; timeout?: number; pause?: boolean }
   | { type: "stop" }
   /** Pick an option of the open level-up, chest or shrine choice by its index. */
   | { type: "choose"; index: number }
   | { type: "dash"; dir?: Heading }
   | { type: "pause" }
   | { type: "resume" }
+  /** Run the simulation `factor` ticks per frame (1 to 8). Movement input still applies to every tick. */
+  | { type: "speed"; factor: number }
   /** From the title screen or the end screen, start an Open World run. */
   | { type: "start"; difficulty?: "easy" | "normal" | "hard" | "nightmare" };
 
@@ -76,6 +82,8 @@ export type Snapshot = {
   capturedAt: number;
   screen: "title" | "run" | "choice" | "paused" | "over";
   run?: RunView;
+  /** How the most recent run went; set once a run has ended. */
+  lastRun?: { time: number; level: number; kills: number };
   commands: CommandStatus[];
   error?: string;
 };
@@ -108,6 +116,21 @@ export type RunView = {
   pois: (Rel & { uid: number; kind: string; name: string; radius: number; inside: boolean; charge: number; chargeNeeded: number; used: boolean })[];
   hazards: (Rel & { kind: string; source: "terrain" | "attack"; radius: number; inside: boolean; secondsLeft?: number })[];
   bullets: { total: number; nearest: (Rel & { radius: number })[] };
+  /** Everything around the player bucketed by compass direction, nearest first within each. */
+  sectors: SectorView[];
+};
+
+export type SectorView = {
+  dir: Direction;
+  /** Enemies within 60 and within 150 units in this direction. */
+  enemiesNear: number;
+  enemiesFar: number;
+  /** Distance to the nearest enemy, boss or bullet this way, or null when there is none within 300. */
+  nearestEnemy: number | null;
+  nearestBoss: number | null;
+  nearestBullet: number | null;
+  /** A terrain hazard or attack zone overlaps the next 60 units of this direction. */
+  hazard: string | null;
 };
 
 /** `charge` and `chargeNeeded` (seconds) appear on pickups you open by standing on them. */
@@ -153,7 +176,12 @@ export function parseCommand(input: unknown): Command {
   const c = (input ?? {}) as Record<string, unknown>;
   switch (c.type) {
     case "move":
-      return { type: "move", dir: heading(c.dir, "dir"), ...(c.seconds === undefined ? {} : { seconds: num(c.seconds, "seconds") }) };
+      return {
+        type: "move",
+        dir: heading(c.dir, "dir"),
+        ...(c.seconds === undefined ? {} : { seconds: num(c.seconds, "seconds") }),
+        ...(c.pause === true ? { pause: true } : {}),
+      };
     case "goto": {
       const stay = c.stay === undefined || c.stay === "done" ? c.stay : num(c.stay, "stay");
       const to = target(c.to);
@@ -164,10 +192,16 @@ export function parseCommand(input: unknown): Command {
         ...(c.within === undefined ? {} : { within: num(c.within, "within") }),
         ...(stay === undefined ? {} : { stay }),
         ...(c.timeout === undefined ? {} : { timeout: num(c.timeout, "timeout") }),
+        ...(c.pause === true ? { pause: true } : {}),
       };
     }
     case "choose":
       return { type: "choose", index: num(c.index, "index") };
+    case "speed": {
+      const factor = num(c.factor, "factor");
+      if (!Number.isInteger(factor) || factor < 1 || factor > 8) fail("factor must be a whole number from 1 to 8");
+      return { type: "speed", factor };
+    }
     case "dash":
       return c.dir === undefined ? { type: "dash" } : { type: "dash", dir: heading(c.dir, "dir") };
     case "start": {
@@ -180,6 +214,6 @@ export function parseCommand(input: unknown): Command {
     case "resume":
       return { type: c.type };
     default:
-      return fail("type must be move, goto, stop, choose, dash, pause, resume or start");
+      return fail("type must be move, goto, stop, choose, dash, pause, resume, speed or start");
   }
 }

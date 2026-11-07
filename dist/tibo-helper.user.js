@@ -195,7 +195,12 @@
     const c = input ?? {};
     switch (c.type) {
       case "move":
-        return { type: "move", dir: heading(c.dir, "dir"), ...c.seconds === undefined ? {} : { seconds: num(c.seconds, "seconds") } };
+        return {
+          type: "move",
+          dir: heading(c.dir, "dir"),
+          ...c.seconds === undefined ? {} : { seconds: num(c.seconds, "seconds") },
+          ...c.pause === true ? { pause: true } : {}
+        };
       case "goto": {
         const stay = c.stay === undefined || c.stay === "done" ? c.stay : num(c.stay, "stay");
         const to = target(c.to);
@@ -206,11 +211,18 @@
           to,
           ...c.within === undefined ? {} : { within: num(c.within, "within") },
           ...stay === undefined ? {} : { stay },
-          ...c.timeout === undefined ? {} : { timeout: num(c.timeout, "timeout") }
+          ...c.timeout === undefined ? {} : { timeout: num(c.timeout, "timeout") },
+          ...c.pause === true ? { pause: true } : {}
         };
       }
       case "choose":
         return { type: "choose", index: num(c.index, "index") };
+      case "speed": {
+        const factor = num(c.factor, "factor");
+        if (!Number.isInteger(factor) || factor < 1 || factor > 8)
+          fail("factor must be a whole number from 1 to 8");
+        return { type: "speed", factor };
+      }
       case "dash":
         return c.dir === undefined ? { type: "dash" } : { type: "dash", dir: heading(c.dir, "dir") };
       case "start": {
@@ -224,7 +236,7 @@
       case "resume":
         return { type: c.type };
       default:
-        return fail("type must be move, goto, stop, choose, dash, pause, resume or start");
+        return fail("type must be move, goto, stop, choose, dash, pause, resume, speed or start");
     }
   }
 
@@ -249,6 +261,8 @@
   var TICKS_PER_SECOND = 60;
   var HAZARD_RANGE = 600;
   var MAX_POIS = 15;
+  var SECTOR_RANGE = 300;
+  var PATH_AHEAD = 60;
   function directionOf(dx, dy) {
     const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
     return DIRECTIONS[(octant + 8) % 8] ?? "right";
@@ -444,6 +458,29 @@
     for (const i of alive(s.bullets))
       bullets.push({ ...relTo(s, s.bullets.x[i] ?? 0, s.bullets.y[i] ?? 0), radius: s.bullets.radius[i] ?? 0 });
     const choice = s.choiceQueue[0];
+    const sectors = DIRECTIONS.map((dir, i) => {
+      const angle = i * Math.PI / 4;
+      const ux = Math.cos(angle);
+      const uy = Math.sin(angle);
+      const within = (rows) => rows.filter((r) => r.dir === dir);
+      const closest = (rows) => {
+        const d = Math.min(...within(rows).map((r) => r.dist), Number.POSITIVE_INFINITY);
+        return d <= SECTOR_RANGE ? round(d) : null;
+      };
+      const crosses = (h) => {
+        const t = Math.max(0, Math.min(PATH_AHEAD, h.dx * ux + h.dy * uy));
+        return Math.hypot(h.dx - ux * t, h.dy - uy * t) <= h.radius;
+      };
+      return {
+        dir,
+        enemiesNear: within(enemies).filter((e) => e.dist <= 60).length,
+        enemiesFar: within(enemies).filter((e) => e.dist <= 150).length,
+        nearestEnemy: closest(enemies),
+        nearestBoss: closest(bosses),
+        nearestBullet: closest(bullets),
+        hazard: hazards.find(crosses)?.kind ?? null
+      };
+    });
     return {
       tick: s.tick,
       time: round(s.runClock),
@@ -482,7 +519,8 @@
       pickups: { counts, chests: chests.sort((a, b) => a.dist - b.dist), nearest: nearest(loose) },
       pois,
       hazards: nearest(hazards, 20),
-      bullets: { total: bullets.length, nearest: nearest(bullets) }
+      bullets: { total: bullets.length, nearest: nearest(bullets) },
+      sectors
     };
   }
   function inRun(link) {
@@ -492,8 +530,9 @@
   function snapshot(link, discovery, commands) {
     const base = { capturedAt: Date.now(), commands, ...link.error === undefined ? {} : { error: link.error } };
     const game = link.game;
+    const ended = game?.state.over ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, kills: game.state.run.kills } } : {};
     if (game === undefined || !inRun(link))
-      return { ...base, screen: game?.state.over ? "over" : "title" };
+      return { ...base, ...ended, screen: game?.state.over ? "over" : "title" };
     const d = liveData(link);
     if (d === undefined || !link.ready)
       return { ...base, screen: "run", error: link.error ?? "game content not loaded yet" };
@@ -667,8 +706,11 @@
       status.at = Date.now();
       if (detail !== undefined)
         status.detail = detail;
-      if (this.active?.status === status)
-        this.active = undefined;
+      if (this.active?.status !== status)
+        return;
+      if (this.active.command.pause && state !== "replaced")
+        this.link.game?.setPaused(true);
+      this.active = undefined;
     }
     game() {
       const game = this.link.game;
@@ -680,10 +722,12 @@
       switch (command.type) {
         case "move":
         case "goto":
-          this.game();
+          const game = this.game();
           if (this.active !== undefined)
             this.finish(this.active.status, "replaced");
           this.active = { status, command };
+          if (command.pause)
+            game.setPaused(false);
           return;
         case "stop":
           if (this.active !== undefined)
@@ -712,6 +756,10 @@
         case "pause":
         case "resume":
           this.game().setPaused(command.type === "pause");
+          this.finish(status, "done");
+          return;
+        case "speed":
+          this.link.speed = command.factor;
           this.finish(status, "done");
           return;
         case "start":
@@ -948,6 +996,7 @@
     icons;
     error;
     steer;
+    speed = 1;
     contentFn;
     seen = new Set;
     listeners = new Set;
@@ -1011,7 +1060,14 @@
           link.game = this;
           link.changed();
         }
-        return step.call(this);
+        const result = step.call(this);
+        for (let i = 1;i < link.speed; i++) {
+          const override = link.steer?.(this);
+          if (override !== undefined)
+            setInput.call(this, override.x, override.y);
+          step.call(this);
+        }
+        return result;
       };
       Game.prototype.setInput = function(x, y) {
         const override = link.steer?.(this);

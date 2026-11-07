@@ -75,7 +75,9 @@ export class Controller {
     status.state = state;
     status.at = Date.now();
     if (detail !== undefined) status.detail = detail;
-    if (this.active?.status === status) this.active = undefined;
+    if (this.active?.status !== status) return;
+    if (this.active.command.pause && state !== "replaced") this.link.game?.setPaused(true);
+    this.active = undefined;
   }
 
   private game(): Game {
@@ -88,9 +90,10 @@ export class Controller {
     switch (command.type) {
       case "move":
       case "goto":
-        this.game();
+        const game = this.game();
         if (this.active !== undefined) this.finish(this.active.status, "replaced");
         this.active = { status, command };
+        if (command.pause) game.setPaused(false);
         return;
       case "stop":
         if (this.active !== undefined) this.finish(this.active.status, "replaced");
@@ -116,6 +119,10 @@ export class Controller {
       case "pause":
       case "resume":
         this.game().setPaused(command.type === "pause");
+        this.finish(status, "done");
+        return;
+      case "speed":
+        this.link.speed = command.factor;
         this.finish(status, "done");
         return;
       case "start":

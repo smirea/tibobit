@@ -20,6 +20,8 @@ const NEAREST = 10;
 const TICKS_PER_SECOND = 60;
 const HAZARD_RANGE = 600;
 const MAX_POIS = 15;
+const SECTOR_RANGE = 300;
+const PATH_AHEAD = 60;
 
 export function directionOf(dx: number, dy: number): Direction {
   const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
@@ -140,7 +142,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
   const msg = (kind: string, id: string) => link.message(`content.${kind}.${id}.name`) ?? id;
   const owned = (key: Key, level: number) => ({ id: key.slice(key.indexOf(":") + 1), name: nameOf(d.catalog, key), level, max: d.catalog.maxLevel[key] ?? 1 });
 
-  const enemies = [];
+  const enemies: RunView["enemies"]["nearest"] = [];
   for (const i of alive(s.enemies)) {
     const flags = s.enemies.flags[i] ?? 0;
     if (flags & (enums.enemyFlags.Hidden ?? 0)) continue;
@@ -155,7 +157,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     });
   }
 
-  const bosses = [];
+  const bosses: RunView["bosses"] = [];
   for (const i of alive(s.bosses)) {
     const id = table.bossIdAt(s.bosses.def[i] ?? 0) ?? "unknown";
     bosses.push({
@@ -227,10 +229,34 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     });
   }
 
-  const bullets = [];
+  const bullets: RunView["bullets"]["nearest"] = [];
   for (const i of alive(s.bullets)) bullets.push({ ...relTo(s, s.bullets.x[i] ?? 0, s.bullets.y[i] ?? 0), radius: s.bullets.radius[i] ?? 0 });
 
   const choice = s.choiceQueue[0];
+  const sectors = DIRECTIONS.map((dir, i) => {
+    const angle = (i * Math.PI) / 4;
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    const within = <T extends Rel>(rows: T[]) => rows.filter((r) => r.dir === dir);
+    const closest = (rows: Rel[]) => {
+      const d = Math.min(...within(rows).map((r) => r.dist), Number.POSITIVE_INFINITY);
+      return d <= SECTOR_RANGE ? round(d) : null;
+    };
+    // Distance from a circle's center to the segment the player would walk in the next 60 units.
+    const crosses = (h: { dx: number; dy: number; radius: number }) => {
+      const t = Math.max(0, Math.min(PATH_AHEAD, h.dx * ux + h.dy * uy));
+      return Math.hypot(h.dx - ux * t, h.dy - uy * t) <= h.radius;
+    };
+    return {
+      dir,
+      enemiesNear: within(enemies).filter((e) => e.dist <= 60).length,
+      enemiesFar: within(enemies).filter((e) => e.dist <= 150).length,
+      nearestEnemy: closest(enemies),
+      nearestBoss: closest(bosses),
+      nearestBullet: closest(bullets),
+      hazard: hazards.find(crosses)?.kind ?? null,
+    };
+  });
   return {
     tick: s.tick,
     time: round(s.runClock),
@@ -270,6 +296,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     pois,
     hazards: nearest(hazards, 20),
     bullets: { total: bullets.length, nearest: nearest(bullets) },
+    sectors,
   };
 }
 
@@ -281,7 +308,8 @@ export function inRun(link: GameLink): boolean {
 export function snapshot(link: GameLink, discovery: Discovery, commands: CommandStatus[]): Snapshot {
   const base = { capturedAt: Date.now(), commands, ...(link.error === undefined ? {} : { error: link.error }) };
   const game = link.game;
-  if (game === undefined || !inRun(link)) return { ...base, screen: game?.state.over ? "over" : "title" };
+  const ended = game?.state.over ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, kills: game.state.run.kills } } : {};
+  if (game === undefined || !inRun(link)) return { ...base, ...ended, screen: game?.state.over ? "over" : "title" };
   const d = liveData(link);
   if (d === undefined || !link.ready) return { ...base, screen: "run", error: link.error ?? "game content not loaded yet" };
   const s = game.state;
