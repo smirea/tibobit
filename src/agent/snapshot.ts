@@ -15,7 +15,7 @@ import {
 import { type Data, liveData } from "../data";
 import type { Discovery } from "../discovery";
 import type { Game, GameLink, GameState, Pool } from "../game";
-import { type ComboView, type CommandStatus, DIRECTIONS, type Direction, type OptionView, type PickupView, type Rel, type RunView, type Snapshot } from "./protocol";
+import { type ComboView, type CommandStatus, DIRECTIONS, type Direction, type ForecastView, type OptionView, type PickupView, type Rel, type RunView, type Snapshot } from "./protocol";
 
 const NEAREST = 10;
 const TICKS_PER_SECOND = 60;
@@ -26,6 +26,8 @@ const PATH_AHEAD = 60;
 const HURT_WINDOW_TICKS = 180;
 const PLAYER_SPEED = 62;
 const FORECAST_SECONDS = 0.6;
+// The game's own sim, run forward on a copy: exact for every attack, pool and bullet pattern.
+const SIM_FORECAST_TICKS = 60;
 const XP_RANGE = 120;
 
 // Cumulative damage by source at recent ticks, to report what hurt the player lately.
@@ -179,6 +181,27 @@ function toJson(value: unknown): unknown {
   } catch {
     return undefined;
   }
+}
+
+let forecastCache: { game: Game; tick: number; outlook: ForecastView[] } | undefined;
+
+// Only while the game is paused between agent steps: the snapshot is pushed many times per tick then,
+// and forecasting a running game would slow it down.
+function simForecast(link: GameLink, game: Game): ForecastView[] | undefined {
+  const s = game.state;
+  if (link.forecast === undefined || !s.paused || s.over || s.choiceQueue.length > 0) return undefined;
+  if (forecastCache?.game === game && forecastCache.tick === s.tick) return forecastCache.outlook;
+  const inputs = [...DIRECTIONS.map((_, i) => ({ x: Math.cos((i * Math.PI) / 4), y: Math.sin((i * Math.PI) / 4) })), { x: 0, y: 0 }];
+  const outlook = link.forecast(game, inputs, SIM_FORECAST_TICKS).map((f) => ({
+    seconds: SIM_FORECAST_TICKS / 60,
+    damage: round(f.damage),
+    dead: f.dead,
+    sources: Object.entries(f.bySource)
+      .sort((a, b) => b[1] - a[1])
+      .map(([source, damage]) => ({ source, damage: round(damage) })),
+  }));
+  forecastCache = { game, tick: s.tick, outlook };
+  return outlook;
 }
 
 function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): RunView {
@@ -363,6 +386,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     return touches;
   };
 
+  const outlook = simForecast(link, game);
   const choice = s.choiceQueue[0];
   const sectors = DIRECTIONS.map((dir, i) => {
     const angle = (i * Math.PI) / 4;
@@ -390,6 +414,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
       clearOfAttacks: areas.every((a) => a.view.source !== "attack" || !a.contains(end.x, end.y)),
       bulletHits: hitsWalking(ux, uy),
       enemyTouches: touchesWalking(ux, uy),
+      ...(outlook === undefined ? {} : { forecast: outlook[i] }),
       xpNear: within(gems).length,
     };
   });
@@ -439,6 +464,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     bullets: { total: bullets.length, nearest: nearest(bullets) },
     standingBulletHits: hitsWalking(0, 0),
     standingEnemyTouches: touchesWalking(0, 0),
+    ...(outlook === undefined ? {} : { standingForecast: outlook[DIRECTIONS.length] }),
     sectors,
   };
 }

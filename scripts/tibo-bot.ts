@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { appendFile, mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type CommandStatus, DIRECTIONS, type Direction, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type CommandStatus, DIRECTIONS, type Direction, type ForecastView, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {
@@ -455,13 +455,25 @@ function awayFromBoss(r: RunView, dir: Direction): string | undefined {
   return offset >= 3 && offset <= 5 ? `away from the ${boss.name} boss` : undefined;
 }
 
+function outlook(r: RunView, f: ForecastView): string {
+  if (f.dead) return "Tibo would die within a second";
+  const share = Math.round((100 * f.damage) / r.player.maxHp);
+  if (share < 1) return "Tibo takes no damage in the next second";
+  return `Tibo would lose ${share}% of its health within a second, to ${f.sources
+    .slice(0, 2)
+    .map((x) => sourceWords(x.source))
+    .join(" and ")}`;
+}
+
 // Threats come first: the models weigh the start of a description most.
 function describe(r: RunView, s: SectorView): string {
   const boss = r.bosses.find((b) => b.dir === s.dir);
+  // The sim forecast is exact, so it replaces the rough bullet and contact guesses when present.
   const parts = [
+    s.forecast === undefined ? "" : outlook(r, s.forecast),
     boss !== undefined && boss.dist < 250 ? `toward the ${boss.name} boss only ${Math.round(boss.dist)} away, which hurts Tibo on contact` : "",
-    s.bulletHits > 0 ? `${plural(s.bulletHits, "enemy bullet")} would hit Tibo` : s.bulletsNear > 0 ? "enemy bullets nearby but none on course to hit" : "",
-    s.enemyTouches > 0 ? `${plural(s.enemyTouches, "enemy")} would bump into Tibo and hurt it` : "",
+    s.forecast !== undefined ? "" : s.bulletHits > 0 ? `${plural(s.bulletHits, "enemy bullet")} would hit Tibo` : s.bulletsNear > 0 ? "enemy bullets nearby but none on course to hit" : "",
+    s.forecast !== undefined ? "" : s.enemyTouches > 0 ? `${plural(s.enemyTouches, "enemy")} would bump into Tibo and hurt it` : "",
     awayFromBoss(r, s.dir) ?? "",
     s.hazard !== null ? `into ${hazardWords(s.hazard)}` : "",
     s.leavesHazard ? "out of the danger Tibo stands in" : "",
@@ -479,11 +491,12 @@ function describe(r: RunView, s: SectorView): string {
 function standing(r: RunView): string {
   const near = r.sectors.reduce((n, x) => n + x.enemiesNear, 0);
   const crowd = near > 0 ? ` with ${plural(near, "enemy")} within 60 units closing in` : "";
-  const touches = r.standingEnemyTouches > 0 ? `, where ${plural(r.standingEnemyTouches, "enemy")} would bump into Tibo and hurt it` : "";
-  const hits = r.standingBulletHits > 0 ? `, where ${plural(r.standingBulletHits, "enemy bullet")} would hit Tibo` : "";
+  const forecast = r.standingForecast === undefined ? "" : `, where ${outlook(r, r.standingForecast).replace(/^Tibo /, "it ")}`;
+  const touches = r.standingForecast === undefined && r.standingEnemyTouches > 0 ? `, where ${plural(r.standingEnemyTouches, "enemy")} would bump into Tibo and hurt it` : "";
+  const hits = r.standingForecast === undefined && r.standingBulletHits > 0 ? `, where ${plural(r.standingBulletHits, "enemy bullet")} would hit Tibo` : "";
   const under = r.hazards.find((h) => h.inside);
   const inAttack = under === undefined ? "" : under.landsIn === undefined ? `, staying in ${hazardWords(under.kind)}` : `, staying where a boss attack lands in ${under.landsIn.toFixed(1)} seconds`;
-  return `${standingSpot(r)}${crowd}${touches}${hits}${inAttack}`;
+  return `${standingSpot(r)}${crowd}${forecast}${touches}${hits}${inAttack}`;
 }
 
 function standingSpot(r: RunView): string {

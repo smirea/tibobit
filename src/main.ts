@@ -7,6 +7,8 @@ import { guardPanelKeys, startHelper } from "./helper";
 const link = new GameLink();
 const discovery = new Discovery();
 const controller = new Controller(link);
+// For the headless harness's /eval, which debugs the bot against the live game.
+Object.assign(window, { __tibobit: { link } });
 guardPanelKeys();
 
 function start() {

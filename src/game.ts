@@ -109,6 +109,65 @@ export type IconPage = { url: string; width: number; height: number };
 /** The game's own icon sprite sheet, keyed by weapon, passive or item id. */
 export type IconSheet = IconPage & { frames: Map<string, IconFrame>; pageOf(frame: IconFrame): IconPage };
 
+/** What a copy of the game took when run forward with one input held. */
+export type Forecast = { damage: number; bySource: Record<string, number>; dead: boolean; x: number; y: number; hp: number };
+
+const NO_RECORDER = { step() {}, choose() {}, dash() {}, taint() {}, log() {} };
+
+// A deep copy that keeps prototypes (the game's pools are classes) and shared identity within the
+// state, but leaves content definitions and rule modules shared, since the sim compares them by identity.
+function cloneState<T>(root: T, shared: WeakSet<object>): T {
+  const memo = new Map<object, unknown>();
+  const copy = (v: unknown): unknown => {
+    if (typeof v !== "object" || v === null || shared.has(v)) return v;
+    const known = memo.get(v);
+    if (known !== undefined) return known;
+    if (ArrayBuffer.isView(v)) {
+      const c = v instanceof DataView ? new DataView(v.buffer.slice(0)) : (v as unknown as { slice(): object }).slice();
+      memo.set(v, c);
+      return c;
+    }
+    if (Array.isArray(v)) {
+      const c: unknown[] = [];
+      memo.set(v, c);
+      for (const x of v) c.push(copy(x));
+      return c;
+    }
+    if (v instanceof Map) {
+      const c = new Map();
+      memo.set(v, c);
+      for (const [k, x] of v) c.set(copy(k), copy(x));
+      return c;
+    }
+    if (v instanceof Set) {
+      const c = new Set();
+      memo.set(v, c);
+      for (const x of v) c.add(copy(x));
+      return c;
+    }
+    const c = Object.create(Object.getPrototypeOf(v)) as Record<string, unknown>;
+    memo.set(v, c);
+    for (const k of Object.keys(v)) c[k] = copy((v as Record<string, unknown>)[k]);
+    return c;
+  };
+  return copy(root) as T;
+}
+
+function reachable(root: unknown, into: WeakSet<object>) {
+  const stack = [root];
+  while (stack.length > 0) {
+    const v = stack.pop();
+    if (typeof v !== "object" || v === null || into.has(v) || ArrayBuffer.isView(v)) continue;
+    into.add(v);
+    if (v instanceof Map) for (const [k, x] of v) stack.push(k, x);
+    else if (v instanceof Set) for (const x of v) stack.push(x);
+    else for (const x of Object.values(v)) stack.push(x);
+  }
+}
+
+const isRuleModule = (v: unknown) =>
+  typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).length > 0 && Object.values(v).every((x) => typeof x === "function");
+
 /** While set, replaces the player's movement input every simulation tick. */
 export type Steer = (game: Game) => { x: number; y: number } | undefined;
 
@@ -190,6 +249,8 @@ export class GameLink {
   speed = 1;
   /** Pause the next new run before its first tick, so agents start every run from tick 0. */
   pauseAtStart = false;
+  /** Runs a copy of the game forward once per input, each held for `ticks`; the real game is untouched. */
+  forecast: ((game: Game, inputs: { x: number; y: number }[], ticks: number) => Forecast[]) | undefined;
   /** The share link of the last finished run. The game puts it in the address bar (run=...&stats=...) on its summary. */
   runLink: string | undefined;
 
@@ -283,6 +344,32 @@ export class GameLink {
     Game.prototype.setInput = function (this: Game, x: number, y: number) {
       const override = link.steer?.(this);
       return setInput.call(this, override?.x ?? x, override?.y ?? y);
+    };
+    let shared: WeakSet<object> | undefined;
+    this.forecast = (game, inputs, ticks) => {
+      if (shared === undefined) {
+        shared = new WeakSet();
+        reachable(link.table, shared);
+      }
+      for (const v of Object.values(game.state)) if (isRuleModule(v)) shared.add(v as object);
+      return inputs.map(({ x, y }) => {
+        const sim = Object.assign(Object.create(Object.getPrototypeOf(game) as object) as Game, game, { recorder: NO_RECORDER });
+        sim.state = cloneState(game.state, shared ?? new WeakSet());
+        sim.state.paused = false;
+        setInput.call(sim, x, y);
+        const before = new Map(sim.state.run.damageTakenBySource);
+        for (let i = 0; i < ticks && !sim.state.over && sim.state.choiceQueue.length === 0; i++) step.call(sim);
+        const bySource: Record<string, number> = {};
+        let damage = 0;
+        for (const [source, total] of sim.state.run.damageTakenBySource) {
+          const taken = total - (before.get(source) ?? 0);
+          if (taken <= 0) continue;
+          bySource[source] = taken;
+          damage += taken;
+        }
+        const { player, me } = sim.state;
+        return { damage, bySource, dead: sim.state.over, x: player.x[me] ?? 0, y: player.y[me] ?? 0, hp: player.hp[me] ?? 0 };
+      });
     };
 
     const source = await (await fetch(url)).text();

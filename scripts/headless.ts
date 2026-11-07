@@ -75,7 +75,14 @@ Bun.serve({
       await page.reload();
       return new Response("reloaded\n");
     }
-    return new Response("GET /screenshot or /reload\n", { status: 404 });
+    if (url.pathname === "/eval" && req.method === "POST") {
+      try {
+        return Response.json(await page.evaluate(await req.text()));
+      } catch (e) {
+        return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+      }
+    }
+    return new Response("GET /screenshot, GET /reload or POST /eval <expression>\n", { status: 404 });
   },
 });
 console.log(`tibo.dog running headless at ${width}x${height}; screenshots at http://127.0.0.1:${port}/screenshot`);

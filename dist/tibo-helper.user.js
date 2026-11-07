@@ -280,6 +280,7 @@
   var HURT_WINDOW_TICKS = 180;
   var PLAYER_SPEED = 62;
   var FORECAST_SECONDS = 0.6;
+  var SIM_FORECAST_TICKS = 60;
   var XP_RANGE = 120;
   var hurtHistory = [];
   function recentHurt(s) {
@@ -410,6 +411,23 @@
     } catch {
       return;
     }
+  }
+  var forecastCache;
+  function simForecast(link, game) {
+    const s = game.state;
+    if (link.forecast === undefined || !s.paused || s.over || s.choiceQueue.length > 0)
+      return;
+    if (forecastCache?.game === game && forecastCache.tick === s.tick)
+      return forecastCache.outlook;
+    const inputs = [...DIRECTIONS.map((_, i) => ({ x: Math.cos(i * Math.PI / 4), y: Math.sin(i * Math.PI / 4) })), { x: 0, y: 0 }];
+    const outlook = link.forecast(game, inputs, SIM_FORECAST_TICKS).map((f) => ({
+      seconds: SIM_FORECAST_TICKS / 60,
+      damage: round(f.damage),
+      dead: f.dead,
+      sources: Object.entries(f.bySource).sort((a, b) => b[1] - a[1]).map(([source, damage]) => ({ source, damage: round(damage) }))
+    }));
+    forecastCache = { game, tick: s.tick, outlook };
+    return outlook;
   }
   function runView(link, game, discovery, d) {
     const s = game.state;
@@ -583,6 +601,7 @@
       }
       return touches;
     };
+    const outlook = simForecast(link, game);
     const choice = s.choiceQueue[0];
     const sectors = DIRECTIONS.map((dir, i) => {
       const angle = i * Math.PI / 4;
@@ -610,6 +629,7 @@
         clearOfAttacks: areas.every((a) => a.view.source !== "attack" || !a.contains(end.x, end.y)),
         bulletHits: hitsWalking(ux, uy),
         enemyTouches: touchesWalking(ux, uy),
+        ...outlook === undefined ? {} : { forecast: outlook[i] },
         xpNear: within(gems).length
       };
     });
@@ -659,6 +679,7 @@
       bullets: { total: bullets.length, nearest: nearest(bullets) },
       standingBulletHits: hitsWalking(0, 0),
       standingEnemyTouches: touchesWalking(0, 0),
+      ...outlook === undefined ? {} : { standingForecast: outlook[DIRECTIONS.length] },
       sectors
     };
   }
@@ -1163,6 +1184,68 @@
   }
 
   // src/game.ts
+  var NO_RECORDER = { step() {}, choose() {}, dash() {}, taint() {}, log() {} };
+  function cloneState(root, shared) {
+    const memo = new Map;
+    const copy = (v) => {
+      if (typeof v !== "object" || v === null || shared.has(v))
+        return v;
+      const known = memo.get(v);
+      if (known !== undefined)
+        return known;
+      if (ArrayBuffer.isView(v)) {
+        const c = v instanceof DataView ? new DataView(v.buffer.slice(0)) : v.slice();
+        memo.set(v, c);
+        return c;
+      }
+      if (Array.isArray(v)) {
+        const c = [];
+        memo.set(v, c);
+        for (const x of v)
+          c.push(copy(x));
+        return c;
+      }
+      if (v instanceof Map) {
+        const c = new Map;
+        memo.set(v, c);
+        for (const [k, x] of v)
+          c.set(copy(k), copy(x));
+        return c;
+      }
+      if (v instanceof Set) {
+        const c = new Set;
+        memo.set(v, c);
+        for (const x of v)
+          c.add(copy(x));
+        return c;
+      }
+      const c = Object.create(Object.getPrototypeOf(v));
+      memo.set(v, c);
+      for (const k of Object.keys(v))
+        c[k] = copy(v[k]);
+      return c;
+    };
+    return copy(root);
+  }
+  function reachable(root, into) {
+    const stack = [root];
+    while (stack.length > 0) {
+      const v = stack.pop();
+      if (typeof v !== "object" || v === null || into.has(v) || ArrayBuffer.isView(v))
+        continue;
+      into.add(v);
+      if (v instanceof Map)
+        for (const [k, x] of v)
+          stack.push(k, x);
+      else if (v instanceof Set)
+        for (const x of v)
+          stack.push(x);
+      else
+        for (const x of Object.values(v))
+          stack.push(x);
+    }
+  }
+  var isRuleModule = (v) => typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).length > 0 && Object.values(v).every((x) => typeof x === "function");
   var SIM_CHUNK = /\/assets\/sim-[\w-]+\.js$/;
   var BOOT_CHUNK = /\/assets\/boot-[\w-]+\.js$/;
   var ENGLISH_CHUNK = /\/assets\/i18n-en-[\w.-]+\.js$/;
@@ -1237,6 +1320,7 @@
     inPool;
     speed = 1;
     pauseAtStart = false;
+    forecast;
     runLink;
     noteRunLink() {
       if (!new URLSearchParams(location.search).has("run"))
@@ -1325,6 +1409,36 @@
       Game.prototype.setInput = function(x, y) {
         const override = link.steer?.(this);
         return setInput.call(this, override?.x ?? x, override?.y ?? y);
+      };
+      let shared;
+      this.forecast = (game, inputs, ticks) => {
+        if (shared === undefined) {
+          shared = new WeakSet;
+          reachable(link.table, shared);
+        }
+        for (const v of Object.values(game.state))
+          if (isRuleModule(v))
+            shared.add(v);
+        return inputs.map(({ x, y }) => {
+          const sim = Object.assign(Object.create(Object.getPrototypeOf(game)), game, { recorder: NO_RECORDER });
+          sim.state = cloneState(game.state, shared ?? new WeakSet);
+          sim.state.paused = false;
+          setInput.call(sim, x, y);
+          const before = new Map(sim.state.run.damageTakenBySource);
+          for (let i = 0;i < ticks && !sim.state.over && sim.state.choiceQueue.length === 0; i++)
+            step.call(sim);
+          const bySource = {};
+          let damage = 0;
+          for (const [source, total] of sim.state.run.damageTakenBySource) {
+            const taken = total - (before.get(source) ?? 0);
+            if (taken <= 0)
+              continue;
+            bySource[source] = taken;
+            damage += taken;
+          }
+          const { player, me } = sim.state;
+          return { damage, bySource, dead: sim.state.over, x: player.x[me] ?? 0, y: player.y[me] ?? 0, hp: player.hp[me] ?? 0 };
+        });
       };
       const source = await (await fetch(url)).text();
       const contentFn = await importBinding(source, url, localAt(source, /([\w$]+)\(e\.bigUpdate\)\.baseWeapons/, "content registry call"));
@@ -1747,6 +1861,7 @@
   var link = new GameLink;
   var discovery = new Discovery;
   var controller = new Controller(link);
+  Object.assign(window, { __tibobit: { link } });
   guardPanelKeys();
   function start() {
     startHelper(link, discovery, startBridge(link, discovery, controller));

@@ -10,6 +10,9 @@ export function validPort(port: number): boolean {
 }
 
 export const DIRECTIONS = ["right", "down-right", "down", "down-left", "left", "up-left", "up", "up-right"] as const;
+/** The damage a copy of the game took when run forward with one input held. Sources are the game's damage-by-source keys. */
+export type ForecastView = { seconds: number; damage: number; dead: boolean; sources: { source: string; damage: number }[] };
+
 export type Direction = (typeof DIRECTIONS)[number];
 
 /** Compass bearing in degrees: 0 is right, 90 is down. */
@@ -147,6 +150,8 @@ export type RunView = {
   standingBulletHits: number;
   /** Enemies that would reach the player within 0.6 seconds if it stands still, chasing at their base speed. */
   standingEnemyTouches: number;
+  /** What standing still for the next second costs, from the game's own simulation. Only while paused between agent steps. */
+  standingForecast?: ForecastView;
   /** Everything around the player bucketed by compass direction, nearest first within each. */
   sectors: SectorView[];
 };
@@ -172,6 +177,8 @@ export type SectorView = {
   bulletHits: number;
   /** Enemies that would reach the player within 0.6 seconds if it walks this way, chasing at their base speed. */
   enemyTouches: number;
+  /** What walking this way for the next second costs, from the game's own simulation. Only while paused between agent steps. */
+  forecast?: ForecastView;
   /** XP gems within 120 units this way. */
   xpNear: number;
 };
