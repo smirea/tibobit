@@ -194,3 +194,5 @@ date,run,time,notes
 2026-11-07,2026-11-07-11-46-40-daily-nightmare-DG0S-Z730R0,5:00,"When a level-up offers none of the want names, press Reroll and do not allow any other card; the 4:14 offer had no want name and still took Masher Grip."
 2026-11-07,2026-11-07-11-46-40-daily-nightmare-DG0S-Z730R0,5:51,Force Reroll when a level-up offers none of the want names; the 5:17 card took Masher Grip while want was only Gravy Heart and Small Fry.
 2026-11-07,2026-11-07-11-46-40-daily-nightmare-DG0S-Z730R0,6:03,"Report a boolean for whether the player tile is inside a circle telegraph and a heading that leaves it perpendicular to the boss, so a circle 17 away is not treated as already clear."
+2026-11-07,2026-11-07-12-13-03-daily-nightmare-DG0S-Z730R0,0:30,"Show each level-up offer's exact button text and whether it was taken or rerolled, plus whether the XP bar is full."
+2026-11-07,2026-11-07-12-13-03-daily-nightmare-DG0S-Z730R0,2:00,"When a recipe is ready, report the nearest chest distance past sight range and which ready evolution that chest would open, since Overgrowth is ready and the chest reads as none in sight."

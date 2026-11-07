@@ -59,6 +59,16 @@ const context = await browser.newContext({ bypassCSP: true, viewport: { width, h
 const target = bridge === "" ? "" : `window.__tiboBridgeOrigin = "http://127.0.0.1:${Number(bridge)}";`;
 await context.addInitScript({ content: `${target}\n${shim}\n${await userscript.text()}` });
 const page = await context.newPage();
+// tibo.dog polls /version.json and reloads itself onto a new build, which drops the run in
+// progress. Keep answering with the build this page loaded; /reload picks up a new one.
+let loadedVersion: { body: string; contentType: string } | undefined;
+await page.route("**/version.json*", async (route) => {
+  if (loadedVersion === undefined) {
+    const response = await route.fetch();
+    loadedVersion = { body: await response.text(), contentType: response.headers()["content-type"] ?? "application/json" };
+  }
+  await route.fulfill({ status: 200, body: loadedVersion.body, contentType: loadedVersion.contentType });
+});
 page.on("pageerror", (e) => console.error("page error:", String(e)));
 page.on("console", (m) => {
   if (m.type() === "error" && !m.text().includes("Failed to load resource")) console.error("console:", m.text().slice(0, 300));
@@ -72,6 +82,7 @@ Bun.serve({
     const url = new URL(req.url);
     if (url.pathname === "/screenshot") return new Response(new Uint8Array(await page.screenshot()), { headers: { "content-type": "image/png" } });
     if (url.pathname === "/reload") {
+      loadedVersion = undefined;
       await page.reload();
       return new Response("reloaded\n");
     }
