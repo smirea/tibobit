@@ -1028,7 +1028,7 @@
           const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
           throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
         }
-        const next = button(/^(Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
+        const next = button(/^(Not now|Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
         this.link.noteRunLink();
         if (next !== undefined)
           await press(next);

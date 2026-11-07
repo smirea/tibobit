@@ -789,9 +789,13 @@ async function choose(r: RunView) {
   return command({ type: "choose", index });
 }
 
+let rescuedLink: string | undefined;
+
 async function start(): Promise<void> {
   let started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY }, 120);
   if (started.state !== "done") {
+    // The page has already shown the finished run's link by now; a reload would lose it.
+    rescuedLink = (await api<Snap>("/state")).lastRunLink ?? rescuedLink;
     console.log(`start failed (${started.detail ?? started.state}); reloading the game page`);
     await fetch(RELOAD).catch(() => undefined);
     await Bun.sleep(8000);
@@ -848,11 +852,13 @@ async function main() {
   runs = 1;
 
   const fillLink = async (s: Snap) => {
-    if (awaitingLink === undefined || s.lastRunLink === undefined || s.lastRunLink === awaitingLink.known) return;
-    awaitingLink.notes.link = s.lastRunLink;
+    const link = [s.lastRunLink, rescuedLink].find((l) => l !== undefined && l !== awaitingLink?.known);
+    if (awaitingLink === undefined || link === undefined) return;
+    awaitingLink.notes.link = link;
     await awaitingLink.notes.write();
-    console.log(`run link: ${s.lastRunLink}`);
+    console.log(`run link: ${link}`);
     awaitingLink = undefined;
+    rescuedLink = undefined;
   };
 
   for (;;) {
