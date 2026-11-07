@@ -1,6 +1,6 @@
 # Run 2026-11-07 06:15, daily nightmare
 
-Run link: pending: written once the game shows the run summary
+Run link: none (run aborted)
 
 | | |
 | --- | --- |
@@ -20,8 +20,8 @@ Coach notes taken during the run, by game time.
 
 ## Outcome
 
-(the run is in progress)
+- Aborted at 1:11: the bot looped on a vendor choice it could not afford, because Leave was not offered. Fixed in cff1d1d.
 
 ## Review
 
-(written after the run)
+No review: the run was aborted by an infrastructure bug, not by play.
