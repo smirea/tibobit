@@ -121,6 +121,7 @@ function situation(r: RunView): string {
     `Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only chooses where to walk.`,
     `Time ${Math.floor(r.time / 60)}:${String(Math.floor(r.time % 60)).padStart(2, "0")}. Health ${hp}%${hp < 40 ? ", which is low" : ""}. Level ${p.level}. ${plural(near, "enemy")} within 60 units, ${plural(r.enemies.total, "enemy")} around.`,
     ...(r.bosses.length > 0 ? [`Boss ${r.bosses[0]?.name} is ${Math.round(r.bosses[0]?.dist ?? 0)} units away to the ${r.bosses[0]?.dir}.`] : []),
+    ...r.hazards.filter((h) => h.inside).slice(0, 1).map((h) => `Tibo is standing in ${hazardWords(h.kind)}.`),
     `Weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}. Passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
     ...(plan === undefined ? [] : [`Plan: ${plan.advice}`]),
   ].join("\n");
@@ -135,15 +136,23 @@ function sights(r: RunView, dir: Direction): string[] {
   return out.slice(0, 2);
 }
 
-const HAZARD_WORDS: Record<string, string> = { telegraph: "a boss attack about to land", hazardPool: "a damaging puddle", strike: "a strike about to land" };
+const HAZARD_WORDS: Record<string, string> = {
+  telegraph: "a boss attack about to land",
+  hazardPool: "a damaging puddle",
+  strike: "a strike about to land",
+  slow: "a sticky patch that slows Tibo",
+  chill: "an icy patch that slows Tibo",
+};
+const hazardWords = (kind: string) => HAZARD_WORDS[kind] ?? `a ${kind} patch that hurts Tibo`;
 
 // Threats come first: the models weigh the start of a description most.
 function describe(r: RunView, s: SectorView): string {
   const boss = r.bosses.find((b) => b.dir === s.dir);
   const parts = [
-    boss !== undefined && boss.dist < 250 ? `the ${boss.name} boss only ${Math.round(boss.dist)} away` : "",
+    boss !== undefined && boss.dist < 250 ? `toward the ${boss.name} boss only ${Math.round(boss.dist)} away, which hurts Tibo on contact` : "",
     s.nearestBullet !== null && s.nearestBullet < 80 ? `an enemy bullet ${Math.round(s.nearestBullet)} away` : "",
-    s.hazard !== null ? `${HAZARD_WORDS[s.hazard] ?? `a ${s.hazard} hazard`} in the way` : "",
+    s.hazard !== null ? `into ${hazardWords(s.hazard)}` : "",
+    s.leavesHazard ? "out of the patch Tibo stands in" : "",
     s.enemiesNear > 0 ? `${plural(s.enemiesNear, "enemy")} close` : "no enemies close",
     s.enemiesFar > s.enemiesNear ? `${s.enemiesFar - s.enemiesNear} more further out` : "",
     ...sights(r, s.dir),

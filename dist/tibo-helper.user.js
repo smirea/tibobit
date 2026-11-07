@@ -471,6 +471,8 @@
         const t = Math.max(0, Math.min(PATH_AHEAD, h.dx * ux + h.dy * uy));
         return Math.hypot(h.dx - ux * t, h.dy - uy * t) <= h.radius;
       };
+      const end = { x: ux * PATH_AHEAD, y: uy * PATH_AHEAD };
+      const holding = hazards.filter((h) => h.inside);
       return {
         dir,
         enemiesNear: within(enemies).filter((e) => e.dist <= 60).length,
@@ -478,7 +480,8 @@
         nearestEnemy: closest(enemies),
         nearestBoss: closest(bosses),
         nearestBullet: closest(bullets),
-        hazard: hazards.find(crosses)?.kind ?? null
+        hazard: hazards.find((h) => !h.inside && crosses(h))?.kind ?? null,
+        leavesHazard: holding.length > 0 && holding.every((h) => Math.hypot(h.dx - end.x, h.dy - end.y) > h.radius)
       };
     });
     return {
