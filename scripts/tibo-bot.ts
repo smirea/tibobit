@@ -14,6 +14,8 @@ const option = (name: string, fallback: string) => {
   return i >= 0 ? (args[i + 1] ?? fallback) : fallback;
 };
 const MODEL = option("model", "h2o-lightning-4b@q8_0");
+// Level-up picks are rare (a few dozen a run), so they can afford a slower, stronger model.
+const PICK_MODEL = option("pick-model", MODEL);
 const SERVER = option("server", process.env.TIBO_SERVER ?? DEFAULT_ORIGIN);
 const DECIDER = option("decider", "http://localhost:1234/v1/systemone");
 const STEP = Number(option("step", "0.35"));
@@ -63,9 +65,9 @@ const command = (c: unknown, timeoutSeconds = 30) =>
 
 const latency: number[] = [];
 let trace: ((entry: unknown) => void) | undefined;
-async function decide(state: string, questions: Record<string, Question>): Promise<Record<string, Answer>> {
+async function decide(state: string, questions: Record<string, Question>, model = MODEL): Promise<Record<string, Answer>> {
   const started = performance.now();
-  const body = JSON.stringify({ model: MODEL, state, questions });
+  const body = JSON.stringify({ model, state, questions });
   let json: { answers?: Record<string, Answer>; error?: unknown } | undefined;
   // LM Studio occasionally never answers a request; give up on it and ask again.
   for (let attempt = 0; json === undefined; attempt++) {
@@ -155,7 +157,7 @@ class RunNotes {
       mode: MODE,
       difficulty: DIFFICULTY,
       seed: r.seed,
-      model: MODEL,
+      model: PICK_MODEL === MODEL ? MODEL : `${MODEL} (moves), ${PICK_MODEL} (picks)`,
       coach: COACH === "none" ? "none" : `${COACH} ${COACH_MODEL}`,
       step: String(STEP),
       speed: String(SPEED),
@@ -472,9 +474,11 @@ async function choose(r: RunView) {
     ];
     criteria[`${o.index}: ${o.type === "other" ? o.name.split(" | ")[0] : o.name}`] = notes.filter(Boolean).join("; ");
   }
-  const { pick } = await decide(situation(r), {
-    pick: { type: "choice", instructions: `Tibo levelled up. Which ${r.choice?.kind === "levelUp" ? "upgrade" : "reward"} makes Tibo strongest?`, criteria },
-  });
+  const { pick } = await decide(
+    situation(r),
+    { pick: { type: "choice", instructions: `Tibo levelled up. Which ${r.choice?.kind === "levelUp" ? "upgrade" : "reward"} makes Tibo strongest?`, criteria } },
+    PICK_MODEL,
+  );
   const index = Number((pick?.choice ?? "0").split(":")[0]);
   const picked = options.find((o) => o.index === index);
   if (picked !== undefined) deadPicks.names.add(picked.name);
