@@ -98,7 +98,7 @@ const COACH_COOLDOWN = 45;
 const URGENT_COOLDOWN = 10;
 const LOW_HEALTH = 0.5;
 
-type Plan = { want: string[]; advice: string; at: number };
+type Plan = { want: string[]; otherwise: "reroll" | "choose"; advice: string; at: number };
 // The coach's advice line lapses after this many game seconds, so a stale instruction cannot
 // stay in force while the situation changes; its upgrade list stays until the next consult.
 const ADVICE_SECONDS = 90;
@@ -357,11 +357,12 @@ class Coach {
       `You are asked now because ${why}. State now:`,
       digest(r),
       "Answer from these facts alone; do not browse, search or use tools.",
-      'Reply with only JSON: {"want": [up to 8 exact weapon, passive or item names, best first. This list is binding: whenever a level-up offers any name on it, only those can be taken, so include the weapons to keep levelling as well as the passives you want], "advice": "one short sentence for the decision model about the next minute or two; it stays in force for 90 seconds, so never name a compass direction or a countdown", "note": "one or two sentences for the run notes: what is happening and what to watch", "infra": "one concrete suggestion to improve the data or controls the bot has, or an empty string"}',
+      'Reply with only JSON: {"want": [up to 8 exact weapon, passive or item names, best first. This list is binding: whenever a level-up offers any name on it, only those can be taken, so include the weapons to keep levelling as well as the passives you want], "otherwise": "reroll" or "choose": what a level-up that offers nothing on want does. reroll spends a reroll (or skips) instead of filling a slot with an unplanned card; choose lets the decision model pick the strongest card", "advice": "one short sentence for the decision model about the next minute or two; it stays in force for 90 seconds, so never name a compass direction or a countdown", "note": "one or two sentences for the run notes: what is happening and what to watch", "infra": "one concrete suggestion to improve the data or controls the bot has, or an empty string"}',
     ].join("\n\n");
     const reply = await askCoach(prompt);
     if (reply === undefined) return;
-    if (Array.isArray(reply.want) && typeof reply.advice === "string") plan = { want: reply.want.map(String), advice: reply.advice, at: r.time };
+    if (Array.isArray(reply.want) && typeof reply.advice === "string")
+      plan = { want: reply.want.map(String), otherwise: reply.otherwise === "reroll" ? "reroll" : "choose", advice: reply.advice, at: r.time };
     const note = typeof reply.note === "string" ? reply.note : "";
     this.notes.timeline.push(`- **${clock(r.time)}** (${why}) ${note}${plan === undefined ? "" : ` Advice: ${plan.advice} Want: ${plan.want.join(", ")}.`}`);
     await this.notes.write();
@@ -603,7 +604,10 @@ async function choose(r: RunView) {
   const takeable = options.filter((o) => o.available && !deadPicks.names.has(o.name));
   if (takeable.length === 0) throw new Error(`every option of this ${r.choice?.kind} was tried without closing it: ${options.map((o) => o.name).join(", ")}`);
   const wanted = takeable.filter((o) => inPlan(o.name));
-  const considered = wanted.length > 0 ? wanted : takeable;
+  // The coach decides what a row without any wanted card is worth: a reroll or skip, or a free pick.
+  const escape = takeable.filter((o) => o.type === "other" && /^(Reroll|Skip)\b/.test(o.name));
+  const fallback = plan?.otherwise === "reroll" && escape.length > 0 ? escape.slice(0, 1) : takeable;
+  const considered = wanted.length > 0 ? wanted : fallback;
   // The decision API reads a choice's keys, not their descriptions: replayed picks did not change
   // at all when a note was added to the description, and Laya took a new weapon in 4 of 6 offers
   // once the key said so. So everything the model should weigh goes into the key.
