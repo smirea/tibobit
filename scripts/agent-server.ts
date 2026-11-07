@@ -39,8 +39,9 @@ function say(input: unknown) {
   }
   const last = chat.at(-1);
   // The action model answers a few times a second, which would bury the planner and the actor, so
-  // its moves between two of their messages are one message showing the latest.
-  if (last !== undefined && line.role === "action" && last.role === "action") {
+  // its moves between two of their messages are one message showing the latest. An errand keeps
+  // its own message, which it rewrites by key as it goes.
+  if (last !== undefined && line.role === "action" && last.role === "action" && last.key === undefined && line.key === undefined) {
     Object.assign(last, line, { count: last.count + 1, at: Date.now() });
     toPage({ chat: last });
     return;

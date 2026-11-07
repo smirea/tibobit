@@ -7,8 +7,9 @@
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { appendFileSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ChatLine, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type ForecastView, type MoveOption, type OptionView, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ChatLine, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type ForecastView, type Inspect, type MoveOption, type OptionView, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {
@@ -32,11 +33,19 @@ const MODE = option("mode", "daily");
 const SPEED = Number(option("speed", "4"));
 const COACH = option("coach", "grok");
 const COACH_MODEL = option("coach-model", "grok-4.7-build-fast");
-const TRACE = args.includes("--trace");
 // For "Grok take the wheel": play the run already in progress instead of starting a fresh one.
 const TAKEOVER = args.includes("--takeover");
 const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
+// Everything the bot sees, asks, answers and sends, one JSON line each, for reading a run back
+// step by step. Outside the repo on purpose: a 20-minute run writes about 100 MB.
+const FULL_LOG = option("full-log", path.join("/tmp", "tibobit", `${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}-${process.pid}.jsonl`));
+await mkdir(path.dirname(FULL_LOG), { recursive: true });
+let gameTime: number | undefined;
+/** Appends one entry to the full log, stamped with wall-clock and game time. */
+function record(event: string, fields: Record<string, unknown> = {}) {
+  appendFileSync(FULL_LOG, `${JSON.stringify({ at: new Date().toISOString(), time: gameTime, event, ...fields })}\n`);
+}
 
 /** `live` is the server's "DO IT LIVE" switch, read every step so it can change mid-run. */
 type Snap = Snapshot & { connected: boolean; ageMs: number; live?: boolean };
@@ -47,7 +56,10 @@ let chatQueue = Promise.resolve();
  * A line for the panel's chat, shown while the bot has the wheel. Never awaited, so the chat cannot
  * slow a step, but sent in order, so a late streamed update never overwrites a final message.
  */
-function say(line: ChatLine) {
+function say(line: ChatLine, logged = line.stream === undefined) {
+  // Streamed reasoning and errand progress rewrite a message several times a second; the full
+  // log keeps only their final form (and each step's own entry).
+  if (logged) record("chat", { line });
   const body = JSON.stringify(line);
   chatQueue = chatQueue.then(() => fetch(`${SERVER}/pilot/say`, { method: "POST", headers: { "content-type": "application/json" }, body }).then(() => undefined, () => undefined));
 }
@@ -97,10 +109,17 @@ async function timed<T>(phase: "state" | "decide" | "command", work: Promise<T>)
   }
 }
 
-const command = (c: unknown, timeoutSeconds = 30) =>
-  timed("command", api<CommandStatus & { interruptedBy?: string }>(`/command?wait=1&timeout=${timeoutSeconds}`, c));
+async function command(c: unknown, timeoutSeconds = 30) {
+  const result = await timed("command", api<CommandStatus & { interruptedBy?: string }>(`/command?wait=1&timeout=${timeoutSeconds}`, c));
+  record("command", { command: c, result: { id: result.id, state: result.state, detail: result.detail, interruptedBy: result.interruptedBy } });
+  return result;
+}
 /** Sends a command without waiting for it to finish, such as a move held until the next one. */
-const send = (c: unknown) => timed("command", api<{ id: number }>("/command", c));
+async function send(c: unknown) {
+  const sent = await timed("command", api<{ id: number }>("/command", c));
+  record("command", { command: c, id: sent.id });
+  return sent;
+}
 
 // Live play runs the game in real time and never pauses it: each move is held until the next
 // decision replaces it, and the coach thinks while the game goes on. A level-up or chest still
@@ -127,7 +146,6 @@ async function untilLive(done: () => boolean) {
 }
 
 const latency: number[] = [];
-let trace: ((entry: unknown) => void) | undefined;
 async function decide(state: string, questions: Record<string, Question>, model = MODEL): Promise<Record<string, Answer>> {
   const started = performance.now();
   const body = JSON.stringify({ model, state, questions });
@@ -146,8 +164,8 @@ async function decide(state: string, questions: Record<string, Question>, model 
     }
   }
   latency.push(performance.now() - started);
+  record("decision", { model, ms: Math.round(performance.now() - started), state, questions, answers: json.answers, error: json.error });
   if (json.answers === undefined) throw new Error(`decision model error: ${JSON.stringify(json.error ?? json).slice(0, 300)}`);
-  trace?.({ event: "decision", state, questions, answers: json.answers });
   // A score is an index into its criteria; as a share of the scale it reads like a noul.
   for (const [key, q] of Object.entries(questions)) {
     const a = json.answers[key];
@@ -385,6 +403,7 @@ function digest(r: RunView): string {
     `Items: ${r.loadout.items.map((i) => `${i.name} x${i.count}`).join(", ") || "none"}.`,
     `Recipes in reach: ${r.combos.map((c) => `${c.name} (${c.parts.map((x) => `${x.name} ${x.state}`).join(" + ")})`).join("; ") || "none"}.`,
     `Unpaired: ${r.unpaired.map((u) => `${u.name} needs one of ${u.options.map((o) => o.name).join(", ")}`).join("; ") || "none"}.`,
+    `Tibo stands: ${spotLine(r) ?? "on no chest or point of interest"}. ${errand === undefined ? "No errand under way" : `Errand under way: ${errand.text}`}.`,
     `Bosses: ${r.bosses.map((b) => `${b.name} ${Math.round(b.dist)} away, ${Math.round(b.hp)}/${Math.round(b.maxHp)} hp`).join("; ") || "none"}.`,
     `Hurt in the last 3 seconds by: ${Object.entries(p.hurtBy).map(([k, v]) => `${k} ${v}`).join(", ") || "nothing"}.`,
     `Nearest chest: ${where(r.pickups.chests[0])}. Nearest food: ${where(r.pickups.nearest.find((x) => x.kind === "heal"))}. Nearest shrine to stand in: ${where(r.pois.find((x) => x.chargeNeeded > 0))}.`,
@@ -683,6 +702,8 @@ function situation(r: RunView): string {
           : `Tibo is standing where a boss attack lands in ${h.landsIn.toFixed(1)} seconds, and must step out of it.`,
       ),
     `Weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}. Passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
+    ...(spotLine(r) === undefined ? [] : [`Tibo stands ${spotLine(r)}.`]),
+    ...errandNews(r),
     ...hurtLine(r),
     ...healthTrend(r),
     ...readyLine(r),
@@ -773,11 +794,206 @@ function standing(r: RunView): string {
 }
 
 function standingSpot(r: RunView): string {
-  const chest = r.pickups.chests.find((c) => c.dist <= 14);
-  if (chest !== undefined) return `stand still on the chest to open it, ${chest.charge ?? 0} of ${chest.chargeNeeded ?? 1} seconds done`;
-  const inside = r.pois.find((p) => p.inside && p.chargeNeeded > 0);
-  if (inside !== undefined) return `stand still inside the ${inside.name}${poiWhat(inside)}, charged ${inside.charge} of ${inside.chargeNeeded} seconds`;
-  return "stand still";
+  const spot = spotLine(r);
+  return spot === undefined ? "stand still" : `stand still ${spot}`;
+}
+
+const onChest = (c: RunView["pickups"]["chests"][number]) => c.dist <= ON_CHEST;
+const ON_CHEST = 14;
+
+/** Where Tibo stands, as "on a chest, 1 of 3 seconds into opening it", or undefined when on nothing. */
+function spotLine(r: RunView): string | undefined {
+  const chest = r.pickups.chests.find(onChest);
+  if (chest !== undefined) return `on a chest, ${chest.charge ?? 0} of ${chest.chargeNeeded ?? 1} seconds into opening it`;
+  const inside = r.pois.find((p) => p.inside);
+  if (inside === undefined) return undefined;
+  return `inside the ${inside.name}${poiWhat(inside)}${inside.chargeNeeded > 0 ? `, charged ${inside.charge} of ${inside.chargeNeeded} seconds` : ""}`;
+}
+
+// ---- Errands -------------------------------------------------------------------------------
+// Walking to a chest and standing on it takes a dozen single steps, and asking the decision model
+// each time is slow and jittery. An errand is one choice ("go to chest 1") that the page then
+// steers on its own, at the game's 60 ticks a second, until the target is used up. No model is
+// asked meanwhile. The bot still checks every step that the way on costs no more than the safest
+// move, by the same forecast that rules out single moves, and drops the errand when it does.
+type ErrandTarget = { pickup: number } | { poi: number };
+type Errand = {
+  key: string;
+  /** Short, for the chat: "Go to chest 1". */
+  title: string;
+  /** For the model: where it is, what Tibo does there, and what it is for. */
+  text: string;
+  to: ErrandTarget;
+  /** The heading of its first second, which the forecast prices. */
+  heading: Direction | "stay";
+  done: string;
+};
+/** `best` is the least work left so far (distance, plus charging seconds as walking distance) and when. */
+type Running = Errand & { since: number; deadline: number; best: { left: number; time: number }; line: ChatLine; commandId?: number };
+/** `charging` is the seconds of standing still left once there. */
+type Located = { dist: number; dir: Direction; arrived: boolean; charging: number; progress: string };
+
+const ERRAND_RANGE = 400;
+const FOOD_RANGE = 300;
+const FOOD_BELOW = 0.7;
+// Tibo walks about 62 units a second; an errand that takes far longer than the walk is stuck.
+const ERRAND_SPEED = 45;
+const ERRAND_SLACK = 8;
+const ERRAND_STUCK_SECONDS = 4;
+// An outcome stays in the model's situation this long, so the next move knows what just happened.
+const ERRAND_NEWS_SECONDS = 6;
+// A target an errand gave up on is not offered again for a while: a Potato Crate charges nothing
+// without the gold for it, and the model walked back into one every ten seconds.
+const ERRAND_RETRY_SECONDS = 45;
+const giveUps = new Map<string, number>();
+const targetId = (to: ErrandTarget) => ("poi" in to ? `poi:${to.poi}` : `pickup:${to.pickup}`);
+const workLeft = (at: Located) => at.dist + at.charging * ERRAND_SPEED;
+
+// A lockstep errand step ends by timing out, and a pickup collected on touch ends as "gone"
+// before the goto counts it as reached; the next step's look at the target tells which it was.
+const STEP_OVER = new Set(["timeout", "the target is gone"]);
+
+let errand: Running | undefined;
+let lastErrand: { text: string; time: number } | undefined;
+
+function errands(r: RunView): Errand[] {
+  return candidateErrands(r).filter((e) => (giveUps.get(targetId(e.to)) ?? Number.NEGATIVE_INFINITY) <= r.time);
+}
+
+function candidateErrands(r: RunView): Errand[] {
+  const out: Errand[] = [];
+  r.pickups.chests
+    .filter((c) => c.dist < ERRAND_RANGE)
+    .slice(0, 2)
+    .forEach((c, i) => {
+      const name = `chest ${i + 1}`;
+      const left = `${c.charge ?? 0} of ${c.chargeNeeded ?? 1} seconds done`;
+      out.push(
+        onChest(c)
+          ? { key: `chest${i + 1}`, title: `Stand on ${name}`, text: `stay on ${name}, which Tibo stands on, until it opens (${left})`, to: { pickup: c.uid }, heading: "stay", done: `Opened ${name}` }
+          : { key: `chest${i + 1}`, title: `Go to ${name}`, text: `walk to ${name}, ${Math.round(c.dist)} away to the ${c.dir}, and stand on it until it opens`, to: { pickup: c.uid }, heading: c.dir, done: `Opened ${name}` },
+      );
+    });
+  r.pois
+    .filter((p) => p.chargeNeeded > 0 && p.dist < ERRAND_RANGE)
+    .slice(0, 2)
+    .forEach((p, i) => {
+      const what = poiWhat(p);
+      out.push(
+        p.inside
+          ? { key: `spot${i + 1}`, title: `Stand in the ${p.name}`, text: `stay inside the ${p.name}${what} until it is charged (${p.charge} of ${p.chargeNeeded} seconds)`, to: { poi: p.uid }, heading: "stay", done: `Charged the ${p.name}` }
+          : { key: `spot${i + 1}`, title: `Go to the ${p.name}`, text: `walk to the ${p.name}${what}, ${Math.round(p.dist)} away to the ${p.dir}, and stand in it for ${p.chargeNeeded} seconds`, to: { poi: p.uid }, heading: p.dir, done: `Charged the ${p.name}` },
+      );
+    });
+  const food = r.pickups.nearest.find((x) => x.kind === "heal" && x.dist < FOOD_RANGE);
+  if (food !== undefined && r.player.hp / r.player.maxHp < FOOD_BELOW)
+    out.push({ key: "food", title: "Go to the food", text: `walk to the food ${Math.round(food.dist)} away to the ${food.dir}, which heals Tibo`, to: { pickup: food.uid }, heading: food.dir, done: "Ate the food" });
+  return out;
+}
+
+function locate(r: RunView, to: ErrandTarget): Located | undefined {
+  if ("poi" in to) {
+    const p = r.pois.find((x) => x.uid === to.poi);
+    return p === undefined ? undefined : { dist: p.dist, dir: p.dir, arrived: p.inside, charging: p.chargeNeeded - p.charge, progress: `${p.charge} of ${p.chargeNeeded}s charged` };
+  }
+  const chest = r.pickups.chests.find((x) => x.uid === to.pickup);
+  if (chest !== undefined)
+    return { dist: chest.dist, dir: chest.dir, arrived: onChest(chest), charging: (chest.chargeNeeded ?? 1) - (chest.charge ?? 0), progress: `${chest.charge ?? 0} of ${chest.chargeNeeded ?? 1}s opened` };
+  const loose = r.pickups.nearest.find((x) => x.uid === to.pickup);
+  return loose === undefined ? undefined : { dist: loose.dist, dir: loose.dir, arrived: false, charging: 0, progress: "" };
+}
+
+function errandNews(r: RunView): string[] {
+  if (errand !== undefined) return [`Tibo is busy: ${errand.text}.`];
+  if (lastErrand === undefined || r.time - lastErrand.time > ERRAND_NEWS_SECONDS) return [];
+  return [`Just now: ${lastErrand.text}.`];
+}
+
+/** What a move costs over the next second as a share of max health, from the game's own simulation. */
+function moveCost(r: RunView, heading: Direction | "stay"): number | undefined {
+  const f = heading === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === heading)?.forecast;
+  return f === undefined ? undefined : f.dead ? Number.POSITIVE_INFINITY : f.damage / r.player.maxHp;
+}
+
+function cheapestMove(r: RunView): number | undefined {
+  const costs = [...DIRECTIONS, "stay" as const].map((h) => moveCost(r, h));
+  return costs.every((c) => c !== undefined) ? Math.min(...(costs as number[])) : undefined;
+}
+
+function startErrand(e: Errand, r: RunView, inspect: Inspect) {
+  const there = locate(r, e.to);
+  const seconds = (there?.dist ?? 0) / ERRAND_SPEED + (there?.charging ?? 0) + ERRAND_SLACK;
+  errand = {
+    ...e,
+    since: r.time,
+    deadline: r.time + seconds,
+    best: { left: there === undefined ? 0 : workLeft(there), time: r.time },
+    line: { role: "action", model: MODEL, time: r.time, text: e.title, key: `errand-${process.pid}-${r.tick}`, inspect, detail: there?.progress ?? "" },
+  };
+  lastErrand = undefined;
+  record("errand", { phase: "start", errand: { key: e.key, text: e.text, to: e.to, heading: e.heading }, deadline: errand.deadline });
+  say(errand.line);
+}
+
+/** `retry` false keeps the target off the menu for a while: the errand failed, not just paused for danger. */
+function endErrand(r: RunView, outcome: string, success: boolean, retry = true) {
+  if (errand === undefined) return;
+  const e = errand;
+  errand = undefined;
+  if (!retry) giveUps.set(targetId(e.to), r.time + ERRAND_RETRY_SECONDS);
+  lastErrand = { text: success ? e.done.toLowerCase() : `gave up on "${e.title}" because ${outcome}`, time: r.time };
+  record("errand", { phase: "end", key: e.key, success, outcome, seconds: Math.round((r.time - e.since) * 10) / 10 });
+  say({ ...e.line, text: success ? e.done : `${e.title}: stopped`, detail: success ? `${Math.round(r.time - e.since)}s` : outcome });
+}
+
+/**
+ * One step of the errand under way: drop it if it is done, stuck, late or has turned costly, and
+ * otherwise let the page steer it on. True when the errand used this step.
+ */
+async function followErrand(s: Snap, r: RunView): Promise<boolean> {
+  const e = errand;
+  if (e === undefined) return false;
+  const there = locate(r, e.to);
+  const status = e.commandId === undefined ? undefined : s.commands.find((c) => c.id === e.commandId);
+  if (there === undefined || status?.state === "done") {
+    endErrand(r, "done", true);
+    return false;
+  }
+  if (status?.state === "failed" && !STEP_OVER.has(status.detail ?? "")) {
+    endErrand(r, `the game said: ${status.detail ?? "failed"}`, false, false);
+    return false;
+  }
+  if (r.time > e.deadline) {
+    endErrand(r, `still not done after ${Math.round(r.time - e.since)} seconds`, false, false);
+    return false;
+  }
+  if (workLeft(there) < e.best.left - 1) e.best = { left: workLeft(there), time: r.time };
+  else if (r.time - e.best.time > ERRAND_STUCK_SECONDS) {
+    endErrand(r, there.arrived ? `standing there charged nothing for ${ERRAND_STUCK_SECONDS} seconds (it may cost gold Tibo lacks)` : `no closer than ${Math.round(there.dist)} units for ${ERRAND_STUCK_SECONDS} seconds`, false, false);
+    return false;
+  }
+  const heading = there.arrived ? "stay" : there.dir;
+  const cost = moveCost(r, heading);
+  const cheapest = cheapestMove(r);
+  if (cost !== undefined && cheapest !== undefined && cost > cheapest + AFFORDABLE_EXTRA_DAMAGE) {
+    const f = heading === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === heading)?.forecast;
+    endErrand(r, `${heading === "stay" ? "staying put" : `walking ${heading}`} would cost ${f?.dead ? "Tibo's life" : `${Math.round((cost - cheapest) * 100)}% more health`} than the safest move`, false);
+    return false;
+  }
+  e.line = { ...e.line, time: r.time, detail: [there.arrived ? there.progress : `${Math.round(there.dist)} away to the ${there.dir}`, `${Math.round(r.time - e.since)}s`].filter(Boolean).join(" · ") };
+  say(e.line, false);
+  const go = { type: "goto", to: e.to, stay: "done" };
+  if (playingLive) {
+    // Live, one goto runs until the target is used up; it is only sent again if something replaced it.
+    if (e.commandId === undefined || (status !== undefined && status.state !== "running")) e.commandId = (await send({ ...go, timeout: Math.max(1, e.deadline - r.time) })).id;
+    return true;
+  }
+  // Lockstep runs the errand a step at a time, so the forecast is checked between steps.
+  const result = await command({ ...go, timeout: STEP, pause: true });
+  e.commandId = result.id;
+  if (result.state === "done") endErrand(r, "done", true);
+  else if (result.state === "failed" && !STEP_OVER.has(result.detail ?? "")) endErrand(r, `the game said: ${result.detail ?? "failed"}`, false, false);
+  return true;
 }
 
 // Small decision models judge one concrete option far better than they rank nine at once, so
@@ -793,25 +1009,31 @@ const AFFORDABLE_EXTRA_DAMAGE = 0.02;
 const SAFE_ENOUGH = 0.5;
 
 async function move(r: RunView) {
+  // Errands come first: a tie on usefulness goes to the errand, which spares the next dozen steps.
+  const offeredErrands = errands(r);
   const moves: Record<string, string> = {};
-  for (const s of r.sectors) moves[s.dir] = `walk ${s.dir}: ${describe(r, s)}`;
+  const headings: Record<string, Direction | "stay"> = {};
+  for (const e of offeredErrands) {
+    const sector = r.sectors.find((x) => x.dir === e.heading);
+    moves[e.key] = `${e.text}; its first second ${e.heading === "stay" || sector === undefined ? `is to ${standing(r)}` : `walks ${e.heading}: ${describe(r, sector)}`}`;
+    headings[e.key] = e.heading;
+  }
+  for (const s of r.sectors) {
+    moves[s.dir] = `walk ${s.dir}: ${describe(r, s)}`;
+    headings[s.dir] = s.dir;
+  }
   moves.stay = standing(r);
+  headings.stay = "stay";
   // The game's own simulation prices every move for the next second, and Laya cannot weigh those
   // prices: on replayed states it rated a fatal move safest in 4 of 8, and it stood in hot oil
   // forecast "very badly hurt" for ten seconds while every step out was "scratched" (its danger
   // score tracks how many threats a description lists, not which). So moves that cost clearly
   // more than the cheapest are not offered, like a card Tibo cannot afford; the model chooses
   // among the rest on what the forecast cannot see (bosses closing in, crowds further out, loot).
-  const cost = (k: string) => {
-    const f = k === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === k)?.forecast;
-    return f === undefined ? undefined : f.dead ? Number.POSITIVE_INFINITY : f.damage / r.player.maxHp;
-  };
+  const cost = (k: string) => moveCost(r, headings[k] ?? "stay");
   const offered = { ...moves };
-  const costs = Object.keys(moves).map(cost);
-  if (costs.every((c) => c !== undefined)) {
-    const cheapest = Math.min(...(costs as number[]));
-    for (const k of Object.keys(moves)) if ((cost(k) ?? 0) > cheapest + AFFORDABLE_EXTRA_DAMAGE) delete moves[k];
-  }
+  const cheapest = cheapestMove(r);
+  if (cheapest !== undefined) for (const k of Object.keys(moves)) if ((cost(k) ?? 0) > cheapest + AFFORDABLE_EXTRA_DAMAGE) delete moves[k];
   const state = situation(r);
 
   // One request per step: how badly each move hurts (a score on a scale, which Jev and Laya both
@@ -831,9 +1053,10 @@ async function move(r: RunView) {
   const choice = safe.sort((x, y) => (answers[`useful:${y}`]?.noul ?? 0) - (answers[`useful:${x}`]?.noul ?? 0) || risk(x) - risk(y))[0] ?? "stay";
   const dir = (DIRECTIONS as readonly string[]).includes(choice) ? (choice as Direction) : undefined;
   const dash = dir !== undefined && (answers.dash?.noul ?? 0) > 0.5;
-  const ruledOut = r.sectors.length + 1 - Object.keys(moves).length;
+  const ruledOut = Object.keys(offered).length - Object.keys(moves).length;
   const forecast = (k: string) => {
-    const f = k === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === k)?.forecast;
+    const h = headings[k] ?? "stay";
+    const f = h === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === h)?.forecast;
     return f === undefined ? undefined : f.dead ? "dead" : f.damage === 0 ? "no damage" : `-${Math.round(f.damage)} hp`;
   };
   const weighed: MoveOption[] = Object.entries(offered).map(([k, description]) => {
@@ -841,7 +1064,7 @@ async function move(r: RunView) {
     const hurt = answers[k]?.score;
     const useful = answers[`useful:${k}`]?.noul;
     return {
-      move: k === "stay" ? "stand still" : k,
+      move: k === "stay" ? "stand still" : (offeredErrands.find((e) => e.key === k)?.title.toLowerCase() ?? k),
       description,
       ...(f === undefined ? {} : { forecast: f }),
       ...(hurt === undefined ? {} : { hurt }),
@@ -849,12 +1072,18 @@ async function move(r: RunView) {
       outcome: k === choice ? "chosen" : !(k in moves) ? "ruled out" : safe.includes(k) ? "safe" : "risky",
     };
   });
+  const inspect: Inspect = { kind: "moves", situation: state, moves: weighed, ...(answers.dash?.noul === undefined ? {} : { dash: answers.dash.noul }) };
+  const picked = offeredErrands.find((e) => e.key === choice);
+  if (picked !== undefined) {
+    startErrand(picked, r, inspect);
+    return;
+  }
   say({
     role: "action",
     model: MODEL,
     time: r.time,
     text: dir === undefined ? "Stand still" : `${dash ? "Dash" : "Walk"} ${dir}`,
-    inspect: { kind: "moves", situation: state, moves: weighed, ...(answers.dash?.noul === undefined ? {} : { dash: answers.dash.noul }) },
+    inspect,
     detail: [`Tibo ${HURT_SCALE[Math.round(answers[choice]?.score ?? 0)] ?? "?"}`, `useful ${Math.round((answers[`useful:${choice}`]?.noul ?? 0) * 100)}%`, ...(ruledOut > 0 ? [`${ruledOut} costlier ${ruledOut === 1 ? "move" : "moves"} ruled out`] : [])].join(" · "),
   });
   if (dash) await command({ type: "dash", dir });
@@ -968,7 +1197,6 @@ async function main() {
   await mkdir(path.dirname(LOG), { recursive: true });
   await Bun.write(LOG, "");
   const log = Bun.file(LOG).writer();
-  if (TRACE) trace = (entry) => log.write(`${JSON.stringify(entry)}\n`);
   let runs = 0;
   let lastReport = -1;
   let steps = 0;
@@ -980,9 +1208,11 @@ async function main() {
   const recent: string[] = [];
   // The previous run's notes wait for its share link, which appears while the next run starts.
   let awaitingLink: { notes: RunNotes; known: string | undefined } | undefined;
-  console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, speed x${SPEED}, coach ${COACH}, log ${LOG}`);
+  console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, speed x${SPEED}, coach ${COACH}, log ${LOG}, full log ${FULL_LOG}`);
+  record("config", { model: MODEL, pickModel: PICK_MODEL, decider: DECIDER, mode: MODE, difficulty: DIFFICULTY, step: STEP, speed: SPEED, coach: PLANNER, takeover: TAKEOVER, args });
   // A run the bot is stopped in the middle of says so in its notes instead of staying "in progress".
   const stop = async (signal: string) => {
+    record("stop", { signal });
     if (reviewing !== undefined) {
       reviewing.review = `Interrupted: the bot was stopped (${signal}) before the review finished. Rerun it with ./scripts/tibo-bot.ts --review ${reviewing.file}`;
       await reviewing.write();
@@ -998,6 +1228,7 @@ async function main() {
   process.on("SIGINT", () => void stop("SIGINT"));
   process.on("SIGTERM", () => void stop("SIGTERM"));
   recordCrash = async (e) => {
+    record("crash", { error: e instanceof Error ? (e.stack ?? e.message) : String(e) });
     if (notes === undefined) return;
     notes.link = "none (bot crashed)";
     notes.outcome = `- Crashed at ${last === undefined ? "the start" : clock(last.time)}: ${e instanceof Error ? e.message : String(e)}`;
@@ -1011,7 +1242,7 @@ async function main() {
   say({
     role: "system",
     text: adopted ? `Taking over the run at ${clock(now.run?.time ?? 0)}.` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}.`,
-    detail: `Planner ${PLANNER}, actor ${PICK_MODEL}, action model ${MODEL}`,
+    detail: `Planner ${PLANNER}, actor ${PICK_MODEL}, action model ${MODEL}. Full log: ${FULL_LOG}`,
   });
   if (!adopted) await start();
   runs = 1;
@@ -1028,6 +1259,9 @@ async function main() {
 
   for (;;) {
     const s = await timed("state", api<Snap>("/state"));
+    gameTime = s.run?.time;
+    const p = s.run?.player;
+    record("step", { screen: s.screen, live: s.live, ageMs: s.ageMs, ...(p === undefined ? {} : { hp: p.hp, x: p.x, y: p.y, level: p.level }), errand: errand?.line.detail === undefined ? errand?.key : `${errand.key}: ${errand.line.detail}`, ...(s.lastRun === undefined ? {} : { lastRun: s.lastRun }) });
     if (!s.connected) throw new Error("the game tab is not connected to the agent server");
     await fillLink(s);
     if (s.screen === "title" || s.screen === "over") {
@@ -1036,6 +1270,7 @@ async function main() {
         console.log(`run ${runs} ended at ${s.lastRun.time}s, level ${s.lastRun.level}, ${s.lastRun.kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
         say({ role: "system", time: s.lastRun.time, text: `Run over at ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills.` });
         console.log(`  damage taken: ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+        record("run-end", { notes: notes.id, ...s.lastRun, steps, coachCalls: coach.calls, avgDecisionMs: Math.round(avg) });
         log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty: DIFFICULTY, notes: notes.id, ...s.lastRun, steps, coachCalls: coach.calls, avgDecisionMs: Math.round(avg) })}\n`);
         log.flush();
         // The run is over; a stop from here on must not mark it aborted, only note the missing review.
@@ -1079,6 +1314,9 @@ async function main() {
       runs++;
       steps = 0;
       plan = undefined;
+      errand = undefined;
+      lastErrand = undefined;
+      giveUps.clear();
       lastReport = -1;
       latency.length = 0;
       recent.length = 0;
@@ -1126,8 +1364,15 @@ async function main() {
     if (!live) await Promise.race([asking, untilLive(() => consulting !== asking)]);
     recent.push(situation(r));
     if (recent.length > 4) recent.shift();
-    if (s.screen === "choice") await choose(r);
-    else await move(r);
+    if (s.screen === "choice") {
+      record("snapshot", { run: r, commands: s.commands });
+      await choose(r);
+    } else if (!(await followErrand(s, r))) {
+      record("snapshot", { run: r, commands: s.commands });
+      await move(r);
+      // A newly chosen errand takes its first step now, so lockstep never runs a step without input.
+      if (errand !== undefined) await followErrand(s, r);
+    }
     if (live) await Bun.sleep(Math.max(0, LIVE_MIN_STEP_MS - (performance.now() - stepStarted)));
   }
 }
