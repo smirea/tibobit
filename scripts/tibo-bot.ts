@@ -304,6 +304,7 @@ const LOG_COLUMNS = [
   "hp",
   "max_hp",
   "hp_lost",
+  "hp_gained",
   "level",
   "xp_pct",
   "gold",
@@ -328,12 +329,16 @@ const LOG_COLUMNS = [
   "items",
   "options",
 ] as const;
-type LogEvent = "plan" | "pick" | "move" | "goal" | "run_end";
+/** `walk`: the page walked Tibo toward its goal without asking a model, and Tibo lost health on the way. `loadout`: what Tibo holds changed. */
+type LogEvent = "plan" | "pick" | "move" | "walk" | "goal" | "loadout" | "run_end";
 type LogRow = { event: LogEvent; model?: string; reason?: string; goal?: string; action?: string; options?: string; detail?: string; ms?: number };
 
 class RunLog {
-  /** Health at the previous row, for `hp_lost`. */
+  /** Health at the previous row, for `hp_lost` and `hp_gained`. */
   private hp: number | undefined;
+  /** Health gained between rows over the run: the game counts healing only in total, not by source. */
+  healed = 0;
+  private held: Map<string, string> | undefined;
   constructor(readonly file: string) {
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, `${LOG_COLUMNS.join(",")}\n`);
@@ -342,6 +347,8 @@ class RunLog {
   write(r: RunView | undefined, row: LogRow) {
     const p = r?.player;
     const lost = p === undefined || this.hp === undefined ? "" : String(Math.max(0, Math.round(this.hp - p.hp)));
+    const gained = p === undefined || this.hp === undefined ? 0 : Math.max(0, Math.round(p.hp - this.hp));
+    this.healed += gained;
     if (p !== undefined) this.hp = p.hp;
     const at = (x: { dist: number; dir: string }) => `${Math.round(x.dist)} ${x.dir}`;
     const state: Partial<Record<(typeof LOG_COLUMNS)[number], string | number>> =
@@ -353,6 +360,7 @@ class RunLog {
             hp: Math.round(p.hp),
             max_hp: Math.round(p.maxHp),
             hp_lost: lost,
+            hp_gained: gained,
             level: p.level,
             xp_pct: pct(p.xp, p.xpNext),
             gold: p.gold,
@@ -361,7 +369,7 @@ class RunLog {
             dash: p.dashCharges,
             enemies: r.enemies.total,
             enemies_near: near(r),
-            bosses: r.bosses.map((b) => `${b.name} ${at(b)} ${pct(b.hp, b.maxHp)}%`).join("; "),
+            bosses: r.bosses.map((b) => `${b.name} (${b.id}) ${at(b)} ${pct(b.hp, b.maxHp)}%`).join("; "),
             hurt_by: Object.entries(p.hurtBy).map(([k, v]) => `${k} ${v}`).join("; "),
             standing_on: spotLine(r) ?? "",
             underfoot: r.hazards.filter((h) => h.inside).map((h) => h.kind).join("; "),
@@ -374,6 +382,29 @@ class RunLog {
           };
     const values = { ...state, ...row, wall: new Date().toISOString().slice(11, 19) } as Record<string, string | number | undefined>;
     appendFileSync(this.file, `${LOG_COLUMNS.map((c) => csvField(String(values[c] ?? ""))).join(",")}\n`);
+  }
+
+  /** Health lost since the last row. */
+  lostSince(r: RunView): number {
+    return this.hp === undefined ? 0 : Math.max(0, this.hp - r.player.hp);
+  }
+
+  /**
+   * What Tibo holds now against the last call, such as "Root Spikes 3/8 to 7/8, Taproot Eruption
+   * new", or undefined when nothing changed. Chests hand out their rewards without a choice, so
+   * this is the only record of what a chest gave.
+   */
+  loadoutChange(r: RunView): string | undefined {
+    const now = new Map([...r.loadout.weapons, ...r.loadout.passives].map((x) => [x.name, `${x.level}/${x.max}`] as [string, string]));
+    for (const i of r.loadout.items) now.set(i.name, `x${i.count}`);
+    const before = this.held;
+    this.held = now;
+    if (before === undefined) return undefined;
+    const changes = [
+      ...[...now].filter(([k, v]) => before.get(k) !== v).map(([k, v]) => (before.has(k) ? `${k} ${before.get(k)} to ${v}` : `${k} ${v} new`)),
+      ...[...before.keys()].filter((k) => !now.has(k)).map((k) => `${k} gone`),
+    ];
+    return changes.length === 0 ? undefined : changes.join(", ");
   }
 }
 
@@ -657,6 +688,10 @@ type Pursuit = {
   /** The least work left so far (distance, plus seconds of charging as distance) and when. */
   best: { left: number; time: number };
   origin: { x: number; y: number };
+  /** Health when the goal began, to say what it cost. */
+  hp: number;
+  /** Steps the action model took off the spot a goal needs Tibo to stand on. */
+  steppedOff: number;
   /** Chests listed before the goal began; exploring ends on any other. */
   known: Set<string>;
   /** A target is only "used up" once it was seen: one missing from the start was never there. */
@@ -819,7 +854,10 @@ function aimAt(p: Pursuit, r: RunView): Aim | Ended {
       return { heading: best.dir, progress: `${best.xpNear} gems to the ${best.dir}` };
     }
     case "evade":
-      if (age >= knobs().evadeSeconds) return { done: `kept clear for ${knobs().evadeSeconds} seconds`, success: true };
+      if (age >= knobs().evadeSeconds) {
+        const lost = Math.round(p.hp - r.player.hp);
+        return { done: lost > 0 ? `the ${knobs().evadeSeconds} seconds ran out, and Tibo lost ${lost} health during them` : `kept clear for ${knobs().evadeSeconds} seconds without losing health`, success: true };
+      }
       return { progress: `${Math.ceil(knobs().evadeSeconds - age)}s left` };
   }
 }
@@ -835,6 +873,8 @@ function begin(goal: Goal, r: RunView, log: RunLog) {
     deadline: r.time,
     best: { left: Number.POSITIVE_INFINITY, time: r.time },
     origin: { x: r.player.x, y: r.player.y },
+    hp: r.player.hp,
+    steppedOff: 0,
     known: new Set(everListed),
     seen: false,
   };
@@ -878,13 +918,28 @@ function ending(p: Pursuit, r: RunView, aim: Aim | Ended, status: CommandStatus 
   if (aim.left === undefined) return undefined;
   if (aim.left < p.best.left - 1) p.best = { left: aim.left, time: r.time };
   else if (r.time - p.best.time > knobs().stuckSeconds)
-    return { done: aim.heading === "stay" ? `standing there did nothing for ${knobs().stuckSeconds} seconds (it may cost gold Tibo lacks)` : `no closer for ${knobs().stuckSeconds} seconds`, success: false };
+    return { done: stuckWords(p, r, aim), success: false };
   return undefined;
+}
+
+/** Why a goal stopped making progress, in the words the planner reads in its recent goals. */
+function stuckWords(p: Pursuit, r: RunView, aim: Aim): string {
+  const seconds = knobs().stuckSeconds;
+  const off = p.steppedOff === 0 ? "" : `; the action model stepped off it ${plural(p.steppedOff, "time")} to dodge`;
+  if (aim.heading !== "stay") return `no closer for ${seconds} seconds${off}`;
+  const spot = p.goal.kind === "poi" ? r.pois.find((x) => x.uid === (p.goal as TargetGoal).uid) : undefined;
+  const paid = spot !== undefined && /\bgold\b|\bcosts?\b|\bpay/i.test(spot.description);
+  return `standing on it charged nothing for ${seconds} seconds${paid ? ` (it costs gold, and Tibo has ${r.player.gold})` : ""}${off}`;
 }
 
 /** One step toward the current goal: walk on while it is safe, else ask the action model. */
 async function pursue(s: Snap, r: RunView, log: RunLog, planner: Planner) {
   for (const c of r.pickups.chests) everListed.add(`C${c.uid}`);
+  const gained = log.loadoutChange(r);
+  if (gained !== undefined) {
+    log.write(r, { event: "loadout", action: gained, ...(pursuit === undefined ? {} : { goal: pursuit.id }) });
+    if (!planner.picked) planner.notes.picks.push(`- **${clock(r.time)}** gained without a pick (a chest or other): ${gained}.`);
+  }
   for (let starts = 0; ; starts++) {
     if (pursuit === undefined) await planner.plan(r, outcomes.length === 0 ? "the run started" : "the last goal ended");
     const p = pursuit as Pursuit | undefined;
@@ -900,7 +955,12 @@ async function pursue(s: Snap, r: RunView, log: RunLog, planner: Planner) {
     const cost = aim.heading === undefined ? undefined : moveCost(r, aim.heading);
     const cheapest = cheapestMove(r);
     const clear = aim.heading !== undefined && (cost === undefined || cheapest === undefined || cost <= cheapest + knobs().extraDamage);
-    if (clear) return walkOn(p, r, aim, status, log);
+    if (clear) {
+      // The page walks on its own here, so a hit the forecast missed would otherwise leave no row.
+      const lost = log.lostSince(r);
+      if (lost >= 1) log.write(r, { event: "walk", model: "none", goal: p.id, action: aim.heading === "stay" ? "stand on the goal" : `walk ${aim.heading}`, reason: "the way to the goal cost no more than the cheapest move" });
+      return walkOn(p, r, aim, status, log);
+    }
     p.sent = undefined;
     return steer(r, p, aim, log);
   }
@@ -1074,6 +1134,15 @@ async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog) {
   const choice = safe.sort((x, y) => (answers[`useful:${y}`]?.noul ?? 0) - (answers[`useful:${x}`]?.noul ?? 0) || risk(x) - risk(y))[0] ?? "stay";
   const dir = (DIRECTIONS as readonly string[]).includes(choice) ? (choice as Direction) : undefined;
   const dash = dir !== undefined && (answers.dash?.noul ?? 0) > 0.5;
+  if (aim.heading === "stay" && dir !== undefined) p.steppedOff++;
+  const dashWhy =
+    templates.action.dash.trim() === ""
+      ? "dash not asked: the template is empty"
+      : r.player.dashCharges === 0
+        ? "dash not asked: no charge"
+        : !canDash
+          ? "dash not asked: nothing close"
+          : `dash asked: ${Math.round((answers.dash?.noul ?? 0) * 100)}%${dash ? ", dashed" : ""}`;
   const ruledOut = Object.keys(offered).length - Object.keys(moves).length;
   const forecast = (k: string) => {
     const f = k === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === k)?.forecast;
@@ -1115,6 +1184,7 @@ async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog) {
     goal: p.id,
     action: move,
     options: weighed.map((w) => `${w.move} ${w.forecast ?? "?"} hurt ${w.hurt ?? "-"} useful ${w.useful === undefined ? "-" : Math.round(w.useful * 100)}%${w.outcome === "ruled out" ? " (ruled out)" : ""}`).join("; "),
+    detail: dashWhy,
     ms,
   });
   if (dash) await command({ type: "dash", dir });
@@ -1165,7 +1235,7 @@ function blocks(r: RunView, b: Book): Record<BlockName, () => string> {
     },
     standing_on: () => `Tibo stands ${spotLine(r) ?? "on no chest or spot"}.${r.hazards.some((h) => h.inside) ? ` Underfoot: ${r.hazards.filter((h) => h.inside).map((h) => hazardWords(h.kind)).join(", ")}.` : ""}`,
     hurt_by: () => `Hurt in the last 3 seconds by: ${Object.entries(p.hurtBy).map(([k, n]) => `${sourceWords(k)} ${n}`).join(", ") || "nothing"}.`,
-    bosses: () => `Bosses: ${r.bosses.map((x) => `${x.name} ${Math.round(x.dist)} away to the ${x.dir}, ${pct(x.hp, x.maxHp)}% health`).join("; ") || "none"}.`,
+    bosses: () => `Bosses: ${r.bosses.map((x) => `${x.name} (${x.id}) ${Math.round(x.dist)} away to the ${x.dir}, ${pct(x.hp, x.maxHp)}% health`).join("; ") || "none"}.`,
     enemies: () => {
       const crowd = [...r.sectors].sort((a, z) => z.enemiesFar - a.enemiesFar);
       return `Enemies: ${r.enemies.total} around, ${near(r)} within 60. Most within 150 to the ${crowd[0]?.dir} (${crowd[0]?.enemiesFar}), fewest to the ${crowd.at(-1)?.dir} (${crowd.at(-1)?.enemiesFar}).`;
@@ -1247,7 +1317,7 @@ class Planner {
   private sawBoss = false;
 
   constructor(
-    private notes: RunNotes,
+    readonly notes: RunNotes,
     private log: RunLog,
   ) {}
 
@@ -1339,14 +1409,14 @@ class Planner {
   }
 
   /** The run ended: its notes are written, then the coach reviews it. */
-  async finish(lastRun: NonNullable<Snapshot["lastRun"]>, last: RunView | undefined, ladder: number | undefined) {
+  async finish(lastRun: NonNullable<Snapshot["lastRun"]>, last: RunView | undefined, ladder: number | undefined, healed: number) {
     const damage = Object.entries(lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ");
     await this.notes.finish({
       lived: lastRun.time,
       ending: `${lastRun.time >= WIN_SECONDS ? "won (passed 20:00), then " : ""}died at ${clock(lastRun.time)}, level ${lastRun.level}, ${lastRun.kills} kills`,
       outcome: [
         `Lived **${clock(lastRun.time)}** (${lastRun.time}s), level ${lastRun.level}, ${lastRun.kills} kills.`,
-        `Damage taken by source: ${damage || "none recorded"}.`,
+        `Damage taken by source: ${damage || "none recorded"}; ${Math.round(Object.values(lastRun.damageTaken).reduce((a, b) => a + b, 0))} in all. Health gained over the run, by food, regeneration and anything else: about ${healed} (the game does not say from what).`,
         ...(last === undefined ? [] : loadoutLines(last)),
         `Planner asked ${this.calls} times.`,
         ...(ladder === undefined ? [] : [`Nightmare ladder after the run: ${ladder === 0 ? "no level won yet" : `won up to Nightmare ${ladder}`}, so the next Open World Nightmare run plays Nightmare ${ladder + 1}.`]),
@@ -1489,14 +1559,20 @@ async function main() {
         console.log(`run ${runs} ended at ${s.lastRun.time}s, level ${s.lastRun.level}, ${s.lastRun.kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
         say({ role: "system", time: s.lastRun.time, tag: "Over", text: `Run over at ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills.` });
         console.log(`  damage taken: ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}`);
-        runLog.write(last, { event: "run_end", detail: `survived ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills; damage by ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}` });
+        const total = Object.values(s.lastRun.damageTaken).reduce((a, b) => a + b, 0);
+        const lastHurt = last === undefined ? "" : Object.entries(last.player.hurtBy).map(([k, v]) => `${k} ${v}`).join(", ");
+        runLog.write(last, {
+          event: "run_end",
+          action: s.lastRun.time >= WIN_SECONDS ? "won, then died" : "died",
+          detail: `Tibo died at ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills; hurt in its last 3 seconds by ${lastHurt || "nothing the bot saw"}; damage taken ${Math.round(total)} in all: ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}`,
+        });
         log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty, notes: notes.id, runLog: runLog.file, ...s.lastRun, steps, plannerCalls: planner.calls, avgDecisionMs: Math.round(avg) })}\n`);
         log.flush();
         // The run is over; a stop from here on only notes the missing review.
         const ended = notes;
         reviewing = ended;
         notes = undefined;
-        await planner.finish(s.lastRun, last, s.ladderCleared);
+        await planner.finish(s.lastRun, last, s.ladderCleared, runLog.healed);
         // The share link only exists on the run summary, and a page reload loses it, so it goes into
         // the notes now, before the review, rather than whenever the next run starts.
         const summary = await command({ type: "summary" }, 60);
