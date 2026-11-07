@@ -4,7 +4,7 @@ Run link: none (run aborted)
 
 | | |
 | --- | --- |
-| Date | 2026-11-07T07:37:03.192Z |
+| Date | 2026-11-07T07:37:54.633Z |
 | Mode | daily nightmare |
 | Seed | DG0S-Z730R0 |
 | Decision model | laya@q8_0 (moves), h2o-lightning-4b@q8_0 (picks) |
@@ -16,11 +16,11 @@ Run link: none (run aborted)
 
 Coach notes taken during the run, by game time.
 
-(no notes yet)
+- **0:30** (checkpoint at 0:30) Full health at 0:30 with Seeker Sprouts 2/8 and Fertilizer still missing, so the first level-up is Fertilizer and every other offer is only the four sustain passives. No chest or threat yet; do not spend the walk on the shrine. Advice: Leave any attack circle first, then step out of hot oil or puddles, then move toward food if health falls under two thirds, and otherwise keep walking off the densest enemies while skipping shrines and chests. Want: Fertilizer, Hash Rush, Hearty Helping, Gravy Heart, Starch Plating.
 
 ## Outcome
 
-- Aborted at 0:30: the bot was stopped (SIGTERM).
+- Aborted at 0:30: the bot was restarted to load the bullet forecast.
 
 ## Review
 
