@@ -25,6 +25,7 @@ const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
   choose <index>                  pick a level-up or chest option
   dash [dir|degrees]
   start [easy|normal|hard|nightmare] [daily]   daily plays today's fixed-seed Daily
+  summary                         after a death, step to the run summary and record its share link
 
 Commands wait until they finish (except move without seconds); add --no-wait to return at once.
 The agent server defaults to $TIBO_SERVER, then ${DEFAULT_ORIGIN}; --port picks another one on 127.0.0.1.`;
@@ -159,6 +160,7 @@ function parseArgs(args: string[]): unknown {
     case "stop":
     case "pause":
     case "resume":
+    case "summary":
       return { type: verb };
   }
   throw new Error(USAGE);

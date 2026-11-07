@@ -47,7 +47,9 @@ export type Command =
    * today's Daily, which has the same seed and build for everyone, so runs are comparable. The
    * new run waits paused at tick 0; use `resume` or a `move`/`goto` with `pause` to play it.
    */
-  | { type: "start"; mode?: "openWorld" | "daily"; difficulty?: "easy" | "normal" | "hard" | "nightmare" };
+  | { type: "start"; mode?: "openWorld" | "daily"; difficulty?: "easy" | "normal" | "hard" | "nightmare" }
+  /** After a run ends, step forward through the end screens to the run summary, which puts the run's share link in `lastRunLink`. */
+  | { type: "summary" };
 
 export type CommandState = "running" | "done" | "failed" | "replaced";
 export type CommandStatus = { id: number; command: Command; state: CommandState; detail?: string; at: number };
@@ -265,9 +267,10 @@ export function parseCommand(input: unknown): Command {
     case "stop":
     case "pause":
     case "resume":
+    case "summary":
       return { type: c.type };
     default:
-      return fail("type must be move, goto, stop, choose, dash, pause, resume, speed or start");
+      return fail("type must be move, goto, stop, choose, dash, pause, resume, speed, start or summary");
   }
 }
 

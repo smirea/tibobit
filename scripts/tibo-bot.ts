@@ -935,15 +935,27 @@ async function main() {
         const ended = notes;
         reviewing = ended;
         notes = undefined;
+        // The share link only exists on the run summary, and a page reload loses it, so it goes into
+        // the notes now, before the review, rather than whenever the next run starts.
+        const summary = await command({ type: "summary" }, 60);
+        const shown = (await api<Snap>("/state")).lastRunLink;
+        if (summary.state === "done" && shown !== undefined && shown !== s.lastRunLink) {
+          ended.link = shown;
+          await ended.write();
+          console.log(`run link: ${shown}`);
+        } else {
+          console.log(`run summary showed no link (${summary.detail ?? summary.state}); it is read again when the next run starts`);
+          awaitingLink = { notes: ended, known: s.lastRunLink };
+        }
         await coach.review(s.lastRun, last, recent);
         reviewing = undefined;
         console.log(`notes: ${ended.file}`);
-        awaitingLink = { notes: ended, known: s.lastRunLink };
         coach = undefined;
         if (runs >= RUNS) {
-          // Starting walks through the end screens, which is where the game shows the share link.
-          await start();
-          await fillLink(await api<Snap>("/state"));
+          if (awaitingLink !== undefined) {
+            await start();
+            await fillLink(await api<Snap>("/state"));
+          }
           return;
         }
       } else if (notes !== undefined) {

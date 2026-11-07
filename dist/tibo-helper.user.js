@@ -248,9 +248,10 @@
       case "stop":
       case "pause":
       case "resume":
+      case "summary":
         return { type: c.type };
       default:
-        return fail("type must be move, goto, stop, choose, dash, pause, resume, speed or start");
+        return fail("type must be move, goto, stop, choose, dash, pause, resume, speed, start or summary");
     }
   }
 
@@ -1048,7 +1049,25 @@
         case "start":
           this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy").catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
           return;
+        case "summary":
+          this.summary(status).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+          return;
       }
+    }
+    async summary(status) {
+      if (inRun(this.link))
+        throw new Error("the run is still going");
+      const before = this.link.runLink;
+      for (let i = 0;i < 12; i++) {
+        this.link.noteRunLink();
+        if (this.link.runLink !== undefined && this.link.runLink !== before)
+          return this.finish(status, "done");
+        const next = button(/^(Next|Continue|Skip)$/i);
+        if (next !== undefined)
+          await press(next);
+        await wait(1000);
+      }
+      throw new Error("the run summary did not show a share link");
     }
     async start(status, mode, difficulty) {
       const entry = mode === "daily" ? /^Daily/ : "Open World";

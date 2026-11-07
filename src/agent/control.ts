@@ -154,7 +154,25 @@ export class Controller {
       case "start":
         this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy").catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
         return;
+      case "summary":
+        this.summary(status).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+        return;
     }
+  }
+
+  // Only forward buttons: the summary sits right after the death screens, and anything else
+  // ("Try Grok Bot", "Main menu") would leave it before its link is read.
+  private async summary(status: CommandStatus) {
+    if (inRun(this.link)) throw new Error("the run is still going");
+    const before = this.link.runLink;
+    for (let i = 0; i < 12; i++) {
+      this.link.noteRunLink();
+      if (this.link.runLink !== undefined && this.link.runLink !== before) return this.finish(status, "done");
+      const next = button(/^(Next|Continue|Skip)$/i);
+      if (next !== undefined) await press(next);
+      await wait(1000);
+    }
+    throw new Error("the run summary did not show a share link");
   }
 
   private async start(status: CommandStatus, mode: "openWorld" | "daily", difficulty: string) {
