@@ -17,9 +17,13 @@
   }
   function buildCatalog(content, messages) {
     const names = {};
+    const descriptions = {};
     const maxLevel = {};
     const name = (kind, id) => {
       names[`${kind}:${id}`] = messages[`content.${kind}.${id}.name`]?.[0] ?? titleCase(id);
+      const description = messages[`content.${kind}.${id}.desc`]?.[0];
+      if (description !== undefined)
+        descriptions[`${kind}:${id}`] = description;
     };
     for (const w of content.allWeapons) {
       name("weapon", w.id);
@@ -50,7 +54,7 @@
         continue;
       recipes.push({ kind: "itemEvolution", item: i.from, catalyst: i.catalyst, result: i.id });
     }
-    return { names, maxLevel, recipes };
+    return { names, descriptions, maxLevel, recipes };
   }
   function toCombo(r) {
     switch (r.kind) {
@@ -327,7 +331,10 @@
     return;
   }
   function choiceCards() {
-    return [...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")];
+    const cards = [...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")];
+    if (cards.length > 0)
+      return cards;
+    return [...document.querySelectorAll("button")].filter((b) => !b.matches(".ui-pause-btn, .ui-sound") && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "");
   }
   var RECOMMENDED_LINE = /(^|\n)★?\s*RECOMMENDED(?=\n|$)/;
   function options(d, discovery, loadout) {
@@ -337,8 +344,10 @@
       const recommended = card.querySelector(".ui-pick-badge") !== null || RECOMMENDED_LINE.test(text);
       const label = text.replace(RECOMMENDED_LINE, "").replace(/\n+/g, " | ").trim();
       const offer = offerKey(tip);
-      if (offer === undefined)
-        return { index, type: "other", id: tip, name: label, recommended, unseen: false, combos: [] };
+      if (offer === undefined) {
+        const unavailable = card instanceof HTMLButtonElement && card.disabled ? " (unavailable)" : "";
+        return { index, type: "other", id: tip, name: `${label}${unavailable}`, recommended, unseen: false, combos: [] };
+      }
       const after = new Map(loadout);
       after.set(offer.key, offer.key.startsWith("item:") ? (loadout.get(offer.key) ?? 0) + 1 : offer.level);
       const held = (c) => loadout.has(partner(c, offer.key).key);
@@ -1237,6 +1246,13 @@
   background: var(--sheet) no-repeat; background-size: calc(var(--sw) * var(--s) * 1px) calc(var(--sh) * var(--s) * 1px);
   background-position: calc(var(--x) * var(--s) * -1px) calc(var(--y) * var(--s) * -1px); image-rendering: pixelated; }
 .tbh-icon-text { display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #f3e6c4; }
+.tbh-tip { position: fixed; z-index: 2147483001; max-width: min(240px, calc(100vw - 16px)); padding: 5px 7px; pointer-events: none;
+  background: rgba(17, 14, 10, 0.96); color: #f3e6c4; border: 1px solid #6b5631; border-radius: 5px; box-shadow: 0 4px 14px rgba(0,0,0,.5);
+  font: 11.5px/1.35 ui-monospace, Menlo, Consolas, monospace; text-align: start; }
+.tbh-tip[hidden] { display: none; }
+.tbh-tip-name { color: #ffd36b; font-weight: 700; }
+.tbh-tip-note { color: #c9b58a; }
+.tbh-tip-desc { margin-top: 2px; }
 .tbh-icon.tbh-fresh::after { content: ""; position: absolute; right: -2px; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: #ff7ad9; box-shadow: 0 0 0 1px rgba(17,14,10,.9); }
 
 .ui-card.tbh-card-new { box-shadow: 0 0 0 2px #ff7ad9, 0 0 16px rgba(255,122,217,.6) !important; }
@@ -1267,11 +1283,12 @@
     const words = name.split(/[\s-]+/).filter(Boolean);
     return (words.length > 1 ? `${words[0]?.[0]}${words[1]?.[0]}` : name.slice(0, 2)).toUpperCase();
   }
-  function icon(v, key, title, className = "") {
+  var tips = new WeakMap;
+  function icon(v, key, note = "", className = "") {
     const id = key.slice(key.indexOf(":") + 1);
     const frame = v.icons?.frames.get(id);
     const box = h("span", `tbh-icon ${className}`.trim());
-    box.title = title;
+    tips.set(box, { name: nameOf(v.d.catalog, key), note, description: v.d.catalog.descriptions[key] });
     if (v.icons === undefined || frame === undefined) {
       box.classList.add("tbh-icon-text");
       box.textContent = initials(nameOf(v.d.catalog, key));
@@ -1288,14 +1305,60 @@
     box.append(art);
     return box;
   }
-  function partTitle(v, part) {
+  function partNeed(v, part) {
     const max = v.d.catalog.maxLevel[part.key];
+    if (part.need !== "max" || max === undefined)
+      return "";
     const have = v.loadout.get(part.key);
-    const level = part.need === "max" && max !== undefined ? ` (needs Lv${max}${have === undefined ? "" : `, have ${have}`})` : "";
-    return `${nameOf(v.d.catalog, part.key)}${level}`;
+    return `needs Lv${max}${have === undefined ? "" : `, have ${have}`}`;
   }
-  function pairingTitle(v, part, combo) {
-    return `${partTitle(v, part)} → ${nameOf(v.d.catalog, combo.result)}${v.discovery.made(combo.result) ? "" : " (never made)"}`;
+  function partTitle(v, part) {
+    const need = partNeed(v, part);
+    return `${nameOf(v.d.catalog, part.key)}${need === "" ? "" : ` (${need})`}`;
+  }
+  function resultNote(v, combo) {
+    return `makes ${nameOf(v.d.catalog, combo.result)}${v.discovery.made(combo.result) ? "" : " (never made)"}`;
+  }
+  function pairingNote(v, part, combo) {
+    return [partNeed(v, part), resultNote(v, combo)].filter(Boolean).join(" · ");
+  }
+  function startTips() {
+    const tip = h("div", "tbh-tip");
+    tip.hidden = true;
+    document.body.append(tip);
+    let anchor;
+    const hide = () => {
+      anchor = undefined;
+      tip.hidden = true;
+    };
+    const show = (el, content) => {
+      anchor = el;
+      tip.replaceChildren(h("div", "tbh-tip-name", content.name), ...content.note === "" ? [] : [h("div", "tbh-tip-note", content.note)], ...content.description === undefined ? [] : [h("div", "tbh-tip-desc", content.description)]);
+      tip.hidden = false;
+      const at = el.getBoundingClientRect();
+      const size = tip.getBoundingClientRect();
+      const margin = 8;
+      const left = Math.min(Math.max(margin, at.left + at.width / 2 - size.width / 2), window.innerWidth - size.width - margin);
+      const below = at.bottom + 6;
+      const top = below + size.height + margin > window.innerHeight ? Math.max(margin, at.top - 6 - size.height) : below;
+      tip.style.left = `${left}px`;
+      tip.style.top = `${top}px`;
+    };
+    window.addEventListener("pointerover", (e) => {
+      const el = e.target instanceof Element ? e.target.closest(".tbh-icon") : null;
+      if (el === anchor)
+        return;
+      const content = el === null ? undefined : tips.get(el);
+      if (el === null || content === undefined)
+        return hide();
+      show(el, content);
+    }, true);
+    window.addEventListener("pointerout", (e) => e.relatedTarget === null && hide(), true);
+    window.addEventListener("scroll", hide, true);
+    return () => {
+      if (anchor !== undefined && !anchor.isConnected)
+        hide();
+    };
   }
   function header(panel, count) {
     const el = h("div", "tbh-header", h("span", "", "Combos"), h("span", "tbh-count", count));
@@ -1313,8 +1376,8 @@
       const fresh = options.some((o) => !v.discovery.made(o.combo.result));
       const opts = h("span", "tbh-opts");
       for (const o of options)
-        opts.append(icon(v, o.partner.key, pairingTitle(v, o.partner, o.combo), v.discovery.made(o.combo.result) ? "" : "tbh-fresh"));
-      body.append(h("div", "tbh-need", fresh ? h("span", "tbh-badge tbh-badge-evo", "NEW") : h("span", ""), icon(v, held, nameOf(v.d.catalog, held)), h("span", "tbh-colon", ":"), opts));
+        opts.append(icon(v, o.partner.key, pairingNote(v, o.partner, o.combo), v.discovery.made(o.combo.result) ? "" : "tbh-fresh"));
+      body.append(h("div", "tbh-need", fresh ? h("span", "tbh-badge tbh-badge-evo", "NEW") : h("span", ""), icon(v, held), h("span", "tbh-colon", ":"), opts));
     }
     const counts = [`${rows.length} open`, `${paired.length} paired`, ...ready.length > 0 ? [`${ready.length} ready`] : []].join(" · ");
     const head = header(panel, counts);
@@ -1363,7 +1426,7 @@
       const other = partner(combo, offer.key);
       const ready = comboProgress(combo, after, v.d.catalog).every((s) => s === "done");
       const fresh = !v.discovery.made(combo.result);
-      box.append(h("div", `tbh-line tbh-${partState(other, v.loadout, v.d.catalog)}`, icon(v, other.key, partTitle(v, other)), h("span", "tbh-arrow", "→"), icon(v, combo.result, nameOf(v.d.catalog, combo.result), fresh ? "tbh-fresh" : ""), h("span", "tbh-result", nameOf(v.d.catalog, combo.result)), ...ready ? [h("span", "tbh-ready-tag", "READY")] : []));
+      box.append(h("div", `tbh-line tbh-${partState(other, v.loadout, v.d.catalog)}`, icon(v, other.key, partNeed(v, other)), h("span", "tbh-arrow", "→"), icon(v, combo.result, fresh ? "never made" : "", fresh ? "tbh-fresh" : ""), h("span", "tbh-result", nameOf(v.d.catalog, combo.result)), ...ready ? [h("span", "tbh-ready-tag", "READY")] : []));
     }
     (card.querySelector(".ui-card-text") ?? card).append(box);
   }
@@ -1380,6 +1443,7 @@
   }
   function startHelper(link, discovery) {
     const panel = mount();
+    const dropStaleTip = startTips();
     let panelSignature = "";
     let queued = false;
     let version = 0;
@@ -1389,6 +1453,7 @@
       const hud = document.querySelector(".hud-weapons");
       const game = link.game;
       panel.hidden = game === undefined || game.state.over || hud === null || !isShown(hud);
+      dropStaleTip();
       if (panel.hidden || game === undefined)
         return;
       const cards = [...document.querySelectorAll(".ui-card[data-tip]")];
@@ -1418,6 +1483,7 @@
       }
       for (const card of cards)
         annotateCard(card, view, version);
+      dropStaleTip();
     };
     const schedule = () => {
       if (queued)

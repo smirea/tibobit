@@ -36,12 +36,15 @@ function initials(name: string): string {
   return (words.length > 1 ? `${words[0]?.[0]}${words[1]?.[0]}` : name.slice(0, 2)).toUpperCase();
 }
 
+type Tip = { name: string; note: string; description: string | undefined };
+const tips = new WeakMap<Element, Tip>();
+
 /** The game's own sprite for a weapon, passive or item, or its initials when the sheet has none. */
-function icon(v: View, key: Key, title: string, className = ""): HTMLElement {
+function icon(v: View, key: Key, note = "", className = ""): HTMLElement {
   const id = key.slice(key.indexOf(":") + 1);
   const frame = v.icons?.frames.get(id);
   const box = h("span", `tbh-icon ${className}`.trim());
-  box.title = title;
+  tips.set(box, { name: nameOf(v.d.catalog, key), note, description: v.d.catalog.descriptions[key] });
   if (v.icons === undefined || frame === undefined) {
     box.classList.add("tbh-icon-text");
     box.textContent = initials(nameOf(v.d.catalog, key));
@@ -58,15 +61,69 @@ function icon(v: View, key: Key, title: string, className = ""): HTMLElement {
   return box;
 }
 
-function partTitle(v: View, part: Part): string {
+function partNeed(v: View, part: Part): string {
   const max = v.d.catalog.maxLevel[part.key];
+  if (part.need !== "max" || max === undefined) return "";
   const have = v.loadout.get(part.key);
-  const level = part.need === "max" && max !== undefined ? ` (needs Lv${max}${have === undefined ? "" : `, have ${have}`})` : "";
-  return `${nameOf(v.d.catalog, part.key)}${level}`;
+  return `needs Lv${max}${have === undefined ? "" : `, have ${have}`}`;
 }
 
-function pairingTitle(v: View, part: Part, combo: Combo): string {
-  return `${partTitle(v, part)} → ${nameOf(v.d.catalog, combo.result)}${v.discovery.made(combo.result) ? "" : " (never made)"}`;
+function partTitle(v: View, part: Part): string {
+  const need = partNeed(v, part);
+  return `${nameOf(v.d.catalog, part.key)}${need === "" ? "" : ` (${need})`}`;
+}
+
+function resultNote(v: View, combo: Combo): string {
+  return `makes ${nameOf(v.d.catalog, combo.result)}${v.discovery.made(combo.result) ? "" : " (never made)"}`;
+}
+
+function pairingNote(v: View, part: Part, combo: Combo): string {
+  return [partNeed(v, part), resultNote(v, combo)].filter(Boolean).join(" · ");
+}
+
+/** One shared tooltip for every icon, so hovering shows the game's own description without the native title delay. */
+function startTips(): () => void {
+  const tip = h("div", "tbh-tip");
+  tip.hidden = true;
+  document.body.append(tip);
+  let anchor: Element | undefined;
+  const hide = () => {
+    anchor = undefined;
+    tip.hidden = true;
+  };
+  const show = (el: Element, content: Tip) => {
+    anchor = el;
+    tip.replaceChildren(
+      h("div", "tbh-tip-name", content.name),
+      ...(content.note === "" ? [] : [h("div", "tbh-tip-note", content.note)]),
+      ...(content.description === undefined ? [] : [h("div", "tbh-tip-desc", content.description)]),
+    );
+    tip.hidden = false;
+    const at = el.getBoundingClientRect();
+    const size = tip.getBoundingClientRect();
+    const margin = 8;
+    const left = Math.min(Math.max(margin, at.left + at.width / 2 - size.width / 2), window.innerWidth - size.width - margin);
+    const below = at.bottom + 6;
+    const top = below + size.height + margin > window.innerHeight ? Math.max(margin, at.top - 6 - size.height) : below;
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+  };
+  window.addEventListener(
+    "pointerover",
+    (e) => {
+      const el = e.target instanceof Element ? e.target.closest(".tbh-icon") : null;
+      if (el === anchor) return;
+      const content = el === null ? undefined : tips.get(el);
+      if (el === null || content === undefined) return hide();
+      show(el, content);
+    },
+    true,
+  );
+  window.addEventListener("pointerout", (e) => e.relatedTarget === null && hide(), true);
+  window.addEventListener("scroll", hide, true);
+  return () => {
+    if (anchor !== undefined && !anchor.isConnected) hide();
+  };
 }
 
 function header(panel: HTMLElement, count: string): HTMLElement {
@@ -84,13 +141,13 @@ function renderPanel(panel: HTMLElement, v: View) {
   for (const { held, options } of rows) {
     const fresh = options.some((o) => !v.discovery.made(o.combo.result));
     const opts = h("span", "tbh-opts");
-    for (const o of options) opts.append(icon(v, o.partner.key, pairingTitle(v, o.partner, o.combo), v.discovery.made(o.combo.result) ? "" : "tbh-fresh"));
+    for (const o of options) opts.append(icon(v, o.partner.key, pairingNote(v, o.partner, o.combo), v.discovery.made(o.combo.result) ? "" : "tbh-fresh"));
     body.append(
       h(
         "div",
         "tbh-need",
         fresh ? h("span", "tbh-badge tbh-badge-evo", "NEW") : h("span", ""),
-        icon(v, held, nameOf(v.d.catalog, held)),
+        icon(v, held),
         h("span", "tbh-colon", ":"),
         opts,
       ),
@@ -146,9 +203,9 @@ function annotateCard(card: HTMLElement, v: View, version: number) {
       h(
         "div",
         `tbh-line tbh-${partState(other, v.loadout, v.d.catalog)}`,
-        icon(v, other.key, partTitle(v, other)),
+        icon(v, other.key, partNeed(v, other)),
         h("span", "tbh-arrow", "→"),
-        icon(v, combo.result, nameOf(v.d.catalog, combo.result), fresh ? "tbh-fresh" : ""),
+        icon(v, combo.result, fresh ? "never made" : "", fresh ? "tbh-fresh" : ""),
         h("span", "tbh-result", nameOf(v.d.catalog, combo.result)),
         ...(ready ? [h("span", "tbh-ready-tag", "READY")] : []),
       ),
@@ -170,6 +227,7 @@ function mount(): HTMLElement {
 
 export function startHelper(link: GameLink, discovery: Discovery) {
   const panel = mount();
+  const dropStaleTip = startTips();
   let panelSignature = "";
   let queued = false;
   let version = 0;
@@ -180,6 +238,7 @@ export function startHelper(link: GameLink, discovery: Discovery) {
     const hud = document.querySelector(".hud-weapons");
     const game = link.game;
     panel.hidden = game === undefined || game.state.over || hud === null || !isShown(hud);
+    dropStaleTip();
     if (panel.hidden || game === undefined) return;
     const cards = [...document.querySelectorAll<HTMLElement>(".ui-card[data-tip]")];
     const offered = cards.map(offerKey).filter((o) => o !== undefined);
@@ -206,6 +265,7 @@ export function startHelper(link: GameLink, discovery: Discovery) {
       renderPanel(panel, view);
     }
     for (const card of cards) annotateCard(card, view, version);
+    dropStaleTip();
   };
   const schedule = () => {
     if (queued) return;

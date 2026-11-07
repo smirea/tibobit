@@ -87,9 +87,16 @@ function offerKey(tip: string): { key: Key; level: number } | undefined {
   return undefined;
 }
 
-/** The open choice's option cards in on-screen order; `choose` clicks them by this index. */
+/**
+ * The open choice's options in on-screen order; `choose` clicks them by this index. Level-ups,
+ * chests and shrines show cards; shops such as the vendor or the dog kennel show plain buttons.
+ */
 export function choiceCards(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>("button.ui-card, .ui-card[data-tip]")];
+  const cards = [...document.querySelectorAll<HTMLElement>("button.ui-card, .ui-card[data-tip]")];
+  if (cards.length > 0) return cards;
+  return [...document.querySelectorAll<HTMLButtonElement>("button")].filter(
+    (b) => !b.matches(".ui-pause-btn, .ui-sound") && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "",
+  );
 }
 
 const RECOMMENDED_LINE = /(^|\n)★?\s*RECOMMENDED(?=\n|$)/;
@@ -101,7 +108,10 @@ function options(d: Data, discovery: Discovery, loadout: Loadout): OptionView[] 
     const recommended = card.querySelector(".ui-pick-badge") !== null || RECOMMENDED_LINE.test(text);
     const label = text.replace(RECOMMENDED_LINE, "").replace(/\n+/g, " | ").trim();
     const offer = offerKey(tip);
-    if (offer === undefined) return { index, type: "other", id: tip, name: label, recommended, unseen: false, combos: [] };
+    if (offer === undefined) {
+      const unavailable = card instanceof HTMLButtonElement && card.disabled ? " (unavailable)" : "";
+      return { index, type: "other", id: tip, name: `${label}${unavailable}`, recommended, unseen: false, combos: [] };
+    }
     const after: Loadout = new Map(loadout);
     after.set(offer.key, offer.key.startsWith("item:") ? (loadout.get(offer.key) ?? 0) + 1 : offer.level);
     const held = (c: Combo) => loadout.has(partner(c, offer.key).key);

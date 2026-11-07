@@ -10,6 +10,7 @@ export type Recipe =
 
 export type Catalog = {
   names: Record<Key, string>;
+  descriptions: Record<Key, string>;
   maxLevel: Record<Key, number>;
   recipes: Recipe[];
 };
@@ -20,9 +21,12 @@ function titleCase(id: string): string {
 
 export function buildCatalog(content: Content, messages: Messages): Catalog {
   const names: Record<Key, string> = {};
+  const descriptions: Record<Key, string> = {};
   const maxLevel: Record<Key, number> = {};
   const name = (kind: Kind, id: string) => {
     names[`${kind}:${id}`] = messages[`content.${kind}.${id}.name`]?.[0] ?? titleCase(id);
+    const description = messages[`content.${kind}.${id}.desc`]?.[0];
+    if (description !== undefined) descriptions[`${kind}:${id}`] = description;
   };
   for (const w of content.allWeapons) {
     name("weapon", w.id);
@@ -50,7 +54,7 @@ export function buildCatalog(content: Content, messages: Messages): Catalog {
     if (i.from === undefined || i.catalyst === undefined) continue;
     recipes.push({ kind: "itemEvolution", item: i.from, catalyst: i.catalyst, result: i.id });
   }
-  return { names, maxLevel, recipes };
+  return { names, descriptions, maxLevel, recipes };
 }
 
 // "max" mirrors the game: a base weapon must be maxed to evolve, and an item evolves
