@@ -360,9 +360,8 @@
   }
   function choiceCards() {
     const cards = [...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")];
-    if (cards.length > 0)
-      return cards;
-    return [...document.querySelectorAll("button")].filter((b) => !b.matches(".ui-pause-btn, .ui-sound") && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "");
+    const buttons = [...document.querySelectorAll("button")].filter((b) => !b.matches(".ui-card, .ui-pause-btn, .ui-sound") && !b.closest("#tibo-helper") && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "" && !/^banish/i.test((b.textContent ?? "").trim()));
+    return [...cards, ...buttons];
   }
   var RECOMMENDED_LINE = /(^|\n)★?\s*RECOMMENDED(?=\n|$)/;
   function options(d, discovery, loadout, banished) {
@@ -372,10 +371,9 @@
       const recommended = card.querySelector(".ui-pick-badge") !== null || RECOMMENDED_LINE.test(text);
       const label = text.replace(RECOMMENDED_LINE, "").replace(/\n+/g, " | ").trim();
       const offer = offerKey(tip);
-      if (offer === undefined) {
-        const unavailable = card instanceof HTMLButtonElement && card.disabled ? " (unavailable)" : "";
-        return { index, type: "other", id: tip, name: `${label}${unavailable}`, recommended, unseen: false, combos: [] };
-      }
+      const available = !(card instanceof HTMLButtonElement && card.disabled);
+      if (offer === undefined)
+        return { index, type: "other", id: tip, name: label, label, available, recommended, unseen: false, combos: [] };
       const after = new Map(loadout);
       after.set(offer.key, offer.key.startsWith("item:") ? (loadout.get(offer.key) ?? 0) + 1 : offer.level);
       const held = (c) => loadout.has(partner(c, offer.key).key);
@@ -386,6 +384,8 @@
         type,
         id,
         name: nameOf(d.catalog, offer.key),
+        label,
+        available,
         ...type === "item" ? {} : { level: offer.level },
         recommended,
         unseen: discovery.isNew(offer.key),
@@ -554,7 +554,8 @@
         nearestBullet: closest(bullets),
         bulletsNear: within(bullets).filter((b) => b.dist <= 60).length,
         hazard: areas.find((a) => !a.view.inside && crosses(a))?.view.kind ?? null,
-        leavesHazard: holding.length > 0 && holding.every((a) => !a.contains(end.x, end.y))
+        leavesHazard: holding.length > 0 && holding.every((a) => !a.contains(end.x, end.y)),
+        clearOfAttacks: areas.every((a) => a.view.source !== "attack" || !a.contains(end.x, end.y))
       };
     });
     return {

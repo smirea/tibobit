@@ -95,7 +95,10 @@ const CHECKPOINTS = [30, 150, 300, 480, 660, 840, 1020, 1140];
 const COACH_COOLDOWN = 45;
 const LOW_HEALTH = 0.5;
 
-type Plan = { want: string[]; advice: string };
+type Plan = { want: string[]; advice: string; at: number };
+// The coach's advice line lapses after this many game seconds, so a stale instruction cannot
+// stay in force while the situation changes; its upgrade list stays until the next consult.
+const ADVICE_SECONDS = 90;
 let plan: Plan | undefined;
 const inPlan = (name: string) => plan?.want.some((w) => w.toLowerCase() === name.toLowerCase()) ?? false;
 
@@ -203,6 +206,9 @@ class Coach {
   private lastAsked = Number.NEGATIVE_INFINITY;
   private sawBoss = false;
   private lowHealth = false;
+  private critical = false;
+  private bossClose = false;
+  private attack = false;
   private evolved = 0;
   calls = 0;
 
@@ -214,12 +220,22 @@ class Coach {
     const low = r.player.hp / r.player.maxHp < LOW_HEALTH;
     const checkpoint = CHECKPOINTS[this.nextCheckpoint];
     let why: string | undefined;
+    const attack = r.hazards.some((h) => h.source === "attack" && h.landsIn !== undefined && h.dist < 120);
+    const bossClose = r.bosses.some((b) => b.dist < 50);
+    const critical = r.player.hp / r.player.maxHp < 0.15;
+    const cooled = r.time - this.lastAsked >= COACH_COOLDOWN;
     if (!this.sawBoss && r.bosses.length > 0) why = `a boss appeared: ${r.bosses[0]?.name}`;
-    else if (low && !this.lowHealth && r.time - this.lastAsked >= COACH_COOLDOWN) why = "health dropped below half";
+    else if (critical && !this.critical && cooled) why = "health dropped below 15%";
+    else if (bossClose && !this.bossClose && cooled) why = "a boss came within 50 units";
+    else if (attack && !this.attack && cooled) why = "a boss attack is telegraphed nearby";
+    else if (low && !this.lowHealth && cooled) why = "health dropped below half";
     else if (evolved > this.evolved && r.time - this.lastAsked >= COACH_COOLDOWN) why = "a weapon evolved";
     else if (checkpoint !== undefined && r.time >= checkpoint) why = `checkpoint at ${clock(checkpoint)}`;
     this.sawBoss ||= r.bosses.length > 0;
     this.lowHealth = low;
+    this.critical = critical;
+    this.bossClose = bossClose;
+    this.attack = attack;
     this.evolved = Math.max(this.evolved, evolved);
     while (CHECKPOINTS[this.nextCheckpoint] !== undefined && r.time >= (CHECKPOINTS[this.nextCheckpoint] ?? 0)) this.nextCheckpoint++;
     return why;
@@ -246,7 +262,7 @@ class Coach {
     ].join("\n\n");
     const reply = await askCoach(prompt);
     if (reply === undefined) return;
-    if (Array.isArray(reply.want) && typeof reply.advice === "string") plan = { want: reply.want.map(String), advice: reply.advice };
+    if (Array.isArray(reply.want) && typeof reply.advice === "string") plan = { want: reply.want.map(String), advice: reply.advice, at: r.time };
     const note = typeof reply.note === "string" ? reply.note : "";
     this.notes.timeline.push(`- **${clock(r.time)}** (${why}) ${note}${plan === undefined ? "" : ` Advice: ${plan.advice} Want: ${plan.want.join(", ")}.`}`);
     await this.notes.write();
@@ -307,6 +323,19 @@ function sourceWords(source: string): string {
   return hazardWords(source);
 }
 
+// Health samples by game time, to tell the model whether it is bleeding.
+const healthHistory: { time: number; hp: number }[] = [];
+
+function healthTrend(r: RunView): string[] {
+  const pct = Math.round((r.player.hp / r.player.maxHp) * 100);
+  if (healthHistory.length > 0 && (healthHistory.at(-1)?.time ?? 0) > r.time) healthHistory.length = 0;
+  healthHistory.push({ time: r.time, hp: pct });
+  while (healthHistory.length > 1 && (healthHistory[1]?.time ?? 0) <= r.time - 30) healthHistory.shift();
+  const then = healthHistory[0];
+  if (then === undefined || r.time - then.time < 20 || Math.abs(then.hp - pct) < 10) return [];
+  return [`Health went from ${then.hp}% to ${pct}% over the last ${Math.round(r.time - then.time)} seconds.`];
+}
+
 function hurtLine(r: RunView): string[] {
   const sources = Object.entries(r.player.hurtBy).sort((a, b) => b[1] - a[1]).slice(0, 2);
   return sources.length === 0 ? [] : [`In the last 3 seconds Tibo was hurt by ${sources.map(([k]) => sourceWords(k)).join(" and ")}.`];
@@ -330,7 +359,8 @@ function situation(r: RunView): string {
       ),
     `Weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}. Passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
     ...hurtLine(r),
-    ...(plan === undefined ? [] : [`Plan: ${plan.advice}`]),
+    ...healthTrend(r),
+    ...(plan === undefined || r.time - plan.at > ADVICE_SECONDS ? [] : [`Plan: ${plan.advice}`]),
   ].join("\n");
 }
 
@@ -369,6 +399,7 @@ function describe(r: RunView, s: SectorView): string {
     awayFromBoss(r, s.dir) ?? "",
     s.hazard !== null ? `into ${hazardWords(s.hazard)}` : "",
     s.leavesHazard ? "out of the danger Tibo stands in" : "",
+    r.hazards.some((h) => h.inside && h.source === "attack") && s.clearOfAttacks ? "clear of every boss attack" : "",
     s.enemiesNear > 0 ? `${plural(s.enemiesNear, "enemy")} close` : "no enemies close",
     s.enemiesFar > s.enemiesNear ? `${s.enemiesFar - s.enemiesNear} more further out` : "",
     ...sights(r, s.dir),
@@ -421,13 +452,20 @@ async function move(r: RunView) {
   return command(dir === undefined ? { type: "goto", to: { dx: 0, dy: 0 }, stay: STEP, pause: true } : { type: "move", dir, seconds: STEP, pause: true });
 }
 
+// Picks that did nothing (an item Tibo cannot afford, say) for the choice now open, so the model
+// is told instead of picking them forever.
+let deadPicks: { signature: string; names: Set<string> } = { signature: "", names: new Set() };
+
 async function choose(r: RunView) {
   const options = r.choice?.options ?? [];
   if (options.length === 0) throw new Error(`a ${r.choice?.kind} choice with no options`);
+  const signature = `${r.tick}|${options.map((o) => o.name).join("|")}`;
+  if (deadPicks.signature !== signature) deadPicks = { signature, names: new Set() };
   const criteria: Record<string, string> = {};
   for (const o of options) {
     const notes = [
-      o.type === "other" ? o.name : `${o.type}${o.level === undefined ? "" : ` level ${o.level}`}`,
+      deadPicks.names.has(o.name) || !o.available ? "cannot be taken right now" : "",
+      o.type === "other" ? o.name : `${o.type}${o.level === undefined ? "" : ` level ${o.level}`}, ${o.label}`,
       o.recommended ? "the game recommends it" : "",
       inPlan(o.name) ? "part of the long-term plan" : "",
       ...o.combos.filter((c) => c.partnerHeld).map((c) => `pairs with your ${c.partner.name} into ${c.name}${c.ready ? " right away" : ""}`),
@@ -438,6 +476,8 @@ async function choose(r: RunView) {
     pick: { type: "choice", instructions: `Tibo levelled up. Which ${r.choice?.kind === "levelUp" ? "upgrade" : "reward"} makes Tibo strongest?`, criteria },
   });
   const index = Number((pick?.choice ?? "0").split(":")[0]);
+  const picked = options.find((o) => o.index === index);
+  if (picked !== undefined) deadPicks.names.add(picked.name);
   return command({ type: "choose", index: Number.isFinite(index) ? index : 0 });
 }
 

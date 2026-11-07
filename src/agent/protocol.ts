@@ -78,6 +78,10 @@ export type OptionView = {
   type: string;
   id: string;
   name: string;
+  /** The option's text on screen, with prices and stats. */
+  label: string;
+  /** False for a greyed-out option, such as an item you cannot afford. */
+  available: boolean;
   level?: number;
   /** The game's own pick suggestion. */
   recommended: boolean;
@@ -157,6 +161,8 @@ export type SectorView = {
   hazard: string | null;
   /** The player stands in a hazard, and 60 units this way is clear of it. */
   leavesHazard: boolean;
+  /** 60 units this way is outside every enemy attack zone on the ground. */
+  clearOfAttacks: boolean;
 };
 
 /** `charge` and `chargeNeeded` (seconds) appear on pickups you open by standing on them. */

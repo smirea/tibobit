@@ -116,10 +116,17 @@ function offerKey(tip: string): { key: Key; level: number } | undefined {
  */
 export function choiceCards(): HTMLElement[] {
   const cards = [...document.querySelectorAll<HTMLElement>("button.ui-card, .ui-card[data-tip]")];
-  if (cards.length > 0) return cards;
-  return [...document.querySelectorAll<HTMLButtonElement>("button")].filter(
-    (b) => !b.matches(".ui-pause-btn, .ui-sound") && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "",
+  // The other buttons of the overlay: Leave in a shop, Reroll and Skip on a level-up. Banish is
+  // left out because it only toggles a mode for the next click.
+  const buttons = [...document.querySelectorAll<HTMLButtonElement>("button")].filter(
+    (b) =>
+      !b.matches(".ui-card, .ui-pause-btn, .ui-sound") &&
+      !b.closest("#tibo-helper") &&
+      b.getClientRects().length > 0 &&
+      (b.textContent ?? "").trim() !== "" &&
+      !/^banish/i.test((b.textContent ?? "").trim()),
   );
+  return [...cards, ...buttons];
 }
 
 const RECOMMENDED_LINE = /(^|\n)★?\s*RECOMMENDED(?=\n|$)/;
@@ -131,10 +138,8 @@ function options(d: Data, discovery: Discovery, loadout: Loadout, banished: Read
     const recommended = card.querySelector(".ui-pick-badge") !== null || RECOMMENDED_LINE.test(text);
     const label = text.replace(RECOMMENDED_LINE, "").replace(/\n+/g, " | ").trim();
     const offer = offerKey(tip);
-    if (offer === undefined) {
-      const unavailable = card instanceof HTMLButtonElement && card.disabled ? " (unavailable)" : "";
-      return { index, type: "other", id: tip, name: `${label}${unavailable}`, recommended, unseen: false, combos: [] };
-    }
+    const available = !(card instanceof HTMLButtonElement && card.disabled);
+    if (offer === undefined) return { index, type: "other", id: tip, name: label, label, available, recommended, unseen: false, combos: [] };
     const after: Loadout = new Map(loadout);
     after.set(offer.key, offer.key.startsWith("item:") ? (loadout.get(offer.key) ?? 0) + 1 : offer.level);
     const held = (c: Combo) => loadout.has(partner(c, offer.key).key);
@@ -147,6 +152,8 @@ function options(d: Data, discovery: Discovery, loadout: Loadout, banished: Read
       type,
       id,
       name: nameOf(d.catalog, offer.key),
+      label,
+      available,
       ...(type === "item" ? {} : { level: offer.level }),
       recommended,
       unseen: discovery.isNew(offer.key),
@@ -324,6 +331,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
       bulletsNear: within(bullets).filter((b) => b.dist <= 60).length,
       hazard: areas.find((a) => !a.view.inside && crosses(a))?.view.kind ?? null,
       leavesHazard: holding.length > 0 && holding.every((a) => !a.contains(end.x, end.y)),
+      clearOfAttacks: areas.every((a) => a.view.source !== "attack" || !a.contains(end.x, end.y)),
     };
   });
   return {
