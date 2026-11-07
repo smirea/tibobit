@@ -110,6 +110,8 @@ export type Snapshot = {
   lastRunLink?: string;
   /** How the most recent run went; set once a run has ended. `damageTaken` is by source, largest first. */
   lastRun?: { time: number; level: number; kills: number; damageTaken: Record<string, number> };
+  /** Whether the page runs under automation (navigator.webdriver), as in scripts/headless.ts. */
+  headless?: boolean;
   commands: CommandStatus[];
   error?: string;
 };

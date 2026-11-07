@@ -483,6 +483,7 @@ export function snapshot(link: GameLink, discovery: Discovery, commands: Command
   link.noteRunLink();
   const base = {
     capturedAt: Date.now(),
+    headless: navigator.webdriver,
     commands,
     ...(link.error === undefined ? {} : { error: link.error }),
     ...(link.runLink === undefined ? {} : { lastRunLink: link.runLink }),
