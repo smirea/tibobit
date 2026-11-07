@@ -52,7 +52,8 @@ function setPilot(next: Omit<PilotState, keyof PilotSettings> & Partial<PilotSet
 
 function startPilot() {
   if (bot !== undefined) return;
-  const args = ["--server", `http://127.0.0.1:${PORT}`, "--takeover", "--runs", "Infinity", "--reload", "", ...PILOT_ARGS];
+  // One run: when it ends, the bot reviews it (unless incognito) and hands the wheel back.
+  const args = ["--server", `http://127.0.0.1:${PORT}`, "--takeover", "--runs", "1", "--reload", "", ...PILOT_ARGS];
   console.log(`pilot: tibo-bot.ts ${args.join(" ")}`);
   // From the repo root, where Bun loads .env.local with the OpenRouter key.
   const child = Bun.spawn([process.execPath, path.join(import.meta.dir, "tibo-bot.ts"), ...args], { cwd: path.join(import.meta.dir, ".."), stdin: "ignore", stdout: "inherit", stderr: "pipe" });
@@ -71,6 +72,10 @@ function startPilot() {
     if (bot !== child) return;
     bot = undefined;
     if (pilot.state === "stopping") return setPilot({ state: "off" });
+    if (code === 0) {
+      say({ role: "system", text: "The run is over: the wheel is yours." });
+      return setPilot({ state: "off" });
+    }
     const reason = errors.trim().split("\n").filter((l) => /error/i.test(l)).at(-1) ?? errors.trim().split("\n").at(-1);
     const detail = `The bot stopped (exit ${code})${reason ? `: ${reason.trim().slice(0, 300)}` : ""}`;
     say({ role: "system", text: detail });

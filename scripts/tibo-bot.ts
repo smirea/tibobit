@@ -51,6 +51,9 @@ const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.rep
 type Snap = Snapshot & { connected: boolean; ageMs: number; pace?: PilotPace; incognito?: boolean };
 /** Seconds between planner calls while a goal is under way, and between steps (game time in lockstep, wall time live). */
 let pace: PilotPace = { planEvery: PLAN_EVERY, actEvery: STEP };
+/** Whether the panel started this bot, which someone is watching. */
+let piloted = false;
+const PICK_SHOW_MS = 4000;
 
 const COACH_NAME = `${COACH} ${COACH_MODEL}`;
 let chatQueue = Promise.resolve();
@@ -1259,7 +1262,7 @@ class Planner {
         ? undefined
         : [...keys].map(([k, o]) => {
             const probability = answers.pick?.probabilities?.[k];
-            return { card: cardName(o), notes: k.slice(k.indexOf(": ") + 2), ...(probability === undefined ? {} : { probability }), chosen: o === pick };
+            return { card: cardName(o), notes: k.slice(k.indexOf(": ") + 2), ...(probability === undefined ? {} : { probability }), chosen: o === pick, index: o.index };
           });
     const weighed: CardOption[] = goals.map((g, i) => ({ card: goalTitle(g.goal, r), notes: g.text, probability: score(i), chosen: i === best }));
     setGoal(goal, r, this.log);
@@ -1331,7 +1334,12 @@ async function choose(r: RunView, planner: Planner, log: RunLog) {
   if (takeable.length === 0) throw new Error(`every option of this ${r.choice?.kind} was tried without closing it: ${options.map((o) => o.name).join(", ")}`);
   const kind = r.choice?.kind === "levelUp" ? "level-up" : (r.choice?.kind ?? "choice");
   let picked = takeable.length === 1 ? takeable[0] : undefined;
-  if (picked === undefined) picked = (await planner.plan(r, `a ${kind} choice opened`, takeable)).pick;
+  if (picked === undefined) {
+    picked = (await planner.plan(r, `a ${kind} choice opened`, takeable)).pick;
+    // The panel shows the odds over the cards and lands a highlight on the pick before it is taken;
+    // the choice freezes the game, so the wait costs no game time.
+    if (piloted) await Bun.sleep(PICK_SHOW_MS);
+  }
   else log.write(r, { event: "pick", model: "none", reason: kind, action: cardName(picked), detail: "the only option that can be taken" });
   if (picked === undefined) throw new Error(`no ${kind} option was picked`);
   deadPicks.names.add(picked.name);
@@ -1455,7 +1463,8 @@ async function main() {
         planner = undefined;
         runLog = undefined;
         if (runs >= RUNS) {
-          if (awaitingLink !== undefined) {
+          // A run the panel played hands the wheel back on its end screen instead of starting another.
+          if (awaitingLink !== undefined && !TAKEOVER) {
             await start();
             await fillLink(await api<Snap>("/state"));
           }
@@ -1486,6 +1495,7 @@ async function main() {
       continue;
     }
     pace = s.pace ?? pace;
+    piloted = s.pace !== undefined;
     const incognito = s.incognito ?? INCOGNITO;
     if (notes === undefined || planner === undefined || runLog === undefined) {
       const experiment = !adopted && !incognito && (await experimentDue()) ? await chooseExperiment() : undefined;

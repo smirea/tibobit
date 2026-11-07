@@ -331,7 +331,8 @@ export type MoveOption = {
   useful?: number;
   outcome: "chosen" | "safe" | "risky" | "ruled out";
 };
-export type CardOption = { card: string; notes: string; probability?: number; chosen: boolean };
+/** `index` is the option's position in the open choice, so the page can find its card. */
+export type CardOption = { card: string; notes: string; probability?: number; chosen: boolean; index?: number };
 /**
  * What hovering a chat message shows: the question a model got and what it weighed. A plan carries
  * the cards it chose among and every goal it weighed, each with the model's odds.
@@ -350,7 +351,7 @@ export type ChatLine = { role: PilotRole; text: string; detail?: string; model?:
 export type ChatMessage = ChatLine & { id: number; at: number };
 
 const KEEP_PLANS = 500;
-const KEEP_OTHERS = 60;
+const KEEP_OTHERS = 400;
 
 /**
  * Drops the oldest messages beyond what the panel shows: every planner decision of a run (its

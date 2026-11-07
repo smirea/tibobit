@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
-// @version      1.14.2
+// @version      1.15.0
 // @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
@@ -285,7 +285,7 @@
     return change;
   }
   var KEEP_PLANS = 500;
-  var KEEP_OTHERS = 60;
+  var KEEP_OTHERS = 400;
   function trimChat(chat) {
     let plans = 0;
     let others = 0;
@@ -1654,6 +1654,8 @@
   var clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
   var fine = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
   var percent = (v) => `${Math.round(v * 100)}%`;
+  var ARROWS = { right: "→", "down-right": "↘", down: "↓", "down-left": "↙", left: "←", "up-left": "↖", up: "↑", "up-right": "↗", "stand still": "•" };
+  var arrowed = (text) => text.replace(/(?<![\w-])(up-right|up-left|down-right|down-left|right|left|up|down)(?![\w-])/g, (d) => ARROWS[d] ?? d);
   function h(tag, className, ...children) {
     const el = document.createElement(tag);
     el.className = className;
@@ -1673,10 +1675,10 @@
     return h("details", "tbh-insp-fold", h("summary", "", title), pre(text, className));
   }
   function oddsRows(options) {
-    return options.map((c) => h("div", `tbh-opt ${c.chosen ? "tbh-opt-chosen" : c.probability === undefined ? "tbh-opt-ruled-out" : "tbh-opt-safe"}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name", c.card), ...c.chosen ? [h("span", "tbh-opt-outcome", "chosen")] : [], ...c.probability === undefined ? [] : [h("span", "tbh-opt-scores", meter(percent(c.probability), c.probability, "tbh-meter-useful tbh-meter-wide"))]), ...c.notes === "" ? [] : [h("div", "tbh-opt-desc", c.notes)]));
+    return options.map((c) => h("div", `tbh-opt ${c.chosen ? "tbh-opt-chosen" : c.probability === undefined ? "tbh-opt-ruled-out" : "tbh-opt-safe"}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name", arrowed(c.card)), ...c.chosen ? [h("span", "tbh-opt-outcome", "chosen")] : [], ...c.probability === undefined ? [] : [h("span", "tbh-opt-scores", meter(percent(c.probability), c.probability, "tbh-meter-useful tbh-meter-wide"))]), ...c.notes === "" ? [] : [h("div", "tbh-opt-desc", c.notes)]));
   }
   function inspectBody(m) {
-    const words = [h("div", "tbh-insp-text", m.text), ...m.detail === undefined ? [] : [h("div", "tbh-opt-desc", m.detail)]];
+    const words = [h("div", "tbh-insp-text", arrowed(m.text)), ...m.detail === undefined ? [] : [h("div", "tbh-opt-desc", m.detail)]];
     const inspect = m.inspect;
     if (inspect === undefined)
       return words;
@@ -1696,7 +1698,7 @@
           folded("Prompt", inspect.prompt)
         ];
       case "moves": {
-        const rows = inspect.moves.map((m) => h("div", `tbh-opt tbh-opt-${m.outcome.replace(" ", "-")}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name", m.move), h("span", "tbh-opt-outcome", m.outcome), h("span", "tbh-opt-scores", ...m.forecast === undefined ? [] : [h("span", `tbh-chip${m.forecast === "no damage" ? " tbh-chip-ok" : ""}`, m.forecast)], ...m.hurt === undefined ? [] : [meter(`hurt ${m.hurt.toFixed(1)}/4`, m.hurt / 4, "tbh-meter-hurt")], ...m.useful === undefined ? [] : [meter(`useful ${percent(m.useful)}`, m.useful, "tbh-meter-useful")])), h("div", "tbh-opt-desc", m.description)));
+        const rows = inspect.moves.map((m) => h("div", `tbh-opt tbh-opt-${m.outcome.replace(" ", "-")}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name tbh-opt-arrow", ARROWS[m.move] ?? m.move), h("span", "tbh-opt-outcome", m.outcome), h("span", "tbh-opt-scores", ...m.forecast === undefined ? [] : [h("span", `tbh-chip${m.forecast === "no damage" ? " tbh-chip-ok" : ""}`, m.forecast)], ...m.hurt === undefined ? [] : [meter(`hurt ${m.hurt.toFixed(1)}/4`, m.hurt / 4, "tbh-meter-hurt")], ...m.useful === undefined ? [] : [meter(`useful ${percent(m.useful)}`, m.useful, "tbh-meter-useful")])), h("div", "tbh-opt-desc", m.description)));
         return [
           ...words,
           section("Moves", ...rows, ...inspect.dash === undefined ? [] : [h("div", "tbh-opt-desc", `Dash to escape? ${percent(inspect.dash)} (dashes above 50%)`)]),
@@ -1807,8 +1809,21 @@
       }
     };
   }
+  var MOVES_PER_ROW = 12;
+  function step(m) {
+    if (m.role !== "action" || m.inspect?.kind !== "moves")
+      return;
+    const chosen = m.inspect.moves.find((x) => x.outcome === "chosen");
+    return { move: chosen?.move ?? "stand still", hurt: chosen?.forecast !== undefined && chosen.forecast !== "no damage", dash: m.text.startsWith("Dash") };
+  }
   function actionRow(m) {
-    const el = h("div", `tbh-row tbh-row-${m.role}${m.inspect === undefined ? "" : " tbh-row-inspectable"}`, h("span", "tbh-row-time", m.time === undefined ? "" : fine(m.time)), h("span", "tbh-row-text", m.text));
+    const el = h("div", `tbh-row tbh-row-${m.role}${m.inspect === undefined ? "" : " tbh-row-inspectable"}`, h("span", "tbh-row-time", m.time === undefined ? "" : fine(m.time)), h("span", "tbh-row-text", arrowed(m.text)));
+    el.dataset.id = String(m.id);
+    return el;
+  }
+  function stepSquare(m) {
+    const s = step(m);
+    const el = h("span", `tbh-sq${s?.hurt ? " tbh-sq-hurt" : ""}${s?.dash ? " tbh-sq-dash" : ""}`, ARROWS[s?.move ?? ""] ?? "?");
     el.dataset.id = String(m.id);
     return el;
   }
@@ -1837,6 +1852,7 @@
     const list = h("div", "tbh-actions");
     list.setAttribute("aria-live", "polite");
     const rows = new Map;
+    const stepRows = new Map;
     const insp = inspector(() => plan.closest(".tbh-panel") ?? plan, () => bridge.chat());
     let shownPlan;
     const render = () => {
@@ -1857,22 +1873,49 @@
       const latest = [...messages].reverse().find((m) => m.role === "planner");
       if (latest !== shownPlan || latest === undefined) {
         shownPlan = latest;
-        plan.replaceChildren(h("span", "tbh-plan-label", "Plan"), ...latest?.time === undefined ? [] : [h("span", "tbh-row-time", clock(latest.time))], h("span", "tbh-plan-text", latest?.text ?? "Waiting for the planner…"), ...latest?.stream === undefined ? [] : [h("div", "tbh-plan-stream", h("span", "", latest.stream, h("b", "tbh-cursor", "▍")))]);
+        plan.replaceChildren(h("span", "tbh-plan-label", "Plan"), ...latest?.time === undefined ? [] : [h("span", "tbh-row-time", clock(latest.time))], h("span", "tbh-plan-text", latest === undefined ? "Waiting for the planner…" : arrowed(latest.text)), ...latest?.stream === undefined ? [] : [h("div", "tbh-plan-stream", h("span", "", latest.stream, h("b", "tbh-cursor", "▍")))]);
         plan.classList.toggle("tbh-row-inspectable", latest !== undefined);
       }
-      const actions = messages.filter((m) => m.role !== "planner").slice(-ACTION_ROWS).reverse();
-      const ids = new Set(actions.map((m) => m.id));
+      const groups = [];
+      for (let i = messages.length - 1;i >= 0 && groups.length <= ACTION_ROWS; i--) {
+        const m = messages[i];
+        if (m === undefined || m.role === "planner")
+          continue;
+        const group = groups.at(-1);
+        if (step(m) !== undefined && group !== undefined && step(group[0]) !== undefined && group.length < MOVES_PER_ROW)
+          group.push(m);
+        else
+          groups.push([m]);
+      }
+      const shown = groups.slice(0, ACTION_ROWS);
+      const ids = new Set(shown.flat().map((m) => m.id));
       for (const [id] of rows)
         if (!ids.has(id))
           rows.delete(id);
-      const els = actions.map((message) => {
+      const made = (message, make) => {
         const before = rows.get(message.id);
         if (before?.message === message)
           return before.el;
-        const el = actionRow(message);
+        const el = make(message);
         rows.set(message.id, { el, message });
         return el;
+      };
+      const els = shown.map((group) => {
+        const [first] = group;
+        if (first === undefined || step(first) === undefined)
+          return made(first, actionRow);
+        const key = `steps-${first.id}`;
+        const line = stepRows.get(key) ?? h("div", "tbh-row tbh-row-steps", h("span", "tbh-row-time", first.time === undefined ? "" : fine(first.time)), h("span", "tbh-sqs"));
+        stepRows.set(key, line);
+        const squares = group.map((m) => made(m, stepSquare));
+        const holder = line.lastElementChild;
+        if (holder.children.length !== squares.length || squares.some((sq, i) => holder.children[i] !== sq))
+          holder.replaceChildren(...squares);
+        return line;
       });
+      for (const key of [...stepRows.keys()])
+        if (!shown.some((g) => `steps-${g[0]?.id}` === key))
+          stepRows.delete(key);
       if (els.length !== list.children.length || els.some((el, i) => list.children[i] !== el))
         list.replaceChildren(...els);
       insp.refresh((target) => target.kind === "plan" ? plan : rows.get(target.id)?.el);
@@ -1885,7 +1928,7 @@
       insp.show({ kind: "plan" }, plan);
     });
     list.addEventListener("pointerover", (e) => {
-      const el = e.target instanceof Element ? e.target.closest(".tbh-row") : null;
+      const el = e.target instanceof Element ? e.target.closest("[data-id]") : null;
       if (el === hovered)
         return;
       hovered = el ?? undefined;
@@ -1907,7 +1950,7 @@
   var css = `
 .tbh-panel {
   position: fixed; top: 52px; right: 8px; z-index: 2147483000;
-  width: min(290px, calc(100vw - 16px)); max-height: calc(100vh - 120px); overflow: auto;
+  width: min(320px, calc(100vw - 16px)); max-height: calc(100vh - 120px); overflow: auto;
   background: rgba(17, 14, 10, 0.88); color: #f3e6c4; border: 1px solid #6b5631; border-radius: 6px;
   font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; box-shadow: 0 4px 18px rgba(0,0,0,.5);
   touch-action: auto; user-select: none;
@@ -1926,7 +1969,7 @@
 .tbh-panel:not(.tbh-pilot):is(.tbh-collapsed:not(.tbh-choice, .tbh-idle), .tbh-choice:not(.tbh-peek)) .tbh-conn { display: none; }
 /* Below the title screen's "made by" badge and "What's new" button. */
 .tbh-panel.tbh-idle { top: 80px; }
-.tbh-panel.tbh-idle:not(.tbh-pilot) { width: auto; max-width: min(290px, calc(100vw - 16px)); }
+.tbh-panel.tbh-idle:not(.tbh-pilot) { width: auto; max-width: min(320px, calc(100vw - 16px)); }
 .tbh-idle > .tbh-content { display: none; }
 .tbh-idle .tbh-conn { border-top: 0; }
 .tbh-body { padding: 0 6px 6px; }
@@ -1938,7 +1981,7 @@
 .tbh-stale { margin: 0 6px 6px; padding: 4px 6px; border-radius: 4px; background: rgba(227,138,127,.15); color: #f0b3aa; font-size: 11px; }
 .tbh-conn { padding: 6px 8px; border-top: 1px solid rgba(255,255,255,.08); user-select: auto; }
 .tbh-conn-row { display: flex; align-items: center; gap: 6px; }
-.tbh-conn-label { color: #c9b58a; flex: 1; }
+.tbh-conn-label { color: #c9b58a; flex: 1; white-space: nowrap; }
 .tbh-port { width: 7ch; padding: 2px 4px; font: inherit; color: #f3e6c4; background: rgba(255,255,255,.06); border: 1px solid #6b5631; border-radius: 3px; -moz-appearance: textfield; }
 .tbh-port::-webkit-inner-spin-button, .tbh-port::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .tbh-port:focus { outline: 1px solid #ffd36b; }
@@ -1952,15 +1995,14 @@
 .tbh-conn-status { margin-top: 4px; font-size: 11px; color: #a8977a; overflow-wrap: anywhere; }
 .tbh-conn-status[data-state="ok"] { color: #7fe3a4; }
 .tbh-conn-status[data-state="error"] { color: #f0b3aa; }
-.tbh-wheel { display: block; flex: 1; min-width: 0; padding: 5px 8px; white-space: nowrap; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
+.tbh-wheel { display: block; width: 100%; margin-top: 6px; padding: 5px 8px; white-space: nowrap; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
   color: #f3e6c4; background: linear-gradient(180deg, #3b2f52, #2a2140); border: 1px solid #8e74c9; border-radius: 4px; }
 .tbh-wheel:hover:not(:disabled) { border-color: #c9a0ff; color: #fff; }
 .tbh-chat-tools { display: flex; align-items: center; gap: 6px; padding: 6px 6px 0; font-size: 11px; color: #c9b58a; }
 .tbh-giveback { flex: 1; min-width: 0; padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: inherit; font-weight: 800; cursor: pointer; color: #ffd6d0; background: rgba(227,138,127,.12); border: 1px solid #e38a7f; border-radius: 4px; }
 .tbh-giveback:hover:not(:disabled) { color: #fff; background: rgba(227,138,127,.24); }
 .tbh-wheel:disabled, .tbh-giveback:disabled { opacity: .5; cursor: default; }
-.tbh-wheel-row { display: flex; gap: 6px; margin-top: 6px; }
-.tbh-incognito { flex: none; margin-left: auto; padding: 4px 8px; white-space: nowrap; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; color: #a8977a; background: transparent; border: 1px dashed #6b5631; border-radius: 4px; }
+.tbh-incognito { flex: none; padding: 2px 6px; white-space: nowrap; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; color: #a8977a; background: transparent; border: 1px dashed #6b5631; border-radius: 4px; }
 .tbh-incognito:hover { color: #f3e6c4; border-style: solid; }
 .tbh-incognito[aria-pressed="true"] { color: #f3e6c4; background: #2a2a33; border: 1px solid #8d8da8; }
 .tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
@@ -1982,11 +2024,30 @@
 .tbh-row-system { --role: #6b5631; color: #c9b58a; }
 .tbh-row-time { flex: none; font-size: 10px; color: #8d7c5c; font-variant-numeric: tabular-nums; }
 .tbh-row-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+.tbh-sqs { display: flex; flex-wrap: wrap; gap: 2px; }
+.tbh-sq { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 3px; font-size: 12px; font-weight: 900; color: #dbe6ff; background: rgba(127,168,255,.16); border: 1px solid rgba(127,168,255,.35); cursor: help; }
+.tbh-sq:hover { background: rgba(127,168,255,.35); border-color: #7fa8ff; }
+.tbh-sq-hurt { color: #ffd6d0; background: rgba(227,138,127,.22); border-color: rgba(227,138,127,.6); }
+.tbh-sq-dash { box-shadow: 0 0 0 1px #ffd36b; }
+.tbh-opt-arrow { font-size: 14px; min-width: 1.2em; }
 .tbh-row-inspectable { cursor: help; }
 .tbh-row-inspectable:hover { background: rgba(255,255,255,.05); outline: 1px solid color-mix(in srgb, var(--role) 55%, transparent); }
 .tbh-cursor { font-style: normal; font-weight: 400; color: var(--role); animation: tbh-blink 1s steps(1) infinite; }
 @keyframes tbh-blink { 50% { opacity: 0; } }
 
+.tbh-pick-layer { position: fixed; inset: 0; z-index: 2147482999; pointer-events: none; font: 800 12px/1.3 ui-monospace, Menlo, Consolas, monospace; }
+.tbh-pick-layer[hidden], .tbh-pick-layer [hidden] { display: none; }
+.tbh-pick-banner { position: fixed; transform: translate(-50%, -100%); box-sizing: border-box; padding: 5px 12px; text-align: center; color: #f3e6c4; background: rgba(42,33,64,.95); border: 1px solid #c9a0ff; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+.tbh-pick-bar { position: fixed; display: flex; align-items: center; gap: 6px; box-sizing: border-box; padding: 0 2px; transition: opacity .3s; }
+.tbh-pick-track { flex: 1; height: 7px; border-radius: 4px; background: rgba(0,0,0,.55); box-shadow: 0 0 0 1px rgba(255,255,255,.15); overflow: hidden; }
+.tbh-pick-track > i { display: block; height: 100%; background: #7fa8ff; }
+.tbh-pick-pct { color: #fff; text-shadow: 0 1px 2px #000; }
+.tbh-pick-dim { opacity: .35; }
+.tbh-pick-frame { position: fixed; box-sizing: border-box; border: 3px solid transparent; border-radius: 10px; transition: border-color .08s, box-shadow .08s; }
+.tbh-pick-on { border-color: #ffd36b; box-shadow: 0 0 14px rgba(255,211,107,.7); }
+.tbh-pick-final { border-color: #ffd36b; box-shadow: 0 0 26px 4px rgba(255,211,107,.9); animation: tbh-pick-pulse .7s ease-in-out infinite alternate; }
+@keyframes tbh-pick-pulse { to { box-shadow: 0 0 10px 1px rgba(255,211,107,.5); } }
+@media (prefers-reduced-motion: reduce) { .tbh-pick-final { animation: none; } }
 .tbh-insp { position: fixed; z-index: 2147483002; box-sizing: border-box; overflow: auto; padding: 8px 10px 10px; background: rgba(17,14,10,.97); color: #f3e6c4; border: 1px solid #6b5631; border-radius: 6px;
   box-shadow: 0 6px 24px rgba(0,0,0,.6); font: 11.5px/1.4 ui-monospace, Menlo, Consolas, monospace; user-select: text; overscroll-behavior: contain; }
 .tbh-insp[hidden] { display: none; }
@@ -2230,7 +2291,7 @@
         return;
       bridge.connect(port);
     };
-    const row = h2("form", "tbh-conn-row", h2("span", "tbh-conn-label", "Agent port"), input, button, connected, dot);
+    const row = h2("form", "tbh-conn-row", incognito, h2("span", "tbh-conn-label", "Agent port"), input, button, connected, dot);
     row.noValidate = true;
     row.addEventListener("submit", connect);
     bridge.onChange(refresh);
@@ -2239,7 +2300,7 @@
       refresh();
     });
     refresh();
-    return h2("div", "tbh-conn", row, status, h2("div", "tbh-wheel-row", wheel, incognito), wheelNote);
+    return h2("div", "tbh-conn", row, status, wheel, wheelNote);
   }
   function offerKey2(card) {
     const tip = card.dataset.tip ?? "";
@@ -2376,6 +2437,102 @@
     schedule();
   }
 
+  // src/pickShow.ts
+  var SHOW_MS = 3400;
+  var FIRST_HOP_MS = 70;
+  var SLOWDOWN = 1.16;
+  var FRESH_MS = 8000;
+  function hopsTo(indexes, chosen) {
+    const times = [];
+    for (let t = 0, gap = FIRST_HOP_MS;t < SHOW_MS; t += gap, gap *= SLOWDOWN)
+      times.push(t);
+    const last = indexes.indexOf(chosen);
+    return times.map((at, k) => ({ at, index: indexes[((last - (times.length - 1 - k)) % indexes.length + indexes.length) % indexes.length] ?? chosen }));
+  }
+  function el(className, text = "") {
+    const d = document.createElement("div");
+    d.className = className;
+    d.textContent = text;
+    return d;
+  }
+  function startPickShow(bridge) {
+    const layer = el("tbh-pick-layer");
+    const banner = el("tbh-pick-banner");
+    layer.append(banner);
+    document.body.append(layer);
+    let show;
+    const bars = new Map;
+    const latestPick = () => {
+      const chat = bridge.chat();
+      for (let i = chat.length - 1;i >= 0; i--) {
+        const m = chat[i];
+        if (m?.role === "planner" && m.inspect?.kind === "plan" && m.inspect.choices !== undefined)
+          return m;
+      }
+      return;
+    };
+    bridge.onChange(() => {
+      const m = latestPick();
+      if (m === undefined || m.id === show?.id || m.inspect?.kind !== "plan" || m.inspect.choices === undefined)
+        return;
+      const options = m.inspect.choices.filter((c) => c.index !== undefined);
+      const chosen = options.find((c) => c.chosen)?.index;
+      if (chosen === undefined)
+        return;
+      show = { id: m.id, seen: performance.now(), text: m.text, options, hops: hopsTo(options.map((c) => c.index ?? 0), chosen) };
+      for (const { bar, frame } of bars.values()) {
+        bar.remove();
+        frame.remove();
+      }
+      bars.clear();
+      for (const c of options) {
+        const fill = document.createElement("i");
+        const label = el("tbh-pick-pct", `${Math.round((c.probability ?? 0) * 100)}%`);
+        const bar = el("tbh-pick-bar");
+        const track = el("tbh-pick-track");
+        track.append(fill);
+        fill.style.width = `${Math.round((c.probability ?? 0) * 100)}%`;
+        bar.append(track, label);
+        const frame = el("tbh-pick-frame");
+        layer.append(bar, frame);
+        bars.set(c.index ?? 0, { bar, frame });
+      }
+      banner.textContent = m.text;
+    });
+    const frame = () => {
+      requestAnimationFrame(frame);
+      const cards = choiceCards();
+      const age = show === undefined ? Number.POSITIVE_INFINITY : performance.now() - show.seen;
+      const visible = show !== undefined && bridge.pilot().state !== "off" && cards.length > 0 && age < FRESH_MS;
+      layer.hidden = !visible;
+      if (!visible || show === undefined)
+        return;
+      const done = age >= SHOW_MS;
+      const lit = done ? show.hops.at(-1)?.index : [...show.hops].reverse().find((hop) => hop.at <= age)?.index;
+      let top = Number.POSITIVE_INFINITY;
+      let left = Number.POSITIVE_INFINITY;
+      let right = 0;
+      for (const [index, parts] of bars) {
+        const rect = cards[index]?.getBoundingClientRect();
+        const shown = rect !== undefined && rect.width > 0;
+        parts.bar.hidden = parts.frame.hidden = !shown;
+        if (!shown)
+          continue;
+        top = Math.min(top, rect.top);
+        left = Math.min(left, rect.left);
+        right = Math.max(right, rect.right);
+        Object.assign(parts.bar.style, { left: `${rect.left}px`, top: `${rect.top - 22}px`, width: `${rect.width}px` });
+        Object.assign(parts.frame.style, { left: `${rect.left - 3}px`, top: `${rect.top - 3}px`, width: `${rect.width + 6}px`, height: `${rect.height + 6}px` });
+        parts.frame.classList.toggle("tbh-pick-on", index === lit);
+        parts.frame.classList.toggle("tbh-pick-final", done && index === lit);
+        parts.bar.classList.toggle("tbh-pick-dim", done && index !== lit);
+      }
+      if (Number.isFinite(top))
+        Object.assign(banner.style, { left: `${(left + right) / 2}px`, top: `${top - 30}px`, maxWidth: `${Math.max(240, right - left)}px` });
+    };
+    requestAnimationFrame(frame);
+  }
+
   // src/main.ts
   var link = new GameLink;
   var discovery = new Discovery;
@@ -2383,7 +2540,9 @@
   Object.assign(window, { __tibobit: { link } });
   guardPanelKeys();
   function start() {
-    startHelper(link, discovery, startBridge(link, discovery, controller));
+    const bridge = startBridge(link, discovery, controller);
+    startHelper(link, discovery, bridge);
+    startPickShow(bridge);
   }
   if (document.body === null)
     document.addEventListener("DOMContentLoaded", start, { once: true });

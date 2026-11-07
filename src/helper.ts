@@ -221,7 +221,7 @@ function connectionRow(bridge: Bridge): HTMLElement {
   };
   // A form, because Enter submits it as a default action, which still happens after guardPanelKeys
   // stops the key event from reaching anything else.
-  const row = h("form", "tbh-conn-row", h("span", "tbh-conn-label", "Agent port"), input, button, connected, dot);
+  const row = h("form", "tbh-conn-row", incognito, h("span", "tbh-conn-label", "Agent port"), input, button, connected, dot);
   row.noValidate = true;
   row.addEventListener("submit", connect);
   bridge.onChange(refresh);
@@ -230,7 +230,7 @@ function connectionRow(bridge: Bridge): HTMLElement {
     refresh();
   });
   refresh();
-  return h("div", "tbh-conn", row, status, h("div", "tbh-wheel-row", wheel, incognito), wheelNote);
+  return h("div", "tbh-conn", row, status, wheel, wheelNote);
 }
 
 function offerKey(card: HTMLElement): { key: Key; level: number } | undefined {

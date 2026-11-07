@@ -14,5 +14,5 @@
     "playwright-core": "1.59",
     "typescript": "^7.0.2"
   },
-  "version": "1.14.2"
+  "version": "1.15.0"
 }

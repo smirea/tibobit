@@ -11,6 +11,9 @@ const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.fl
 /** Game time to a tenth of a second, as 01:23.4. */
 const fine = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
 const percent = (v: number) => `${Math.round(v * 100)}%`;
+const ARROWS: Record<string, string> = { right: "→", "down-right": "↘", down: "↓", "down-left": "↙", left: "←", "up-left": "↖", up: "↑", "up-right": "↗", "stand still": "•" };
+// A move or goal title names a direction in words ("Explore up-right"); the panel shows the arrow.
+const arrowed = (text: string) => text.replace(/(?<![\w-])(up-right|up-left|down-right|down-left|right|left|up|down)(?![\w-])/g, (d) => ARROWS[d] ?? d);
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
@@ -44,7 +47,7 @@ function oddsRows(options: CardOption[]): HTMLElement[] {
       h(
         "div",
         "tbh-opt-head",
-        h("span", "tbh-opt-name", c.card),
+        h("span", "tbh-opt-name", arrowed(c.card)),
         ...(c.chosen ? [h("span", "tbh-opt-outcome", "chosen")] : []),
         ...(c.probability === undefined ? [] : [h("span", "tbh-opt-scores", meter(percent(c.probability), c.probability, "tbh-meter-useful tbh-meter-wide"))]),
       ),
@@ -54,7 +57,7 @@ function oddsRows(options: CardOption[]): HTMLElement[] {
 }
 
 function inspectBody(m: ChatMessage): Node[] {
-  const words = [h("div", "tbh-insp-text", m.text), ...(m.detail === undefined ? [] : [h("div", "tbh-opt-desc", m.detail)])];
+  const words = [h("div", "tbh-insp-text", arrowed(m.text)), ...(m.detail === undefined ? [] : [h("div", "tbh-opt-desc", m.detail)])];
   const inspect: Inspect | undefined = m.inspect;
   if (inspect === undefined) return words;
   switch (inspect.kind) {
@@ -80,7 +83,7 @@ function inspectBody(m: ChatMessage): Node[] {
           h(
             "div",
             "tbh-opt-head",
-            h("span", "tbh-opt-name", m.move),
+            h("span", "tbh-opt-name tbh-opt-arrow", ARROWS[m.move] ?? m.move),
             h("span", "tbh-opt-outcome", m.outcome),
             h(
               "span",
@@ -227,13 +230,30 @@ function inspector(panel: () => HTMLElement, messages: () => readonly ChatMessag
   };
 }
 
+const MOVES_PER_ROW = 12;
+
+/** A step the action model chose, as the move it took; undefined for anything else. */
+function step(m: ChatMessage): { move: string; hurt: boolean; dash: boolean } | undefined {
+  if (m.role !== "action" || m.inspect?.kind !== "moves") return undefined;
+  const chosen = m.inspect.moves.find((x) => x.outcome === "chosen");
+  return { move: chosen?.move ?? "stand still", hurt: chosen?.forecast !== undefined && chosen.forecast !== "no damage", dash: m.text.startsWith("Dash") };
+}
+
 function actionRow(m: ChatMessage): HTMLElement {
   const el = h(
     "div",
     `tbh-row tbh-row-${m.role}${m.inspect === undefined ? "" : " tbh-row-inspectable"}`,
     h("span", "tbh-row-time", m.time === undefined ? "" : fine(m.time)),
-    h("span", "tbh-row-text", m.text),
+    h("span", "tbh-row-text", arrowed(m.text)),
   );
+  el.dataset.id = String(m.id);
+  return el;
+}
+
+/** One step as a square holding its arrow: red when the game forecast it hurts, ringed for a dash. */
+function stepSquare(m: ChatMessage): HTMLElement {
+  const s = step(m);
+  const el = h("span", `tbh-sq${s?.hurt ? " tbh-sq-hurt" : ""}${s?.dash ? " tbh-sq-dash" : ""}`, ARROWS[s?.move ?? ""] ?? "?");
   el.dataset.id = String(m.id);
   return el;
 }
@@ -273,6 +293,8 @@ export function chatBox(bridge: Bridge): HTMLElement {
   const list = h("div", "tbh-actions");
   list.setAttribute("aria-live", "polite");
   const rows = new Map<number, { el: HTMLElement; message: ChatMessage }>();
+  /** One row per run of steps, keyed by its newest step, so a hovered square keeps its place. */
+  const stepRows = new Map<string, HTMLElement>();
   const insp = inspector(() => plan.closest<HTMLElement>(".tbh-panel") ?? plan, () => bridge.chat());
   let shownPlan: ChatMessage | undefined;
 
@@ -297,22 +319,43 @@ export function chatBox(bridge: Bridge): HTMLElement {
       plan.replaceChildren(
         h("span", "tbh-plan-label", "Plan"),
         ...(latest?.time === undefined ? [] : [h("span", "tbh-row-time", clock(latest.time))]),
-        h("span", "tbh-plan-text", latest?.text ?? "Waiting for the planner…"),
+        h("span", "tbh-plan-text", latest === undefined ? "Waiting for the planner…" : arrowed(latest.text)),
         ...(latest?.stream === undefined ? [] : [h("div", "tbh-plan-stream", h("span", "", latest.stream, h("b", "tbh-cursor", "▍")))]),
       );
       plan.classList.toggle("tbh-row-inspectable", latest !== undefined);
     }
 
-    const actions = messages.filter((m) => m.role !== "planner").slice(-ACTION_ROWS).reverse();
-    const ids = new Set(actions.map((m) => m.id));
+    // Newest first. A run of steps shares one row of squares; anything else is a row of its own.
+    const groups: ChatMessage[][] = [];
+    for (let i = messages.length - 1; i >= 0 && groups.length <= ACTION_ROWS; i--) {
+      const m = messages[i];
+      if (m === undefined || m.role === "planner") continue;
+      const group = groups.at(-1);
+      if (step(m) !== undefined && group !== undefined && step(group[0] as ChatMessage) !== undefined && group.length < MOVES_PER_ROW) group.push(m);
+      else groups.push([m]);
+    }
+    const shown = groups.slice(0, ACTION_ROWS);
+    const ids = new Set(shown.flat().map((m) => m.id));
     for (const [id] of rows) if (!ids.has(id)) rows.delete(id);
-    const els = actions.map((message) => {
+    const made = (message: ChatMessage, make: (m: ChatMessage) => HTMLElement) => {
       const before = rows.get(message.id);
       if (before?.message === message) return before.el;
-      const el = actionRow(message);
+      const el = make(message);
       rows.set(message.id, { el, message });
       return el;
+    };
+    const els = shown.map((group) => {
+      const [first] = group;
+      if (first === undefined || step(first) === undefined) return made(first as ChatMessage, actionRow);
+      const key = `steps-${first.id}`;
+      const line = stepRows.get(key) ?? h("div", "tbh-row tbh-row-steps", h("span", "tbh-row-time", first.time === undefined ? "" : fine(first.time)), h("span", "tbh-sqs"));
+      stepRows.set(key, line);
+      const squares = group.map((m) => made(m, stepSquare));
+      const holder = line.lastElementChild as HTMLElement;
+      if (holder.children.length !== squares.length || squares.some((sq, i) => holder.children[i] !== sq)) holder.replaceChildren(...squares);
+      return line;
     });
+    for (const key of [...stepRows.keys()]) if (!shown.some((g) => `steps-${g[0]?.id}` === key)) stepRows.delete(key);
     if (els.length !== list.children.length || els.some((el, i) => list.children[i] !== el)) list.replaceChildren(...els);
     insp.refresh((target) => (target.kind === "plan" ? plan : rows.get(target.id)?.el));
   };
@@ -325,7 +368,7 @@ export function chatBox(bridge: Bridge): HTMLElement {
     insp.show({ kind: "plan" }, plan);
   });
   list.addEventListener("pointerover", (e) => {
-    const el = e.target instanceof Element ? e.target.closest<HTMLElement>(".tbh-row") : null;
+    const el = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-id]") : null;
     if (el === hovered) return;
     hovered = el ?? undefined;
     if (el === null) return insp.leave();
