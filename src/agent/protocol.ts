@@ -141,7 +141,10 @@ export type RunView = {
    * stepping sideways leaves it; `landsIn` is the seconds until a telegraphed attack hits.
    */
   hazards: (Rel & { kind: string; source: "terrain" | "attack"; shape: string; radius: number; inside: boolean; landsIn?: number })[];
-  bullets: { total: number; nearest: (Rel & { radius: number })[] };
+  /** Enemy bullets; `vx`/`vy` are units per second. */
+  bullets: { total: number; nearest: (Rel & { radius: number; vx: number; vy: number })[] };
+  /** Enemy bullets that would hit the player within 0.6 seconds if it stands still. */
+  standingBulletHits: number;
   /** Everything around the player bucketed by compass direction, nearest first within each. */
   sectors: SectorView[];
 };
@@ -163,6 +166,8 @@ export type SectorView = {
   leavesHazard: boolean;
   /** 60 units this way is outside every enemy attack zone on the ground. */
   clearOfAttacks: boolean;
+  /** Enemy bullets that would hit the player within 0.6 seconds if it walks this way, from their current paths. */
+  bulletHits: number;
 };
 
 /** `charge` and `chargeNeeded` (seconds) appear on pickups you open by standing on them. */

@@ -278,6 +278,8 @@
   var SECTOR_RANGE = 300;
   var PATH_AHEAD = 60;
   var HURT_WINDOW_TICKS = 180;
+  var PLAYER_SPEED = 62;
+  var FORECAST_SECONDS = 0.6;
   var hurtHistory = [];
   function recentHurt(s) {
     const totals = new Map(s.run.damageTakenBySource);
@@ -530,7 +532,24 @@
     const hazards = areas.map((a) => a.view);
     const bullets = [];
     for (const i of alive(s.bullets))
-      bullets.push({ ...relTo(s, s.bullets.x[i] ?? 0, s.bullets.y[i] ?? 0), radius: s.bullets.radius[i] ?? 0 });
+      bullets.push({ ...relTo(s, s.bullets.x[i] ?? 0, s.bullets.y[i] ?? 0), radius: s.bullets.radius[i] ?? 0, vx: round(s.bullets.vx[i] ?? 0), vy: round(s.bullets.vy[i] ?? 0) });
+    const speed = PLAYER_SPEED * (s.loadout.stats.moveSpeed > 0 ? s.loadout.stats.moveSpeed : 1);
+    const playerRadius = s.player.radius[me] ?? 6;
+    const hitsWalking = (ux, uy) => {
+      let hits = 0;
+      for (const b of bullets) {
+        if (b.dist > 200)
+          continue;
+        for (let t = 0;t <= FORECAST_SECONDS; t += 0.05) {
+          const gap = Math.hypot(b.dx + b.vx * t - ux * speed * t, b.dy + b.vy * t - uy * speed * t);
+          if (gap <= playerRadius + b.radius) {
+            hits++;
+            break;
+          }
+        }
+      }
+      return hits;
+    };
     const choice = s.choiceQueue[0];
     const sectors = DIRECTIONS.map((dir, i) => {
       const angle = i * Math.PI / 4;
@@ -555,7 +574,8 @@
         bulletsNear: within(bullets).filter((b) => b.dist <= 60).length,
         hazard: areas.find((a) => !a.view.inside && crosses(a))?.view.kind ?? null,
         leavesHazard: holding.length > 0 && holding.every((a) => !a.contains(end.x, end.y)),
-        clearOfAttacks: areas.every((a) => a.view.source !== "attack" || !a.contains(end.x, end.y))
+        clearOfAttacks: areas.every((a) => a.view.source !== "attack" || !a.contains(end.x, end.y)),
+        bulletHits: hitsWalking(ux, uy)
       };
     });
     return {
@@ -602,6 +622,7 @@
       pois,
       hazards: nearest(hazards, 20),
       bullets: { total: bullets.length, nearest: nearest(bullets) },
+      standingBulletHits: hitsWalking(0, 0),
       sectors
     };
   }

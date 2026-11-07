@@ -24,6 +24,8 @@ const MAX_POIS = 15;
 const SECTOR_RANGE = 300;
 const PATH_AHEAD = 60;
 const HURT_WINDOW_TICKS = 180;
+const PLAYER_SPEED = 62;
+const FORECAST_SECONDS = 0.6;
 
 // Cumulative damage by source at recent ticks, to report what hurt the player lately.
 let hurtHistory: { tick: number; totals: Map<string, number> }[] = [];
@@ -305,7 +307,26 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
   const hazards = areas.map((a) => a.view);
 
   const bullets: RunView["bullets"]["nearest"] = [];
-  for (const i of alive(s.bullets)) bullets.push({ ...relTo(s, s.bullets.x[i] ?? 0, s.bullets.y[i] ?? 0), radius: s.bullets.radius[i] ?? 0 });
+  for (const i of alive(s.bullets))
+    bullets.push({ ...relTo(s, s.bullets.x[i] ?? 0, s.bullets.y[i] ?? 0), radius: s.bullets.radius[i] ?? 0, vx: round(s.bullets.vx[i] ?? 0), vy: round(s.bullets.vy[i] ?? 0) });
+  // Straight-line forecast: which bullets reach the player in the next moments for each way it
+  // could walk. Bullets that curve or speed up are not modelled.
+  const speed = PLAYER_SPEED * (s.loadout.stats.moveSpeed > 0 ? s.loadout.stats.moveSpeed : 1);
+  const playerRadius = s.player.radius[me] ?? 6;
+  const hitsWalking = (ux: number, uy: number) => {
+    let hits = 0;
+    for (const b of bullets) {
+      if (b.dist > 200) continue;
+      for (let t = 0; t <= FORECAST_SECONDS; t += 0.05) {
+        const gap = Math.hypot(b.dx + b.vx * t - ux * speed * t, b.dy + b.vy * t - uy * speed * t);
+        if (gap <= playerRadius + b.radius) {
+          hits++;
+          break;
+        }
+      }
+    }
+    return hits;
+  };
 
   const choice = s.choiceQueue[0];
   const sectors = DIRECTIONS.map((dir, i) => {
@@ -332,6 +353,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
       hazard: areas.find((a) => !a.view.inside && crosses(a))?.view.kind ?? null,
       leavesHazard: holding.length > 0 && holding.every((a) => !a.contains(end.x, end.y)),
       clearOfAttacks: areas.every((a) => a.view.source !== "attack" || !a.contains(end.x, end.y)),
+      bulletHits: hitsWalking(ux, uy),
     };
   });
   return {
@@ -378,6 +400,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     pois,
     hazards: nearest(hazards, 20),
     bullets: { total: bullets.length, nearest: nearest(bullets) },
+    standingBulletHits: hitsWalking(0, 0),
     sectors,
   };
 }

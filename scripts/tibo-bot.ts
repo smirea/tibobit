@@ -414,7 +414,7 @@ function describe(r: RunView, s: SectorView): string {
   const boss = r.bosses.find((b) => b.dir === s.dir);
   const parts = [
     boss !== undefined && boss.dist < 250 ? `toward the ${boss.name} boss only ${Math.round(boss.dist)} away, which hurts Tibo on contact` : "",
-    s.bulletsNear > 1 ? `${s.bulletsNear} enemy bullets within 60` : s.nearestBullet !== null && s.nearestBullet < 80 ? `an enemy bullet ${Math.round(s.nearestBullet)} away` : "",
+    s.bulletHits > 0 ? `${plural(s.bulletHits, "enemy bullet")} would hit Tibo` : s.bulletsNear > 0 ? "enemy bullets nearby but none on course to hit" : "",
     awayFromBoss(r, s.dir) ?? "",
     s.hazard !== null ? `into ${hazardWords(s.hazard)}` : "",
     s.leavesHazard ? "out of the danger Tibo stands in" : "",
@@ -428,6 +428,11 @@ function describe(r: RunView, s: SectorView): string {
 
 // Chests and shrines only open after Tibo stands on them for a moment, so standing still says so.
 function standing(r: RunView): string {
+  const hits = r.standingBulletHits > 0 ? `, where ${plural(r.standingBulletHits, "enemy bullet")} would hit Tibo` : "";
+  return `${standingSpot(r)}${hits}`;
+}
+
+function standingSpot(r: RunView): string {
   const chest = r.pickups.chests.find((c) => c.dist <= 14);
   if (chest !== undefined) return `stand still on the chest to open it, ${chest.charge ?? 0} of ${chest.chargeNeeded ?? 1} seconds done`;
   const inside = r.pois.find((p) => p.inside && p.chargeNeeded > 0);

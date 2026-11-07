@@ -64,7 +64,7 @@ export type GameState = {
     banished: Set<string>;
     stats: { maxHp: number; moveSpeed: number };
   };
-  player: Pool<"x" | "y" | "fx" | "fy" | "hp" | "invuln" | "dashCharges" | "dashCd" | "moving">;
+  player: Pool<"x" | "y" | "fx" | "fy" | "hp" | "invuln" | "dashCharges" | "dashCd" | "moving" | "radius">;
   me: number;
   enemies: Pool<"x" | "y" | "hp" | "maxHp" | "radius" | "def" | "flags" | "damage">;
   bosses: Pool<"x" | "y" | "hp" | "maxHp" | "radius" | "def">;
