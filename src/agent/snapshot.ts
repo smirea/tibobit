@@ -261,6 +261,8 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     };
   });
   return {
+    seed: String(s.run.seed),
+    daily: s.daily !== undefined,
     tick: s.tick,
     time: round(s.runClock),
     player: {

@@ -34,8 +34,12 @@ export type Command =
   | { type: "resume" }
   /** Run the simulation `factor` ticks per frame (1 to 8). Movement input still applies to every tick. */
   | { type: "speed"; factor: number }
-  /** From the title screen or the end screen, start an Open World run. */
-  | { type: "start"; difficulty?: "easy" | "normal" | "hard" | "nightmare" };
+  /**
+   * From the title screen, the end screen or mid-run, start a new run. `mode` "daily" plays
+   * today's Daily, which has the same seed and build for everyone, so runs are comparable. The
+   * new run waits paused at tick 0; use `resume` or a `move`/`goto` with `pause` to play it.
+   */
+  | { type: "start"; mode?: "openWorld" | "daily"; difficulty?: "easy" | "normal" | "hard" | "nightmare" };
 
 export type CommandState = "running" | "done" | "failed" | "replaced";
 export type CommandStatus = { id: number; command: Command; state: CommandState; detail?: string; at: number };
@@ -89,6 +93,9 @@ export type Snapshot = {
 };
 
 export type RunView = {
+  /** The run's seed and whether it is today's Daily; the same Daily seed means the same map and spawns. */
+  seed: string;
+  daily: boolean;
   tick: number;
   time: number;
   player: {
@@ -209,7 +216,9 @@ export function parseCommand(input: unknown): Command {
     case "start": {
       const d = c.difficulty;
       if (d !== undefined && d !== "easy" && d !== "normal" && d !== "hard" && d !== "nightmare") fail("difficulty must be easy, normal, hard or nightmare");
-      return d === undefined ? { type: "start" } : { type: "start", difficulty: d };
+      const m = c.mode;
+      if (m !== undefined && m !== "openWorld" && m !== "daily") fail("mode must be openWorld or daily");
+      return { type: "start", ...(m === undefined ? {} : { mode: m }), ...(d === undefined ? {} : { difficulty: d }) };
     }
     case "stop":
     case "pause":

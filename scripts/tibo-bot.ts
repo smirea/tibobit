@@ -17,6 +17,7 @@ const DECIDER = option("decider", "http://localhost:1234/v1/systemone");
 const STEP = Number(option("step", "0.35"));
 const RUNS = Number(option("runs", "1"));
 const DIFFICULTY = option("difficulty", "easy");
+const MODE = option("mode", "daily");
 const SPEED = Number(option("speed", "4"));
 const PLANNER = option("planner", "grok");
 const PLAN_EVERY = Number(option("plan-every", "300"));
@@ -61,8 +62,18 @@ const latency: number[] = [];
 let trace: ((entry: unknown) => void) | undefined;
 async function decide(state: string, questions: Record<string, Question>): Promise<Record<string, Answer>> {
   const started = performance.now();
-  const res = await timed("decide", fetch(DECIDER, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: MODEL, state, questions }) }));
-  const json = (await res.json()) as { answers?: Record<string, Answer>; error?: unknown };
+  const body = JSON.stringify({ model: MODEL, state, questions });
+  let json: { answers?: Record<string, Answer>; error?: unknown } | undefined;
+  // LM Studio occasionally never answers a request; give up on it and ask again.
+  for (let attempt = 0; json === undefined; attempt++) {
+    try {
+      const res = await timed("decide", fetch(DECIDER, { method: "POST", headers: { "content-type": "application/json" }, body, signal: AbortSignal.timeout(60_000) }));
+      json = (await res.json()) as { answers?: Record<string, Answer>; error?: unknown };
+    } catch (e) {
+      if (attempt >= 3) throw e;
+      console.log(`decision request failed (${e instanceof Error ? e.message : e}); retrying`);
+    }
+  }
   latency.push(performance.now() - started);
   if (json.answers === undefined) throw new Error(`decision model error: ${JSON.stringify(json.error ?? json).slice(0, 300)}`);
   trace?.({ event: "decision", state, questions, answers: json.answers });
@@ -206,9 +217,10 @@ async function main() {
   const log = Bun.file(LOG).writer();
   if (TRACE) trace = (entry) => log.write(`${JSON.stringify(entry)}\n`);
   let runs = 0;
+  let lastSeed = "";
   let lastReport = -1;
   let steps = 0;
-  console.log(`model ${MODEL}, step ${STEP}s, speed x${SPEED}, log ${LOG}`);
+  console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, speed x${SPEED}, log ${LOG}`);
   await command({ type: "speed", factor: SPEED });
   const first = await api<Snap>("/state");
   if (first.screen !== "title" && first.screen !== "over") runs = 1;
@@ -219,16 +231,16 @@ async function main() {
       if (s.screen === "over" && s.lastRun !== undefined && runs > 0) {
         const avg = latency.reduce((a, b) => a + b, 0) / Math.max(1, latency.length);
         console.log(`run ${runs} ended at ${s.lastRun.time}s, level ${s.lastRun.level}, ${s.lastRun.kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
-        log.write(`${JSON.stringify({ event: "end", model: MODEL, ...s.lastRun, steps, planCalls, avgDecisionMs: Math.round(avg) })}\n`);
+        log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, seed: lastSeed, ...s.lastRun, steps, planCalls, avgDecisionMs: Math.round(avg) })}\n`);
         log.flush();
         if (runs >= RUNS) return;
       }
-      let started = await command({ type: "start", difficulty: DIFFICULTY });
+      let started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY });
       if (started.state !== "done") {
         console.log(`start failed (${started.detail ?? started.state}); reloading the game page`);
         await fetch(RELOAD).catch(() => undefined);
         await Bun.sleep(8000);
-        started = await command({ type: "start", difficulty: DIFFICULTY });
+        started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY });
         if (started.state !== "done") throw new Error(`could not start a run: ${started.detail ?? started.state}`);
       }
       await command({ type: "speed", factor: SPEED });
@@ -242,6 +254,10 @@ async function main() {
       continue;
     }
     const r = s.run;
+    if (r !== undefined && r.seed !== lastSeed) {
+      lastSeed = r.seed;
+      console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}`);
+    }
     if (r === undefined) {
       await Bun.sleep(100);
       continue;

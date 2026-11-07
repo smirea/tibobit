@@ -78,7 +78,8 @@ export type GameState = {
   paused: boolean;
   tick: number;
   runClock: number;
-  run: { timeSec: number; level: number; kills: number };
+  run: { timeSec: number; level: number; kills: number; seed: string };
+  daily: unknown;
 };
 
 export type Game = {
@@ -178,6 +179,8 @@ export class GameLink {
   steer: Steer | undefined;
   /** Simulation ticks per game frame; above 1 the game runs faster than real time. */
   speed = 1;
+  /** Pause the next new run before its first tick, so agents start every run from tick 0. */
+  pauseAtStart = false;
   private contentFn: ((bigUpdate: Record<string, boolean>) => Content) | undefined;
   private seen = new Set<string>();
   private listeners = new Set<() => void>();
@@ -244,6 +247,11 @@ export class GameLink {
       if (link.game !== this) {
         link.game = this;
         link.changed();
+        if (link.pauseAtStart) {
+          link.pauseAtStart = false;
+          this.setPaused(true);
+          return undefined;
+        }
       }
       const result = step.call(this);
       // Extra ticks re-steer before each one, so agent commands stay tick-exact at any speed.

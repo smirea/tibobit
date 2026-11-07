@@ -37,8 +37,11 @@ function button(label: string | RegExp): HTMLButtonElement | undefined {
   });
 }
 
-// Menu buttons ignore synthetic clicks in some screens but accept a focused Enter press.
-function press(el: HTMLElement) {
+// Some menu buttons only answer a click and others only a focused Enter, so try both.
+async function press(el: HTMLElement) {
+  el.click();
+  await wait(300);
+  if (!el.isConnected) return;
   el.focus();
   for (const type of ["keydown", "keyup"]) el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", bubbles: true }));
 }
@@ -126,25 +129,32 @@ export class Controller {
         this.finish(status, "done");
         return;
       case "start":
-        this.start(status, command.difficulty ?? "easy").catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+        this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy").catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
         return;
     }
   }
 
-  private async start(status: CommandStatus, difficulty: string) {
-    if (inRun(this.link)) throw new Error("a run is already in progress");
+  private async start(status: CommandStatus, mode: "openWorld" | "daily", difficulty: string) {
+    const entry = mode === "daily" ? /^Daily/ : "Open World";
+    if (inRun(this.link)) {
+      // Leave the current run through the pause menu: Main menu, then confirm.
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+      if (!(await until(() => button("Main menu") !== undefined, 3000))) throw new Error("the pause menu did not open");
+      for (let i = 0; i < 2 && button(entry) === undefined; i++) {
+        const menu = button("Main menu");
+        if (menu !== undefined) await press(menu);
+        await wait(1500);
+      }
+    }
     // After a death the game walks through a few screens (a promo, a summary) before the title.
     // Advance through them, never pressing anything that leaves the game, such as "Try Grok Bot".
-    let again: HTMLButtonElement | undefined;
-    for (let i = 0; i < 15 && button("Open World") === undefined; i++) {
+    for (let i = 0; i < 15 && button(entry) === undefined; i++) {
       if (i === 14) {
         const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
         throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
       }
-      again = button(/^(Play again|Retry|Try again|Again|Run again)$/i);
-      if (again !== undefined) break;
       const next = button(/^(Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
-      if (next !== undefined) press(next);
+      if (next !== undefined) await press(next);
       else {
         // Some end screens (the run summary) have no button and listen for keys instead.
         for (const key of ["Escape", "Enter"]) {
@@ -154,22 +164,21 @@ export class Controller {
       }
       await wait(1200);
     }
-    if (again !== undefined) press(again);
-    else {
-      const world = button("Open World");
-      if (world === undefined) throw new Error("no Open World button on screen");
-      press(world);
-      if (!(await until(() => button("Start") !== undefined, 5000))) throw new Error("the Open World screen did not open");
-      const pick = button(new RegExp(`^${difficulty}$`, "i"));
-      if (pick === undefined) throw new Error(`no ${difficulty} difficulty button`);
-      pick.click();
-      await wait(200);
-      button("Start")?.click();
-    }
+    const open = button(entry);
+    if (open === undefined) throw new Error(`no ${mode} button on the title screen`);
+    await press(open);
+    if (!(await until(() => button("Start") !== undefined, 5000))) throw new Error(`the ${mode} screen did not open`);
+    const pick = button(new RegExp(`^${difficulty}$`, "i"));
+    if (pick === undefined) throw new Error(`no ${difficulty} difficulty button`);
+    pick.click();
+    await wait(200);
+    const before = this.link.game;
+    this.link.pauseAtStart = true;
+    button("Start")?.click();
     // The opening cutscene is skipped by holding Space.
     await wait(2500);
     window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true }));
-    const started = await until(() => inRun(this.link) && (this.link.game?.state.tick ?? 0) > 0, 20000);
+    const started = await until(() => inRun(this.link) && this.link.game !== before, 20000);
     window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", bubbles: true }));
     if (!started) throw new Error("the run did not start within 20 seconds");
     this.finish(status, "done");

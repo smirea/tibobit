@@ -15,7 +15,7 @@ const USAGE = `usage: tibo <command>
   stop | pause | resume
   choose <index>                  pick a level-up or chest option
   dash [dir|degrees]
-  start [easy|normal|hard|nightmare]
+  start [easy|normal|hard|nightmare] [daily]   daily plays today's fixed-seed Daily
 
 Commands wait until they finish (except move without seconds); add --no-wait to return at once.`;
 
@@ -125,8 +125,10 @@ function parseArgs(args: string[]): unknown {
       return { type: "choose", index: num(rest[0], "index") };
     case "dash":
       return rest[0] === undefined ? { type: "dash" } : { type: "dash", dir: heading(rest[0]) };
-    case "start":
-      return rest[0] === undefined ? { type: "start" } : { type: "start", difficulty: rest[0] };
+    case "start": {
+      const difficulty = rest.find((w) => w !== "daily");
+      return { type: "start", ...(rest.includes("daily") ? { mode: "daily" } : {}), ...(difficulty === undefined ? {} : { difficulty }) };
+    }
     case "stop":
     case "pause":
     case "resume":

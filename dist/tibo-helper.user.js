@@ -229,7 +229,10 @@
         const d = c.difficulty;
         if (d !== undefined && d !== "easy" && d !== "normal" && d !== "hard" && d !== "nightmare")
           fail("difficulty must be easy, normal, hard or nightmare");
-        return d === undefined ? { type: "start" } : { type: "start", difficulty: d };
+        const m = c.mode;
+        if (m !== undefined && m !== "openWorld" && m !== "daily")
+          fail("mode must be openWorld or daily");
+        return { type: "start", ...m === undefined ? {} : { mode: m }, ...d === undefined ? {} : { difficulty: d } };
       }
       case "stop":
       case "pause":
@@ -485,6 +488,8 @@
       };
     });
     return {
+      seed: String(s.run.seed),
+      daily: s.daily !== undefined,
       tick: s.tick,
       time: round(s.runClock),
       player: {
@@ -671,7 +676,11 @@
       return typeof label === "string" ? text === label : label.test(text);
     });
   }
-  function press(el) {
+  async function press(el) {
+    el.click();
+    await wait(300);
+    if (!el.isConnected)
+      return;
     el.focus();
     for (const type of ["keydown", "keyup"])
       el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", bubbles: true }));
@@ -767,25 +776,31 @@
           this.finish(status, "done");
           return;
         case "start":
-          this.start(status, command.difficulty ?? "easy").catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+          this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy").catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
           return;
       }
     }
-    async start(status, difficulty) {
-      if (inRun(this.link))
-        throw new Error("a run is already in progress");
-      let again;
-      for (let i = 0;i < 15 && button("Open World") === undefined; i++) {
+    async start(status, mode, difficulty) {
+      const entry = mode === "daily" ? /^Daily/ : "Open World";
+      if (inRun(this.link)) {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+        if (!await until(() => button("Main menu") !== undefined, 3000))
+          throw new Error("the pause menu did not open");
+        for (let i = 0;i < 2 && button(entry) === undefined; i++) {
+          const menu = button("Main menu");
+          if (menu !== undefined)
+            await press(menu);
+          await wait(1500);
+        }
+      }
+      for (let i = 0;i < 15 && button(entry) === undefined; i++) {
         if (i === 14) {
           const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
           throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
         }
-        again = button(/^(Play again|Retry|Try again|Again|Run again)$/i);
-        if (again !== undefined)
-          break;
         const next = button(/^(Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
         if (next !== undefined)
-          press(next);
+          await press(next);
         else {
           for (const key of ["Escape", "Enter"]) {
             for (const type of ["keydown", "keyup"])
@@ -795,25 +810,23 @@
         }
         await wait(1200);
       }
-      if (again !== undefined)
-        press(again);
-      else {
-        const world = button("Open World");
-        if (world === undefined)
-          throw new Error("no Open World button on screen");
-        press(world);
-        if (!await until(() => button("Start") !== undefined, 5000))
-          throw new Error("the Open World screen did not open");
-        const pick = button(new RegExp(`^${difficulty}$`, "i"));
-        if (pick === undefined)
-          throw new Error(`no ${difficulty} difficulty button`);
-        pick.click();
-        await wait(200);
-        button("Start")?.click();
-      }
+      const open = button(entry);
+      if (open === undefined)
+        throw new Error(`no ${mode} button on the title screen`);
+      await press(open);
+      if (!await until(() => button("Start") !== undefined, 5000))
+        throw new Error(`the ${mode} screen did not open`);
+      const pick = button(new RegExp(`^${difficulty}$`, "i"));
+      if (pick === undefined)
+        throw new Error(`no ${difficulty} difficulty button`);
+      pick.click();
+      await wait(200);
+      const before = this.link.game;
+      this.link.pauseAtStart = true;
+      button("Start")?.click();
       await wait(2500);
       window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true }));
-      const started = await until(() => inRun(this.link) && (this.link.game?.state.tick ?? 0) > 0, 20000);
+      const started = await until(() => inRun(this.link) && this.link.game !== before, 20000);
       window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", bubbles: true }));
       if (!started)
         throw new Error("the run did not start within 20 seconds");
@@ -1016,6 +1029,7 @@
     error;
     steer;
     speed = 1;
+    pauseAtStart = false;
     contentFn;
     seen = new Set;
     listeners = new Set;
@@ -1078,6 +1092,11 @@
         if (link.game !== this) {
           link.game = this;
           link.changed();
+          if (link.pauseAtStart) {
+            link.pauseAtStart = false;
+            this.setPaused(true);
+            return;
+          }
         }
         const result = step.call(this);
         for (let i = 1;i < link.speed; i++) {
