@@ -69,11 +69,18 @@ function post(origin: string, path: string, body: unknown): Promise<boolean> {
  * delivers in a couple of milliseconds; snapshots go up as POSTs, which Tampermonkey takes
  * about 80ms to deliver, so several stay in flight to keep the server's copy fresh.
  */
+// Tampermonkey grants this only from the installed script's own header, never from a @require'd
+// file, so a local-dev wrapper with "@grant none" leaves it undefined.
+const NOT_GRANTED =
+  typeof GM_xmlhttpRequest === "function"
+    ? undefined
+    : "Tampermonkey did not grant GM_xmlhttpRequest. Add @grant GM_xmlhttpRequest and @connect 127.0.0.1 to the installed script's header.";
+
 export function startBridge(link: GameLink, discovery: Discovery, controller: Controller): Bridge {
   let origin = initialOrigin();
   let session = 0;
   let request: { abort(): void } | undefined;
-  let error: string | undefined;
+  let error: string | undefined = NOT_GRANTED;
   let connected = false;
   const listeners = new Set<() => void>();
   const notify = () => {
@@ -92,6 +99,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
 
   const listen = () => {
     const mine = ++session;
+    if (NOT_GRANTED !== undefined) return;
     request = GM_xmlhttpRequest({
       method: "GET",
       url: `${origin}/bridge/commands`,
@@ -185,7 +193,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
       } catch {}
       origin = bridgeOrigin(port);
       connected = false;
-      error = undefined;
+      error = NOT_GRANTED;
       request?.abort();
       listen();
       notify();

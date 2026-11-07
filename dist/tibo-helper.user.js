@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
-// @version      1.5.0
+// @version      1.6.0
 // @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
@@ -618,11 +618,12 @@
       ontimeout: () => resolve(false)
     }));
   }
+  var NOT_GRANTED = typeof GM_xmlhttpRequest === "function" ? undefined : "Tampermonkey did not grant GM_xmlhttpRequest. Add @grant GM_xmlhttpRequest and @connect 127.0.0.1 to the installed script's header.";
   function startBridge(link, discovery, controller) {
     let origin = initialOrigin();
     let session = 0;
     let request;
-    let error;
+    let error = NOT_GRANTED;
     let connected = false;
     const listeners = new Set;
     const notify = () => {
@@ -641,6 +642,8 @@
     };
     const listen = () => {
       const mine = ++session;
+      if (NOT_GRANTED !== undefined)
+        return;
       request = GM_xmlhttpRequest({
         method: "GET",
         url: `${origin}/bridge/commands`,
@@ -740,7 +743,7 @@
         } catch {}
         origin = bridgeOrigin(port);
         connected = false;
-        error = undefined;
+        error = NOT_GRANTED;
         request?.abort();
         listen();
         notify();
@@ -1274,7 +1277,6 @@
   font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; box-shadow: 0 4px 18px rgba(0,0,0,.5);
   touch-action: auto; user-select: none;
 }
-.tbh-panel[hidden] { display: none; }
 .tbh-panel.tbh-collapsed:not(.tbh-choice), .tbh-panel.tbh-choice:not(.tbh-peek) { width: auto; }
 .tbh-collapsed .tbh-header, .tbh-choice:not(.tbh-peek) .tbh-header { gap: 12px; }
 @media (max-width: 699px) {
@@ -1283,8 +1285,12 @@
 }
 .tbh-header { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: pointer; font-weight: 700; color: #ffd36b; position: sticky; top: 0; background: rgba(17,14,10,.96); }
 .tbh-count { color: #c9b58a; font-weight: 400; }
-.tbh-collapsed:not(.tbh-choice) :is(.tbh-body, .tbh-stale, .tbh-conn),
+.tbh-collapsed:not(.tbh-choice, .tbh-idle) :is(.tbh-body, .tbh-stale, .tbh-conn),
 .tbh-choice:not(.tbh-peek) :is(.tbh-body, .tbh-stale, .tbh-conn) { display: none; }
+/* Below the title screen's "made by" badge and "What's new" button. */
+.tbh-panel.tbh-idle { top: 80px; width: auto; max-width: min(260px, calc(100vw - 16px)); }
+.tbh-idle > .tbh-content { display: none; }
+.tbh-idle .tbh-conn { border-top: 0; }
 .tbh-body { padding: 0 6px 6px; }
 .tbh-empty { color: #a8977a; padding: 4px 2px; }
 .tbh-need { display: grid; grid-template-columns: 30px 24px 8px 1fr; align-items: center; gap: 4px; padding: 3px 2px; border-top: 1px solid rgba(255,255,255,.06); }
@@ -1539,7 +1545,7 @@
     const style = document.createElement("style");
     style.textContent = css;
     document.head.append(style);
-    const content = h("div", "");
+    const content = h("div", "tbh-content");
     const panel = h("div", "tbh-panel", content, footer);
     panel.id = "tibo-helper";
     if (window.innerWidth < 700)
@@ -1558,10 +1564,13 @@
       queued = false;
       const hud = document.querySelector(".hud-weapons");
       const game = link.game;
-      panel.hidden = game === undefined || game.state.over || hud === null || !isShown(hud);
+      const running = game !== undefined && !game.state.over && hud !== null && isShown(hud);
+      panel.classList.toggle("tbh-idle", !running);
       dropStaleTip();
-      if (panel.hidden || game === undefined)
+      if (!running) {
+        panel.classList.remove("tbh-choice", "tbh-peek");
         return;
+      }
       const cards = [...document.querySelectorAll(".ui-card[data-tip]")];
       const offered = cards.map(offerKey2).filter((o) => o !== undefined);
       panel.classList.toggle("tbh-choice", offered.length > 0);

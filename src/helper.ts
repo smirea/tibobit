@@ -265,7 +265,7 @@ function mount(footer: HTMLElement): { panel: HTMLElement; content: HTMLElement 
   const style = document.createElement("style");
   style.textContent = css;
   document.head.append(style);
-  const content = h("div", "");
+  const content = h("div", "tbh-content");
   const panel = h("div", "tbh-panel", content, footer);
   panel.id = "tibo-helper";
   if (window.innerWidth < 700) panel.classList.add("tbh-collapsed");
@@ -285,9 +285,14 @@ export function startHelper(link: GameLink, discovery: Discovery, bridge: Bridge
     queued = false;
     const hud = document.querySelector(".hud-weapons");
     const game = link.game;
-    panel.hidden = game === undefined || game.state.over || hud === null || !isShown(hud);
+    const running = game !== undefined && !game.state.over && hud !== null && isShown(hud);
+    // Outside a run (title, mode select, end screens) the panel shows only the agent port box.
+    panel.classList.toggle("tbh-idle", !running);
     dropStaleTip();
-    if (panel.hidden || game === undefined) return;
+    if (!running) {
+      panel.classList.remove("tbh-choice", "tbh-peek");
+      return;
+    }
     const cards = [...document.querySelectorAll<HTMLElement>(".ui-card[data-tip]")];
     const offered = cards.map(offerKey).filter((o) => o !== undefined);
     panel.classList.toggle("tbh-choice", offered.length > 0);

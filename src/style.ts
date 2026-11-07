@@ -6,7 +6,6 @@ export const css = `
   font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; box-shadow: 0 4px 18px rgba(0,0,0,.5);
   touch-action: auto; user-select: none;
 }
-.tbh-panel[hidden] { display: none; }
 .tbh-panel.tbh-collapsed:not(.tbh-choice), .tbh-panel.tbh-choice:not(.tbh-peek) { width: auto; }
 .tbh-collapsed .tbh-header, .tbh-choice:not(.tbh-peek) .tbh-header { gap: 12px; }
 @media (max-width: 699px) {
@@ -15,8 +14,12 @@ export const css = `
 }
 .tbh-header { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: pointer; font-weight: 700; color: #ffd36b; position: sticky; top: 0; background: rgba(17,14,10,.96); }
 .tbh-count { color: #c9b58a; font-weight: 400; }
-.tbh-collapsed:not(.tbh-choice) :is(.tbh-body, .tbh-stale, .tbh-conn),
+.tbh-collapsed:not(.tbh-choice, .tbh-idle) :is(.tbh-body, .tbh-stale, .tbh-conn),
 .tbh-choice:not(.tbh-peek) :is(.tbh-body, .tbh-stale, .tbh-conn) { display: none; }
+/* Below the title screen's "made by" badge and "What's new" button. */
+.tbh-panel.tbh-idle { top: 80px; width: auto; max-width: min(260px, calc(100vw - 16px)); }
+.tbh-idle > .tbh-content { display: none; }
+.tbh-idle .tbh-conn { border-top: 0; }
 .tbh-body { padding: 0 6px 6px; }
 .tbh-empty { color: #a8977a; padding: 4px 2px; }
 .tbh-need { display: grid; grid-template-columns: 30px 24px 8px 1fr; align-items: center; gap: 4px; padding: 3px 2px; border-top: 1px solid rgba(255,255,255,.06); }

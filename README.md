@@ -27,7 +27,7 @@ The same userscript lets a program play the game. A local server exposes the gam
 
 Keep one tibo.dog tab open with the userscript installed. It connects within a few seconds of the server starting and reconnects on its own, including to a run already in progress.
 
-To use a server on another port, type the port into **Agent port** at the bottom of the Combos panel and press **Connect** (or Enter). The tab remembers the port, and the line under it says whether it is connected, still trying, or refused because another tab holds that server. Point the CLI at the same server with `./scripts/tibo.ts --port <port> <command>`, or `--server <url>`, or `TIBO_SERVER`.
+To use a server on another port, type the port into **Agent port** and press **Connect** (or Enter). The box sits at the bottom of the Combos panel during a run, and alone in the upper right on the title and other screens outside a run. The tab remembers the port, and the line under it says whether it is connected, still trying, or refused because another tab holds that server. Point the CLI at the same server with `./scripts/tibo.ts --port <port> <command>`, or `--server <url>`, or `TIBO_SERVER`.
 
 | Endpoint | What it does |
 | --- | --- |
@@ -85,3 +85,18 @@ bun run build   # writes dist/tibo-helper.user.js
 ```
 
 Bump `version` in `package.json` when the code changes so Tampermonkey picks up the update.
+
+To run a local build, install a wrapper script that `@require`s it. Tampermonkey takes grants only from the installed script's own header, never from a required file, so the wrapper needs the agent API's grants itself:
+
+```js
+// ==UserScript==
+// @name         tibo.dog combo helper (local dev)
+// @match        https://tibo.dog/*
+// @run-at       document-start
+// @grant        GM_xmlhttpRequest
+// @connect      127.0.0.1
+// @require      file:///path/to/tibobit/dist/tibo-helper.user.js
+// ==/UserScript==
+```
+
+Without them the port box reports that Tampermonkey did not grant `GM_xmlhttpRequest`.
