@@ -6,18 +6,21 @@ export const css = `
   font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; box-shadow: 0 4px 18px rgba(0,0,0,.5);
   touch-action: auto; user-select: none;
 }
-.tbh-panel.tbh-collapsed:not(.tbh-choice), .tbh-panel.tbh-choice:not(.tbh-peek) { width: auto; }
+.tbh-panel:not(.tbh-pilot):is(.tbh-collapsed:not(.tbh-choice), .tbh-choice:not(.tbh-peek)) { width: auto; }
+.tbh-panel.tbh-pilot { width: min(340px, calc(100vw - 16px)); }
 .tbh-collapsed .tbh-header, .tbh-choice:not(.tbh-peek) .tbh-header { gap: 12px; }
 @media (max-width: 699px) {
   .tbh-panel { top: 100px; }
-  .tbh-panel.tbh-choice { display: none; }
+  .tbh-panel.tbh-choice:not(.tbh-pilot) { display: none; }
 }
 .tbh-header { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: pointer; font-weight: 700; color: #ffd36b; position: sticky; top: 0; background: rgba(17,14,10,.96); }
 .tbh-count { color: #c9b58a; font-weight: 400; }
-.tbh-collapsed:not(.tbh-choice, .tbh-idle) :is(.tbh-body, .tbh-stale, .tbh-conn),
-.tbh-choice:not(.tbh-peek) :is(.tbh-body, .tbh-stale, .tbh-conn) { display: none; }
+.tbh-collapsed:not(.tbh-choice, .tbh-idle) :is(.tbh-body, .tbh-stale),
+.tbh-choice:not(.tbh-peek) :is(.tbh-body, .tbh-stale),
+.tbh-panel:not(.tbh-pilot):is(.tbh-collapsed:not(.tbh-choice, .tbh-idle), .tbh-choice:not(.tbh-peek)) .tbh-conn { display: none; }
 /* Below the title screen's "made by" badge and "What's new" button. */
-.tbh-panel.tbh-idle { top: 80px; width: auto; max-width: min(260px, calc(100vw - 16px)); }
+.tbh-panel.tbh-idle { top: 80px; }
+.tbh-panel.tbh-idle:not(.tbh-pilot) { width: auto; max-width: min(260px, calc(100vw - 16px)); }
 .tbh-idle > .tbh-content { display: none; }
 .tbh-idle .tbh-conn { border-top: 0; }
 .tbh-body { padding: 0 6px 6px; }
@@ -39,6 +42,29 @@ export const css = `
 .tbh-conn-status { margin-top: 4px; font-size: 11px; color: #a8977a; overflow-wrap: anywhere; }
 .tbh-conn-status[data-state="ok"] { color: #7fe3a4; }
 .tbh-conn-status[data-state="error"] { color: #f0b3aa; }
+.tbh-wheel { display: block; width: 100%; margin-top: 6px; padding: 5px 8px; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
+  color: #f3e6c4; background: linear-gradient(180deg, #3b2f52, #2a2140); border: 1px solid #8e74c9; border-radius: 4px; }
+.tbh-wheel:hover:not(:disabled) { border-color: #c9a0ff; color: #fff; }
+.tbh-wheel[data-state="on"] { color: #ffd6d0; background: rgba(227,138,127,.12); border-color: #e38a7f; }
+.tbh-wheel:disabled { opacity: .5; cursor: default; }
+.tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
+.tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chat { display: none; }
+.tbh-chat { display: flex; flex-direction: column; gap: 4px; max-height: min(52vh, 460px); overflow-y: auto; padding: 6px; border-top: 1px solid rgba(255,255,255,.08); user-select: text; overscroll-behavior: contain; }
+.tbh-chat:empty::before { content: "Waiting for the bot…"; color: #a8977a; }
+.tbh-msg { --role: #a8977a; padding: 4px 6px 5px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(255,255,255,.045); overflow-wrap: anywhere; }
+.tbh-msg-planner { --role: #c9a0ff; background: rgba(201,160,255,.09); }
+.tbh-msg-actor { --role: #5ee8c0; background: rgba(94,232,192,.07); }
+.tbh-msg-action { --role: #7fa8ff; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding-block: 2px 3px; background: transparent; }
+.tbh-msg-system { --role: #6b5631; color: #c9b58a; }
+.tbh-msg-head { display: flex; align-items: baseline; gap: 6px; font-size: 10px; color: #8d7c5c; }
+.tbh-msg-role { color: var(--role); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.tbh-msg-model { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tbh-msg-time { margin-left: auto; }
+.tbh-msg-text { white-space: pre-wrap; }
+.tbh-msg-count { margin-left: 5px; color: var(--role); font-size: 10.5px; font-weight: 700; }
+.tbh-msg-detail { white-space: pre-wrap; font-size: 10.5px; color: #a8977a; }
+.tbh-msg-action .tbh-msg-model { display: none; }
+.tbh-msg-action .tbh-msg-detail { flex-basis: 100%; }
 .tbh-badge { display: inline-block; padding: 0 4px; border-radius: 3px; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-align: center; }
 .tbh-badge-new { align-self: flex-start; background: #ff7ad9; color: #3d0630; margin: 0 0 2px; }
 .tbh-badge-evo { background: #ffd36b; color: #3a2600; }

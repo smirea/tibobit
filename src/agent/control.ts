@@ -82,6 +82,13 @@ export class Controller {
     }
   }
 
+  /** After the bot lets go: no held movement, normal speed, and a run the bot left paused resumes. */
+  release() {
+    if (this.active !== undefined) this.finish(this.active.status, "replaced");
+    this.link.speed = 1;
+    if (inRun(this.link)) this.link.game?.setPaused(false);
+  }
+
   private finish(status: CommandStatus, state: CommandStatus["state"], detail?: string) {
     status.state = state;
     status.at = Date.now();

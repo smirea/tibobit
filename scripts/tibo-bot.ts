@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { appendFile, mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type CommandStatus, DIRECTIONS, type Direction, type ForecastView, type OptionView, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ChatLine, type CommandStatus, DIRECTIONS, type Direction, type ForecastView, type OptionView, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {
@@ -33,10 +33,18 @@ const SPEED = Number(option("speed", "4"));
 const COACH = option("coach", "grok");
 const COACH_MODEL = option("coach-model", "grok-4.7-build-fast");
 const TRACE = args.includes("--trace");
+// For "Grok take the wheel": play the run already in progress instead of starting a fresh one.
+const TAKEOVER = args.includes("--takeover");
 const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
 
 type Snap = Snapshot & { connected: boolean; ageMs: number };
+
+const PLANNER = COACH === "none" ? "none" : `${COACH} ${COACH_MODEL}`;
+/** A line for the panel's chat, shown while the bot has the wheel. Never awaited: the chat must not slow a step. */
+function say(line: ChatLine) {
+  void fetch(`${SERVER}/pilot/say`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(line) }).catch(() => undefined);
+}
 type Question =
   | { type: "choice"; instructions: string; criteria: Record<string, string | null> }
   | { type: "noul"; instructions: string }
@@ -173,6 +181,7 @@ async function experimentDue(): Promise<boolean> {
 }
 
 async function chooseExperiment(): Promise<Experiment | undefined> {
+  say({ role: "planner", model: PLANNER, text: "Thinking: this run is an experiment; choosing which…" });
   const reply = await askCoach(
     [
       "You coach a bot that plays tibo.dog, and the next run is an experiment run.",
@@ -222,6 +231,7 @@ async function askCoach(prompt: string, timeoutMs: number): Promise<Record<strin
     if (json === undefined) {
       const err = (await new Response(proc.stderr).text()).trim();
       console.error(`coach gave no JSON after ${seconds()}s${timedOut ? " (timed out)" : ""}: ${(text.trim() || err).slice(0, 300) || "(empty output)"}`);
+      say({ role: "planner", model: PLANNER, text: `No answer after ${seconds()}s${timedOut ? " (timed out)" : ""}; the previous plan stands.` });
       return undefined;
     }
     return JSON.parse(json) as Record<string, unknown>;
@@ -243,7 +253,11 @@ class RunNotes {
   review = "(written after the run)";
   private fields: Record<string, string>;
 
-  constructor(r: RunView, strategy: string, readonly experiment?: Experiment) {
+  /**
+   * A run the bot took over from a person is not saved: its notes would credit the bot with
+   * someone else's opening, and the mode and difficulty it was started with are unknown.
+   */
+  constructor(r: RunView, strategy: string, readonly experiment?: Experiment, readonly saved = true) {
     const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
     this.id = `${stamp}-${MODE}-${DIFFICULTY}-${r.seed}`;
     this.file = path.join(NOTES_DIR, `${this.id}.md`);
@@ -267,6 +281,7 @@ class RunNotes {
   }
 
   async write() {
+    if (!this.saved) return;
     const template = await Bun.file(path.join(NOTES_DIR, "TEMPLATE.md")).text();
     const values: Record<string, string> = {
       ...this.fields,
@@ -473,6 +488,7 @@ class Coach {
     if (why === undefined || COACH === "none") return;
     this.lastAsked = r.time;
     this.calls++;
+    say({ role: "planner", model: PLANNER, time: r.time, text: `Thinking: ${why}…` });
     const prompt = [
       "You coach a bot that plays tibo.dog.",
       GAME_RULES,
@@ -503,9 +519,17 @@ class Coach {
     await this.notes.write();
     if (typeof reply.infra === "string") await infraFeedback(this.notes.id, clock(r.time), reply.infra);
     console.log(`coach ${clock(r.time)} (${why}): ${note}`);
+    say({
+      role: "planner",
+      model: PLANNER,
+      time: r.time,
+      text: plan === undefined ? note || "(no plan)" : plan.advice,
+      detail: [note, plan === undefined ? "" : `Want: ${plan.want.join(", ")}${plan.otherwise === "reroll" ? "; reroll anything else" : ""}`].filter(Boolean).join("\n"),
+    });
   }
 
   async review(lastRun: NonNullable<Snapshot["lastRun"]>, last: RunView | undefined, recent: string[]) {
+    if (!this.notes.saved) return;
     const damage = Object.entries(lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ");
     this.notes.outcome = [
       `- Survived **${clock(lastRun.time)}** (${lastRun.time}s), level ${lastRun.level}, ${lastRun.kills} kills.`,
@@ -519,8 +543,10 @@ class Coach {
       `- Coach consulted ${this.calls} times.`,
     ].join("\n");
     await this.notes.write();
+    say({ role: "planner", model: PLANNER, time: lastRun.time, text: "Reviewing the run and rewriting the strategy…" });
     const review = await reviewRun(this.notes.timeline.join("\n"), this.notes.outcome, recent, this.notes.id, clock(lastRun.time), this.notes.experiment);
     if (review === undefined) return;
+    say({ role: "planner", model: PLANNER, time: lastRun.time, text: review });
     this.notes.review = review;
     await this.notes.write();
   }
@@ -725,7 +751,16 @@ async function move(r: RunView) {
   const safe = Object.keys(moves).filter((k) => risk(k) <= safest + SAFE_MARGIN && (risk(k) < SAFE_ENOUGH || risk(k) === safest));
   const choice = safe.sort((x, y) => (answers[`useful:${y}`]?.noul ?? 0) - (answers[`useful:${x}`]?.noul ?? 0) || risk(x) - risk(y))[0] ?? "stay";
   const dir = (DIRECTIONS as readonly string[]).includes(choice) ? (choice as Direction) : undefined;
-  if (dir !== undefined && (answers.dash?.noul ?? 0) > 0.5) await command({ type: "dash", dir });
+  const dash = dir !== undefined && (answers.dash?.noul ?? 0) > 0.5;
+  const ruledOut = r.sectors.length + 1 - Object.keys(moves).length;
+  say({
+    role: "action",
+    model: MODEL,
+    time: r.time,
+    text: dir === undefined ? "Stand still" : `${dash ? "Dash" : "Walk"} ${dir}`,
+    detail: [`Tibo ${HURT_SCALE[Math.round(answers[choice]?.score ?? 0)] ?? "?"}`, `useful ${Math.round((answers[`useful:${choice}`]?.noul ?? 0) * 100)}%`, ...(ruledOut > 0 ? [`${ruledOut} costlier ${ruledOut === 1 ? "move" : "moves"} ruled out`] : [])].join(" · "),
+  });
+  if (dash) await command({ type: "dash", dir });
   return command(dir === undefined ? { type: "goto", to: { dx: 0, dy: 0 }, stay: STEP, pause: true } : { type: "move", dir, seconds: STEP, pause: true });
 }
 
@@ -744,6 +779,9 @@ function cardKind(r: RunView, o: OptionView): string {
     return held === undefined ? `new passive, fills passive slot ${r.loadout.passives.length + 1} of 6` : `passive upgrade to level ${held.level + 1} of ${held.max}`;
   return o.type === "other" ? "" : o.type;
 }
+
+// Shrine and chest options join their lines with "|", and some start with an empty one.
+const cardName = (o: OptionView) => o.name.split(/\s*\|\s*/).find((part) => part !== "") ?? o.label;
 
 async function choose(r: RunView) {
   const options = r.choice?.options ?? [];
@@ -770,7 +808,7 @@ async function choose(r: RunView) {
       ...o.combos.filter((c) => c.partnerHeld).map((c) => `pairs with your ${c.partner.name} into ${c.name}${c.ready ? " right away" : ""}`),
       o.recommended ? "the game recommends it" : "",
     ].filter(Boolean);
-    const name = o.type === "other" ? o.name.split(" | ")[0] : o.name;
+    const name = o.type === "other" ? cardName(o) : o.name;
     criteria[`${o.index}: ${name}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`] = o.label;
   }
   // A single wanted card needs no question: the coach already chose it.
@@ -782,6 +820,19 @@ async function choose(r: RunView) {
   );
   const picked = considered.find((o) => o.index === Number((pick?.choice ?? "").split(":")[0])) ?? considered[0];
   const index = picked?.index ?? 0;
+  const sure = pick !== undefined && "confidence" in pick ? pick.confidence : undefined;
+  say({
+    role: "actor",
+    model: PICK_MODEL,
+    time: r.time,
+    text: `Take ${picked === undefined ? `option ${index}` : cardName(picked)}`,
+    detail: [
+      `${r.choice?.kind === "levelUp" ? "Level up" : `At a ${r.choice?.kind}`}: ${options.map(cardName).join(", ")}`,
+      only !== undefined ? "the only card on the planner's list" : wanted.length > 0 ? "from the planner's list" : sure === undefined ? "" : `${Math.round(sure * 100)}% sure`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  });
   if (picked !== undefined) deadPicks.names.add(picked.name);
   pickLog.push(
     `${clock(r.time)} ${r.choice?.kind}: offered ${options.map((o) => o.name).join(", ")}; took ${picked?.name ?? index}${wanted.length > 0 ? " (from the want list)" : ""}; slots weapons ${r.loadout.weapons.length}/6, passives ${r.loadout.passives.length}/6`,
@@ -797,7 +848,7 @@ async function start(): Promise<void> {
     // The page has already shown the finished run's link by now; a reload would lose it.
     rescuedLink = (await api<Snap>("/state")).lastRunLink ?? rescuedLink;
     console.log(`start failed (${started.detail ?? started.state}); reloading the game page`);
-    await fetch(RELOAD).catch(() => undefined);
+    if (RELOAD !== "") await fetch(RELOAD).catch(() => undefined);
     await Bun.sleep(8000);
     started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY }, 120);
     if (started.state !== "done") throw new Error(`could not start a run: ${started.detail ?? started.state}`);
@@ -847,8 +898,15 @@ async function main() {
     await notes.write();
   };
   await command({ type: "speed", factor: SPEED });
-  // Every run starts fresh, so a Daily always begins at tick 0 on its fixed seed.
-  await start();
+  const now = await api<Snap>("/state");
+  // Every run the bot starts begins fresh, so a Daily always begins at tick 0 on its fixed seed.
+  let adopted = TAKEOVER && now.run !== undefined && now.screen !== "over" && now.screen !== "title";
+  say({
+    role: "system",
+    text: adopted ? `Taking over the run at ${clock(now.run?.time ?? 0)}.` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}.`,
+    detail: `Planner ${PLANNER}, actor ${PICK_MODEL}, action model ${MODEL}`,
+  });
+  if (!adopted) await start();
   runs = 1;
 
   const fillLink = async (s: Snap) => {
@@ -869,6 +927,7 @@ async function main() {
       if (s.screen === "over" && s.lastRun !== undefined && runs > 0 && notes !== undefined && coach !== undefined) {
         const avg = latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length);
         console.log(`run ${runs} ended at ${s.lastRun.time}s, level ${s.lastRun.level}, ${s.lastRun.kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
+        say({ role: "system", time: s.lastRun.time, text: `Run over at ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills.` });
         console.log(`  damage taken: ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}`);
         log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty: DIFFICULTY, notes: notes.id, ...s.lastRun, steps, coachCalls: coach.calls, avgDecisionMs: Math.round(avg) })}\n`);
         log.flush();
@@ -913,12 +972,16 @@ async function main() {
     }
     if (notes === undefined || coach === undefined) {
       // Chosen while the game is paused at tick 0, so the coach's wait does not cost game time.
-      const experiment = COACH !== "none" && (await experimentDue()) ? await chooseExperiment() : undefined;
-      notes = new RunNotes(r, await readStrategy(), experiment);
+      const experiment = !adopted && COACH !== "none" && (await experimentDue()) ? await chooseExperiment() : undefined;
+      notes = new RunNotes(r, await readStrategy(), experiment, !adopted);
+      adopted = false;
       coach = new Coach(notes);
       await notes.write();
-      console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}, notes ${notes.file}`);
-      if (experiment !== undefined) console.log(`experiment run: ${experiment.name}: ${experiment.directive}`);
+      console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}, notes ${notes.saved ? notes.file : "not saved (taken over mid-run)"}`);
+      if (experiment !== undefined) {
+        console.log(`experiment run: ${experiment.name}: ${experiment.directive}`);
+        say({ role: "planner", model: PLANNER, time: r.time, text: `Experiment run: ${experiment.name}`, detail: experiment.directive });
+      }
     }
     last = r;
     if (Math.floor(r.time / 30) !== lastReport) {

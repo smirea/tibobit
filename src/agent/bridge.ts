@@ -2,7 +2,7 @@ import type { Discovery } from "../discovery";
 import type { GameLink } from "../game";
 import type { Controller } from "./control";
 import { encyclopedia } from "./encyclopedia";
-import { BRIDGE_PORT, bridgeOrigin, parseCommand, validPort } from "./protocol";
+import { BRIDGE_PORT, type ChatMessage, type PageLine, type PilotState, bridgeOrigin, parseCommand, validPort } from "./protocol";
 import { inRun, snapshot } from "./snapshot";
 
 const PORT_KEY = "tibobit.bridgePort";
@@ -27,6 +27,12 @@ export type Bridge = {
   status(): BridgeStatus;
   /** Drops the current server and connects to the one on this port, remembering it for next time. */
   connect(port: number): void;
+  /** Whether the server's bot is playing for this tab ("Grok take the wheel"). */
+  pilot(): PilotState;
+  /** Asks the server to start or stop the bot; the new state arrives over the stream. */
+  setPilot(on: boolean): void;
+  /** The bot's chat, oldest first; a message whose `count` grows keeps its id and position. */
+  chat(): readonly ChatMessage[];
   onChange(listener: () => void): void;
 };
 
@@ -48,6 +54,7 @@ const RUN_INTERVAL_MS = 33;
 const IDLE_INTERVAL_MS = 500;
 const RECONNECT_MS = 3000;
 const MAX_IN_FLIGHT = 4;
+const CHAT_LIMIT = 200;
 
 function post(origin: string, path: string, body: unknown): Promise<boolean> {
   return new Promise((resolve) =>
@@ -86,6 +93,8 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
   const notify = () => {
     for (const listener of listeners) listener();
   };
+  let pilot: PilotState = { state: "off" };
+  const chat: ChatMessage[] = [];
   let inFlight = 0;
   let lastPush = 0;
   let sentEncyclopedia = false;
@@ -93,6 +102,8 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
   const reconnect = (from: number) => {
     if (from !== session) return;
     connected = false;
+    // Without the server there is no bot, so nothing is driving the game any more.
+    receivePilot({ state: "off" });
     notify();
     setTimeout(listen, RECONNECT_MS);
   };
@@ -121,6 +132,21 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
     });
   };
 
+  const receivePilot = (next: PilotState) => {
+    // Hand the game back to the keyboard: the bot leaves it paused at its own speed between steps.
+    if (pilot.state !== "off" && next.state === "off") controller.release();
+    // Each time the bot takes the wheel its chat starts empty, as the server's does.
+    if (pilot.state === "off" && next.state === "on") chat.length = 0;
+    pilot = next;
+  };
+
+  const receiveChat = (message: ChatMessage) => {
+    const at = chat.findIndex((m) => m.id === message.id);
+    if (at >= 0) chat[at] = message;
+    else chat.push(message);
+    if (chat.length > CHAT_LIMIT) chat.splice(0, chat.length - CHAT_LIMIT);
+  };
+
   const read = async (body: ReadableStream<Uint8Array>, mine: number) => {
     const reader = body.getReader();
     const decoder = new TextDecoder();
@@ -135,21 +161,25 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
         buffer = buffer.slice(nl + 1);
         if (line === "") continue;
         try {
-          const envelope = JSON.parse(line) as { hello?: true; error?: string; id: number; command: unknown };
+          const envelope = JSON.parse(line) as PageLine;
           if (mine !== session) return;
-          if (envelope.hello) {
+          if ("hello" in envelope) {
             connected = true;
             error = undefined;
             sentEncyclopedia = false;
+            // The server replays its chat backlog after the hello.
+            chat.length = 0;
             notify();
-            continue;
-          }
-          if (typeof envelope.error === "string") {
+          } else if ("error" in envelope) {
             error = envelope.error;
             notify();
-          }
-          if (typeof envelope.id !== "number") continue;
-          controller.handle({ id: envelope.id, command: parseCommand(envelope.command) });
+          } else if ("pilot" in envelope) {
+            receivePilot(envelope.pilot);
+            notify();
+          } else if ("chat" in envelope) {
+            receiveChat(envelope.chat);
+            notify();
+          } else controller.handle({ id: envelope.id, command: parseCommand(envelope.command) });
         } catch (e) {
           console.error("[tibobit] bad command from the agent server", line, e);
         }
@@ -198,6 +228,16 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
       listen();
       notify();
     },
+    pilot: () => pilot,
+    setPilot: (on) => {
+      if (!connected) return;
+      void post(origin, "/pilot", { on }).then((ok) => {
+        if (ok) return;
+        pilot = { ...pilot, detail: `the agent server on ${origin} would not ${on ? "start" : "stop"} the bot; restart it with this version of scripts/agent-server.ts` };
+        notify();
+      });
+    },
+    chat: () => chat,
     onChange: (listener) => listeners.add(listener),
   };
 }

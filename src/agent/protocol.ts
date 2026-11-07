@@ -270,3 +270,38 @@ export function parseCommand(input: unknown): Command {
       return fail("type must be move, goto, stop, choose, dash, pause, resume, speed or start");
   }
 }
+
+/**
+ * "Grok take the wheel": the agent server runs scripts/tibo-bot.ts for the tab, and the bot's
+ * models talk in the panel. The planner is the coach (grok), which sets the plan at checkpoints;
+ * the actor is the decision model picking level-up and chest cards; the action model is the
+ * decision model choosing each step's move.
+ */
+export const PILOT_ROLES = ["planner", "actor", "action", "system"] as const;
+export type PilotRole = (typeof PILOT_ROLES)[number];
+export type PilotState = { state: "off" | "on" | "stopping"; detail?: string };
+/** What the bot says; the server stamps it into a ChatMessage. */
+export type ChatLine = { role: PilotRole; text: string; detail?: string; model?: string; time?: number };
+/** `count` is how many moves an action message stands for: the server folds a run of moves into one message. */
+export type ChatMessage = ChatLine & { id: number; count: number; at: number };
+/** One line of the server's held-open stream to the page. */
+export type PageLine = { hello: true } | { error: string } | Envelope | { chat: ChatMessage } | { pilot: PilotState };
+
+function optionalString(v: unknown, what: string): string | undefined {
+  return v === undefined ? undefined : typeof v === "string" ? v : fail(`${what} must be a string`);
+}
+
+export function parseChatLine(input: unknown): ChatLine {
+  const c = (input ?? {}) as Record<string, unknown>;
+  if (!(PILOT_ROLES as readonly unknown[]).includes(c.role)) fail(`role must be one of ${PILOT_ROLES.join(", ")}`);
+  if (typeof c.text !== "string" || c.text === "") fail("text must be a non-empty string");
+  const detail = optionalString(c.detail, "detail");
+  const model = optionalString(c.model, "model");
+  return {
+    role: c.role as PilotRole,
+    text: c.text,
+    ...(detail === undefined ? {} : { detail }),
+    ...(model === undefined ? {} : { model }),
+    ...(c.time === undefined ? {} : { time: num(c.time, "time") }),
+  };
+}

@@ -16,6 +16,18 @@ The recipe rules mirror the game's own code. A base weapon evolves at its max le
 1. Install [Tampermonkey](https://www.tampermonkey.net/) in Brave or Chrome. Manifest V3 browsers only run userscripts after you allow it. In `brave://extensions`, open Tampermonkey's **Details** and turn on **Allow user scripts**. On older Chromium versions that lack the toggle, turn on **Developer mode** instead.
 2. Open <https://raw.githubusercontent.com/smirea/tibobit/master/dist/tibo-helper.user.js> and click **Install**. Tampermonkey checks the same URL for updates.
 
+## Grok take the wheel
+
+**Grok take the wheel**, under the agent port box, hands the game to the bot. The agent server starts `scripts/tibo-bot.ts` for the tab (`./scripts/agent-server.ts` must be running and `OPENROUTER_API_KEY` set). During a run the bot takes over where you are. On the title or end screen it starts today's Daily on Nightmare and keeps playing runs until you press **Take the wheel back**, which stops it and resumes the game at normal speed. To use other bot flags, start the server with `--pilot "<flags>"`, for example `--pilot "--model laya@q8_0"` for LM Studio.
+
+While the bot plays, the combos panel folds to its header and the bot's models talk in a chat in its place:
+
+- **Planner** (grok, the coach) says why it was consulted and then gives its advice and the list of cards to take. The game stays paused while it thinks.
+- **Actor** (the decision model) says which level-up or chest card it took and what was offered.
+- **Action** (the decision model) shows the latest move, how badly it expects it to hurt Tibo and how useful it is. A run of moves between two planner or actor messages shares one message, with a move count.
+
+A run the bot takes over from you writes no notes and gets no review, so the learning loop in `gameplay/` only learns from runs the bot played from the start.
+
 ## Agent API
 
 The same userscript lets a program play the game. A local server exposes the game state and accepts commands, and the userscript relays both between the server and the tibo.dog tab.

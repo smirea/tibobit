@@ -86,6 +86,14 @@ Bun.serve({
       await page.reload();
       return new Response("reloaded\n");
     }
+    if (url.pathname === "/click" && req.method === "POST") {
+      try {
+        await page.click(await req.text(), { timeout: 5000 });
+        return new Response("clicked\n");
+      } catch (e) {
+        return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+      }
+    }
     if (url.pathname === "/eval" && req.method === "POST") {
       try {
         return Response.json(await page.evaluate(await req.text()));
@@ -93,7 +101,7 @@ Bun.serve({
         return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
       }
     }
-    return new Response("GET /screenshot, GET /reload or POST /eval <expression>\n", { status: 404 });
+    return new Response("GET /screenshot, GET /reload, POST /click <selector> or POST /eval <expression>\n", { status: 404 });
   },
 });
 console.log(`tibo.dog running headless at ${width}x${height}; screenshots at http://127.0.0.1:${port}/screenshot`);

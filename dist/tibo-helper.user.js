@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
-// @version      1.7.0
+// @version      1.8.0
 // @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
@@ -725,6 +725,7 @@
   var IDLE_INTERVAL_MS = 500;
   var RECONNECT_MS = 3000;
   var MAX_IN_FLIGHT = 4;
+  var CHAT_LIMIT = 200;
   function post(origin, path, body) {
     return new Promise((resolve) => GM_xmlhttpRequest({
       method: "POST",
@@ -749,6 +750,8 @@
       for (const listener of listeners)
         listener();
     };
+    let pilot = { state: "off" };
+    const chat = [];
     let inFlight = 0;
     let lastPush = 0;
     let sentEncyclopedia = false;
@@ -756,6 +759,7 @@
       if (from !== session)
         return;
       connected = false;
+      receivePilot({ state: "off" });
       notify();
       setTimeout(listen, RECONNECT_MS);
     };
@@ -781,6 +785,22 @@
         }
       });
     };
+    const receivePilot = (next) => {
+      if (pilot.state !== "off" && next.state === "off")
+        controller.release();
+      if (pilot.state === "off" && next.state === "on")
+        chat.length = 0;
+      pilot = next;
+    };
+    const receiveChat = (message) => {
+      const at = chat.findIndex((m) => m.id === message.id);
+      if (at >= 0)
+        chat[at] = message;
+      else
+        chat.push(message);
+      if (chat.length > CHAT_LIMIT)
+        chat.splice(0, chat.length - CHAT_LIMIT);
+    };
     const read = async (body, mine) => {
       const reader = body.getReader();
       const decoder = new TextDecoder;
@@ -803,20 +823,23 @@
             const envelope = JSON.parse(line);
             if (mine !== session)
               return;
-            if (envelope.hello) {
+            if ("hello" in envelope) {
               connected = true;
               error = undefined;
               sentEncyclopedia = false;
+              chat.length = 0;
               notify();
-              continue;
-            }
-            if (typeof envelope.error === "string") {
+            } else if ("error" in envelope) {
               error = envelope.error;
               notify();
-            }
-            if (typeof envelope.id !== "number")
-              continue;
-            controller.handle({ id: envelope.id, command: parseCommand(envelope.command) });
+            } else if ("pilot" in envelope) {
+              receivePilot(envelope.pilot);
+              notify();
+            } else if ("chat" in envelope) {
+              receiveChat(envelope.chat);
+              notify();
+            } else
+              controller.handle({ id: envelope.id, command: parseCommand(envelope.command) });
           } catch (e) {
             console.error("[tibobit] bad command from the agent server", line, e);
           }
@@ -867,6 +890,18 @@
         listen();
         notify();
       },
+      pilot: () => pilot,
+      setPilot: (on) => {
+        if (!connected)
+          return;
+        post(origin, "/pilot", { on }).then((ok) => {
+          if (ok)
+            return;
+          pilot = { ...pilot, detail: `the agent server on ${origin} would not ${on ? "start" : "stop"} the bot; restart it with this version of scripts/agent-server.ts` };
+          notify();
+        });
+      },
+      chat: () => chat,
       onChange: (listener) => listeners.add(listener)
     };
   }
@@ -934,6 +969,13 @@
       } catch (e) {
         this.finish(status, "failed", e instanceof Error ? e.message : String(e));
       }
+    }
+    release() {
+      if (this.active !== undefined)
+        this.finish(this.active.status, "replaced");
+      this.link.speed = 1;
+      if (inRun(this.link))
+        this.link.game?.setPaused(false);
     }
     finish(status, state, detail) {
       status.state = state;
@@ -1523,18 +1565,21 @@
   font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; box-shadow: 0 4px 18px rgba(0,0,0,.5);
   touch-action: auto; user-select: none;
 }
-.tbh-panel.tbh-collapsed:not(.tbh-choice), .tbh-panel.tbh-choice:not(.tbh-peek) { width: auto; }
+.tbh-panel:not(.tbh-pilot):is(.tbh-collapsed:not(.tbh-choice), .tbh-choice:not(.tbh-peek)) { width: auto; }
+.tbh-panel.tbh-pilot { width: min(340px, calc(100vw - 16px)); }
 .tbh-collapsed .tbh-header, .tbh-choice:not(.tbh-peek) .tbh-header { gap: 12px; }
 @media (max-width: 699px) {
   .tbh-panel { top: 100px; }
-  .tbh-panel.tbh-choice { display: none; }
+  .tbh-panel.tbh-choice:not(.tbh-pilot) { display: none; }
 }
 .tbh-header { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: pointer; font-weight: 700; color: #ffd36b; position: sticky; top: 0; background: rgba(17,14,10,.96); }
 .tbh-count { color: #c9b58a; font-weight: 400; }
-.tbh-collapsed:not(.tbh-choice, .tbh-idle) :is(.tbh-body, .tbh-stale, .tbh-conn),
-.tbh-choice:not(.tbh-peek) :is(.tbh-body, .tbh-stale, .tbh-conn) { display: none; }
+.tbh-collapsed:not(.tbh-choice, .tbh-idle) :is(.tbh-body, .tbh-stale),
+.tbh-choice:not(.tbh-peek) :is(.tbh-body, .tbh-stale),
+.tbh-panel:not(.tbh-pilot):is(.tbh-collapsed:not(.tbh-choice, .tbh-idle), .tbh-choice:not(.tbh-peek)) .tbh-conn { display: none; }
 /* Below the title screen's "made by" badge and "What's new" button. */
-.tbh-panel.tbh-idle { top: 80px; width: auto; max-width: min(260px, calc(100vw - 16px)); }
+.tbh-panel.tbh-idle { top: 80px; }
+.tbh-panel.tbh-idle:not(.tbh-pilot) { width: auto; max-width: min(260px, calc(100vw - 16px)); }
 .tbh-idle > .tbh-content { display: none; }
 .tbh-idle .tbh-conn { border-top: 0; }
 .tbh-body { padding: 0 6px 6px; }
@@ -1556,6 +1601,29 @@
 .tbh-conn-status { margin-top: 4px; font-size: 11px; color: #a8977a; overflow-wrap: anywhere; }
 .tbh-conn-status[data-state="ok"] { color: #7fe3a4; }
 .tbh-conn-status[data-state="error"] { color: #f0b3aa; }
+.tbh-wheel { display: block; width: 100%; margin-top: 6px; padding: 5px 8px; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
+  color: #f3e6c4; background: linear-gradient(180deg, #3b2f52, #2a2140); border: 1px solid #8e74c9; border-radius: 4px; }
+.tbh-wheel:hover:not(:disabled) { border-color: #c9a0ff; color: #fff; }
+.tbh-wheel[data-state="on"] { color: #ffd6d0; background: rgba(227,138,127,.12); border-color: #e38a7f; }
+.tbh-wheel:disabled { opacity: .5; cursor: default; }
+.tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
+.tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chat { display: none; }
+.tbh-chat { display: flex; flex-direction: column; gap: 4px; max-height: min(52vh, 460px); overflow-y: auto; padding: 6px; border-top: 1px solid rgba(255,255,255,.08); user-select: text; overscroll-behavior: contain; }
+.tbh-chat:empty::before { content: "Waiting for the bot…"; color: #a8977a; }
+.tbh-msg { --role: #a8977a; padding: 4px 6px 5px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(255,255,255,.045); overflow-wrap: anywhere; }
+.tbh-msg-planner { --role: #c9a0ff; background: rgba(201,160,255,.09); }
+.tbh-msg-actor { --role: #5ee8c0; background: rgba(94,232,192,.07); }
+.tbh-msg-action { --role: #7fa8ff; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding-block: 2px 3px; background: transparent; }
+.tbh-msg-system { --role: #6b5631; color: #c9b58a; }
+.tbh-msg-head { display: flex; align-items: baseline; gap: 6px; font-size: 10px; color: #8d7c5c; }
+.tbh-msg-role { color: var(--role); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.tbh-msg-model { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tbh-msg-time { margin-left: auto; }
+.tbh-msg-text { white-space: pre-wrap; }
+.tbh-msg-count { margin-left: 5px; color: var(--role); font-size: 10.5px; font-weight: 700; }
+.tbh-msg-detail { white-space: pre-wrap; font-size: 10.5px; color: #a8977a; }
+.tbh-msg-action .tbh-msg-model { display: none; }
+.tbh-msg-action .tbh-msg-detail { flex-basis: 100%; }
 .tbh-badge { display: inline-block; padding: 0 4px; border-radius: 3px; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-align: center; }
 .tbh-badge-new { align-self: flex-start; background: #ff7ad9; color: #3d0630; margin: 0 0 2px; }
 .tbh-badge-evo { background: #ffd36b; color: #3a2600; }
@@ -1722,12 +1790,25 @@
     input.setAttribute("aria-label", "Agent server port");
     const button = h("button", "tbh-connect", "Connect");
     const status = h("div", "tbh-conn-status");
+    const wheel = h("button", "tbh-wheel");
+    wheel.type = "button";
+    wheel.addEventListener("click", () => bridge.setPilot(bridge.pilot().state === "off"));
+    const wheelNote = h("div", "tbh-wheel-note");
     const refresh = () => {
       const s = bridge.status();
       const text = s.state === "connected" ? `connected to :${s.port}` : s.error ?? `connecting to :${s.port}…`;
       if (status.textContent !== text)
         status.textContent = text;
       status.dataset.state = s.state === "connected" ? "ok" : s.error === undefined ? "wait" : "error";
+      const pilot = bridge.pilot();
+      const label = { off: "Grok take the wheel", on: "Take the wheel back", stopping: "Handing the wheel back…" }[pilot.state];
+      if (wheel.textContent !== label)
+        wheel.textContent = label;
+      wheel.dataset.state = pilot.state;
+      wheel.disabled = s.state !== "connected" || pilot.state === "stopping";
+      wheel.title = s.state === "connected" ? "" : "Start the agent server first: ./scripts/agent-server.ts";
+      wheelNote.textContent = pilot.detail ?? "";
+      wheelNote.hidden = pilot.detail === undefined;
     };
     const connect = (e) => {
       e.preventDefault();
@@ -1743,7 +1824,49 @@
     bridge.onChange(refresh);
     input.addEventListener("input", () => input.classList.remove("tbh-invalid"));
     refresh();
-    return h("div", "tbh-conn", row, status);
+    return h("div", "tbh-conn", row, status, wheel, wheelNote);
+  }
+  var ROLE_LABELS = { planner: "Planner", actor: "Actor", action: "Action", system: "Bot" };
+  var clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+  function chatMessage(m) {
+    const head = h("div", "tbh-msg-head", h("span", "tbh-msg-role", ROLE_LABELS[m.role]), ...m.model === undefined ? [] : [h("span", "tbh-msg-model", m.model)], ...m.time === undefined ? [] : [h("span", "tbh-msg-time", clock(m.time))]);
+    const text = h("div", "tbh-msg-text", m.text, ...m.count > 1 ? [h("span", "tbh-msg-count", `${m.count} moves`)] : []);
+    const el = h("div", `tbh-msg tbh-msg-${m.role}`, head, text, ...m.detail === undefined ? [] : [h("div", "tbh-msg-detail", m.detail)]);
+    if (m.model !== undefined)
+      el.title = m.model;
+    return el;
+  }
+  function chatLog(bridge) {
+    const list = h("div", "tbh-chat");
+    list.setAttribute("aria-live", "polite");
+    const shown = new Map;
+    const render = () => {
+      const messages = bridge.chat();
+      const live = new Set(messages.map((m) => m.id));
+      for (const [id, { el }] of shown) {
+        if (live.has(id))
+          continue;
+        el.remove();
+        shown.delete(id);
+      }
+      const following = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
+      for (const message of messages) {
+        const before = shown.get(message.id);
+        if (before?.message === message)
+          continue;
+        const el = chatMessage(message);
+        if (before === undefined)
+          list.append(el);
+        else
+          before.el.replaceWith(el);
+        shown.set(message.id, { el, message });
+      }
+      if (following)
+        list.scrollTop = list.scrollHeight;
+    };
+    bridge.onChange(render);
+    render();
+    return list;
   }
   function offerKey2(card) {
     const tip = card.dataset.tip ?? "";
@@ -1792,12 +1915,12 @@
       window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest("#tibo-helper") !== null && e.stopImmediatePropagation(), true);
     }
   }
-  function mount(footer) {
+  function mount(chat, footer) {
     const style = document.createElement("style");
     style.textContent = css;
     document.head.append(style);
     const content = h("div", "tbh-content");
-    const panel = h("div", "tbh-panel", content, footer);
+    const panel = h("div", "tbh-panel", content, chat, footer);
     panel.id = "tibo-helper";
     if (window.innerWidth < 700)
       panel.classList.add("tbh-collapsed");
@@ -1805,7 +1928,21 @@
     return { panel, content };
   }
   function startHelper(link, discovery, bridge) {
-    const { panel, content } = mount(connectionRow(bridge));
+    const { panel, content } = mount(chatLog(bridge), connectionRow(bridge));
+    let collapsedBefore;
+    const followPilot = () => {
+      const piloting = bridge.pilot().state !== "off";
+      if (piloting === panel.classList.contains("tbh-pilot"))
+        return;
+      panel.classList.toggle("tbh-pilot", piloting);
+      if (piloting) {
+        collapsedBefore = panel.classList.contains("tbh-collapsed");
+        panel.classList.add("tbh-collapsed");
+      } else if (collapsedBefore !== undefined)
+        panel.classList.toggle("tbh-collapsed", collapsedBefore);
+    };
+    bridge.onChange(followPilot);
+    followPilot();
     const dropStaleTip = startTips();
     let panelSignature = "";
     let queued = false;

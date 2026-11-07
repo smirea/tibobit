@@ -15,7 +15,7 @@ import {
   unpaired,
 } from "./catalog";
 import type { Bridge } from "./agent/bridge";
-import { validPort } from "./agent/protocol";
+import { type ChatMessage, type PilotRole, validPort } from "./agent/protocol";
 import { type Data, liveData } from "./data";
 import type { Discovery } from "./discovery";
 import type { GameLink, IconSheet } from "./game";
@@ -178,12 +178,24 @@ function connectionRow(bridge: Bridge): HTMLElement {
   input.setAttribute("aria-label", "Agent server port");
   const button = h("button", "tbh-connect", "Connect");
   const status = h("div", "tbh-conn-status");
+  const wheel = h("button", "tbh-wheel");
+  wheel.type = "button";
+  wheel.addEventListener("click", () => bridge.setPilot(bridge.pilot().state === "off"));
+  const wheelNote = h("div", "tbh-wheel-note");
 
   const refresh = () => {
     const s = bridge.status();
     const text = s.state === "connected" ? `connected to :${s.port}` : (s.error ?? `connecting to :${s.port}…`);
     if (status.textContent !== text) status.textContent = text;
     status.dataset.state = s.state === "connected" ? "ok" : s.error === undefined ? "wait" : "error";
+    const pilot = bridge.pilot();
+    const label = { off: "Grok take the wheel", on: "Take the wheel back", stopping: "Handing the wheel back…" }[pilot.state];
+    if (wheel.textContent !== label) wheel.textContent = label;
+    wheel.dataset.state = pilot.state;
+    wheel.disabled = s.state !== "connected" || pilot.state === "stopping";
+    wheel.title = s.state === "connected" ? "" : "Start the agent server first: ./scripts/agent-server.ts";
+    wheelNote.textContent = pilot.detail ?? "";
+    wheelNote.hidden = pilot.detail === undefined;
   };
   const connect = (e: SubmitEvent) => {
     e.preventDefault();
@@ -200,7 +212,53 @@ function connectionRow(bridge: Bridge): HTMLElement {
   bridge.onChange(refresh);
   input.addEventListener("input", () => input.classList.remove("tbh-invalid"));
   refresh();
-  return h("div", "tbh-conn", row, status);
+  return h("div", "tbh-conn", row, status, wheel, wheelNote);
+}
+
+const ROLE_LABELS: Record<PilotRole, string> = { planner: "Planner", actor: "Actor", action: "Action", system: "Bot" };
+const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+
+function chatMessage(m: ChatMessage): HTMLElement {
+  const head = h(
+    "div",
+    "tbh-msg-head",
+    h("span", "tbh-msg-role", ROLE_LABELS[m.role]),
+    ...(m.model === undefined ? [] : [h("span", "tbh-msg-model", m.model)]),
+    ...(m.time === undefined ? [] : [h("span", "tbh-msg-time", clock(m.time))]),
+  );
+  const text = h("div", "tbh-msg-text", m.text, ...(m.count > 1 ? [h("span", "tbh-msg-count", `${m.count} moves`)] : []));
+  const el = h("div", `tbh-msg tbh-msg-${m.role}`, head, text, ...(m.detail === undefined ? [] : [h("div", "tbh-msg-detail", m.detail)]));
+  if (m.model !== undefined) el.title = m.model;
+  return el;
+}
+
+/** The bot's planner, actor and action model, as a chat that follows the newest message unless scrolled up. */
+function chatLog(bridge: Bridge): HTMLElement {
+  const list = h("div", "tbh-chat");
+  list.setAttribute("aria-live", "polite");
+  const shown = new Map<number, { el: HTMLElement; message: ChatMessage }>();
+  const render = () => {
+    const messages = bridge.chat();
+    const live = new Set(messages.map((m) => m.id));
+    for (const [id, { el }] of shown) {
+      if (live.has(id)) continue;
+      el.remove();
+      shown.delete(id);
+    }
+    const following = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
+    for (const message of messages) {
+      const before = shown.get(message.id);
+      if (before?.message === message) continue;
+      const el = chatMessage(message);
+      if (before === undefined) list.append(el);
+      else before.el.replaceWith(el);
+      shown.set(message.id, { el, message });
+    }
+    if (following) list.scrollTop = list.scrollHeight;
+  };
+  bridge.onChange(render);
+  render();
+  return list;
 }
 
 function offerKey(card: HTMLElement): { key: Key; level: number } | undefined {
@@ -264,12 +322,12 @@ export function guardPanelKeys() {
   }
 }
 
-function mount(footer: HTMLElement): { panel: HTMLElement; content: HTMLElement } {
+function mount(chat: HTMLElement, footer: HTMLElement): { panel: HTMLElement; content: HTMLElement } {
   const style = document.createElement("style");
   style.textContent = css;
   document.head.append(style);
   const content = h("div", "tbh-content");
-  const panel = h("div", "tbh-panel", content, footer);
+  const panel = h("div", "tbh-panel", content, chat, footer);
   panel.id = "tibo-helper";
   if (window.innerWidth < 700) panel.classList.add("tbh-collapsed");
   document.body.append(panel);
@@ -277,7 +335,20 @@ function mount(footer: HTMLElement): { panel: HTMLElement; content: HTMLElement 
 }
 
 export function startHelper(link: GameLink, discovery: Discovery, bridge: Bridge) {
-  const { panel, content } = mount(connectionRow(bridge));
+  const { panel, content } = mount(chatLog(bridge), connectionRow(bridge));
+  // While the bot plays, its chat takes the corner and the combos fold to their header.
+  let collapsedBefore: boolean | undefined;
+  const followPilot = () => {
+    const piloting = bridge.pilot().state !== "off";
+    if (piloting === panel.classList.contains("tbh-pilot")) return;
+    panel.classList.toggle("tbh-pilot", piloting);
+    if (piloting) {
+      collapsedBefore = panel.classList.contains("tbh-collapsed");
+      panel.classList.add("tbh-collapsed");
+    } else if (collapsedBefore !== undefined) panel.classList.toggle("tbh-collapsed", collapsedBefore);
+  };
+  bridge.onChange(followPilot);
+  followPilot();
   const dropStaleTip = startTips();
   let panelSignature = "";
   let queued = false;
