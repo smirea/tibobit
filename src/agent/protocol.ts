@@ -130,7 +130,7 @@ export type RunView = {
   unpaired: UnpairedView[];
   choice?: { kind: string; options: OptionView[]; raw?: unknown };
   bosses: (Rel & { id: string; name: string; hp: number; maxHp: number; radius: number })[];
-  enemies: { total: number; nearest: (Rel & { id: string; name: string; hp: number; radius: number; elite: boolean })[] };
+  enemies: { total: number; nearest: (Rel & { id: string; name: string; hp: number; radius: number; speed: number; elite: boolean })[] };
   /** Counts by kind, every chest, and the nearest pickups that are not xp gems. */
   pickups: { counts: Record<string, number>; chests: PickupView[]; nearest: PickupView[] };
   /** The 15 nearest unused points of interest. Standing inside one's circle charges it; `charge` and `chargeNeeded` are seconds. */
@@ -145,6 +145,8 @@ export type RunView = {
   bullets: { total: number; nearest: (Rel & { radius: number; vx: number; vy: number })[] };
   /** Enemy bullets that would hit the player within 0.6 seconds if it stands still. */
   standingBulletHits: number;
+  /** Enemies that would reach the player within 0.6 seconds if it stands still, chasing at their base speed. */
+  standingEnemyTouches: number;
   /** Everything around the player bucketed by compass direction, nearest first within each. */
   sectors: SectorView[];
 };
@@ -168,6 +170,8 @@ export type SectorView = {
   clearOfAttacks: boolean;
   /** Enemy bullets that would hit the player within 0.6 seconds if it walks this way, from their current paths. */
   bulletHits: number;
+  /** Enemies that would reach the player within 0.6 seconds if it walks this way, chasing at their base speed. */
+  enemyTouches: number;
   /** XP gems within 120 units this way. */
   xpNear: number;
 };

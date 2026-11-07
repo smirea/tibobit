@@ -425,13 +425,15 @@
       const flags = s.enemies.flags[i] ?? 0;
       if (flags & (enums.enemyFlags.Hidden ?? 0))
         continue;
-      const id = table.enemyAt(s.enemies.def[i] ?? 0)?.id ?? "unknown";
+      const def = table.enemyAt(s.enemies.def[i] ?? 0);
+      const id = def?.id ?? "unknown";
       enemies.push({
         ...relTo(s, s.enemies.x[i] ?? 0, s.enemies.y[i] ?? 0),
         id,
         name: msg("enemy", id),
         hp: round(s.enemies.hp[i] ?? 0),
         radius: s.enemies.radius[i] ?? 0,
+        speed: def?.speed ?? 0,
         elite: (flags & (enums.enemyFlags.Elite ?? 0)) !== 0
       });
     }
@@ -560,6 +562,27 @@
       }
       return hits;
     };
+    const touchesWalking = (ux, uy) => {
+      let touches = 0;
+      for (const e of enemies) {
+        if (e.dist > (speed + e.speed) * FORECAST_SECONDS + playerRadius + e.radius)
+          continue;
+        let ex = e.dx;
+        let ey = e.dy;
+        for (let t = 0;t <= FORECAST_SECONDS; t += 0.05) {
+          const gx = ux * speed * t - ex;
+          const gy = uy * speed * t - ey;
+          const gap = Math.hypot(gx, gy);
+          if (gap <= playerRadius + e.radius) {
+            touches++;
+            break;
+          }
+          ex += gx / gap * e.speed * 0.05;
+          ey += gy / gap * e.speed * 0.05;
+        }
+      }
+      return touches;
+    };
     const choice = s.choiceQueue[0];
     const sectors = DIRECTIONS.map((dir, i) => {
       const angle = i * Math.PI / 4;
@@ -586,6 +609,7 @@
         leavesHazard: holding.length > 0 && holding.every((a) => !a.contains(end.x, end.y)),
         clearOfAttacks: areas.every((a) => a.view.source !== "attack" || !a.contains(end.x, end.y)),
         bulletHits: hitsWalking(ux, uy),
+        enemyTouches: touchesWalking(ux, uy),
         xpNear: within(gems).length
       };
     });
@@ -634,6 +658,7 @@
       hazards: nearest(hazards, 20),
       bullets: { total: bullets.length, nearest: nearest(bullets) },
       standingBulletHits: hitsWalking(0, 0),
+      standingEnemyTouches: touchesWalking(0, 0),
       sectors
     };
   }

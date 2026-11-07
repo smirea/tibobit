@@ -461,6 +461,7 @@ function describe(r: RunView, s: SectorView): string {
   const parts = [
     boss !== undefined && boss.dist < 250 ? `toward the ${boss.name} boss only ${Math.round(boss.dist)} away, which hurts Tibo on contact` : "",
     s.bulletHits > 0 ? `${plural(s.bulletHits, "enemy bullet")} would hit Tibo` : s.bulletsNear > 0 ? "enemy bullets nearby but none on course to hit" : "",
+    s.enemyTouches > 0 ? `${plural(s.enemyTouches, "enemy")} would bump into Tibo and hurt it` : "",
     awayFromBoss(r, s.dir) ?? "",
     s.hazard !== null ? `into ${hazardWords(s.hazard)}` : "",
     s.leavesHazard ? "out of the danger Tibo stands in" : "",
@@ -478,10 +479,11 @@ function describe(r: RunView, s: SectorView): string {
 function standing(r: RunView): string {
   const near = r.sectors.reduce((n, x) => n + x.enemiesNear, 0);
   const crowd = near > 0 ? ` with ${plural(near, "enemy")} within 60 units closing in` : "";
+  const touches = r.standingEnemyTouches > 0 ? `, where ${plural(r.standingEnemyTouches, "enemy")} would bump into Tibo and hurt it` : "";
   const hits = r.standingBulletHits > 0 ? `, where ${plural(r.standingBulletHits, "enemy bullet")} would hit Tibo` : "";
   const under = r.hazards.find((h) => h.inside);
   const inAttack = under === undefined ? "" : under.landsIn === undefined ? `, staying in ${hazardWords(under.kind)}` : `, staying where a boss attack lands in ${under.landsIn.toFixed(1)} seconds`;
-  return `${standingSpot(r)}${crowd}${hits}${inAttack}`;
+  return `${standingSpot(r)}${crowd}${touches}${hits}${inAttack}`;
 }
 
 function standingSpot(r: RunView): string {
