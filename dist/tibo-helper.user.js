@@ -1003,6 +1003,7 @@
     async start(status, mode, difficulty) {
       const entry = mode === "daily" ? /^Daily/ : "Open World";
       if (inRun(this.link)) {
+        this.link.game?.setPaused(false);
         window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
         if (!await until(() => button("Main menu") !== undefined, 3000))
           throw new Error("the pause menu did not open");

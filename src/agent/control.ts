@@ -145,7 +145,9 @@ export class Controller {
   private async start(status: CommandStatus, mode: "openWorld" | "daily", difficulty: string) {
     const entry = mode === "daily" ? /^Daily/ : "Open World";
     if (inRun(this.link)) {
-      // Leave the current run through the pause menu: Main menu, then confirm.
+      // Leave the current run through the pause menu: Main menu, then confirm. An agent's lockstep
+      // pause is not the menu, and Escape does not open the menu over it.
+      this.link.game?.setPaused(false);
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
       if (!(await until(() => button("Main menu") !== undefined, 3000))) throw new Error("the pause menu did not open");
       for (let i = 0; i < 2 && button(entry) === undefined; i++) {
