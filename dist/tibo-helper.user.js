@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
-// @version      1.9.0
+// @version      1.10.0
 // @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
@@ -1587,6 +1587,201 @@
     }
   }
 
+  // src/chat.ts
+  var ROLE_LABELS = { planner: "Planner", actor: "Actor", action: "Action", system: "Bot" };
+  var HIDE_DELAY_MS = 200;
+  var MIN_SIDE_ROOM = 300;
+  var clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+  var percent = (v) => `${Math.round(v * 100)}%`;
+  function h(tag, className, ...children) {
+    const el = document.createElement(tag);
+    el.className = className;
+    el.append(...children);
+    return el;
+  }
+  function meter(label, share, className) {
+    const bar = h("i", "");
+    bar.style.width = `${Math.round(Math.min(1, Math.max(0, share)) * 100)}%`;
+    return h("span", `tbh-meter ${className}`, h("span", "tbh-meter-track", bar), h("span", "tbh-meter-label", label));
+  }
+  function section(title, ...body) {
+    return h("section", "tbh-insp-section", h("h4", "", title), ...body);
+  }
+  var pre = (text, className = "") => h("pre", `tbh-insp-pre ${className}`.trim(), text);
+  function inspectBody(inspect) {
+    switch (inspect.kind) {
+      case "prompt":
+        return [
+          section("Prompt", pre(inspect.prompt)),
+          ...inspect.reasoning === undefined ? [] : [section("Reasoning", pre(inspect.reasoning, "tbh-insp-thought"))],
+          ...inspect.reply === undefined ? [] : [section("Reply", pre(inspect.reply))]
+        ];
+      case "moves": {
+        const rows = inspect.moves.map((m) => h("div", `tbh-opt tbh-opt-${m.outcome.replace(" ", "-")}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name", m.move), h("span", "tbh-opt-outcome", m.outcome), ...m.forecast === undefined ? [] : [h("span", `tbh-chip${m.forecast === "no damage" ? " tbh-chip-ok" : ""}`, m.forecast)]), ...m.hurt === undefined && m.useful === undefined ? [] : [
+          h("div", "tbh-opt-scores", ...m.hurt === undefined ? [] : [meter(`hurt ${m.hurt.toFixed(1)}/4`, m.hurt / 4, "tbh-meter-hurt")], ...m.useful === undefined ? [] : [meter(`useful ${percent(m.useful)}`, m.useful, "tbh-meter-useful")])
+        ], h("div", "tbh-opt-desc", m.description)));
+        return [
+          section("Moves", ...rows, ...inspect.dash === undefined ? [] : [h("div", "tbh-opt-desc", `Dash to escape? ${percent(inspect.dash)} (dashes above 50%)`)]),
+          section("Situation", pre(inspect.situation))
+        ];
+      }
+      case "cards": {
+        const rows = inspect.cards.map((c) => h("div", `tbh-opt ${c.chosen ? "tbh-opt-chosen" : c.probability === undefined ? "tbh-opt-ruled-out" : "tbh-opt-safe"}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name", c.card), ...c.chosen ? [h("span", "tbh-opt-outcome", "chosen")] : []), ...c.probability === undefined ? [] : [h("div", "tbh-opt-scores", meter(percent(c.probability), c.probability, "tbh-meter-useful"))], h("div", "tbh-opt-desc", c.notes)));
+        return [section(inspect.question, ...rows), section("Situation", pre(inspect.situation))];
+      }
+    }
+  }
+  function inspector(panel, latest) {
+    const box = h("div", "tbh-insp");
+    box.hidden = true;
+    let showing;
+    let reading = false;
+    let hideTimer;
+    const place = (anchor) => {
+      const side = panel().getBoundingClientRect();
+      const margin = 8;
+      if (side.left < MIN_SIDE_ROOM) {
+        const at = anchor.getBoundingClientRect();
+        const above = at.top > window.innerHeight - at.bottom;
+        Object.assign(box.style, {
+          left: `${margin}px`,
+          right: `${margin}px`,
+          width: "auto",
+          top: above ? "auto" : `${at.bottom + margin}px`,
+          bottom: above ? `${window.innerHeight - at.top + margin}px` : "auto",
+          maxHeight: `${(above ? at.top : window.innerHeight - at.bottom) - 2 * margin}px`
+        });
+        return;
+      }
+      box.style.bottom = "auto";
+      const width = Math.min(560, side.left - 2 * margin);
+      box.style.width = `${width}px`;
+      box.style.left = `${side.left - margin - width}px`;
+      box.style.right = "auto";
+      box.style.maxHeight = `${window.innerHeight - 2 * margin}px`;
+      const top = anchor.getBoundingClientRect().top;
+      box.style.top = `${Math.max(margin, Math.min(top, window.innerHeight - box.offsetHeight - margin))}px`;
+    };
+    const render = (m, anchor) => {
+      if (m.inspect === undefined)
+        return;
+      const scroll = box.scrollTop;
+      const head = h("div", "tbh-insp-head", h("span", `tbh-msg-role tbh-role-${m.role}`, ROLE_LABELS[m.role]), ...m.model === undefined ? [] : [h("span", "tbh-msg-model", m.model)], ...m.time === undefined ? [] : [h("span", "tbh-msg-time", clock(m.time))]);
+      box.replaceChildren(head, ...inspectBody(m.inspect));
+      box.hidden = false;
+      showing = { id: m.id, inspect: m.inspect };
+      place(anchor);
+      box.scrollTop = scroll;
+    };
+    const hide = () => {
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        if (reading)
+          return;
+        box.hidden = true;
+        showing = undefined;
+      }, HIDE_DELAY_MS);
+    };
+    box.addEventListener("pointerenter", () => {
+      reading = true;
+      clearTimeout(hideTimer);
+    });
+    box.addEventListener("pointerleave", () => {
+      reading = false;
+      hide();
+    });
+    return {
+      box,
+      hover(el, m) {
+        clearTimeout(hideTimer);
+        reading = false;
+        box.scrollTop = 0;
+        render(m, el);
+      },
+      leave: hide,
+      refresh(el, m) {
+        if (showing?.id !== m.id || reading || showing.inspect === m.inspect)
+          return;
+        render(m, el);
+      },
+      forget(id) {
+        if (showing?.id === id && !reading)
+          box.hidden = true;
+      },
+      latest
+    };
+  }
+  function chatMessage(m) {
+    const head = h("div", "tbh-msg-head", h("span", "tbh-msg-role", ROLE_LABELS[m.role]), ...m.model === undefined ? [] : [h("span", "tbh-msg-model", m.model)], ...m.time === undefined ? [] : [h("span", "tbh-msg-time", clock(m.time))]);
+    const text = h("div", "tbh-msg-text", m.text, ...m.count > 1 ? [h("span", "tbh-msg-count", `${m.count} moves`)] : []);
+    const el = h("div", `tbh-msg tbh-msg-${m.role}${m.inspect === undefined ? "" : " tbh-msg-inspectable"}`, head, text, ...m.stream === undefined ? [] : [h("div", "tbh-msg-stream", h("span", "", m.stream, h("b", "tbh-cursor", "▍")))], ...m.detail === undefined ? [] : [h("div", "tbh-msg-detail", m.detail)]);
+    return el;
+  }
+  function chatBox(bridge) {
+    const giveBack = h("button", "tbh-giveback");
+    giveBack.type = "button";
+    giveBack.addEventListener("click", () => bridge.setPilot({ on: false }));
+    const live = h("button", "tbh-live", "DO IT LIVE");
+    live.type = "button";
+    live.title = "Play without pausing: the models think while the game keeps running";
+    live.addEventListener("click", () => bridge.setPilot({ live: !bridge.pilot().live }));
+    const tools = h("div", "tbh-chat-tools", giveBack, live);
+    const list = h("div", "tbh-chat");
+    list.setAttribute("aria-live", "polite");
+    const shown = new Map;
+    const insp = inspector(() => list.closest(".tbh-panel") ?? list, (id) => shown.get(id)?.message);
+    const render = () => {
+      const pilot = bridge.pilot();
+      const label = pilot.state === "stopping" ? "Handing the wheel back…" : "Give me back the wheel";
+      if (giveBack.textContent !== label)
+        giveBack.textContent = label;
+      giveBack.disabled = pilot.state !== "on";
+      live.setAttribute("aria-pressed", String(pilot.live));
+      live.disabled = pilot.state !== "on";
+      const messages = bridge.chat();
+      const ids = new Set(messages.map((m) => m.id));
+      for (const [id, { el }] of shown) {
+        if (ids.has(id))
+          continue;
+        el.remove();
+        shown.delete(id);
+        insp.forget(id);
+      }
+      const following = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
+      for (const message of messages) {
+        const before = shown.get(message.id);
+        if (before?.message === message)
+          continue;
+        const el = chatMessage(message);
+        el.dataset.id = String(message.id);
+        if (before === undefined)
+          list.append(el);
+        else
+          before.el.replaceWith(el);
+        shown.set(message.id, { el, message });
+        insp.refresh(el, message);
+      }
+      if (following)
+        list.scrollTop = list.scrollHeight;
+    };
+    const messageAt = (target) => {
+      const el = target instanceof Element ? target.closest(".tbh-msg-inspectable") : null;
+      const message = el === null ? undefined : insp.latest(Number(el.dataset.id));
+      return el === null || message === undefined ? undefined : { el, message };
+    };
+    list.addEventListener("pointerover", (e) => {
+      const hit = messageAt(e.target);
+      if (hit === undefined)
+        return insp.leave();
+      if (messageAt(e.relatedTarget)?.el !== hit.el)
+        insp.hover(hit.el, hit.message);
+    });
+    list.addEventListener("pointerleave", () => insp.leave());
+    bridge.onChange(render);
+    render();
+    return h("div", "tbh-chatbox", tools, list, insp.box);
+  }
+
   // src/style.ts
   var css = `
 .tbh-panel {
@@ -1629,26 +1824,65 @@
 .tbh-port.tbh-invalid { border-color: #e38a7f; }
 .tbh-connect { padding: 2px 8px; font: inherit; font-weight: 700; color: #3a2600; background: #ffd36b; border: 0; border-radius: 3px; cursor: pointer; }
 .tbh-connect:hover { background: #ffe08f; }
+.tbh-connected { color: #7fe3a4; font-weight: 700; }
+.tbh-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #3ddc84; box-shadow: 0 0 0 0 rgba(61,220,132,.7); animation: tbh-pulse 1.6s ease-out infinite; }
+@keyframes tbh-pulse { 70% { box-shadow: 0 0 0 7px rgba(61,220,132,0); } 100% { box-shadow: 0 0 0 0 rgba(61,220,132,0); } }
+:is(.tbh-dot, .tbh-wheel, .tbh-connected, .tbh-connect)[hidden] { display: none; }
 .tbh-conn-status { margin-top: 4px; font-size: 11px; color: #a8977a; overflow-wrap: anywhere; }
 .tbh-conn-status[data-state="ok"] { color: #7fe3a4; }
 .tbh-conn-status[data-state="error"] { color: #f0b3aa; }
-.tbh-wheel-row { display: flex; gap: 6px; margin-top: 6px; }
-.tbh-wheel { flex: 1; padding: 5px 8px; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
+.tbh-wheel { display: block; width: 100%; margin-top: 6px; padding: 5px 8px; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
   color: #f3e6c4; background: linear-gradient(180deg, #3b2f52, #2a2140); border: 1px solid #8e74c9; border-radius: 4px; }
 .tbh-wheel:hover:not(:disabled) { border-color: #c9a0ff; color: #fff; }
-.tbh-wheel[data-state="on"] { color: #ffd6d0; background: rgba(227,138,127,.12); border-color: #e38a7f; }
-.tbh-wheel:disabled, .tbh-live:disabled { opacity: .5; cursor: default; }
+.tbh-chat-tools { display: flex; gap: 6px; padding: 6px 6px 0; }
+.tbh-giveback { flex: 1; padding: 5px 8px; font: inherit; font-weight: 800; cursor: pointer; color: #ffd6d0; background: rgba(227,138,127,.12); border: 1px solid #e38a7f; border-radius: 4px; }
+.tbh-giveback:hover:not(:disabled) { color: #fff; background: rgba(227,138,127,.24); }
+.tbh-wheel:disabled, .tbh-live:disabled, .tbh-giveback:disabled { opacity: .5; cursor: default; }
 .tbh-live { flex: none; padding: 5px 8px; font: inherit; font-weight: 900; letter-spacing: .04em; cursor: pointer;
   color: #ffb4a8; background: transparent; border: 1px dashed #e38a7f; border-radius: 4px; }
-.tbh-live[hidden] { display: none; }
 .tbh-live:hover:not(:disabled) { color: #fff; border-style: solid; }
 .tbh-live[aria-pressed="true"] { color: #fff; background: #d8362a; border: 1px solid #ff6a5a; box-shadow: 0 0 10px rgba(255,80,60,.6); animation: tbh-onair 1.2s ease-in-out infinite; }
 .tbh-live[aria-pressed="true"]::before { content: "● "; }
 @keyframes tbh-onair { 50% { box-shadow: 0 0 2px rgba(255,80,60,.3); } }
 @media (prefers-reduced-motion: reduce) { .tbh-live[aria-pressed="true"] { animation: none; } }
 .tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
-.tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chat { display: none; }
-.tbh-chat { display: flex; flex-direction: column; gap: 4px; max-height: min(52vh, 460px); overflow-y: auto; padding: 6px; border-top: 1px solid rgba(255,255,255,.08); user-select: text; overscroll-behavior: contain; }
+.tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chatbox { display: none; }
+.tbh-chatbox { border-top: 1px solid rgba(255,255,255,.08); }
+.tbh-chat { display: flex; flex-direction: column; gap: 4px; max-height: min(52vh, 460px); overflow-y: auto; padding: 6px; user-select: text; overscroll-behavior: contain; }
+.tbh-msg-inspectable { cursor: help; }
+.tbh-msg-inspectable:hover { outline: 1px solid color-mix(in srgb, var(--role) 55%, transparent); }
+/* The newest reasoning sits at the bottom; older lines scroll out of the top. */
+.tbh-msg-stream { margin-top: 3px; max-height: 7.5em; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 10.5px; font-style: italic; color: #b9a6d9; }
+.tbh-cursor { font-style: normal; font-weight: 400; color: var(--role); animation: tbh-blink 1s steps(1) infinite; }
+@keyframes tbh-blink { 50% { opacity: 0; } }
+
+.tbh-insp { position: fixed; z-index: 2147483002; box-sizing: border-box; overflow: auto; padding: 8px 10px 10px; background: rgba(17,14,10,.97); color: #f3e6c4; border: 1px solid #6b5631; border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.6); font: 11.5px/1.4 ui-monospace, Menlo, Consolas, monospace; user-select: text; overscroll-behavior: contain; }
+.tbh-insp[hidden] { display: none; }
+.tbh-insp-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; font-size: 10.5px; color: #8d7c5c; }
+.tbh-role-planner { --role: #c9a0ff; } .tbh-role-actor { --role: #5ee8c0; } .tbh-role-action { --role: #7fa8ff; } .tbh-role-system { --role: #a8977a; }
+.tbh-insp-section { margin-top: 8px; }
+.tbh-insp-section > h4 { margin: 0 0 4px; font: inherit; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #c9b58a; }
+.tbh-insp-pre { margin: 0; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 10.5px; background: rgba(255,255,255,.04); border-radius: 4px; }
+.tbh-insp-thought { color: #b9a6d9; font-style: italic; }
+.tbh-opt { padding: 4px 6px; margin-top: 3px; border-radius: 4px; border-left: 3px solid #4a3d29; background: rgba(255,255,255,.03); }
+.tbh-opt-chosen { border-left-color: #ffd36b; background: rgba(255,211,107,.1); }
+.tbh-opt-safe { border-left-color: #5ee8c0; }
+.tbh-opt-risky { border-left-color: #e3a07f; opacity: .8; }
+.tbh-opt-ruled-out { opacity: .5; }
+.tbh-opt-ruled-out .tbh-opt-name { text-decoration: line-through; }
+.tbh-opt-head { display: flex; align-items: center; gap: 6px; }
+.tbh-opt-name { font-weight: 800; }
+.tbh-opt-outcome { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: #a8977a; }
+.tbh-opt-chosen .tbh-opt-outcome { color: #ffd36b; }
+.tbh-chip { margin-left: auto; padding: 0 5px; border-radius: 3px; font-size: 10px; background: rgba(227,138,127,.18); color: #f0b3aa; }
+.tbh-chip-ok { background: rgba(127,227,164,.14); color: #7fe3a4; }
+.tbh-opt-scores { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 3px; }
+.tbh-meter { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: #c9b58a; }
+.tbh-meter-track { width: 56px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+.tbh-meter-track > i { display: block; height: 100%; }
+.tbh-meter-hurt i { background: #e38a7f; } .tbh-meter-useful i { background: #7fa8ff; }
+.tbh-opt-desc { margin-top: 2px; font-size: 10.5px; color: #a8977a; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tbh-chat:empty::before { content: "Waiting for the bot…"; color: #a8977a; }
 .tbh-msg { --role: #a8977a; padding: 4px 6px 5px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(255,255,255,.045); overflow-wrap: anywhere; }
 .tbh-msg-planner { --role: #c9a0ff; background: rgba(201,160,255,.09); }
@@ -1704,7 +1938,7 @@
   function isShown(el) {
     return el.getClientRects().length > 0;
   }
-  function h(tag, className, ...children) {
+  function h2(tag, className, ...children) {
     const el = document.createElement(tag);
     el.className = className;
     el.append(...children);
@@ -1719,7 +1953,7 @@
     const id = idOf(key);
     const frame = v.icons?.frames.get(id);
     const banished = v.banished.has(id);
-    const box = h("span", `tbh-icon ${className}${banished ? " tbh-banished" : ""}`.trim());
+    const box = h2("span", `tbh-icon ${className}${banished ? " tbh-banished" : ""}`.trim());
     const notes = [...banished ? ["banished this run"] : [], ...note === "" ? [] : [note]].join(" · ");
     tips.set(box, { name: nameOf(v.d.catalog, key), note: notes, description: v.d.catalog.descriptions[key] });
     if (v.icons === undefined || frame === undefined) {
@@ -1728,7 +1962,7 @@
       return box;
     }
     const page = v.icons.pageOf(frame);
-    const art = h("i", "");
+    const art = h2("i", "");
     const s = art.style;
     s.setProperty("--sheet", `url("${page.url}")`);
     s.setProperty("--sw", String(page.width));
@@ -1756,7 +1990,7 @@
     return [partNeed(v, part), resultNote(v, combo)].filter(Boolean).join(" · ");
   }
   function startTips() {
-    const tip = h("div", "tbh-tip");
+    const tip = h2("div", "tbh-tip");
     tip.hidden = true;
     document.body.append(tip);
     let anchor;
@@ -1766,7 +2000,7 @@
     };
     const show = (el, content) => {
       anchor = el;
-      tip.replaceChildren(h("div", "tbh-tip-name", content.name), ...content.note === "" ? [] : [h("div", "tbh-tip-note", content.note)], ...content.description === undefined ? [] : [h("div", "tbh-tip-desc", content.description)]);
+      tip.replaceChildren(h2("div", "tbh-tip-name", content.name), ...content.note === "" ? [] : [h2("div", "tbh-tip-note", content.note)], ...content.description === undefined ? [] : [h2("div", "tbh-tip-desc", content.description)]);
       tip.hidden = false;
       const at = el.getBoundingClientRect();
       const size = tip.getBoundingClientRect();
@@ -1794,7 +2028,7 @@
     };
   }
   function header(panel, count) {
-    const el = h("div", "tbh-header", h("span", "", "Combos"), h("span", "tbh-count", count));
+    const el = h2("div", "tbh-header", h2("span", "", "Combos"), h2("span", "tbh-count", count));
     el.addEventListener("click", () => panel.classList.toggle(panel.classList.contains("tbh-choice") ? "tbh-peek" : "tbh-collapsed"));
     return el;
   }
@@ -1802,15 +2036,15 @@
     const rows = unpaired(v.d.combos, v.loadout);
     const paired = relevantCombos(v.d.combos, v.loadout).filter((c) => c.parts.every((p) => v.loadout.has(p.key)));
     const ready = paired.filter((c) => comboProgress(c, v.loadout, v.d.catalog).every((s) => s === "done"));
-    const body = h("div", "tbh-body");
+    const body = h2("div", "tbh-body");
     if (rows.length === 0)
-      body.append(h("div", "tbh-empty", paired.length > 0 ? "Everything you hold is paired." : "Nothing you hold has a combo."));
+      body.append(h2("div", "tbh-empty", paired.length > 0 ? "Everything you hold is paired." : "Nothing you hold has a combo."));
     for (const { held, options } of rows) {
       const fresh = options.some((o) => !v.discovery.made(o.combo.result));
-      const opts = h("span", "tbh-opts");
+      const opts = h2("span", "tbh-opts");
       for (const o of options)
         opts.append(icon(v, o.partner.key, pairingNote(v, o.partner, o.combo), v.discovery.made(o.combo.result) ? "" : "tbh-fresh"));
-      body.append(h("div", "tbh-need", fresh ? h("span", "tbh-badge tbh-badge-evo", "NEW") : h("span", ""), icon(v, held), h("span", "tbh-colon", ":"), opts));
+      body.append(h2("div", "tbh-need", fresh ? h2("span", "tbh-badge tbh-badge-evo", "NEW") : h2("span", ""), icon(v, held), h2("span", "tbh-colon", ":"), opts));
     }
     const counts = [`${rows.length} open`, `${paired.length} paired`, ...ready.length > 0 ? [`${ready.length} ready`] : []].join(" · ");
     const head = header(panel, counts);
@@ -1819,41 +2053,40 @@
     content.replaceChildren(head, body);
   }
   function renderProblem(panel, content, message) {
-    content.replaceChildren(header(panel, "offline"), h("div", "tbh-stale", message));
+    content.replaceChildren(header(panel, "offline"), h2("div", "tbh-stale", message));
   }
   function connectionRow(bridge) {
-    const input = h("input", "tbh-port");
+    const input = h2("input", "tbh-port");
     input.type = "number";
     input.min = "1";
     input.max = "65535";
     input.value = String(bridge.status().port);
     input.setAttribute("aria-label", "Agent server port");
-    const button = h("button", "tbh-connect", "Connect");
-    const status = h("div", "tbh-conn-status");
-    const wheel = h("button", "tbh-wheel");
+    const button = h2("button", "tbh-connect", "Connect");
+    const connected = h2("span", "tbh-connected", "connected");
+    const dot = h2("span", "tbh-dot");
+    dot.setAttribute("aria-hidden", "true");
+    const status = h2("div", "tbh-conn-status");
+    const wheel = h2("button", "tbh-wheel", "Grok take the wheel");
     wheel.type = "button";
-    wheel.addEventListener("click", () => bridge.setPilot({ on: bridge.pilot().state === "off" }));
-    const live = h("button", "tbh-live", "DO IT LIVE");
-    live.type = "button";
-    live.title = "Play without pausing: the models think while the game keeps running";
-    live.addEventListener("click", () => bridge.setPilot({ live: !bridge.pilot().live }));
-    const wheelNote = h("div", "tbh-wheel-note");
+    wheel.addEventListener("click", () => bridge.setPilot({ on: true }));
+    const wheelNote = h2("div", "tbh-wheel-note");
     const refresh = () => {
       const s = bridge.status();
-      const text = s.state === "connected" ? `connected to :${s.port}` : s.error ?? `connecting to :${s.port}…`;
+      const live = s.state === "connected";
+      const here = live && Number(input.value) === s.port;
+      button.hidden = here;
+      connected.hidden = !here;
+      dot.hidden = !live;
+      const text = live ? "" : s.error ?? `connecting to :${s.port}…`;
       if (status.textContent !== text)
         status.textContent = text;
-      status.dataset.state = s.state === "connected" ? "ok" : s.error === undefined ? "wait" : "error";
+      status.hidden = text === "";
+      status.dataset.state = s.error === undefined ? "wait" : "error";
       const pilot = bridge.pilot();
-      const label = { off: "Grok take the wheel", on: "Take the wheel back", stopping: "Handing the wheel back…" }[pilot.state];
-      if (wheel.textContent !== label)
-        wheel.textContent = label;
-      wheel.dataset.state = pilot.state;
-      wheel.disabled = s.state !== "connected" || pilot.state === "stopping";
-      wheel.title = s.state === "connected" ? "" : "Start the agent server first: ./scripts/agent-server.ts";
-      live.hidden = pilot.state !== "on";
-      live.setAttribute("aria-pressed", String(pilot.live));
-      live.disabled = s.state !== "connected";
+      wheel.hidden = pilot.state !== "off";
+      wheel.disabled = !live;
+      wheel.title = live ? "" : "Start the agent server first: ./scripts/agent-server.ts";
       wheelNote.textContent = pilot.detail ?? "";
       wheelNote.hidden = pilot.detail === undefined;
     };
@@ -1865,55 +2098,16 @@
         return;
       bridge.connect(port);
     };
-    const row = h("form", "tbh-conn-row", h("span", "tbh-conn-label", "Agent port"), input, button);
+    const row = h2("form", "tbh-conn-row", h2("span", "tbh-conn-label", "Agent port"), input, button, connected, dot);
     row.noValidate = true;
     row.addEventListener("submit", connect);
     bridge.onChange(refresh);
-    input.addEventListener("input", () => input.classList.remove("tbh-invalid"));
+    input.addEventListener("input", () => {
+      input.classList.remove("tbh-invalid");
+      refresh();
+    });
     refresh();
-    return h("div", "tbh-conn", row, status, h("div", "tbh-wheel-row", wheel, live), wheelNote);
-  }
-  var ROLE_LABELS = { planner: "Planner", actor: "Actor", action: "Action", system: "Bot" };
-  var clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
-  function chatMessage(m) {
-    const head = h("div", "tbh-msg-head", h("span", "tbh-msg-role", ROLE_LABELS[m.role]), ...m.model === undefined ? [] : [h("span", "tbh-msg-model", m.model)], ...m.time === undefined ? [] : [h("span", "tbh-msg-time", clock(m.time))]);
-    const text = h("div", "tbh-msg-text", m.text, ...m.count > 1 ? [h("span", "tbh-msg-count", `${m.count} moves`)] : []);
-    const el = h("div", `tbh-msg tbh-msg-${m.role}`, head, text, ...m.detail === undefined ? [] : [h("div", "tbh-msg-detail", m.detail)]);
-    if (m.model !== undefined)
-      el.title = m.model;
-    return el;
-  }
-  function chatLog(bridge) {
-    const list = h("div", "tbh-chat");
-    list.setAttribute("aria-live", "polite");
-    const shown = new Map;
-    const render = () => {
-      const messages = bridge.chat();
-      const live = new Set(messages.map((m) => m.id));
-      for (const [id, { el }] of shown) {
-        if (live.has(id))
-          continue;
-        el.remove();
-        shown.delete(id);
-      }
-      const following = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
-      for (const message of messages) {
-        const before = shown.get(message.id);
-        if (before?.message === message)
-          continue;
-        const el = chatMessage(message);
-        if (before === undefined)
-          list.append(el);
-        else
-          before.el.replaceWith(el);
-        shown.set(message.id, { el, message });
-      }
-      if (following)
-        list.scrollTop = list.scrollHeight;
-    };
-    bridge.onChange(render);
-    render();
-    return list;
+    return h2("div", "tbh-conn", row, status, wheel, wheelNote);
   }
   function offerKey2(card) {
     const tip = card.dataset.tip ?? "";
@@ -1946,14 +2140,14 @@
       card.classList.add("tbh-card-evo");
     if (!isNew && uses.length === 0)
       return;
-    const box = h("div", "tbh-card");
+    const box = h2("div", "tbh-card");
     if (isNew)
-      box.append(h("span", "tbh-badge tbh-badge-new", "UNSEEN"));
+      box.append(h2("span", "tbh-badge tbh-badge-new", "UNSEEN"));
     for (const combo of uses) {
       const other = partner(combo, offer.key);
       const ready = comboProgress(combo, after, v.d.catalog).every((s) => s === "done");
       const fresh = !v.discovery.made(combo.result);
-      box.append(h("div", `tbh-line tbh-${partState(other, v.loadout, v.d.catalog)}`, icon(v, other.key, partNeed(v, other)), h("span", "tbh-arrow", "→"), icon(v, combo.result, fresh ? "never made" : "", fresh ? "tbh-fresh" : ""), h("span", "tbh-result", nameOf(v.d.catalog, combo.result)), ...ready ? [h("span", "tbh-ready-tag", "READY")] : []));
+      box.append(h2("div", `tbh-line tbh-${partState(other, v.loadout, v.d.catalog)}`, icon(v, other.key, partNeed(v, other)), h2("span", "tbh-arrow", "→"), icon(v, combo.result, fresh ? "never made" : "", fresh ? "tbh-fresh" : ""), h2("span", "tbh-result", nameOf(v.d.catalog, combo.result)), ...ready ? [h2("span", "tbh-ready-tag", "READY")] : []));
     }
     (card.querySelector(".ui-card-text") ?? card).append(box);
   }
@@ -1966,8 +2160,8 @@
     const style = document.createElement("style");
     style.textContent = css;
     document.head.append(style);
-    const content = h("div", "tbh-content");
-    const panel = h("div", "tbh-panel", content, chat, footer);
+    const content = h2("div", "tbh-content");
+    const panel = h2("div", "tbh-panel", content, chat, footer);
     panel.id = "tibo-helper";
     if (window.innerWidth < 700)
       panel.classList.add("tbh-collapsed");
@@ -1975,7 +2169,7 @@
     return { panel, content };
   }
   function startHelper(link, discovery, bridge) {
-    const { panel, content } = mount(chatLog(bridge), connectionRow(bridge));
+    const { panel, content } = mount(chatBox(bridge), connectionRow(bridge));
     let collapsedBefore;
     const followPilot = () => {
       const piloting = bridge.pilot().state !== "off";

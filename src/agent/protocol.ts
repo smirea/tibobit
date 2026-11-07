@@ -293,8 +293,29 @@ export const PILOT_ROLES = ["planner", "actor", "action", "system"] as const;
 export type PilotRole = (typeof PILOT_ROLES)[number];
 /** `live` ("DO IT LIVE"): the bot plays without pausing the game while its models think. */
 export type PilotState = { state: "off" | "on" | "stopping"; live: boolean; detail?: string };
-/** What the bot says; the server stamps it into a ChatMessage. */
-export type ChatLine = { role: PilotRole; text: string; detail?: string; model?: string; time?: number };
+/** One move the action model weighed: the game's own forecast, the model's scores, and what became of it. */
+export type MoveOption = {
+  move: string;
+  description: string;
+  /** Health the sim forecast says this move costs over the next second, or "dead". */
+  forecast?: string;
+  /** The model's 0-4 hurt score and 0-1 usefulness; absent for a move ruled out before asking. */
+  hurt?: number;
+  useful?: number;
+  outcome: "chosen" | "safe" | "risky" | "ruled out";
+};
+export type CardOption = { card: string; notes: string; probability?: number; chosen: boolean };
+/** What hovering a chat message shows: the question a model got and what it weighed. */
+export type Inspect =
+  | { kind: "prompt"; prompt: string; reasoning?: string; reply?: string }
+  | { kind: "moves"; situation: string; moves: MoveOption[]; dash?: number }
+  | { kind: "cards"; situation: string; question: string; cards: CardOption[] };
+/**
+ * What the bot says; the server stamps it into a ChatMessage. A line with a `key` replaces the
+ * earlier message with that key, which is how a planner message streams: `stream` holds its
+ * reasoning so far until the final text replaces it.
+ */
+export type ChatLine = { role: PilotRole; text: string; detail?: string; model?: string; time?: number; key?: string; stream?: string; inspect?: Inspect };
 /** `count` is how many moves an action message stands for: the server folds a run of moves into one message. */
 export type ChatMessage = ChatLine & { id: number; count: number; at: number };
 /** One line of the server's held-open stream to the page. */
@@ -310,11 +331,18 @@ export function parseChatLine(input: unknown): ChatLine {
   if (typeof c.text !== "string" || c.text === "") fail("text must be a non-empty string");
   const detail = optionalString(c.detail, "detail");
   const model = optionalString(c.model, "model");
+  const key = optionalString(c.key, "key");
+  const stream = optionalString(c.stream, "stream");
+  const inspect = c.inspect as Inspect | undefined;
+  if (inspect !== undefined && !["prompt", "moves", "cards"].includes((inspect as { kind?: unknown } | null)?.kind as string)) fail("inspect.kind must be prompt, moves or cards");
   return {
     role: c.role as PilotRole,
     text: c.text,
     ...(detail === undefined ? {} : { detail }),
     ...(model === undefined ? {} : { model }),
     ...(c.time === undefined ? {} : { time: num(c.time, "time") }),
+    ...(key === undefined ? {} : { key }),
+    ...(stream === undefined ? {} : { stream }),
+    ...(inspect === undefined ? {} : { inspect }),
   };
 }

@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { appendFile, mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ChatLine, type CommandStatus, DIRECTIONS, type Direction, type ForecastView, type OptionView, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ChatLine, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type ForecastView, type MoveOption, type OptionView, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {
@@ -42,9 +42,27 @@ const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.rep
 type Snap = Snapshot & { connected: boolean; ageMs: number; live?: boolean };
 
 const PLANNER = COACH === "none" ? "none" : `${COACH} ${COACH_MODEL}`;
-/** A line for the panel's chat, shown while the bot has the wheel. Never awaited: the chat must not slow a step. */
+let chatQueue = Promise.resolve();
+/**
+ * A line for the panel's chat, shown while the bot has the wheel. Never awaited, so the chat cannot
+ * slow a step, but sent in order, so a late streamed update never overwrites a final message.
+ */
 function say(line: ChatLine) {
-  void fetch(`${SERVER}/pilot/say`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(line) }).catch(() => undefined);
+  const body = JSON.stringify(line);
+  chatQueue = chatQueue.then(() => fetch(`${SERVER}/pilot/say`, { method: "POST", headers: { "content-type": "application/json" }, body }).then(() => undefined, () => undefined));
+}
+
+/** One planner message, rewritten as the coach reads its prompt, thinks, and answers. */
+class PlannerBubble {
+  private static made = 0;
+  private line: ChatLine;
+  constructor(text: string, time?: number) {
+    this.line = { role: "planner", model: PLANNER, text, key: `planner-${process.pid}-${PlannerBubble.made++}`, ...(time === undefined ? {} : { time }) };
+  }
+  set(fields: Partial<ChatLine>) {
+    this.line = { ...this.line, ...fields };
+    say(this.line);
+  }
 }
 type Question =
   | { type: "choice"; instructions: string; criteria: Record<string, string | null> }
@@ -208,7 +226,7 @@ async function experimentDue(): Promise<boolean> {
 }
 
 async function chooseExperiment(): Promise<Experiment | undefined> {
-  say({ role: "planner", model: PLANNER, text: "Thinking: this run is an experiment; choosing which…" });
+  const bubble = new PlannerBubble("Thinking: this run is an experiment; choosing which…");
   const reply = await askCoach(
     [
       "You coach a bot that plays tibo.dog, and the next run is an experiment run.",
@@ -228,8 +246,10 @@ async function chooseExperiment(): Promise<Experiment | undefined> {
       'Reply with only JSON: {"name": "the experiment name as in the list", "hypothesis": "one sentence: what you expect to happen and why", "directive": "the high-level strategy for this run in two to four sentences, written for the coach that advises the bot during the run: what to pick, where to walk, and what to give up"}',
     ].join("\n\n"),
     CONSULT_TIMEOUT_MS,
+    bubble,
   );
   if (reply === undefined || typeof reply.name !== "string" || typeof reply.directive !== "string") return undefined;
+  bubble.set({ text: `Experiment run: ${reply.name}`, detail: reply.directive });
   return { name: reply.name, hypothesis: typeof reply.hypothesis === "string" ? reply.hypothesis : "", directive: reply.directive };
 }
 
@@ -241,29 +261,62 @@ async function infraFeedback(run: string, time: string, note: string) {
   await appendFile(FEEDBACK_FILE, `${[today(), run, time, text.replace(/\s+/g, " ")].map(csvField).join(",")}\n`);
 }
 
-/** Runs the coach CLI once and returns the JSON object in its reply, or undefined. */
-async function askCoach(prompt: string, timeoutMs: number): Promise<Record<string, unknown> | undefined> {
+const STREAM_EVERY_MS = 250;
+const STREAM_TAIL = 900;
+
+/**
+ * Runs the coach CLI once and returns the JSON object in its reply, or undefined. Its reasoning
+ * and reply stream into `bubble` as they arrive, and hovering the bubble shows the prompt.
+ */
+async function askCoach(prompt: string, timeoutMs: number, bubble: PlannerBubble): Promise<Record<string, unknown> | undefined> {
   if (COACH === "none") return undefined;
   const started = performance.now();
-  const proc = Bun.spawn(["grok", "-p", prompt, "-m", COACH_MODEL, "--output-format", "plain"], { cwd: os.tmpdir(), stdout: "pipe", stderr: "pipe" });
+  bubble.set({ inspect: { kind: "prompt", prompt } });
+  const proc = Bun.spawn(["grok", "-p", prompt, "-m", COACH_MODEL, "--output-format", "streaming-json"], { cwd: os.tmpdir(), stdout: "pipe", stderr: "pipe" });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
     proc.kill();
   }, timeoutMs);
   const seconds = () => Math.round((performance.now() - started) / 1000);
+  let reasoning = "";
+  let text = "";
+  const finish = (fields: Partial<ChatLine>) =>
+    bubble.set({ stream: undefined, inspect: { kind: "prompt", prompt, ...(reasoning === "" ? {} : { reasoning }), ...(text === "" ? {} : { reply: text }) }, ...fields });
   try {
-    const text = await new Response(proc.stdout).text();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let shown = 0;
+    for await (const chunk of proc.stdout) {
+      buffer += decoder.decode(chunk, { stream: true });
+      for (let nl = buffer.indexOf("\n"); nl >= 0; nl = buffer.indexOf("\n")) {
+        const event = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (event === "") continue;
+        try {
+          const e = JSON.parse(event) as { type?: string; data?: unknown };
+          if (e.type === "thought" && typeof e.data === "string") reasoning += e.data;
+          if (e.type === "text" && typeof e.data === "string") text += e.data;
+        } catch {}
+      }
+      if (performance.now() - shown >= STREAM_EVERY_MS) {
+        shown = performance.now();
+        const live = text === "" ? reasoning : `${reasoning}\n\n${text}`;
+        if (live !== "") bubble.set({ stream: live.length > STREAM_TAIL ? `…${live.slice(-STREAM_TAIL)}` : live });
+      }
+    }
     const json = text.match(/\{[\s\S]*\}/)?.[0];
     if (json === undefined) {
       const err = (await new Response(proc.stderr).text()).trim();
       console.error(`coach gave no JSON after ${seconds()}s${timedOut ? " (timed out)" : ""}: ${(text.trim() || err).slice(0, 300) || "(empty output)"}`);
-      say({ role: "planner", model: PLANNER, text: `No answer after ${seconds()}s${timedOut ? " (timed out)" : ""}; the previous plan stands.` });
+      finish({ text: `No answer after ${seconds()}s${timedOut ? " (timed out)" : ""}; the previous plan stands.` });
       return undefined;
     }
+    finish({});
     return JSON.parse(json) as Record<string, unknown>;
   } catch (e) {
     console.error(`coach reply unreadable after ${seconds()}s:`, e instanceof Error ? e.message : e);
+    finish({ text: `Unreadable answer after ${seconds()}s; the previous plan stands.` });
     return undefined;
   } finally {
     clearTimeout(timer);
@@ -422,7 +475,8 @@ async function reviewRun(timeline: string, outcome: string, recent: string[], ru
     "Answer from these facts alone; do not browse, search or use tools.",
     'Reply with only JSON: {"review": "a short paragraph: why the run ended, what worked, what to change", "strategy": "the full updated strategy.md in Markdown. Keep it generic advice for future runs (seed-specific facts only where the Daily repeats), keep its sections, stay under 70 lines, and add one dated line to Lessons", "infra": ["concrete suggestions to improve the data or controls the bot has"], "experiments": "the full updated experiments.md: keep its intro, add new ideas this run suggests, and under each idea record its status and what runs so far showed and why"' + experimentReply + "}",
   ].join("\n\n");
-  const reply = await askCoach(prompt, REVIEW_TIMEOUT_MS);
+  const bubble = new PlannerBubble("Reviewing the run and rewriting the strategy…");
+  const reply = await askCoach(prompt, REVIEW_TIMEOUT_MS, bubble);
   if (reply === undefined) return undefined;
   if (typeof reply.strategy === "string" && reply.strategy.trimStart().startsWith("# Strategy") && reply.strategy.length < 12_000) {
     await Bun.write(STRATEGY_FILE, `${reply.strategy.trim()}\n`);
@@ -440,7 +494,9 @@ async function reviewRun(timeline: string, outcome: string, recent: string[], ru
     await appendFile(EXPERIMENTS_CSV, `${row.map(csvField).join(",")}\n`);
     console.log(`experiments.csv: ${experiment.name}`);
   }
-  return typeof reply.review === "string" ? reply.review : undefined;
+  if (typeof reply.review !== "string") return undefined;
+  bubble.set({ text: reply.review });
+  return reply.review;
 }
 
 /** `--review <notes.md>`: review a finished run whose review never got written (the bot was stopped mid-review). */
@@ -515,7 +571,7 @@ class Coach {
     if (why === undefined || COACH === "none") return;
     this.lastAsked = r.time;
     this.calls++;
-    say({ role: "planner", model: PLANNER, time: r.time, text: `Thinking: ${why}…` });
+    const bubble = new PlannerBubble(`Thinking: ${why}…`, r.time);
     const prompt = [
       "You coach a bot that plays tibo.dog.",
       GAME_RULES,
@@ -537,7 +593,7 @@ class Coach {
       "Answer from these facts alone; do not browse, search or use tools.",
       'Reply with only JSON: {"want": [up to 8 exact weapon, passive or item names, best first. This list is binding: whenever a level-up offers any name on it, only those can be taken, so include the weapons to keep levelling as well as the passives you want], "otherwise": "reroll" or "choose": what a level-up that offers nothing on want does. reroll spends a reroll (or skips) instead of filling a slot with an unplanned card; choose lets the decision model pick the strongest card", "advice": "one short sentence for the decision model about the next minute or two; it stays in force for 90 seconds, so never name a compass direction or a countdown", "note": "one or two sentences for the run notes: what is happening and what to watch", "infra": "one concrete suggestion to improve the data or controls the bot has, or an empty string"}',
     ].join("\n\n");
-    const reply = await askCoach(prompt, CONSULT_TIMEOUT_MS);
+    const reply = await askCoach(prompt, CONSULT_TIMEOUT_MS, bubble);
     if (reply === undefined) return;
     if (Array.isArray(reply.want) && typeof reply.advice === "string")
       plan = { want: reply.want.map(String), otherwise: reply.otherwise === "reroll" ? "reroll" : "choose", advice: reply.advice, at: r.time };
@@ -546,12 +602,9 @@ class Coach {
     await this.notes.write();
     if (typeof reply.infra === "string" && this.notes.saved) await infraFeedback(this.notes.id, clock(r.time), reply.infra);
     console.log(`coach ${clock(r.time)} (${why}): ${note}`);
-    say({
-      role: "planner",
-      model: PLANNER,
-      time: r.time,
+    bubble.set({
       text: plan === undefined ? note || "(no plan)" : plan.advice,
-      detail: [note, plan === undefined ? "" : `Want: ${plan.want.join(", ")}${plan.otherwise === "reroll" ? "; reroll anything else" : ""}`].filter(Boolean).join("\n"),
+      detail: [`Asked because ${why}.`, note, plan === undefined ? "" : `Want: ${plan.want.join(", ")}${plan.otherwise === "reroll" ? "; reroll anything else" : ""}`].filter(Boolean).join("\n"),
     });
   }
 
@@ -570,10 +623,8 @@ class Coach {
       `- Coach consulted ${this.calls} times.`,
     ].join("\n");
     await this.notes.write();
-    say({ role: "planner", model: PLANNER, time: lastRun.time, text: "Reviewing the run and rewriting the strategy…" });
     const review = await reviewRun(this.notes.timeline.join("\n"), this.notes.outcome, recent, this.notes.id, clock(lastRun.time), this.notes.experiment);
     if (review === undefined) return;
-    say({ role: "planner", model: PLANNER, time: lastRun.time, text: review });
     this.notes.review = review;
     await this.notes.write();
   }
@@ -755,6 +806,7 @@ async function move(r: RunView) {
     const f = k === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === k)?.forecast;
     return f === undefined ? undefined : f.dead ? Number.POSITIVE_INFINITY : f.damage / r.player.maxHp;
   };
+  const offered = { ...moves };
   const costs = Object.keys(moves).map(cost);
   if (costs.every((c) => c !== undefined)) {
     const cheapest = Math.min(...(costs as number[]));
@@ -780,11 +832,29 @@ async function move(r: RunView) {
   const dir = (DIRECTIONS as readonly string[]).includes(choice) ? (choice as Direction) : undefined;
   const dash = dir !== undefined && (answers.dash?.noul ?? 0) > 0.5;
   const ruledOut = r.sectors.length + 1 - Object.keys(moves).length;
+  const forecast = (k: string) => {
+    const f = k === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === k)?.forecast;
+    return f === undefined ? undefined : f.dead ? "dead" : f.damage === 0 ? "no damage" : `-${Math.round(f.damage)} hp`;
+  };
+  const weighed: MoveOption[] = Object.entries(offered).map(([k, description]) => {
+    const f = forecast(k);
+    const hurt = answers[k]?.score;
+    const useful = answers[`useful:${k}`]?.noul;
+    return {
+      move: k === "stay" ? "stand still" : k,
+      description,
+      ...(f === undefined ? {} : { forecast: f }),
+      ...(hurt === undefined ? {} : { hurt }),
+      ...(useful === undefined ? {} : { useful }),
+      outcome: k === choice ? "chosen" : !(k in moves) ? "ruled out" : safe.includes(k) ? "safe" : "risky",
+    };
+  });
   say({
     role: "action",
     model: MODEL,
     time: r.time,
     text: dir === undefined ? "Stand still" : `${dash ? "Dash" : "Walk"} ${dir}`,
+    inspect: { kind: "moves", situation: state, moves: weighed, ...(answers.dash?.noul === undefined ? {} : { dash: answers.dash.noul }) },
     detail: [`Tibo ${HURT_SCALE[Math.round(answers[choice]?.score ?? 0)] ?? "?"}`, `useful ${Math.round((answers[`useful:${choice}`]?.noul ?? 0) * 100)}%`, ...(ruledOut > 0 ? [`${ruledOut} costlier ${ruledOut === 1 ? "move" : "moves"} ruled out`] : [])].join(" · "),
   });
   if (dash) await command({ type: "dash", dir });
@@ -841,19 +911,25 @@ async function choose(r: RunView) {
   }
   // A single wanted card needs no question: the coach already chose it.
   const only = considered.length === 1 ? considered[0] : undefined;
-  const { pick } = only !== undefined ? { pick: { choice: `${only.index}: ${only.name}` } } : await decide(
-    situation(r),
-    { pick: { type: "choice", instructions: r.choice?.kind === "levelUp" ? "Tibo levelled up. Which upgrade makes Tibo strongest?" : `Tibo is at a ${r.choice?.kind}. Which option makes Tibo strongest?`, criteria } },
-    PICK_MODEL,
-  );
+  const question = r.choice?.kind === "levelUp" ? "Tibo levelled up. Which upgrade makes Tibo strongest?" : `Tibo is at a ${r.choice?.kind}. Which option makes Tibo strongest?`;
+  const state = situation(r);
+  const { pick } = only !== undefined ? { pick: { choice: `${only.index}: ${only.name}` } } : await decide(state, { pick: { type: "choice", instructions: question, criteria } }, PICK_MODEL);
   const picked = considered.find((o) => o.index === Number((pick?.choice ?? "").split(":")[0])) ?? considered[0];
   const index = picked?.index ?? 0;
   const sure = pick !== undefined && "confidence" in pick ? pick.confidence : undefined;
+  const probabilities = pick !== undefined && "probabilities" in pick ? pick.probabilities : undefined;
+  const cards: CardOption[] = options.map((o) => {
+    const key = Object.keys(criteria).find((k) => k.startsWith(`${o.index}: `));
+    const left = !o.available || deadPicks.names.has(o.name) ? "cannot be taken" : "left out: the planner's list names other cards";
+    const probability = key === undefined ? undefined : probabilities?.[key];
+    return { card: cardName(o), notes: key === undefined ? left : key.slice(key.indexOf(": ") + 2), ...(probability === undefined ? {} : { probability }), chosen: o.index === index };
+  });
   say({
     role: "actor",
     model: PICK_MODEL,
     time: r.time,
     text: `Take ${picked === undefined ? `option ${index}` : cardName(picked)}`,
+    inspect: { kind: "cards", situation: state, question: only === undefined ? question : `${question} (not asked: the only card on the planner's list)`, cards },
     detail: [
       `${r.choice?.kind === "levelUp" ? "Level up" : `At a ${r.choice?.kind}`}: ${options.map(cardName).join(", ")}`,
       only !== undefined ? "the only card on the planner's list" : wanted.length > 0 ? "from the planner's list" : sure === undefined ? "" : `${Math.round(sure * 100)}% sure`,
@@ -1021,10 +1097,7 @@ async function main() {
       coach = new Coach(notes);
       await notes.write();
       console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}, notes ${notes.saved ? notes.file : "not saved (taken over mid-run)"}`);
-      if (experiment !== undefined) {
-        console.log(`experiment run: ${experiment.name}: ${experiment.directive}`);
-        say({ role: "planner", model: PLANNER, time: r.time, text: `Experiment run: ${experiment.name}`, detail: experiment.directive });
-      }
+      if (experiment !== undefined) console.log(`experiment run: ${experiment.name}: ${experiment.directive}`);
     }
     last = r;
     if (Math.floor(r.time / 30) !== lastReport) {

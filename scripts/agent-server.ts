@@ -29,6 +29,14 @@ const chat: ChatMessage[] = [];
 let nextChatId = 1;
 function say(input: unknown) {
   const line = parseChatLine(input);
+  const at = line.key === undefined ? -1 : chat.findIndex((m) => m.key === line.key);
+  const earlier = chat[at];
+  if (earlier !== undefined) {
+    const message: ChatMessage = { ...line, id: earlier.id, count: 1, at: Date.now() };
+    chat[at] = message;
+    toPage({ chat: message });
+    return;
+  }
   const last = chat.at(-1);
   // The action model answers a few times a second, which would bury the planner and the actor, so
   // its moves between two of their messages are one message showing the latest.

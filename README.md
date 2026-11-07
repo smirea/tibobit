@@ -18,17 +18,19 @@ The recipe rules mirror the game's own code. A base weapon evolves at its max le
 
 ## Grok take the wheel
 
-**Grok take the wheel**, under the agent port box, hands the game to the bot. The agent server starts `scripts/tibo-bot.ts` for the tab (`./scripts/agent-server.ts` must be running and `OPENROUTER_API_KEY` set). During a run the bot takes over where you are. On the title or end screen it starts today's Daily on Nightmare and keeps playing runs until you press **Take the wheel back**, which stops it and resumes the game at normal speed. To use other bot flags, start the server with `--pilot "<flags>"`, for example `--pilot "--model laya@q8_0"` for LM Studio.
+**Grok take the wheel**, under the agent port box, hands the game to the bot. The agent server starts `scripts/tibo-bot.ts` for the tab (`./scripts/agent-server.ts` must be running and `OPENROUTER_API_KEY` set). During a run the bot takes over where you are. On the title or end screen it starts today's Daily on Nightmare and keeps playing runs until you press **Give me back the wheel**, at the top of the bot's chat, which stops it and resumes the game at normal speed. To use other bot flags, start the server with `--pilot "<flags>"`, for example `--pilot "--model laya@q8_0"` for LM Studio.
 
 While the bot plays, the combos panel folds to its header and the bot's models talk in a chat in its place:
 
-- **Planner** (grok, the coach) says why it was consulted and then gives its advice and the list of cards to take. The game stays paused while it thinks.
+- **Planner** (grok, the coach) says why it was consulted, streams its reasoning while it thinks, and then gives its advice and the list of cards to take. The game stays paused while it thinks.
 - **Actor** (the decision model) says which level-up or chest card it took and what was offered.
 - **Action** (the decision model) shows the latest move, how badly it expects it to hurt Tibo and how useful it is. A run of moves between two planner or actor messages shares one message, with a move count.
 
+Hover a message to see what the model was given, to the left of the panel. For the planner, that is its whole prompt, its reasoning and its raw reply. For the actor, every card with the model's probability and why any card was left out. For the action model, every move with the game's forecast, the model's hurt and usefulness scores, the description the model read, and which move won or was ruled out.
+
 A run the bot takes over from you writes no notes, feedback or review, so the learning loop in `gameplay/` only learns from runs the bot played from the start.
 
-**DO IT LIVE**, next to **Take the wheel back** while the bot plays, stops it pausing the game. By default the bot plays in lockstep. The game runs for a third of a second, then waits while the models choose the next move, and it waits for the planner's answer too. Live, the game runs at normal speed the whole time. Each move is held until the next decision replaces it, and the planner thinks while the game goes on, so its advice arrives a minute or two of game time after it was asked. The game only stops where it stops for a person, on level-up, chest and shrine choices. Pressing the button again goes back to lockstep, mid-run or while the planner thinks. The server remembers the setting for the next time the bot takes the wheel. While live, the page forecasts damage a few times a second during play, which costs a few frames per second.
+**DO IT LIVE**, next to **Give me back the wheel**, stops it pausing the game. By default the bot plays in lockstep. The game runs for a third of a second, then waits while the models choose the next move, and it waits for the planner's answer too. Live, the game runs at normal speed the whole time. Each move is held until the next decision replaces it, and the planner thinks while the game goes on, so its advice arrives a minute or two of game time after it was asked. The game only stops where it stops for a person, on level-up, chest and shrine choices. Pressing the button again goes back to lockstep, mid-run or while the planner thinks. The server remembers the setting for the next time the bot takes the wheel. While live, the page forecasts damage a few times a second during play, which costs a few frames per second.
 
 ## Agent API
 
@@ -41,7 +43,7 @@ The same userscript lets a program play the game. A local server exposes the gam
 
 Keep one tibo.dog tab open with the userscript installed. It connects within a few seconds of the server starting and reconnects on its own, including to a run already in progress.
 
-To use a server on another port, type the port into **Agent port** and press **Connect** (or Enter). The box sits at the bottom of the Combos panel during a run, and alone in the upper right on the title and other screens outside a run. The tab remembers the port, and the line under it says whether it is connected, still trying, or refused because another tab holds that server. Point the CLI at the same server with `./scripts/tibo.ts --port <port> <command>`, or `--server <url>`, or `TIBO_SERVER`.
+To use a server on another port, type the port into **Agent port** and press **Connect** (or Enter). The box sits at the bottom of the Combos panel during a run, and alone in the upper right on the title and other screens outside a run. The tab remembers the port. While the tab is connected, a pulsing green dot follows the box, and **Connect** reads "connected" until you type a different port. When it is not connected, the line under the box says whether it is still trying or was refused because another tab holds that server. Point the CLI at the same server with `./scripts/tibo.ts --port <port> <command>`, or `--server <url>`, or `TIBO_SERVER`.
 
 | Endpoint | What it does |
 | --- | --- |
