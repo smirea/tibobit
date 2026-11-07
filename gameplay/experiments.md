@@ -5,8 +5,23 @@ High-level strategies to try on experiment runs, so the serious strategy does no
 ## Ideas
 
 - **Greedy** (untried): take every chest, shrine and gold pickup in reach and the highest-damage card every level. Tests whether the safety-first play is leaving power on the table.
+  No run yet. The wide run left every chest closed, including a ready Tailgate Party beside Tailgate Fries 8/8, and died at 6:07, so taking those pickups is still open.
+
 - **Safe** (untried): never walk toward anything worth having while any enemy is inside 100; take every health and armor card. Tests how far pure survival carries a weak build.
+  No run yet.
+
 - **Short-term focus** (untried): every pick is whatever kills the most enemies right now (new weapons first, then weapon levels), no recipe planning. Tests whether early kill speed beats evolution plans.
+  No run yet. The wide run leveled whatever weapon was offered and the 6:00 screen still dealt hot oil 140 and sizzle-imps 73, but the quota was empty slots, not kill speed.
+
 - **Long-term focus** (untried): commit to two evolutions from the first level-up, reroll everything else, and open every chest the moment a pair is ready. Tests whether a strict plan reaches evolutions earlier than a flexible one.
-- **Wide build** (untried): fill all six weapon slots as early as possible, levelling whichever weapon is offered. Tests the weapons-held correlation in the run history directly.
+  No run yet.
+
+- **Wide build** (retired): fill all six weapon slots as early as possible, levelling whichever weapon is offered. Tests the weapons-held correlation in the run history directly.
+  2026-11-07 Nightmare Daily, 6:07, level 17, 4302 kills. Six weapons by the 6:03 telegraph, none evolved: Seeker Sprouts 3/8, Tailgate Fries 8/8 (already 8/8 at 3:04), Tot Toss 3/8, Reset Button 1/8, Small Fry 2/8, Afterburner Fries 2/8. Passives Spud Sneakers 2/5, Sprouting Eyes 1/5, Butter Pat 1/5. Two slots were still open at 2:00, 2:30, and 3:04; one slot was still open at 4:02 and 5:00; the sixth landed between 5:00 and 6:03. Health 61/111 at 2:30, 91/111 at the queen telegraph, full at The Masher and at the 6:03 telegraph, dead at 6:07. Damage: hot oil 140, sizzle-imps 73, hay-bales 19, Late Blight 11, Amusing 3, fry-flies 2, Colorado Queen 2, crumb-ant 1. Beat the 4:32 one- and two-weapon mean, lost to the 6:38 best short run, and is the floor of the six-weapon runs. A full bar of unevolved weapons still died in the Late Blight minute, and Late Blight's own 11 damage leaves oil and sizzle-imps as the sources big enough to remove that bar. Retired: weapons held at the end do not cause the long runs.
+
 - **XP vacuum** (untried): prioritize xp gems and pickup-radius cards (Potato Magnet) over everything but safety. Tests whether level count is the bottleneck.
+  No run yet. The wide run ignored pickups and finished level 17, the same level as the 6:37 run, so pickup priority is still open.
+
+- **Evolve-then-wide** (untried): open Overgrowth before any extra weapon, then fill every remaining slot before starting Jet Fryer or Big Fry. Tests whether the extra weapons on the 8:09 to 17:20 runs extend a run only after the first evolution. The wide run is the missing half: six slots and no evolution died at 6:07.
+
+- **First ready pair** (untried): evolve whichever weapon first reaches 8 with its catalyst, and open that chest on the beat, even when the weapon is not Seeker Sprouts. Tests whether any evolution before Late Blight passes that minute. Suggested by Tailgate Fries sitting at 8/8 from 3:04 with no catalyst and a closed chest.

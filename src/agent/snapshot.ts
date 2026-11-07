@@ -276,6 +276,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
         uid: p.state.uid,
         kind: p.kind,
         name: msg("poi", p.kind),
+        description: link.message(`content.poi.${p.kind}.desc`) ?? "",
         radius: p.radius,
         inside: rel.dist <= p.radius,
         charge: round(p.state.charge / TICKS_PER_SECOND),

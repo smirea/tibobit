@@ -137,7 +137,8 @@ export type RunView = {
   /** Counts by kind, every chest, and the nearest pickups that are not xp gems. */
   pickups: { counts: Record<string, number>; chests: PickupView[]; nearest: PickupView[] };
   /** The 15 nearest unused points of interest. Standing inside one's circle charges it; `charge` and `chargeNeeded` are seconds. */
-  pois: (Rel & { uid: number; kind: string; name: string; radius: number; inside: boolean; charge: number; chargeNeeded: number; used: boolean })[];
+  /** `description` is the game's own line for it, such as "An elite waits here. It drops a chest." */
+  pois: (Rel & { uid: number; kind: string; name: string; description: string; radius: number; inside: boolean; charge: number; chargeNeeded: number; used: boolean })[];
   /**
    * Terrain patches and enemy attack zones. Positions are the zone's nearest point to the player.
    * A "line" zone (a boss sweep or charge) is a band `radius` wide each side of a segment, so

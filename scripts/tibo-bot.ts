@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 // Plays tibo.dog through the agent server with a local decision model (LM Studio's
-// /v1/systemone). This file only describes the game to the model and turns its answers into
-// commands; every decision (where to move, what to pick) is the model's.
+// /v1/systemone). This file describes the game to the model and turns its answers into commands.
+// The model makes every choice (where to move, what to pick); the file only removes options the
+// game itself rules out: cards Tibo cannot take, and moves the game's own simulation says cost
+// clearly more health over the next second than the cheapest one.
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -103,6 +105,10 @@ const FORCED_EXPERIMENT = option("experiment", "");
 type Experiment = { name: string; hypothesis: string; directive: string };
 const CHECKPOINTS = [30, 150, 300, 480, 660, 840, 1020, 1140];
 const COACH_COOLDOWN = 45;
+// A post-run review rewrites two files in one reply, which can take grok a few minutes. A consult
+// during the run holds the paused game, so it gets less.
+const REVIEW_TIMEOUT_MS = 420_000;
+const CONSULT_TIMEOUT_MS = 180_000;
 const URGENT_COOLDOWN = 10;
 const LOW_HEALTH = 0.5;
 
@@ -169,6 +175,7 @@ async function chooseExperiment(): Promise<Experiment | undefined> {
       "Answer from these facts alone; do not browse, search or use tools.",
       'Reply with only JSON: {"name": "the experiment name as in the list", "hypothesis": "one sentence: what you expect to happen and why", "directive": "the high-level strategy for this run in two to four sentences, written for the coach that advises the bot during the run: what to pick, where to walk, and what to give up"}',
     ].join("\n\n"),
+    CONSULT_TIMEOUT_MS,
   );
   if (reply === undefined || typeof reply.name !== "string" || typeof reply.directive !== "string") return undefined;
   return { name: reply.name, hypothesis: typeof reply.hypothesis === "string" ? reply.hypothesis : "", directive: reply.directive };
@@ -183,16 +190,27 @@ async function infraFeedback(run: string, time: string, note: string) {
 }
 
 /** Runs the coach CLI once and returns the JSON object in its reply, or undefined. */
-async function askCoach(prompt: string): Promise<Record<string, unknown> | undefined> {
+async function askCoach(prompt: string, timeoutMs: number): Promise<Record<string, unknown> | undefined> {
   if (COACH === "none") return undefined;
-  const proc = Bun.spawn(["grok", "-p", prompt, "-m", COACH_MODEL, "--output-format", "plain"], { cwd: os.tmpdir(), stdout: "pipe", stderr: "ignore" });
-  const timer = setTimeout(() => proc.kill(), 240_000);
+  const started = performance.now();
+  const proc = Bun.spawn(["grok", "-p", prompt, "-m", COACH_MODEL, "--output-format", "plain"], { cwd: os.tmpdir(), stdout: "pipe", stderr: "pipe" });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    proc.kill();
+  }, timeoutMs);
+  const seconds = () => Math.round((performance.now() - started) / 1000);
   try {
     const text = await new Response(proc.stdout).text();
     const json = text.match(/\{[\s\S]*\}/)?.[0];
-    return json === undefined ? undefined : (JSON.parse(json) as Record<string, unknown>);
+    if (json === undefined) {
+      const err = (await new Response(proc.stderr).text()).trim();
+      console.error(`coach gave no JSON after ${seconds()}s${timedOut ? " (timed out)" : ""}: ${(text.trim() || err).slice(0, 300) || "(empty output)"}`);
+      return undefined;
+    }
+    return JSON.parse(json) as Record<string, unknown>;
   } catch (e) {
-    console.error("coach failed:", e instanceof Error ? e.message : e);
+    console.error(`coach reply unreadable after ${seconds()}s:`, e instanceof Error ? e.message : e);
     return undefined;
   } finally {
     clearTimeout(timer);
@@ -346,7 +364,7 @@ async function reviewRun(timeline: string, outcome: string, recent: string[], ru
     "Answer from these facts alone; do not browse, search or use tools.",
     'Reply with only JSON: {"review": "a short paragraph: why the run ended, what worked, what to change", "strategy": "the full updated strategy.md in Markdown. Keep it generic advice for future runs (seed-specific facts only where the Daily repeats), keep its sections, stay under 70 lines, and add one dated line to Lessons", "infra": ["concrete suggestions to improve the data or controls the bot has"], "experiments": "the full updated experiments.md: keep its intro, add new ideas this run suggests, and under each idea record its status and what runs so far showed and why"' + experimentReply + "}",
   ].join("\n\n");
-  const reply = await askCoach(prompt);
+  const reply = await askCoach(prompt, REVIEW_TIMEOUT_MS);
   if (reply === undefined) return undefined;
   if (typeof reply.strategy === "string" && reply.strategy.trimStart().startsWith("# Strategy") && reply.strategy.length < 12_000) {
     await Bun.write(STRATEGY_FILE, `${reply.strategy.trim()}\n`);
@@ -460,7 +478,7 @@ class Coach {
       "Answer from these facts alone; do not browse, search or use tools.",
       'Reply with only JSON: {"want": [up to 8 exact weapon, passive or item names, best first. This list is binding: whenever a level-up offers any name on it, only those can be taken, so include the weapons to keep levelling as well as the passives you want], "otherwise": "reroll" or "choose": what a level-up that offers nothing on want does. reroll spends a reroll (or skips) instead of filling a slot with an unplanned card; choose lets the decision model pick the strongest card", "advice": "one short sentence for the decision model about the next minute or two; it stays in force for 90 seconds, so never name a compass direction or a countdown", "note": "one or two sentences for the run notes: what is happening and what to watch", "infra": "one concrete suggestion to improve the data or controls the bot has, or an empty string"}',
     ].join("\n\n");
-    const reply = await askCoach(prompt);
+    const reply = await askCoach(prompt, CONSULT_TIMEOUT_MS);
     if (reply === undefined) return;
     if (Array.isArray(reply.want) && typeof reply.advice === "string")
       plan = { want: reply.want.map(String), otherwise: reply.otherwise === "reroll" ? "reroll" : "choose", advice: reply.advice, at: r.time };
@@ -552,12 +570,15 @@ function situation(r: RunView): string {
   ].join("\n");
 }
 
+// The name alone hides what a spot does: standing in a Beetle Nest wakes an elite.
+const poiWhat = (p: RunView["pois"][number]) => (p.description === "" ? "" : ` (${p.description.replace(/\.$/, "").replace(/\. /g, "; ").toLowerCase()})`);
+
 function sights(r: RunView, dir: Direction): string[] {
   const out: string[] = [];
   for (const c of r.pickups.chests) if (c.dir === dir && c.dist < 300) out.push(`a chest ${Math.round(c.dist)} away`);
   for (const p of r.pickups.nearest)
     if (p.dir === dir && p.dist < 200 && p.kind !== "gold") out.push(p.kind === "heal" ? `food that heals Tibo ${Math.round(p.dist)} away` : `a ${p.kind} pickup ${Math.round(p.dist)} away`);
-  for (const p of r.pois) if (p.dir === dir && p.dist < 300 && p.chargeNeeded > 0) out.push(`a ${p.name} ${Math.round(p.dist)} away`);
+  for (const p of r.pois) if (p.dir === dir && p.dist < 300 && p.chargeNeeded > 0) out.push(`a ${p.name} ${Math.round(p.dist)} away${poiWhat(p)}`);
   return out.slice(0, 2);
 }
 
@@ -588,7 +609,7 @@ function hurtWords(share: number): string {
 }
 
 function outlook(r: RunView, f: ForecastView): string {
-  if (f.dead) return "Tibo would die within a second";
+  if (f.dead) return `Tibo would die within a second${f.sources.length === 0 ? "" : `, killed by ${f.sources.slice(0, 2).map((x) => sourceWords(x.source)).join(" and ")}`}`;
   const share = Math.round((100 * f.damage) / r.player.maxHp);
   if (share < 1) return "Tibo takes no damage in the next second";
   return `Tibo would ${hurtWords(share)} within a second, by ${f.sources
@@ -635,7 +656,7 @@ function standingSpot(r: RunView): string {
   const chest = r.pickups.chests.find((c) => c.dist <= 14);
   if (chest !== undefined) return `stand still on the chest to open it, ${chest.charge ?? 0} of ${chest.chargeNeeded ?? 1} seconds done`;
   const inside = r.pois.find((p) => p.inside && p.chargeNeeded > 0);
-  if (inside !== undefined) return `stand still inside the ${inside.name}, charged ${inside.charge} of ${inside.chargeNeeded} seconds`;
+  if (inside !== undefined) return `stand still inside the ${inside.name}${poiWhat(inside)}, charged ${inside.charge} of ${inside.chargeNeeded} seconds`;
   return "stand still";
 }
 
@@ -649,12 +670,29 @@ function standingSpot(r: RunView): string {
 // states with the sim forecast, letting any near-safest move through doubled the health lost
 // per step (0.87% against 0.45%), and the cap brings it back to 0.48% while still asking in 87%.
 const SAFE_MARGIN = 0.1;
+// Share of max health a move may cost over the cheapest move in the next second and still be offered.
+const AFFORDABLE_EXTRA_DAMAGE = 0.02;
 const SAFE_ENOUGH = 0.5;
 
 async function move(r: RunView) {
   const moves: Record<string, string> = {};
   for (const s of r.sectors) moves[s.dir] = `walk ${s.dir}: ${describe(r, s)}`;
   moves.stay = standing(r);
+  // The game's own simulation prices every move for the next second, and Laya cannot weigh those
+  // prices: on replayed states it rated a fatal move safest in 4 of 8, and it stood in hot oil
+  // forecast "very badly hurt" for ten seconds while every step out was "scratched" (its danger
+  // score tracks how many threats a description lists, not which). So moves that cost clearly
+  // more than the cheapest are not offered, like a card Tibo cannot afford; the model chooses
+  // among the rest on what the forecast cannot see (bosses closing in, crowds further out, loot).
+  const cost = (k: string) => {
+    const f = k === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === k)?.forecast;
+    return f === undefined ? undefined : f.dead ? Number.POSITIVE_INFINITY : f.damage / r.player.maxHp;
+  };
+  const costs = Object.keys(moves).map(cost);
+  if (costs.every((c) => c !== undefined)) {
+    const cheapest = Math.min(...(costs as number[]));
+    for (const k of Object.keys(moves)) if ((cost(k) ?? 0) > cheapest + AFFORDABLE_EXTRA_DAMAGE) delete moves[k];
+  }
   const state = situation(r);
 
   const questions: Record<string, Question> = {};
