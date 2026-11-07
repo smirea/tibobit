@@ -95,6 +95,7 @@ const NOTES_DIR = path.join(GAMEPLAY, "notes");
 const FEEDBACK_FILE = path.join(GAMEPLAY, "infrastructure_feedback.csv");
 const CHECKPOINTS = [30, 150, 300, 480, 660, 840, 1020, 1140];
 const COACH_COOLDOWN = 45;
+const URGENT_COOLDOWN = 10;
 const LOW_HEALTH = 0.5;
 
 type Plan = { want: string[]; advice: string; at: number };
@@ -275,11 +276,13 @@ class Coach {
     const then = healthHistory[0];
     const bleeding = then !== undefined && then.hp - (r.player.hp / r.player.maxHp) * 100 >= 33;
     const cooled = r.time - this.lastAsked >= COACH_COOLDOWN;
+    // Emergencies may re-ask sooner, so a stale line cannot ride through a collapse.
+    const urgentCooled = r.time - this.lastAsked >= URGENT_COOLDOWN;
     if (!this.sawBoss && r.bosses.length > 0) why = `a boss appeared: ${r.bosses[0]?.name}`;
-    else if (critical && !this.critical && cooled) why = "health dropped below 15%";
-    else if (bleeding && !this.bleeding && cooled) why = "health fell by a third within 30 seconds";
-    else if (bossClose && !this.bossClose && cooled) why = "a boss came within 50 units";
-    else if (attack && !this.attack && cooled) why = "a boss attack is telegraphed nearby";
+    else if (critical && !this.critical && urgentCooled) why = "health dropped below 15%";
+    else if (bleeding && !this.bleeding && urgentCooled) why = "health fell by a third within 30 seconds";
+    else if (bossClose && !this.bossClose && urgentCooled) why = "a boss came within 50 units";
+    else if (attack && !this.attack && urgentCooled) why = "a boss attack is telegraphed nearby";
     else if (low && !this.lowHealth && cooled) why = "health dropped below half";
     else if (evolved > this.evolved && r.time - this.lastAsked >= COACH_COOLDOWN) why = "a weapon evolved";
     else if (checkpoint !== undefined && r.time >= checkpoint) why = `checkpoint at ${clock(checkpoint)}`;
@@ -514,8 +517,11 @@ async function choose(r: RunView) {
   if (options.length === 0) throw new Error(`a ${r.choice?.kind} choice with no options`);
   const signature = `${r.tick}|${options.map((o) => o.name).join("|")}`;
   if (deadPicks.signature !== signature) deadPicks = { signature, names: new Set() };
+  // The coach's upgrade list is its plan; when the row offers any of it, the pick is among those.
+  const wanted = options.filter((o) => inPlan(o.name) && o.available && !deadPicks.names.has(o.name));
+  const considered = wanted.length > 0 ? wanted : options;
   const criteria: Record<string, string> = {};
-  for (const o of options) {
+  for (const o of considered) {
     const notes = [
       deadPicks.names.has(o.name) || !o.available ? "cannot be taken right now" : "",
       o.type === "other" ? o.name : `${o.type}${o.level === undefined ? "" : ` level ${o.level}`}, ${o.label}`,
@@ -525,7 +531,9 @@ async function choose(r: RunView) {
     ];
     criteria[`${o.index}: ${o.type === "other" ? o.name.split(" | ")[0] : o.name}`] = notes.filter(Boolean).join("; ");
   }
-  const { pick } = await decide(
+  // A single wanted card needs no question: the coach already chose it.
+  const only = considered.length === 1 ? considered[0] : undefined;
+  const { pick } = only !== undefined ? { pick: { choice: `${only.index}: ${only.name}` } } : await decide(
     situation(r),
     { pick: { type: "choice", instructions: `Tibo levelled up. Which ${r.choice?.kind === "levelUp" ? "upgrade" : "reward"} makes Tibo strongest?`, criteria } },
     PICK_MODEL,
@@ -533,7 +541,9 @@ async function choose(r: RunView) {
   const index = Number((pick?.choice ?? "0").split(":")[0]);
   const picked = options.find((o) => o.index === index);
   if (picked !== undefined) deadPicks.names.add(picked.name);
-  pickLog.push(`${clock(r.time)} ${r.choice?.kind}: offered ${options.map((o) => o.name).join(", ")}; took ${picked?.name ?? index}`);
+  pickLog.push(
+    `${clock(r.time)} ${r.choice?.kind}: offered ${options.map((o) => o.name).join(", ")}; took ${picked?.name ?? index}${wanted.length > 0 ? " (from the want list)" : ""}; slots weapons ${r.loadout.weapons.length}/6, passives ${r.loadout.passives.length}/6`,
+  );
   return command({ type: "choose", index: Number.isFinite(index) ? index : 0 });
 }
 
