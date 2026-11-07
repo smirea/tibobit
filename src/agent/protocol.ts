@@ -68,10 +68,10 @@ export type ComboPart = { key: string; name: string; need: "own" | "max"; state:
 export type ComboView = { result: string; name: string; kind: "evolution" | "union" | "itemEvolution"; ready: boolean; made: boolean; parts: ComboPart[] };
 
 /** One recipe an option joins: `ready` means picking the option completes it. */
-export type PairingView = ComboView & { partner: { key: string; name: string }; partnerHeld: boolean };
+export type PairingView = ComboView & { partner: { key: string; name: string }; partnerHeld: boolean; partnerBanished: boolean };
 
 /** A held weapon, passive or item with recipes left and no partner held yet, as in the panel. */
-export type UnpairedView = { key: string; name: string; options: { key: string; name: string; result: string; resultName: string; made: boolean }[] };
+export type UnpairedView = { key: string; name: string; options: { key: string; name: string; result: string; resultName: string; made: boolean; banished: boolean }[] };
 
 export type OptionView = {
   index: number;
@@ -115,7 +115,8 @@ export type RunView = {
     dashCharges: number;
     invulnerable: boolean;
   };
-  loadout: { weapons: Owned[]; passives: Owned[]; items: { id: string; name: string; count: number }[] };
+  /** `banished` lists the ids banished this run, which the game never offers again. */
+  loadout: { weapons: Owned[]; passives: Owned[]; items: { id: string; name: string; count: number }[]; banished: string[] };
   /** Recipes using something held. */
   combos: ComboView[];
   unpaired: UnpairedView[];

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         tibo.dog combo helper
 // @namespace    https://github.com/smirea/tibobit
-// @version      1.6.0
+// @version      1.7.0
 // @description  Lists the evolutions your current loadout can reach, annotates level-up cards, and lets a local agent server read and drive the game.
 // @match        https://tibo.dog/*
 // @run-at       document-start
@@ -129,8 +129,11 @@
     }
     return out;
   }
+  function idOf(key) {
+    return key.slice(key.indexOf(":") + 1);
+  }
   function nameOf(catalog, key) {
-    return catalog.names[key] ?? titleCase(key.slice(key.indexOf(":") + 1));
+    return catalog.names[key] ?? titleCase(idOf(key));
   }
 
   // src/agent/encyclopedia.ts
@@ -341,7 +344,7 @@
     return [...document.querySelectorAll("button")].filter((b) => !b.matches(".ui-pause-btn, .ui-sound") && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "");
   }
   var RECOMMENDED_LINE = /(^|\n)★?\s*RECOMMENDED(?=\n|$)/;
-  function options(d, discovery, loadout) {
+  function options(d, discovery, loadout, banished) {
     return choiceCards().map((card, index) => {
       const tip = card.dataset.tip ?? "";
       const text = card.innerText.replace(/[\u2068\u2069]/g, "");
@@ -367,7 +370,12 @@
         unseen: discovery.isNew(offer.key),
         combos: uses.map((c) => {
           const other = partner(c, offer.key).key;
-          return { ...comboView(d, discovery, c, after), partner: { key: other, name: nameOf(d.catalog, other) }, partnerHeld: held(c) };
+          return {
+            ...comboView(d, discovery, c, after),
+            partner: { key: other, name: nameOf(d.catalog, other) },
+            partnerHeld: held(c),
+            partnerBanished: banished.has(idOf(other))
+          };
         })
       };
     });
@@ -387,7 +395,7 @@
     const loadout = readLoadout(s);
     const me = s.me;
     const msg = (kind, id) => link.message(`content.${kind}.${id}.name`) ?? id;
-    const owned = (key, level) => ({ id: key.slice(key.indexOf(":") + 1), name: nameOf(d.catalog, key), level, max: d.catalog.maxLevel[key] ?? 1 });
+    const owned = (key, level) => ({ id: idOf(key), name: nameOf(d.catalog, key), level, max: d.catalog.maxLevel[key] ?? 1 });
     const enemies = [];
     for (const i of alive(s.enemies)) {
       const flags = s.enemies.flags[i] ?? 0;
@@ -548,7 +556,8 @@
       loadout: {
         weapons: s.loadout.weapons.map((w) => owned(`weapon:${w.def.id}`, w.level)),
         passives: s.loadout.passives.map((p) => owned(`passive:${p.def.id}`, p.level)),
-        items: [...s.loadout.items].filter(([, n]) => n > 0).map(([id, count]) => ({ id, name: nameOf(d.catalog, `item:${id}`), count }))
+        items: [...s.loadout.items].filter(([, n]) => n > 0).map(([id, count]) => ({ id, name: nameOf(d.catalog, `item:${id}`), count })),
+        banished: [...s.loadout.banished]
       },
       combos: relevantCombos(d.combos, loadout).map((c) => comboView(d, discovery, c, loadout)),
       unpaired: unpaired(d.combos, loadout).map((u) => ({
@@ -559,10 +568,11 @@
           name: nameOf(d.catalog, o.partner.key),
           result: o.combo.result,
           resultName: nameOf(d.catalog, o.combo.result),
-          made: discovery.made(o.combo.result)
+          made: discovery.made(o.combo.result),
+          banished: s.loadout.banished.has(idOf(o.partner.key))
         }))
       })),
-      ...choice === undefined ? {} : { choice: { kind: choice.kind, options: options(d, discovery, loadout), raw: toJson(choice) } },
+      ...choice === undefined ? {} : { choice: { kind: choice.kind, options: options(d, discovery, loadout, s.loadout.banished), raw: toJson(choice) } },
       bosses: bosses.sort((a, b) => a.dist - b.dist),
       enemies: { total: enemies.length, nearest: nearest(enemies) },
       pickups: { counts, chests: chests.sort((a, b) => a.dist - b.dist), nearest: nearest(loose) },
@@ -1328,6 +1338,9 @@
 .tbh-tip-name { color: #ffd36b; font-weight: 700; }
 .tbh-tip-note { color: #c9b58a; }
 .tbh-tip-desc { margin-top: 2px; }
+.tbh-icon.tbh-banished > i, .tbh-icon-text.tbh-banished { opacity: .45; }
+.tbh-icon.tbh-banished::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(45deg, transparent 43%, #ff5a4a 43% 57%, transparent 57%), linear-gradient(-45deg, transparent 43%, #ff5a4a 43% 57%, transparent 57%); }
 .tbh-icon.tbh-fresh::after { content: ""; position: absolute; right: -2px; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: #ff7ad9; box-shadow: 0 0 0 1px rgba(17,14,10,.9); }
 
 .ui-card.tbh-card-new { box-shadow: 0 0 0 2px #ff7ad9, 0 0 16px rgba(255,122,217,.6) !important; }
@@ -1360,10 +1373,12 @@
   }
   var tips = new WeakMap;
   function icon(v, key, note = "", className = "") {
-    const id = key.slice(key.indexOf(":") + 1);
+    const id = idOf(key);
     const frame = v.icons?.frames.get(id);
-    const box = h("span", `tbh-icon ${className}`.trim());
-    tips.set(box, { name: nameOf(v.d.catalog, key), note, description: v.d.catalog.descriptions[key] });
+    const banished = v.banished.has(id);
+    const box = h("span", `tbh-icon ${className}${banished ? " tbh-banished" : ""}`.trim());
+    const notes = [...banished ? ["banished this run"] : [], ...note === "" ? [] : [note]].join(" · ");
+    tips.set(box, { name: nameOf(v.d.catalog, key), note: notes, description: v.d.catalog.descriptions[key] });
     if (v.icons === undefined || frame === undefined) {
       box.classList.add("tbh-icon-text");
       box.textContent = initials(nameOf(v.d.catalog, key));
@@ -1509,7 +1524,7 @@
     const offer = offerKey2(card);
     if (offer === undefined)
       return;
-    const signature = `${offer.key}|${[...v.loadout].join(",")}|${v.discovery.version}|${version}`;
+    const signature = `${offer.key}|${[...v.loadout].join(",")}|${[...v.banished].join(",")}|${v.discovery.version}|${version}`;
     if (card.dataset.tbh === signature)
       return;
     card.dataset.tbh = signature;
@@ -1591,8 +1606,8 @@
       }
       const loadout = readLoadout(game.state);
       discovery.settle(loadout, new Set(offered.map((o) => o.key)));
-      const view = { d, discovery, icons: link.icons, loadout };
-      const signature = `${[...loadout].join(",")}|${discovery.version}|${version}`;
+      const view = { d, discovery, icons: link.icons, loadout, banished: game.state.loadout.banished };
+      const signature = `${[...loadout].join(",")}|${[...view.banished].join(",")}|${discovery.version}|${version}`;
       if (signature !== panelSignature) {
         panelSignature = signature;
         renderPanel(panel, content, view);

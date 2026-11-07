@@ -60,6 +60,8 @@ export type GameState = {
     weapons: { def: WeaponDef; level: number }[];
     passives: { def: PassiveDef; level: number }[];
     items: Map<string, number>;
+    /** Ids the player banished this run; the game never offers them again. */
+    banished: Set<string>;
     stats: { maxHp: number; moveSpeed: number };
   };
   player: Pool<"x" | "y" | "fx" | "fy" | "hp" | "invuln" | "dashCharges" | "dashCd" | "moving">;

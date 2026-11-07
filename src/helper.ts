@@ -6,6 +6,7 @@ import {
   type Part,
   comboProgress,
   combosUsing,
+  idOf,
   nameOf,
   partner,
   partState,
@@ -20,7 +21,7 @@ import type { Discovery } from "./discovery";
 import type { GameLink, IconSheet } from "./game";
 import { css } from "./style";
 
-type View = { d: Data; discovery: Discovery; icons: IconSheet | undefined; loadout: Loadout };
+type View = { d: Data; discovery: Discovery; icons: IconSheet | undefined; loadout: Loadout; banished: ReadonlySet<string> };
 
 function isShown(el: Element): boolean {
   return el.getClientRects().length > 0;
@@ -43,10 +44,12 @@ const tips = new WeakMap<Element, Tip>();
 
 /** The game's own sprite for a weapon, passive or item, or its initials when the sheet has none. */
 function icon(v: View, key: Key, note = "", className = ""): HTMLElement {
-  const id = key.slice(key.indexOf(":") + 1);
+  const id = idOf(key);
   const frame = v.icons?.frames.get(id);
-  const box = h("span", `tbh-icon ${className}`.trim());
-  tips.set(box, { name: nameOf(v.d.catalog, key), note, description: v.d.catalog.descriptions[key] });
+  const banished = v.banished.has(id);
+  const box = h("span", `tbh-icon ${className}${banished ? " tbh-banished" : ""}`.trim());
+  const notes = [...(banished ? ["banished this run"] : []), ...(note === "" ? [] : [note])].join(" · ");
+  tips.set(box, { name: nameOf(v.d.catalog, key), note: notes, description: v.d.catalog.descriptions[key] });
   if (v.icons === undefined || frame === undefined) {
     box.classList.add("tbh-icon-text");
     box.textContent = initials(nameOf(v.d.catalog, key));
@@ -212,7 +215,7 @@ function offerKey(card: HTMLElement): { key: Key; level: number } | undefined {
 function annotateCard(card: HTMLElement, v: View, version: number) {
   const offer = offerKey(card);
   if (offer === undefined) return;
-  const signature = `${offer.key}|${[...v.loadout].join(",")}|${v.discovery.version}|${version}`;
+  const signature = `${offer.key}|${[...v.loadout].join(",")}|${[...v.banished].join(",")}|${v.discovery.version}|${version}`;
   if (card.dataset.tbh === signature) return;
   card.dataset.tbh = signature;
   card.querySelector(".tbh-card")?.remove();
@@ -311,8 +314,8 @@ export function startHelper(link: GameLink, discovery: Discovery, bridge: Bridge
     }
     const loadout = readLoadout(game.state);
     discovery.settle(loadout, new Set(offered.map((o) => o.key)));
-    const view: View = { d, discovery, icons: link.icons, loadout };
-    const signature = `${[...loadout].join(",")}|${discovery.version}|${version}`;
+    const view: View = { d, discovery, icons: link.icons, loadout, banished: game.state.loadout.banished };
+    const signature = `${[...loadout].join(",")}|${[...view.banished].join(",")}|${discovery.version}|${version}`;
     if (signature !== panelSignature) {
       panelSignature = signature;
       renderPanel(panel, content, view);

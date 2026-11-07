@@ -81,17 +81,18 @@ function summarizeRun(r: RunView): string[] {
     `${clock(r.time)}  hp ${Math.round(p.hp)}/${Math.round(p.maxHp)}  lv ${p.level} (${p.xp}/${p.xpNext} xp)  gold ${p.gold}  dash ${p.dashCharges}  at (${p.x}, ${p.y})`,
     `weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}`,
     `passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}`,
+    ...(r.loadout.banished.length > 0 ? [`banished: ${r.loadout.banished.join(", ")}`] : []),
   ];
   if (r.loadout.items.length > 0) lines.push(`items: ${r.loadout.items.map((i) => `${i.name} x${i.count}`).join(", ")}`);
   if (r.combos.length > 0)
     lines.push(`combos: ${r.combos.map((c) => `${c.name}${c.ready ? " READY" : ""} (${c.parts.map((x) => `${x.state === "done" ? "+" : x.state === "leveling" ? "~" : "-"}${x.name}`).join(" ")})`).join("; ")}`);
-  for (const u of r.unpaired) lines.push(`  ${u.name}: ${u.options.map((o) => `${o.name}${o.made ? "" : "*"}`).join(", ")}`);
+  for (const u of r.unpaired) lines.push(`  ${u.name}: ${u.options.map((o) => `${o.name}${o.made ? "" : "*"}${o.banished ? " (banished)" : ""}`).join(", ")}`);
   if (r.choice !== undefined) {
     lines.push(`choice (${r.choice.kind}):`);
     for (const o of r.choice.options) {
       lines.push(`  [${o.index}] ${o.name}${o.level === undefined ? "" : ` Lv${o.level}`}${o.recommended ? " (recommended)" : ""}${o.unseen ? " UNSEEN" : ""}`);
       for (const c of o.combos)
-        lines.push(`      ${c.partnerHeld ? "+" : "-"} ${c.partner.name} -> ${c.name}${c.ready ? " READY" : ""}${c.made ? "" : " (new)"}`);
+        lines.push(`      ${c.partnerHeld ? "+" : "-"} ${c.partner.name}${c.partnerBanished ? " (banished)" : ""} -> ${c.name}${c.ready ? " READY" : ""}${c.made ? "" : " (new)"}`);
     }
   }
   for (const b of r.bosses) lines.push(`boss ${b.name} ${Math.round(b.hp)}/${Math.round(b.maxHp)} at ${at(b)}`);

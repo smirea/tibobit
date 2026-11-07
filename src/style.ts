@@ -56,6 +56,9 @@ export const css = `
 .tbh-tip-name { color: #ffd36b; font-weight: 700; }
 .tbh-tip-note { color: #c9b58a; }
 .tbh-tip-desc { margin-top: 2px; }
+.tbh-icon.tbh-banished > i, .tbh-icon-text.tbh-banished { opacity: .45; }
+.tbh-icon.tbh-banished::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(45deg, transparent 43%, #ff5a4a 43% 57%, transparent 57%), linear-gradient(-45deg, transparent 43%, #ff5a4a 43% 57%, transparent 57%); }
 .tbh-icon.tbh-fresh::after { content: ""; position: absolute; right: -2px; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: #ff7ad9; box-shadow: 0 0 0 1px rgba(17,14,10,.9); }
 
 .ui-card.tbh-card-new { box-shadow: 0 0 0 2px #ff7ad9, 0 0 16px rgba(255,122,217,.6) !important; }

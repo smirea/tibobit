@@ -152,6 +152,10 @@ export function unpaired(combos: Combo[], loadout: Loadout): Unpaired[] {
   return out;
 }
 
+export function idOf(key: Key): string {
+  return key.slice(key.indexOf(":") + 1);
+}
+
 export function nameOf(catalog: Catalog, key: Key): string {
-  return catalog.names[key] ?? titleCase(key.slice(key.indexOf(":") + 1));
+  return catalog.names[key] ?? titleCase(idOf(key));
 }

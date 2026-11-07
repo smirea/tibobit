@@ -4,6 +4,7 @@ import {
   type Loadout,
   comboProgress,
   combosUsing,
+  idOf,
   nameOf,
   partner,
   partState,
@@ -101,7 +102,7 @@ export function choiceCards(): HTMLElement[] {
 
 const RECOMMENDED_LINE = /(^|\n)★?\s*RECOMMENDED(?=\n|$)/;
 
-function options(d: Data, discovery: Discovery, loadout: Loadout): OptionView[] {
+function options(d: Data, discovery: Discovery, loadout: Loadout, banished: ReadonlySet<string>): OptionView[] {
   return choiceCards().map((card, index) => {
     const tip = card.dataset.tip ?? "";
     const text = card.innerText.replace(/[\u2068\u2069]/g, "");
@@ -129,7 +130,12 @@ function options(d: Data, discovery: Discovery, loadout: Loadout): OptionView[] 
       unseen: discovery.isNew(offer.key),
       combos: uses.map((c) => {
         const other = partner(c, offer.key).key;
-        return { ...comboView(d, discovery, c, after), partner: { key: other, name: nameOf(d.catalog, other) }, partnerHeld: held(c) };
+        return {
+          ...comboView(d, discovery, c, after),
+          partner: { key: other, name: nameOf(d.catalog, other) },
+          partnerHeld: held(c),
+          partnerBanished: banished.has(idOf(other)),
+        };
       }),
     };
   });
@@ -150,7 +156,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
   const loadout = readLoadout(s);
   const me = s.me;
   const msg = (kind: string, id: string) => link.message(`content.${kind}.${id}.name`) ?? id;
-  const owned = (key: Key, level: number) => ({ id: key.slice(key.indexOf(":") + 1), name: nameOf(d.catalog, key), level, max: d.catalog.maxLevel[key] ?? 1 });
+  const owned = (key: Key, level: number) => ({ id: idOf(key), name: nameOf(d.catalog, key), level, max: d.catalog.maxLevel[key] ?? 1 });
 
   const enemies: RunView["enemies"]["nearest"] = [];
   for (const i of alive(s.enemies)) {
@@ -319,6 +325,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
       weapons: s.loadout.weapons.map((w) => owned(`weapon:${w.def.id}`, w.level)),
       passives: s.loadout.passives.map((p) => owned(`passive:${p.def.id}`, p.level)),
       items: [...s.loadout.items].filter(([, n]) => n > 0).map(([id, count]) => ({ id, name: nameOf(d.catalog, `item:${id}`), count })),
+      banished: [...s.loadout.banished],
     },
     combos: relevantCombos(d.combos, loadout).map((c) => comboView(d, discovery, c, loadout)),
     unpaired: unpaired(d.combos, loadout).map((u) => ({
@@ -330,9 +337,10 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
         result: o.combo.result,
         resultName: nameOf(d.catalog, o.combo.result),
         made: discovery.made(o.combo.result),
+        banished: s.loadout.banished.has(idOf(o.partner.key)),
       })),
     })),
-    ...(choice === undefined ? {} : { choice: { kind: choice.kind, options: options(d, discovery, loadout), raw: toJson(choice) } }),
+    ...(choice === undefined ? {} : { choice: { kind: choice.kind, options: options(d, discovery, loadout, s.loadout.banished), raw: toJson(choice) } }),
     bosses: bosses.sort((a, b) => a.dist - b.dist),
     enemies: { total: enemies.length, nearest: nearest(enemies) },
     pickups: { counts, chests: chests.sort((a, b) => a.dist - b.dist), nearest: nearest(loose) },
