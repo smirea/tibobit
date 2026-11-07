@@ -457,7 +457,8 @@ function standing(r: RunView): string {
   const near = r.sectors.reduce((n, x) => n + x.enemiesNear, 0);
   const crowd = near > 0 ? ` with ${plural(near, "enemy")} within 60 units closing in` : "";
   const hits = r.standingBulletHits > 0 ? `, where ${plural(r.standingBulletHits, "enemy bullet")} would hit Tibo` : "";
-  const inAttack = r.hazards.some((h) => h.inside) ? ", inside the danger Tibo stands in" : "";
+  const under = r.hazards.find((h) => h.inside);
+  const inAttack = under === undefined ? "" : under.landsIn === undefined ? `, staying in ${hazardWords(under.kind)}` : `, staying where a boss attack lands in ${under.landsIn.toFixed(1)} seconds`;
   return `${standingSpot(r)}${crowd}${hits}${inAttack}`;
 }
 
