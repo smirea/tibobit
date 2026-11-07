@@ -455,11 +455,20 @@ function awayFromBoss(r: RunView, dir: Direction): string | undefined {
   return offset >= 3 && offset <= 5 ? `away from the ${boss.name} boss` : undefined;
 }
 
+// Words, not percentages: on 50 replayed states Laya picked a move within 2% of the least
+// damaging one 90% of the time with these words, 80% with "would lose N%", and 38% when the
+// number stood alone.
+function hurtWords(share: number): string {
+  if (share <= 3) return "get scratched";
+  if (share <= 9) return "get badly hurt";
+  return "get very badly hurt";
+}
+
 function outlook(r: RunView, f: ForecastView): string {
   if (f.dead) return "Tibo would die within a second";
   const share = Math.round((100 * f.damage) / r.player.maxHp);
   if (share < 1) return "Tibo takes no damage in the next second";
-  return `Tibo would lose ${share}% of its health within a second, to ${f.sources
+  return `Tibo would ${hurtWords(share)} within a second, by ${f.sources
     .slice(0, 2)
     .map((x) => sourceWords(x.source))
     .join(" and ")}`;
@@ -513,7 +522,11 @@ function standingSpot(r: RunView): string {
 // states, Laya picked the safest way 97% of the time when asked "does it put Tibo in danger",
 // against 77% for "is it a good move" and 48% for one nine-way choice. So Tibo first keeps the
 // moves the model rates about as safe as the safest, then asks which of those is useful.
+// Only moves the model itself calls safe go to that second question: on 400 replayed Nightmare
+// states with the sim forecast, letting any near-safest move through doubled the health lost
+// per step (0.87% against 0.45%), and the cap brings it back to 0.48% while still asking in 87%.
 const SAFE_MARGIN = 0.1;
+const SAFE_ENOUGH = 0.5;
 
 async function move(r: RunView) {
   const moves: Record<string, string> = {};
@@ -529,7 +542,7 @@ async function move(r: RunView) {
   const danger = await decide(state, questions);
   const risk = (k: string) => danger[k]?.noul ?? 1;
   const safest = Math.min(...Object.keys(moves).map(risk));
-  const safe = Object.keys(moves).filter((k) => risk(k) <= safest + SAFE_MARGIN);
+  const safe = Object.keys(moves).filter((k) => risk(k) <= safest + SAFE_MARGIN && (risk(k) < SAFE_ENOUGH || risk(k) === safest));
 
   let choice = safe.sort((x, y) => risk(x) - risk(y))[0] ?? "stay";
   if (safe.length > 1) {
