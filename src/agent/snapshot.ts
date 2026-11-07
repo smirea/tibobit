@@ -484,11 +484,22 @@ export function inRun(link: GameLink): boolean {
   return link.game !== undefined && !link.game.state.over && hud !== null && hud.getClientRects().length > 0;
 }
 
+/** The game keeps its Nightmare ladder in localStorage as {cleared: <highest level won>}. */
+function ladderCleared(): number {
+  try {
+    const cleared = (JSON.parse(localStorage.getItem("tibo.ladder.v1") ?? "{}") as { cleared?: unknown }).cleared;
+    return typeof cleared === "number" ? cleared : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function snapshot(link: GameLink, discovery: Discovery, commands: CommandStatus[]): Snapshot {
   link.noteRunLink();
   const base = {
     capturedAt: Date.now(),
     headless: navigator.webdriver,
+    ladderCleared: ladderCleared(),
     commands,
     ...(link.error === undefined ? {} : { error: link.error }),
     ...(link.runLink === undefined ? {} : { lastRunLink: link.runLink }),

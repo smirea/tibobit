@@ -24,7 +24,8 @@ const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
   stop | pause | resume
   choose <index>                  pick a level-up or chest option
   dash [dir|degrees]
-  start [easy|normal|hard|nightmare] [daily]   daily plays today's fixed-seed Daily
+  start [easy|normal|hard|nightmare|highest] [daily]   daily plays today's fixed-seed Daily; highest
+                                  takes the hardest unlocked, up through the Nightmare levels
   summary                         after a death, step to the run summary and record its share link
 
 Commands wait until they finish (except move without seconds); add --no-wait to return at once.

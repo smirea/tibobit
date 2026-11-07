@@ -5,11 +5,11 @@
 // and sets short-term goals) and acts (steps around danger on the way to the goal). The file removes
 // only options the game itself rules out: cards Tibo cannot take, and moves the game's own
 // simulation says cost clearly more health over the next second than the cheapest one.
-import os from "node:os";
 import path from "node:path";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ChatLine, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { checkHarness, defaultModel, runCoach } from "./coach";
 import * as loop from "./gameplay";
 import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "./gameplay";
 
@@ -31,12 +31,16 @@ if (new URL(DECIDER).hostname === "openrouter.ai" && !DECIDER_KEY) throw new Err
 const STEP = Number(option("step", "0.35"));
 const PLAN_EVERY = Number(option("plan-every", "5"));
 const RUNS = Number(option("runs", "1"));
+// "highest" takes the hardest the game allows; `difficulty` then holds what the game picked, such as nightmare-3.
 const DIFFICULTY = option("difficulty", "easy");
+let difficulty = DIFFICULTY;
 const MODE = option("mode", "daily");
 const SPEED = Number(option("speed", "4"));
 // The coach (grok) only works between runs: it plans the next one and reviews the last.
-const COACH = option("coach", "grok");
-const COACH_MODEL = option("coach-model", "grok-4.7-build-fast");
+// `--coach` names the harness (see scripts/coach.ts) or "none"; `--coach-model` defaults per harness.
+const COACH_ARG = option("coach", "grok");
+const COACH = COACH_ARG === "none" ? "none" : checkHarness(COACH_ARG);
+const COACH_MODEL = args.includes("--coach-model") ? option("coach-model", "") || undefined : COACH === "none" ? undefined : defaultModel(COACH);
 // For "Grok take the wheel": play the run already in progress instead of starting a fresh one.
 const TAKEOVER = args.includes("--takeover");
 // Incognito runs just play: no notes file, no review, and they do not count toward experiments.
@@ -59,7 +63,7 @@ let pace: PilotPace = { planEvery: PLAN_EVERY, actEvery: STEP };
 let piloted = false;
 const PICK_SHOW_MS = 4000;
 
-const COACH_NAME = `${COACH} ${COACH_MODEL}`;
+const COACH_NAME = `${COACH} ${COACH_MODEL ?? "(its default model)"}`;
 let chatQueue = Promise.resolve();
 /**
  * A line for the panel's chat, shown while the bot has the wheel. Never awaited, so the chat cannot
@@ -174,6 +178,7 @@ const PLAN_TIMEOUT_MS = 600_000;
 const REVIEW_TIMEOUT_MS = 900_000;
 const LATEST_NOTES = 3;
 const MODE_NAME = MODE === "daily" ? "daily" : "world";
+const WIN_SECONDS = 1200;
 
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 const csvField = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
@@ -182,61 +187,38 @@ const STREAM_EVERY_MS = 250;
 const STREAM_TAIL = 900;
 
 /**
- * Runs the coach CLI once and returns the JSON object in its reply, or undefined. Its reasoning
- * and reply stream into `bubble` as they arrive, and hovering the bubble shows the prompt.
+ * Runs the coach once and returns the JSON object in its reply, or undefined. Its reasoning and
+ * reply stream into `bubble` as they arrive, and hovering the bubble shows the prompt.
  */
 async function askCoach(prompt: string, timeoutMs: number, bubble: CoachBubble): Promise<Record<string, unknown> | undefined> {
   if (COACH === "none") return undefined;
   const started = performance.now();
   bubble.set({ inspect: { kind: "prompt", prompt } });
-  const proc = Bun.spawn(["grok", "-p", prompt, "-m", COACH_MODEL, "--output-format", "streaming-json"], { cwd: os.tmpdir(), stdout: "pipe", stderr: "pipe" });
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    proc.kill();
-  }, timeoutMs);
-  const seconds = () => Math.round((performance.now() - started) / 1000);
-  let reasoning = "";
-  let text = "";
+  let shown = 0;
+  const said = await runCoach(COACH, COACH_MODEL, prompt, timeoutMs, ({ reasoning, text }) => {
+    if (performance.now() - shown < STREAM_EVERY_MS) return;
+    shown = performance.now();
+    const live = text === "" ? reasoning : `${reasoning}\n\n${text}`;
+    if (live !== "") bubble.set({ stream: live.length > STREAM_TAIL ? `…${live.slice(-STREAM_TAIL)}` : live });
+  });
+  const seconds = Math.round((performance.now() - started) / 1000);
+  const late = said.timedOut ? " (timed out)" : "";
   const finish = (fields: Partial<ChatLine>) =>
-    bubble.set({ stream: undefined, inspect: { kind: "prompt", prompt, ...(reasoning === "" ? {} : { reasoning }), ...(text === "" ? {} : { reply: text }) }, ...fields });
-  try {
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let shown = 0;
-    for await (const chunk of proc.stdout) {
-      buffer += decoder.decode(chunk, { stream: true });
-      for (let nl = buffer.indexOf("\n"); nl >= 0; nl = buffer.indexOf("\n")) {
-        const event = buffer.slice(0, nl).trim();
-        buffer = buffer.slice(nl + 1);
-        if (event === "") continue;
-        try {
-          const e = JSON.parse(event) as { type?: string; data?: unknown };
-          if (e.type === "thought" && typeof e.data === "string") reasoning += e.data;
-          if (e.type === "text" && typeof e.data === "string") text += e.data;
-        } catch {}
-      }
-      if (performance.now() - shown >= STREAM_EVERY_MS) {
-        shown = performance.now();
-        const live = text === "" ? reasoning : `${reasoning}\n\n${text}`;
-        if (live !== "") bubble.set({ stream: live.length > STREAM_TAIL ? `…${live.slice(-STREAM_TAIL)}` : live });
-      }
-    }
-    const json = text.match(/\{[\s\S]*\}/)?.[0];
-    if (json === undefined) {
-      const err = (await new Response(proc.stderr).text()).trim();
-      console.error(`coach gave no JSON after ${seconds()}s${timedOut ? " (timed out)" : ""}: ${(text.trim() || err).slice(0, 300) || "(empty output)"}`);
-      finish({ text: `No answer after ${seconds()}s${timedOut ? " (timed out)" : ""}.` });
-      return undefined;
-    }
-    finish({});
-    return JSON.parse(json) as Record<string, unknown>;
-  } catch (e) {
-    console.error(`coach reply unreadable after ${seconds()}s:`, e instanceof Error ? e.message : e);
-    finish({ text: `Unreadable answer after ${seconds()}s.` });
+    bubble.set({ stream: undefined, inspect: { kind: "prompt", prompt, ...(said.reasoning === "" ? {} : { reasoning: said.reasoning }), ...(said.text === "" ? {} : { reply: said.text }) }, ...fields });
+  const json = said.text.match(/\{[\s\S]*\}/)?.[0];
+  if (json === undefined) {
+    console.error(`coach gave no JSON after ${seconds}s${late}: ${(said.text.trim() || said.stderr).slice(0, 300) || "(empty output)"}`);
+    finish({ text: `No answer after ${seconds}s${late}.` });
     return undefined;
-  } finally {
-    clearTimeout(timer);
+  }
+  try {
+    const reply = JSON.parse(json) as Record<string, unknown>;
+    finish({});
+    return reply;
+  } catch (e) {
+    console.error(`coach reply unreadable after ${seconds}s:`, e instanceof Error ? e.message : e);
+    finish({ text: `Unreadable answer after ${seconds}s.` });
+    return undefined;
   }
 }
 
@@ -302,6 +284,7 @@ function botFacts(): string {
     `The planner is asked when the run starts, when a goal ends, at every level-up, chest and shrine choice, right after a card is taken, when a boss first appears, and every few seconds while a goal is under way (5 by default; the person watching sets it). Each time it rates every goal option with planner.goal, and the highest-rated becomes Tibo's goal. At a choice it also picks a card with planner.pick; a choice with one card it can take is taken without asking.`,
     `The goal options the bot offers: up to 4 chests within ${PLAN_RANGE} units (stand on one for its charge time to open it: a free pick, and it evolves whatever recipe is ready); up to 6 spots that charge, such as shrines, each with the game's description; up to 2 food pickups, which heal; the xp gems nearby, collected for up to gemsSeconds; exploring each of the 8 directions for exploreDistance units, stopping at the first chest never listed before; and evading enemies for evadeSeconds. A target Tibo gave up on carries that note for ${GIVE_UP_SECONDS} seconds. A goal ends when its target is used up, after stuckSeconds without getting closer or charging, or well past the time the walk should take.`,
     "Every step (0.3 seconds by default) the game's own simulation forecasts each of the 8 directions and standing still one second ahead. While the way to the goal costs no more than the cheapest move plus extraDamage, the page walks Tibo there without asking a model. Otherwise the action model is asked action.hurt and action.useful about every move that does not cost more than that; the moves rated about as safe as the safest (within safeMargin, and below the middle of the scale) compete on usefulness, and the most useful wins. With a dash charge and an enemy or bullet close, action.dash decides whether Tibo dashes that way.",
+    "Winning a run means surviving to 20:00; the run goes on after that until Tibo dies. In Open World on Nightmare, winning at Nightmare level N unlocks level N+1, and the bot always starts the highest level unlocked, so the ladder climbs one level per win and never drops. Every Nightmare level makes pests and bosses tougher; on every level they start a run at 40% of their health and grow to full by 8:00, so the opening minutes are the cheapest. A run that passes 20:00 also drops gear (hat, chest, legs, boots), which the game equips from a Loadout screen before a run; the bot cannot equip gear yet.",
     "The game runs live at normal speed and only stops at level-up, chest and shrine choices. The run log has one CSV row per model call and per goal that starts or ends, with the player's state at that moment.",
   ].join("\n\n");
 }
@@ -511,7 +494,7 @@ async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ pla
     "## Templates, state blocks and knobs",
     loop.catalog(),
     "## This run",
-    `${setup.difficulty} ${setup.mode === "daily" ? "Daily (the same seed for everyone today)" : "Open World"}, in a ${setup.surface === "headless" ? "headless browser nobody watches" : "browser someone may be watching"}, starting ${setup.started.toString()}.`,
+    `${setup.difficulty} ${setup.mode === "daily" ? "Daily (the same seed for everyone today)" : "Open World"}, in a ${setup.surface === "headless" ? "headless browser nobody watches" : "browser someone may be watching"}, starting ${setup.started.toString()}. You are ${setup.coach}. Other coaches may run their own loops at the same time on these same files, each on its own Nightmare ladder: their rows and notes are theirs, and the coach of each run is in the run list.`,
     ...(await loopFiles()),
     `## The latest ${LATEST_NOTES} notes`,
     await loop.latestNotes(LATEST_NOTES),
@@ -527,14 +510,15 @@ async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ pla
   const before = await loop.readTables();
   const reply = await consult(prompt, PLAN_TIMEOUT_MS, bubble, (raw) => checkPlan(raw, base.templates, before));
   if (reply === undefined) return reuse("the coach gave no usable plan");
-  const changed = await loop.applyEdits(reply.edits, loop.runId(setup.started));
-  await loop.touchExperiments(reply.testing, (row) => {
+  const { done: changed, renamed } = await loop.applyEdits(reply.edits, loop.runId(setup.started), before);
+  const testing = reply.testing.map((id) => renamed.get(id) ?? id);
+  await loop.touchExperiments(testing, (row) => {
     row.status = "running";
   });
-  const detail = `Testing ${reply.testing.join(", ") || "nothing named"}.${changed.length === 0 ? "" : ` Updated ${changed.join(", ")}.`}`;
+  const detail = `Testing ${testing.join(", ") || "nothing named"}.${changed.length === 0 ? "" : ` Updated ${changed.join(", ")}.`}`;
   console.log(`plan: ${reply.intent}\n  ${detail}`);
   bubble.set({ text: reply.intent, detail });
-  return { plan: { source: "coach-plan.md", intent: reply.intent, testing: reply.testing, templates: reply.templates }, prompts: `coach-plan.md ${loop.hash(instructions)}` };
+  return { plan: { source: "coach-plan.md", intent: reply.intent, testing, templates: reply.templates }, prompts: `coach-plan.md ${loop.hash(instructions)}` };
 }
 
 /**
@@ -570,7 +554,7 @@ async function reviewRun(text: string, name: string): Promise<{ review: string; 
   const before = await loop.readTables();
   const reply = await consult(prompt, REVIEW_TIMEOUT_MS, bubble, (raw) => checkReview(raw, before));
   if (reply === undefined) return undefined;
-  const changed = await loop.applyEdits(reply.edits, name.slice(0, 19));
+  const { done: changed } = await loop.applyEdits(reply.edits, name.slice(0, 19), before);
   await loop.touchExperiments(loop.notesTesting(text), (row) => {
     const runs = row.runs.split(/;\s*/).filter(Boolean);
     if (!runs.includes(name)) row.runs = [...runs, name].join("; ");
@@ -589,12 +573,21 @@ async function commitGameplay(name: string, review: string, testing: string[]) {
     const p = Bun.spawnSync(cmd, { cwd: loop.GAMEPLAY, stdout: "pipe", stderr: "pipe", env: { ...process.env, ...env } });
     return { ok: p.exitCode === 0, out: `${p.stdout.toString()}${p.stderr.toString()}`.trim() };
   };
-  run(["git", "add", "-A", "--", "."]);
-  if (run(["git", "diff", "--cached", "--quiet", "--", "."]).ok) return;
   const lived = name.match(/lived-(\d+)-(\d+)/);
-  const title = `docs(gameplay): review the ${name.slice(0, 16).replace("_", " ").replace(/-(\d\d)$/, ":$1")} run, lived ${lived === null ? "?" : `${Number(lived[1])}:${lived[2]}`}${testing.length === 0 ? "" : `, testing ${testing.join(", ")}`}`;
-  // --only commits gameplay/ alone, whatever else someone has staged.
-  const commit = run(["gai", "-m", `${title}\n\n${summaryOf(review)}`, "--only", "--", "."], { AI_COMITTER_NAME: COACH_MODEL });
+  const title = `docs(gameplay): ${COACH} reviews the ${name.slice(0, 16).replace("_", " ").replace(/-(\d\d)$/, ":$1")} run, lived ${lived === null ? "?" : `${Number(lived[1])}:${lived[2]}`}${testing.length === 0 ? "" : `, testing ${testing.join(", ")}`}`;
+  // Under the gameplay lock, so a commit never catches another loop's file half written. --only
+  // commits gameplay/ alone, whatever else someone has staged; a busy index is tried again.
+  const commit = await loop.locked(async () => {
+    run(["git", "add", "-A", "--", "."]);
+    if (run(["git", "diff", "--cached", "--quiet", "--", "."]).ok) return undefined;
+    let tried = run(["gai", "-m", `${title}\n\n${summaryOf(review)}`, "--only", "--", "."], { AI_COMITTER_NAME: COACH_MODEL ?? COACH });
+    for (let attempt = 1; !tried.ok && tried.out.includes("index.lock") && attempt < 5; attempt++) {
+      await Bun.sleep(2000);
+      tried = run(["gai", "-m", `${title}\n\n${summaryOf(review)}`, "--only", "--", "."], { AI_COMITTER_NAME: COACH_MODEL ?? COACH });
+    }
+    return tried;
+  });
+  if (commit === undefined) return;
   if (!commit.ok) {
     console.error(`could not commit gameplay/: ${commit.out}`);
     say({ role: "system", text: "Could not commit gameplay/ after the review.", detail: commit.out.slice(0, 500) });
@@ -1155,7 +1148,7 @@ function blocks(r: RunView, b: Book): Record<BlockName, () => string> {
   const hp = pct(p.hp, p.maxHp);
   const v: Record<Exclude<BlockName, "state">, () => string> = {
     time: () => clock(r.time),
-    difficulty: () => DIFFICULTY,
+    difficulty: () => difficulty,
     mode: () => MODE_NAME,
     health: () => `Health ${Math.round(p.hp)}/${Math.round(p.maxHp)} (${hp}%${healthTrend(r)})${hp < 40 ? ", which is low" : ""}.`,
     level: () => `Level ${p.level}, ${pct(p.xp, p.xpNext)}% of the way to the next.`,
@@ -1346,16 +1339,17 @@ class Planner {
   }
 
   /** The run ended: its notes are written, then the coach reviews it. */
-  async finish(lastRun: NonNullable<Snapshot["lastRun"]>, last: RunView | undefined) {
+  async finish(lastRun: NonNullable<Snapshot["lastRun"]>, last: RunView | undefined, ladder: number | undefined) {
     const damage = Object.entries(lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ");
     await this.notes.finish({
       lived: lastRun.time,
-      ending: `died at ${clock(lastRun.time)}, level ${lastRun.level}, ${lastRun.kills} kills`,
+      ending: `${lastRun.time >= WIN_SECONDS ? "won (passed 20:00), then " : ""}died at ${clock(lastRun.time)}, level ${lastRun.level}, ${lastRun.kills} kills`,
       outcome: [
         `Lived **${clock(lastRun.time)}** (${lastRun.time}s), level ${lastRun.level}, ${lastRun.kills} kills.`,
         `Damage taken by source: ${damage || "none recorded"}.`,
         ...(last === undefined ? [] : loadoutLines(last)),
         `Planner asked ${this.calls} times.`,
+        ...(ladder === undefined ? [] : [`Nightmare ladder after the run: ${ladder === 0 ? "no level won yet" : `won up to Nightmare ${ladder}`}, so the next Open World Nightmare run plays Nightmare ${ladder + 1}.`]),
       ],
     });
   }
@@ -1419,6 +1413,7 @@ async function start(): Promise<void> {
     started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY }, 120);
     if (started.state !== "done") throw new Error(`could not start a run: ${started.detail ?? started.state}`);
   }
+  difficulty = started.detail ?? DIFFICULTY;
   await command({ type: "speed", factor: SPEED });
   // A new run waits paused at tick 0 at lockstep speed, so the next step sets the mode again.
   modeSet = false;
@@ -1495,13 +1490,13 @@ async function main() {
         say({ role: "system", time: s.lastRun.time, tag: "Over", text: `Run over at ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills.` });
         console.log(`  damage taken: ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}`);
         runLog.write(last, { event: "run_end", detail: `survived ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills; damage by ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}` });
-        log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty: DIFFICULTY, notes: notes.id, runLog: runLog.file, ...s.lastRun, steps, plannerCalls: planner.calls, avgDecisionMs: Math.round(avg) })}\n`);
+        log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty, notes: notes.id, runLog: runLog.file, ...s.lastRun, steps, plannerCalls: planner.calls, avgDecisionMs: Math.round(avg) })}\n`);
         log.flush();
         // The run is over; a stop from here on only notes the missing review.
         const ended = notes;
         reviewing = ended;
         notes = undefined;
-        await planner.finish(s.lastRun, last);
+        await planner.finish(s.lastRun, last, s.ladderCleared);
         // The share link only exists on the run summary, and a page reload loses it, so it goes into
         // the notes now, before the review, rather than whenever the next run starts.
         const summary = await command({ type: "summary" }, 60);
@@ -1554,7 +1549,7 @@ async function main() {
     if (notes === undefined || planner === undefined || runLog === undefined) {
       // A run in progress is played with the latest templates: planning would stall it.
       const skip = adopted ? "taken over mid-run" : incognito ? "incognito" : undefined;
-      const setup: RunSetup = { started: new Date(), difficulty: DIFFICULTY, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: r.seed, planner: PLAN_MODEL, action: MODEL, coach: COACH === "none" ? "none" : COACH_NAME };
+      const setup: RunSetup = { started: new Date(), difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: r.seed, planner: PLAN_MODEL, action: MODEL, coach: COACH === "none" ? "none" : COACH_NAME };
       const { plan, prompts } = await planRun(setup, skip);
       templates = plan.templates;
       notes = new RunNotes(setup, plan, prompts, skip === undefined);

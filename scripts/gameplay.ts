@@ -3,7 +3,7 @@
 // owns their formats and turns away an edit that would break one, so the loop can never wedge itself.
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync, statSync } from "node:fs";
 
 export const GAMEPLAY = path.join(import.meta.dir, "..", "gameplay");
 export const NOTES_DIR = path.join(GAMEPLAY, "notes");
@@ -332,38 +332,96 @@ export function stampBeliefs(rows: BeliefRow[], before: BeliefRow[], run: string
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-/** Writes the coach's edits. `run` is the run's id, the start of its notes file name. */
-export async function applyEdits(edits: LoopEdits, run: string): Promise<string[]> {
-  const done: string[] = [];
-  if (edits.experiments !== undefined) {
-    await writeTable(EXPERIMENTS_CSV, EXPERIMENT_COLUMNS, edits.experiments);
-    done.push(`experiments.csv (${edits.experiments.length} rows)`);
+// Two loops can share gameplay/, each with its own coach, so every read-modify-write of its files
+// holds this lock, and a coach's whole-table edit is merged into the table as it is now rather than
+// written over rows the other coach added meanwhile.
+const LOCK = path.join(GAMEPLAY, ".lock");
+const STALE_LOCK_MS = 30_000;
+
+export async function locked<T>(work: () => Promise<T>): Promise<T> {
+  for (;;) {
+    try {
+      mkdirSync(LOCK);
+      break;
+    } catch {
+      // A holder that died mid-write leaves the lock behind; nothing holds it this long.
+      const age = Date.now() - (statSync(LOCK, { throwIfNoEntry: false })?.mtimeMs ?? Date.now());
+      if (age > STALE_LOCK_MS) rmSync(LOCK, { recursive: true, force: true });
+      await Bun.sleep(50);
+    }
   }
-  if (edits.beliefs !== undefined) {
-    await writeTable(BELIEFS_CSV, BELIEF_COLUMNS, stampBeliefs(edits.beliefs, await readBeliefs(), run));
-    done.push(`beliefs.csv (${edits.beliefs.length} rows)`);
+  try {
+    return await work();
+  } finally {
+    rmSync(LOCK, { recursive: true, force: true });
   }
-  if (edits.infra !== undefined && edits.infra.length > 0) {
-    await writeTable(INFRA_CSV, INFRA_COLUMNS, [...(await readInfra()), ...edits.infra.map((x) => ({ date: today(), run, status: "open", request: x.request, why: x.why }))]);
-    done.push(`${edits.infra.length} infrastructure requests`);
-  }
-  if (edits.coachPlan !== undefined) {
-    await Bun.write(COACH_PLAN, `${edits.coachPlan.trim()}\n`);
-    done.push("coach-plan.md");
-  }
-  if (edits.coachRetrospective !== undefined) {
-    await Bun.write(COACH_RETROSPECTIVE, `${edits.coachRetrospective.trim()}\n`);
-    done.push("coach-retrospective.md");
-  }
-  return done;
+}
+
+/**
+ * The coach's rows over the table as it is now. A row the coach added under an id the other coach
+ * took meanwhile gets the next free id; `renamed` maps the coach's id to the one it got.
+ */
+export function merge<R extends { id: string }>(theirs: R[], now: R[], before: R[], renamed: Map<string, string>): R[] {
+  const taken = new Set(now.map((r) => r.id));
+  const out = theirs.map((r) => {
+    if (before.some((b) => b.id === r.id) || !taken.has(r.id)) return r;
+    const prefix = r.id.match(/^\D*/)?.[0] ?? "";
+    let n = Math.max(0, ...[...taken].filter((id) => id.startsWith(prefix)).map((id) => Number(id.slice(prefix.length)) || 0)) + 1;
+    while (taken.has(`${prefix}${n}`)) n++;
+    renamed.set(r.id, `${prefix}${n}`);
+    taken.add(`${prefix}${n}`);
+    return { ...r, id: `${prefix}${n}` };
+  });
+  const ids = new Set(out.map((r) => r.id));
+  return [...out, ...now.filter((r) => !ids.has(r.id))];
+}
+
+const renameIds = (text: string, renamed: Map<string, string>) => text.replace(/\b[A-Z]+\d+\b/g, (id) => renamed.get(id) ?? id);
+
+/**
+ * Writes the coach's edits over what it was shown (`before`). `run` is the run's id, the start of
+ * its notes file name. `renamed` maps any experiment or belief id that had to change.
+ */
+export async function applyEdits(edits: LoopEdits, run: string, before: Tables): Promise<{ done: string[]; renamed: Map<string, string> }> {
+  return locked(async () => {
+    const done: string[] = [];
+    const renamed = new Map<string, string>();
+    const experiments = edits.experiments === undefined ? undefined : merge(edits.experiments, await readExperiments(), before.experiments, renamed);
+    const beliefs = edits.beliefs === undefined ? undefined : merge(edits.beliefs, await readBeliefs(), before.beliefs, renamed);
+    if (experiments !== undefined) {
+      await writeTable(EXPERIMENTS_CSV, EXPERIMENT_COLUMNS, experiments);
+      done.push(`experiments.csv (${experiments.length} rows)`);
+    }
+    if (beliefs !== undefined) {
+      const linked = beliefs.map((b) => ({ ...b, experiments: renameIds(b.experiments, renamed) }));
+      await writeTable(BELIEFS_CSV, BELIEF_COLUMNS, stampBeliefs(linked, await readBeliefs(), run));
+      done.push(`beliefs.csv (${beliefs.length} rows)`);
+    }
+    if (edits.infra !== undefined && edits.infra.length > 0) {
+      await writeTable(INFRA_CSV, INFRA_COLUMNS, [...(await readInfra()), ...edits.infra.map((x) => ({ date: today(), run, status: "open", request: x.request, why: x.why }))]);
+      done.push(`${edits.infra.length} infrastructure requests`);
+    }
+    if (edits.coachPlan !== undefined) {
+      await Bun.write(COACH_PLAN, `${edits.coachPlan.trim()}\n`);
+      done.push("coach-plan.md");
+    }
+    if (edits.coachRetrospective !== undefined) {
+      await Bun.write(COACH_RETROSPECTIVE, `${edits.coachRetrospective.trim()}\n`);
+      done.push("coach-retrospective.md");
+    }
+    if (renamed.size > 0) done.push(`renumbered ${[...renamed].map(([a, b]) => `${a} to ${b}`).join(", ")}, taken meanwhile`);
+    return { done, renamed };
+  });
 }
 
 /** Marks the experiments a run tests as running, and later adds the finished run to their `runs`. */
 export async function touchExperiments(ids: string[], change: (row: ExperimentRow) => void) {
   if (ids.length === 0) return;
-  const rows = await readExperiments();
-  for (const row of rows) if (ids.includes(row.id)) change(row);
-  await writeTable(EXPERIMENTS_CSV, EXPERIMENT_COLUMNS, rows);
+  await locked(async () => {
+    const rows = await readExperiments();
+    for (const row of rows) if (ids.includes(row.id)) change(row);
+    await writeTable(EXPERIMENTS_CSV, EXPERIMENT_COLUMNS, rows);
+  });
 }
 
 // ---- Notes ---------------------------------------------------------------------------------
@@ -495,7 +553,7 @@ export async function runHistory(limit = 60): Promise<string> {
   const lines: string[] = [];
   for (const name of (await notesFiles()).slice(0, limit)) {
     const text = await Bun.file(path.join(NOTES_DIR, name)).text();
-    lines.push(`- ${name}: ${notesField(text, "Ending") ?? "?"}; testing ${notesField(text, "Testing") ?? "?"}`);
+    lines.push(`- ${name}: ${notesField(text, "Ending") ?? "?"}; testing ${notesField(text, "Testing") ?? "?"}; coach ${notesField(text, "Coach") ?? "?"}`);
   }
   return lines.join("\n") || "(no runs yet)";
 }

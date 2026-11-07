@@ -1,3 +1,6 @@
 node_modules
 .runs
 .env.local
+
+# A loop writing gameplay/ holds this while it does
+gameplay/.lock

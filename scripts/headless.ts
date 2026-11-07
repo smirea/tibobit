@@ -17,6 +17,8 @@ const height = Number(option("height", "600"));
 const port = Number(option("port", "7358"));
 const headed = args.includes("--headed");
 const bridge = option("bridge", "");
+// A profile folder keeps the game's own progress, such as unlocked Nightmare levels, across launches.
+const profile = option("profile", "");
 
 const root = path.resolve(import.meta.dir, "..");
 const userscript = Bun.file(path.join(root, "dist", "tibo-helper.user.js"));
@@ -50,15 +52,19 @@ function executablePath(): string | undefined {
   throw new Error("no headless Chromium found; run bunx playwright-core install chromium-headless-shell or pass --chrome <path>");
 }
 
-const browser = await chromium.launch({
+const launch = {
   executablePath: headed ? undefined : executablePath(),
   headless: !headed,
   args: ["--disable-web-security", "--disable-features=LocalNetworkAccessChecks", "--mute-audio", "--use-angle=metal"],
-});
-const context = await browser.newContext({ bypassCSP: true, viewport: { width, height } });
+};
+const contextOptions = { bypassCSP: true, viewport: { width, height } };
+const context =
+  profile === ""
+    ? await (await chromium.launch(launch)).newContext(contextOptions)
+    : await chromium.launchPersistentContext(path.resolve(profile), { ...launch, ...contextOptions });
 const target = bridge === "" ? "" : `window.__tiboBridgeOrigin = "http://127.0.0.1:${Number(bridge)}";`;
 await context.addInitScript({ content: `${target}\n${shim}\n${await userscript.text()}` });
-const page = await context.newPage();
+const page = context.pages()[0] ?? (await context.newPage());
 // tibo.dog polls /version.json and reloads itself onto a new build, which drops the run in
 // progress. Keep answering with the build this page loaded; /reload picks up a new one.
 let loadedVersion: { body: string; contentType: string } | undefined;
@@ -109,7 +115,7 @@ Bun.serve({
 console.log(`tibo.dog running headless at ${width}x${height}; screenshots at http://127.0.0.1:${port}/screenshot`);
 
 const shutdown = async () => {
-  await browser.close();
+  await (context.browser() ?? context).close();
   process.exit(0);
 };
 process.on("SIGINT", shutdown);

@@ -54,6 +54,33 @@ async function press(el: HTMLElement) {
   for (const type of ["keydown", "keyup"]) el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", bubbles: true }));
 }
 
+const byTestId = (id: string) => document.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`) ?? undefined;
+const locked = (b: HTMLButtonElement | undefined) => b === undefined || b.disabled || b.getAttribute("aria-disabled") === "true";
+
+/**
+ * Picks a difficulty on the mode screen and returns what was picked, such as "hard" or
+ * "nightmare-3". "highest" steps up while the game allows: to Nightmare, then up its levels, which
+ * unlock as the profile plays them.
+ */
+async function pickDifficulty(difficulty: string): Promise<string> {
+  if (difficulty === "highest") {
+    for (let i = 0; i < 10 && !locked(byTestId("pick-harder")); i++) await press(byTestId("pick-harder") as HTMLButtonElement);
+    for (let i = 0; i < 100 && !locked(byTestId("nightmare-higher")); i++) {
+      byTestId("nightmare-higher")?.click();
+      await wait(100);
+    }
+  } else {
+    const pick = button(new RegExp(`^${difficulty}$`, "i"));
+    if (pick === undefined) throw new Error(`no ${difficulty} difficulty button`);
+    pick.click();
+  }
+  await wait(200);
+  const chosen = document.querySelector<HTMLElement>('.run-picker-chip[aria-pressed="true"]')?.dataset.level;
+  if (chosen === undefined) throw new Error("no difficulty is picked on the mode screen");
+  const level = chosen === "nightmare" ? byTestId("nightmare-level")?.textContent?.match(/\d+/)?.[0] : undefined;
+  return level === undefined ? chosen : `${chosen}-${level}`;
+}
+
 async function until(check: () => boolean, ms: number): Promise<boolean> {
   const end = performance.now() + ms;
   while (performance.now() < end) {
@@ -221,10 +248,7 @@ export class Controller {
       await press(open);
       if (!(await until(() => button("Start") !== undefined, 5000))) throw new Error(`the ${mode} screen did not open`);
     }
-    const pick = button(new RegExp(`^${difficulty}$`, "i"));
-    if (pick === undefined) throw new Error(`no ${difficulty} difficulty button`);
-    pick.click();
-    await wait(200);
+    const picked = await pickDifficulty(difficulty);
     const before = this.link.game;
     this.link.pauseAtStart = true;
     button("Start")?.click();
@@ -234,7 +258,7 @@ export class Controller {
     const started = await until(() => inRun(this.link) && this.link.game !== before, 20000);
     window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", bubbles: true }));
     if (!started) throw new Error("the run did not start within 20 seconds");
-    this.finish(status, "done");
+    this.finish(status, "done", picked);
   }
 
   private steer(game: Game): { x: number; y: number } | undefined {

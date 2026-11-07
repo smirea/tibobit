@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type BeliefRow, checkEdits, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type ExperimentRow, notesName, notesTemplates, notesTesting, parseCsv, readExperiments, renderNotes, type RunSetup, withReview } from "./gameplay";
+import { type BeliefRow, checkEdits, merge, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type ExperimentRow, notesName, notesTemplates, notesTesting, parseCsv, readExperiments, renderNotes, type RunSetup, withReview } from "./gameplay";
 
 const setup: RunSetup = { started: new Date(2026, 10, 7, 15, 4, 9), difficulty: "nightmare", mode: "daily", surface: "headless", seed: "S1", planner: "jev", action: "jev", coach: "grok" };
 
@@ -38,6 +38,15 @@ test("a belief keeps the run that wrote it, and takes the run that last changed 
   const fresh = { ...held, id: "B2", created: "made up", updated: "made up" };
   expect(stampBeliefs([{ ...held, updated: "" }, fresh], [held], "run-2")).toEqual([held, { ...fresh, created: "run-2", updated: "run-2" }]);
   expect(stampBeliefs([raised], [held], "run-2")).toEqual([{ ...raised, created: "run-1", updated: "run-2" }]);
+});
+
+test("a coach's table keeps rows another coach added meanwhile, and its new id moves past theirs", () => {
+  const row = (id: string, hypothesis: string) => ({ id, hypothesis });
+  const before = [row("E1", "shared")];
+  const now = [row("E1", "shared"), row("E2", "the other coach's")];
+  const renamed = new Map<string, string>();
+  expect(merge([row("E1", "edited"), row("E2", "mine")], now, before, renamed)).toEqual([row("E1", "edited"), row("E3", "mine"), row("E2", "the other coach's")]);
+  expect(renamed).toEqual(new Map([["E2", "E3"]]));
 });
 
 test("csv fields keep their commas and quotes", () => {

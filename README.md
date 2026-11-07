@@ -62,7 +62,7 @@ Commands, also available as `./scripts/tibo.ts <verb>`:
 - `{"type":"goto","to":{"x":120,"y":-40}}` walks to a world position. `to` can also be `{"dx","dy"}` relative to where you stand, `{"poi":uid}` for a point of interest, or `{"pickup":uid}` for a chest or other pickup. `stay` holds still after arriving, either for a number of seconds or with `"done"` until the target is used up. Shrines, chests and most points of interest only open after you stand on them for their `chargeNeeded` seconds, so `{"type":"goto","to":{"poi":16},"stay":"done"}` is the usual way to take one.
 - `{"type":"choose","index":0}` picks an option of the open level-up, chest or shrine choice. Options carry `recommended` (the game's own suggestion), `unseen`, and `combos`: every recipe the option is part of, with the partner, whether you hold it (`partnerHeld`) or banished it (`partnerBanished`), whether picking completes it (`ready`), and whether you have ever made the result (`made`).
 - `{"type":"forecast","live":true}` keeps the `forecast` and `standingForecast` fields coming while the game runs, at most every 12 ticks. Without it they only appear while the game is paused.
-- `{"type":"dash","dir":"up"}`, `{"type":"stop"}`, `{"type":"pause"}`, `{"type":"resume"}`, `{"type":"speed","factor":4}`, and `{"type":"start","mode":"daily","difficulty":"easy"}` to start a run (Open World by default, or today's Daily) from the title screen, the end screen or mid-run. A started run waits paused at tick 0.
+- `{"type":"dash","dir":"up"}`, `{"type":"stop"}`, `{"type":"pause"}`, `{"type":"resume"}`, `{"type":"speed","factor":4}`, and `{"type":"start","mode":"daily","difficulty":"easy"}` to start a run (Open World by default, or today's Daily) from the title screen, the end screen or mid-run. A started run waits paused at tick 0. `"difficulty":"highest"` picks the hardest the game allows, up through the Nightmare levels the browser has unlocked, and the finished command's `detail` names what it picked, such as `nightmare-3`.
 - Add `"pause": true` to `move` or `goto` to run the game only for that command: it resumes a paused game and pauses it again on the tick the command finishes.
 
 The snapshot's `sectors` summarise every direction (enemies within 60 and 150 units, nearest enemy, boss and bullet, and any hazard in the way), and `lastRun` reports time, level and kills once a run ends.
@@ -75,11 +75,37 @@ The server only listens on 127.0.0.1 and sends no CORS headers, so other website
 
 ## Headless play and the decision-model bot
 
-`./scripts/headless.ts` runs tibo.dog in a headless Chromium with the userscript, so a bot can play without a visible browser. It reuses the newest Playwright headless shell on the machine, and serves `GET http://127.0.0.1:7358/screenshot` for a look at the game.
+The scripts split the work this way:
+
+| Script | What it is |
+| --- | --- |
+| `scripts/agent-server.ts` | The relay between the game tab and everything else: the HTTP API above, and **Grok take the wheel**. |
+| `scripts/tibo.ts` | A command line for that API, for a person or an agent at a terminal: one command per call (`state`, `move`, `start highest`, ...). It has no models and no memory. |
+| `scripts/headless.ts` | tibo.dog in a headless Chromium with the userscript, so nothing needs a visible browser. |
+| `scripts/tibo-bot.ts` | The player: the planner and the action model in the game, and the coach before and after each run. |
+| `scripts/coach.ts`, `scripts/gameplay.ts` | The coach harnesses, and the formats of the files in `gameplay/`. |
+| `scripts/recursive-self-improvement.ts` | The loop left to run on its own: a server, a headless game and the bot, on Open World at the highest difficulty, run after run. |
+
+### Running the loop unattended
+
+```sh
+./scripts/recursive-self-improvement.ts                          # grok grok-4.7-build-fast coaches, until stopped
+./scripts/recursive-self-improvement.ts --model claude --rounds 5  # Claude Code with opus, five runs
+./scripts/recursive-self-improvement.ts --model codex:gpt-5.5      # any harness, any model it takes
+./scripts/recursive-self-improvement.ts -- --plan-every 3          # more tibo-bot.ts flags after --
+```
+
+It starts its own agent server and headless game on free ports, waits for them to connect, then runs `tibo-bot.ts` on Open World with `--difficulty highest` for `--rounds` runs (until stopped by default): each run is planned, played, reviewed and committed. `--model <harness>[:<model>]` picks the coach. The planner and the action model are Jev through OpenRouter. Each round is a fresh bot process, so a change to the bot lands on the next round, and a rebuilt userscript restarts the game between rounds. The headless browser keeps its profile in `.runs/headless-profile-<harness>`, so each coach climbs its own Nightmare ladder and the levels it unlocks stay unlocked next time. Two loops with different coaches can run at once: they share `gameplay/`, every write to it holds a lock (`gameplay/.lock`), a coach's table edit is merged into the table as it is now, and an id the other coach took meanwhile is renumbered. A bot that exits with an error is started again, unless it fails five times in a row within five minutes of starting. Ctrl-C stops the bot first (a review it is writing is marked interrupted), then the game and the server. The server's and the game's logs go to `.runs/rsi-<time>/`.
+
+The coach harnesses are `grok` (default model `grok-4.7-build-fast`), `claude` (`opus`, run without your settings, hooks, MCP servers or tools), `codex` (its own default, read-only sandbox), `opencode` (`opencode/deepseek-v4.1-flash-free`; its own default model never answered a scripted run) and `cursor` (`composer-2.5`, read-only ask mode; `cursor-agent login` first). The bot takes the same as `--coach <harness>` and `--coach-model <model>`.
+
+### Headless game and the bot
+
+`./scripts/headless.ts` runs tibo.dog in a headless Chromium with the userscript, so a bot can play without a visible browser. It reuses the newest Playwright headless shell on the machine, and serves `GET http://127.0.0.1:7358/screenshot` for a look at the game. `--profile <dir>` keeps the browser's profile, and with it the game's progress, in that folder; without it every launch starts fresh.
 
 `./scripts/tibo-bot.ts` plays through the agent server in three layers. In the game, everything is one System One decision model in two personas, the planner and the action model: TypeSafe's Jev through OpenRouter (`--decider openrouter --model typesafe/jev-1.14-20261014`, needs `OPENROUTER_API_KEY` in `.env.local`, managed by env-manager) or a local model in LM Studio (`--model laya@q8_0`, the default decider). `--plan-model` gives the planner a different model. grok only works between runs.
 
-- **Coach.** grok (`--coach-model`; `--coach none` turns it off) plans each run before it starts and reviews it after it ends, through the files in `gameplay/` (see [The learning loop](#the-learning-loop)). It writes the prompts both in-game models play with, so no model outside the decision model runs during a game.
+- **Coach.** grok by default (`--coach <harness>`, `--coach-model`; `--coach none` turns it off) plans each run before it starts and reviews it after it ends, through the files in `gameplay/` (see [The learning loop](#the-learning-loop)). It writes the prompts both in-game models play with, so no model outside the decision model runs during a game.
 - **Planner.** Before every decision the decision model reads the state its prompt asks for. The default prompt has the whole player state: health and its trend, level, gold, weapons, passives and items with the game's description of each, recipes in reach, what Tibo stands on, bosses and enemies around, and how recent goals ended. It takes every level-up, chest and shrine pick, each card described in the option itself. It also rates, one question each, every goal Tibo could take on next: a nearby chest to open, a shrine or other spot to charge, food to eat, the xp gems nearby, exploring one of the eight directions for 300 units (stopping at the first new chest), or keeping away from enemies for 8 seconds. The best-rated goal wins. It is asked when the run starts, when a goal ends, at every choice and again right after the pick lands, when a boss appears, and every 5 seconds (`--plan-every`), so a better goal can take over. Jev answers in about a quarter of a second.
 - **Action model.** While the way to the goal costs no more health than the safest move, the page walks Tibo there on its own and stands it on the chest or shrine until it opens, without asking any model. The cost comes from an exact forecast: the userscript runs a copy of the game's own simulation one second forward for each move. When the way costs more, the decision model chooses the step. By default it is told only the goal, Tibo's health, and for each of the eight directions and standing still, the forecast, a boss or hazard that way, how many enemies are close, and whether the move heads toward the goal. It answers how badly each move would hurt Tibo (a 0-4 score) and whether each brings Tibo closer to the goal; the bot keeps the moves rated about as safe as the safest and takes the one that best serves the goal. Moves that cost clearly more health than the cheapest are not offered at all.
 

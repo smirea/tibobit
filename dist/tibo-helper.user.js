@@ -242,8 +242,8 @@
         return c.dir === undefined ? { type: "dash" } : { type: "dash", dir: heading(c.dir, "dir") };
       case "start": {
         const d = c.difficulty;
-        if (d !== undefined && d !== "easy" && d !== "normal" && d !== "hard" && d !== "nightmare")
-          fail("difficulty must be easy, normal, hard or nightmare");
+        if (d !== undefined && d !== "easy" && d !== "normal" && d !== "hard" && d !== "nightmare" && d !== "highest")
+          fail("difficulty must be easy, normal, hard, nightmare or highest");
         const m = c.mode;
         if (m !== undefined && m !== "openWorld" && m !== "daily")
           fail("mode must be openWorld or daily");
@@ -735,11 +735,20 @@
     const hud = document.querySelector(".hud-weapons");
     return link.game !== undefined && !link.game.state.over && hud !== null && hud.getClientRects().length > 0;
   }
+  function ladderCleared() {
+    try {
+      const cleared = JSON.parse(localStorage.getItem("tibo.ladder.v1") ?? "{}").cleared;
+      return typeof cleared === "number" ? cleared : 0;
+    } catch {
+      return 0;
+    }
+  }
   function snapshot(link, discovery, commands) {
     link.noteRunLink();
     const base = {
       capturedAt: Date.now(),
       headless: navigator.webdriver,
+      ladderCleared: ladderCleared(),
       commands,
       ...link.error === undefined ? {} : { error: link.error },
       ...link.runLink === undefined ? {} : { lastRunLink: link.runLink }
@@ -1011,6 +1020,29 @@
     for (const type of ["keydown", "keyup"])
       el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", bubbles: true }));
   }
+  var byTestId = (id) => document.querySelector(`[data-testid="${id}"]`) ?? undefined;
+  var locked = (b) => b === undefined || b.disabled || b.getAttribute("aria-disabled") === "true";
+  async function pickDifficulty(difficulty) {
+    if (difficulty === "highest") {
+      for (let i = 0;i < 10 && !locked(byTestId("pick-harder")); i++)
+        await press(byTestId("pick-harder"));
+      for (let i = 0;i < 100 && !locked(byTestId("nightmare-higher")); i++) {
+        byTestId("nightmare-higher")?.click();
+        await wait(100);
+      }
+    } else {
+      const pick = button(new RegExp(`^${difficulty}$`, "i"));
+      if (pick === undefined)
+        throw new Error(`no ${difficulty} difficulty button`);
+      pick.click();
+    }
+    await wait(200);
+    const chosen = document.querySelector('.run-picker-chip[aria-pressed="true"]')?.dataset.level;
+    if (chosen === undefined)
+      throw new Error("no difficulty is picked on the mode screen");
+    const level = chosen === "nightmare" ? byTestId("nightmare-level")?.textContent?.match(/\d+/)?.[0] : undefined;
+    return level === undefined ? chosen : `${chosen}-${level}`;
+  }
   async function until(check, ms) {
     const end = performance.now() + ms;
     while (performance.now() < end) {
@@ -1184,11 +1216,7 @@
         if (!await until(() => button("Start") !== undefined, 5000))
           throw new Error(`the ${mode} screen did not open`);
       }
-      const pick = button(new RegExp(`^${difficulty}$`, "i"));
-      if (pick === undefined)
-        throw new Error(`no ${difficulty} difficulty button`);
-      pick.click();
-      await wait(200);
+      const picked = await pickDifficulty(difficulty);
       const before = this.link.game;
       this.link.pauseAtStart = true;
       button("Start")?.click();
@@ -1198,7 +1226,7 @@
       window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", bubbles: true }));
       if (!started)
         throw new Error("the run did not start within 20 seconds");
-      this.finish(status, "done");
+      this.finish(status, "done", picked);
     }
     steer(game) {
       const active = this.active;

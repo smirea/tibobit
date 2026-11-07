@@ -52,8 +52,10 @@ export type Command =
    * From the title screen, the end screen or mid-run, start a new run. `mode` "daily" plays
    * today's Daily, which has the same seed and build for everyone, so runs are comparable. The
    * new run waits paused at tick 0; use `resume` or a `move`/`goto` with `pause` to play it.
+   * `difficulty` "highest" picks the hardest the game allows, up through the unlocked Nightmare
+   * levels. The finished command's `detail` names what was picked, such as "nightmare-3".
    */
-  | { type: "start"; mode?: "openWorld" | "daily"; difficulty?: "easy" | "normal" | "hard" | "nightmare" }
+  | { type: "start"; mode?: "openWorld" | "daily"; difficulty?: "easy" | "normal" | "hard" | "nightmare" | "highest" }
   /** After a run ends, step forward through the end screens to the run summary, which puts the run's share link in `lastRunLink`. */
   | { type: "summary" };
 
@@ -112,6 +114,8 @@ export type Snapshot = {
   lastRun?: { time: number; level: number; kills: number; damageTaken: Record<string, number> };
   /** Whether the page runs under automation (navigator.webdriver), as in scripts/headless.ts. */
   headless?: boolean;
+  /** The highest Open World Nightmare level this browser has won (survived 20:00 on); the next one up is the hardest it can start. */
+  ladderCleared?: number;
   commands: CommandStatus[];
   error?: string;
 };
@@ -270,7 +274,7 @@ export function parseCommand(input: unknown): Command {
       return c.dir === undefined ? { type: "dash" } : { type: "dash", dir: heading(c.dir, "dir") };
     case "start": {
       const d = c.difficulty;
-      if (d !== undefined && d !== "easy" && d !== "normal" && d !== "hard" && d !== "nightmare") fail("difficulty must be easy, normal, hard or nightmare");
+      if (d !== undefined && d !== "easy" && d !== "normal" && d !== "hard" && d !== "nightmare" && d !== "highest") fail("difficulty must be easy, normal, hard, nightmare or highest");
       const m = c.mode;
       if (m !== undefined && m !== "openWorld" && m !== "daily") fail("mode must be openWorld or daily");
       return { type: "start", ...(m === undefined ? {} : { mode: m }), ...(d === undefined ? {} : { difficulty: d }) };
