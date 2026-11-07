@@ -213,8 +213,9 @@ async function askCoach(prompt: string, timeoutMs: number, bubble: CoachBubble):
     bubble.set({ stream: undefined, inspect: { kind: "prompt", prompt, ...(said.reasoning === "" ? {} : { reasoning: said.reasoning }), ...(said.text === "" ? {} : { reply: said.text }) }, ...fields });
   const json = said.text.match(/\{[\s\S]*\}/)?.[0];
   if (json === undefined) {
-    console.error(`coach gave no JSON after ${seconds}s${late}: ${(said.text.trim() || said.stderr).slice(0, 300) || "(empty output)"}`);
-    finish({ text: `No answer after ${seconds}s${late}.` });
+    const why = said.error || said.text.trim() || said.stderr || "(empty output)";
+    console.error(`coach gave no JSON after ${seconds}s${late}: ${why.slice(0, 600)}`);
+    finish({ text: `No answer after ${seconds}s${late}: ${why.slice(0, 300)}` });
     return undefined;
   }
   try {
@@ -228,11 +229,23 @@ async function askCoach(prompt: string, timeoutMs: number, bubble: CoachBubble):
   }
 }
 
+const QUICK_FAILURE_MS = 60_000;
+
 /** Asks the coach until its reply passes `check`; a rejected reply is asked for again once, with the reasons. */
 async function consult<T>(prompt: string, timeoutMs: number, bubble: CoachBubble, check: (reply: Record<string, unknown>) => loop.Checked<T>): Promise<T | undefined> {
   let ask = prompt;
+  let retried = false;
   for (let attempt = 0; attempt < 2; attempt++) {
+    const started = performance.now();
     const reply = await askCoach(ask, timeoutMs, bubble);
+    // A harness that gives up within seconds has hit a passing error (Composer once answered a
+    // review with nothing after 4s, then reviewed the same prompt fine); a slow failure is not retried.
+    if (reply === undefined && !retried && performance.now() - started < QUICK_FAILURE_MS) {
+      retried = true;
+      attempt--;
+      await Bun.sleep(10_000);
+      continue;
+    }
     if (reply === undefined) return undefined;
     const checked = check(reply);
     if ("value" in checked) return checked.value;

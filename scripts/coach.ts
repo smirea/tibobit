@@ -6,8 +6,10 @@ import os from "node:os";
 import { mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 
-/** What one event line adds to the coach's reasoning or reply. */
-type Delta = { thought?: string; text?: string };
+/** What one event line adds to the coach's reasoning or reply, or the error it reports. */
+type Delta = { thought?: string; text?: string; error?: string };
+// Claude Code and Cursor end with a result event, which carries the error when the call failed.
+const resultError = (e: Record<string, unknown>): Delta => (e.type === "result" && e.is_error === true ? { error: str(e.result) ?? JSON.stringify(e).slice(0, 500) } : {});
 type Harness = {
   /** The model when none is named; undefined leaves it to the harness's own setting. */
   model?: string;
@@ -33,7 +35,7 @@ export const HARNESSES = {
     command: (m) => ["claude", "-p", "--setting-sources", "", "--strict-mcp-config", "--tools", "", "--output-format", "stream-json", "--verbose", ...(m === undefined ? [] : ["--model", m])],
     read: (e) =>
       e.type !== "assistant"
-        ? {}
+        ? resultError(e)
         : {
             thought: content(e).map((c) => str(c.thinking) ?? "").join("") || undefined,
             text: content(e).map((c) => (c.type === "text" ? (str(c.text) ?? "") : "")).join("") || undefined,
@@ -42,7 +44,8 @@ export const HARNESSES = {
   codex: {
     command: (m) => ["codex", "exec", "--json", "--skip-git-repo-check", "-s", "read-only", ...(m === undefined ? [] : ["-m", m]), "-"],
     read: (e) => {
-      const item = (e.item ?? {}) as { type?: string; text?: unknown };
+      const item = (e.item ?? {}) as { type?: string; text?: unknown; message?: unknown };
+      if (e.type === "error" || e.type === "turn.failed") return { error: str(e.message) ?? JSON.stringify(e).slice(0, 500) };
       if (e.type !== "item.completed") return {};
       return item.type === "agent_message" ? { text: str(item.text) } : item.type === "reasoning" ? { thought: str(item.text) } : {};
     },
@@ -67,7 +70,7 @@ export const HARNESSES = {
         ? { text: content(e).map((c) => str(c.text) ?? "").join("") || undefined }
         : e.type === "thinking" && e.subtype === "delta"
           ? { thought: str(e.text) }
-          : {},
+          : resultError(e),
   },
 } satisfies Record<string, Harness>;
 
@@ -85,6 +88,8 @@ export function checkHarness(name: string): HarnessName {
 export const defaultModel = (name: HarnessName): string | undefined => (HARNESSES[name] as Harness).model;
 
 export type Stream = { reasoning: string; text: string };
+/** What came back besides the reply: errors the harness reported, and the tail of what it printed that was not an event. */
+export type Said = Stream & { timedOut: boolean; error: string; stderr: string };
 
 // A bot stopped mid-review exits at once; the coach it was waiting on must not keep running alone.
 const running = new Set<ReturnType<typeof Bun.spawn>>();
@@ -96,7 +101,7 @@ process.on("exit", () => {
  * Runs the harness once and returns everything it said, calling `onUpdate` as it streams. Stops it
  * after `timeoutMs`; `timedOut` says whether it did.
  */
-export async function runCoach(name: HarnessName, model: string | undefined, prompt: string, timeoutMs: number, onUpdate: (s: Stream) => void): Promise<Stream & { timedOut: boolean; stderr: string }> {
+export async function runCoach(name: HarnessName, model: string | undefined, prompt: string, timeoutMs: number, onUpdate: (s: Stream) => void): Promise<Said> {
   const h: Harness = HARNESSES[name];
   const cwd = mkdtempSync(path.join(os.tmpdir(), "tibo-coach-"));
   const proc = Bun.spawn(h.command(model, prompt), { cwd, stdin: h.argv ? "ignore" : new Blob([prompt]), stdout: "pipe", stderr: "pipe" });
@@ -107,6 +112,8 @@ export async function runCoach(name: HarnessName, model: string | undefined, pro
     proc.kill();
   }, timeoutMs);
   const out: Stream = { reasoning: "", text: "" };
+  let error = "";
+  let other = "";
   try {
     const decoder = new TextDecoder();
     let buffer = "";
@@ -115,16 +122,21 @@ export async function runCoach(name: HarnessName, model: string | undefined, pro
       for (let nl = buffer.indexOf("\n"); nl >= 0; nl = buffer.indexOf("\n")) {
         const line = buffer.slice(0, nl).trim();
         buffer = buffer.slice(nl + 1);
-        if (!line.startsWith("{")) continue;
+        if (!line.startsWith("{")) {
+          if (line !== "") other = `${other}\n${line}`.slice(-2000);
+          continue;
+        }
         try {
           const d = h.read(JSON.parse(line) as Record<string, unknown>);
           out.reasoning += d.thought ?? "";
           out.text += d.text ?? "";
+          if (d.error !== undefined) error = `${error} ${d.error}`.trim();
         } catch {}
       }
       onUpdate(out);
     }
-    return { ...out, timedOut, stderr: (await new Response(proc.stderr).text()).trim() };
+    const stderr = (await new Response(proc.stderr).text()).trim();
+    return { ...out, timedOut, error, stderr: [other.trim(), stderr.slice(-2000), `exit ${await proc.exited}`].filter(Boolean).join("\n") };
   } finally {
     running.delete(proc);
     clearTimeout(timer);
