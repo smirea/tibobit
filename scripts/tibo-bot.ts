@@ -29,7 +29,17 @@ type Question = { type: "choice"; instructions: string; criteria: Record<string,
 type Answer = { choice?: string; probabilities?: Record<string, number>; confidence?: number; noul?: number };
 
 async function api<T>(route: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${SERVER}${route}`, body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const init = body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
+  let res: Response | undefined;
+  // Ride out a restarting agent server instead of losing the run.
+  for (let attempt = 0; res === undefined; attempt++) {
+    try {
+      res = await fetch(`${SERVER}${route}`, init);
+    } catch (e) {
+      if (attempt >= 30) throw e;
+      await Bun.sleep(2000);
+    }
+  }
   const json = (await res.json()) as T & { error?: string };
   if (!res.ok) throw new Error(`${route}: ${json.error ?? res.status}`);
   return json;
@@ -101,7 +111,7 @@ function requestPlan(r: RunView) {
 
 const inPlan = (name: string) => plan?.want.some((w) => w.toLowerCase() === name.toLowerCase()) ?? false;
 
-const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+const plural = (n: number, one: string) => `${n} ${n === 1 ? one : one.replace(/y$/, "ie")}${n === 1 ? "" : "s"}`;
 
 function situation(r: RunView): string {
   const p = r.player;
@@ -125,13 +135,17 @@ function sights(r: RunView, dir: Direction): string[] {
   return out.slice(0, 2);
 }
 
+const HAZARD_WORDS: Record<string, string> = { telegraph: "a boss attack about to land", hazardPool: "a damaging puddle", strike: "a strike about to land" };
+
+// Threats come first: the models weigh the start of a description most.
 function describe(r: RunView, s: SectorView): string {
+  const boss = r.bosses.find((b) => b.dir === s.dir);
   const parts = [
+    boss !== undefined && boss.dist < 250 ? `the ${boss.name} boss only ${Math.round(boss.dist)} away` : "",
+    s.nearestBullet !== null && s.nearestBullet < 80 ? `an enemy bullet ${Math.round(s.nearestBullet)} away` : "",
+    s.hazard !== null ? `${HAZARD_WORDS[s.hazard] ?? `a ${s.hazard} hazard`} in the way` : "",
     s.enemiesNear > 0 ? `${plural(s.enemiesNear, "enemy")} close` : "no enemies close",
     s.enemiesFar > s.enemiesNear ? `${s.enemiesFar - s.enemiesNear} more further out` : "",
-    s.nearestBoss !== null && s.nearestBoss < 200 ? `the boss ${Math.round(s.nearestBoss)} away` : "",
-    s.nearestBullet !== null && s.nearestBullet < 80 ? `a bullet ${Math.round(s.nearestBullet)} away` : "",
-    s.hazard !== null ? `a ${s.hazard} hazard in the way` : "",
     ...sights(r, s.dir),
   ];
   return parts.filter(Boolean).join(", ");
