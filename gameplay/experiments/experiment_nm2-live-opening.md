@@ -5,9 +5,8 @@
 | Status | running |
 | Area | movement |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L3.I10 |
-| Updated | sonnet-high L3.I10 |
+| Updated | L4.I1 |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ Fresh NM2 steam-vent seeds, 300s, live, 3 or more seeds per variant against the 
 
 ## Findings
 
-Live baseline 1 of 6 alive at 5:00 (L3.I10 rehearsal 1 of 5, full run died 2:15 to the Mascot). L4 plan: run paired live arms on the same fresh seeds (at least 5 seeds) for the boss-adjacent evade text, the boss-slam dash prompt, commit-the-weapon picks and the starting weapon.
+Live baseline 1 of 6 alive at 5:00 (L3.I10 rehearsal 1 of 5, full run died 2:15 to the Mascot). L3.I9 games appear live: baselines 2 of 2 alive, catalyst picks 1 of 3. L4.I1 puts the Mascot package on 5 fresh seeds. L4.I2 onward: commit-the-weapon picks, routing and starting weapon, each paired live on at least 5 seeds.
 
 ## Games
 

@@ -3911,7 +3911,7 @@
   },
   {
     "name": "nm2-live-pre-mascot",
-    "status": "pending",
+    "status": "building",
     "purpose": "Live NM2 state just before the 2:00 Festival Mascot, built with the plain playbook, to compare boss-adjacent evade text, boss-slam dash prompts and elite-fight rules on the exact wall that killed the full run",
     "coach": "sonnet-high",
     "created": "sonnet-high L3.I10",
@@ -3923,7 +3923,7 @@
   },
   {
     "name": "nm2-live-min5",
-    "status": "pending",
+    "status": "building",
     "purpose": "Live NM2 state at 5:00 built with the plain playbook, to test 5:00-10:00 live and pick commitment past the 4:00 Masher and Beetle Queen",
     "coach": "sonnet-high",
     "created": "sonnet-high L3.I10",

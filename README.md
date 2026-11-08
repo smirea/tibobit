@@ -91,11 +91,11 @@ The scripts split the work this way:
 ### Running the loop unattended
 
 ```sh
-./scripts/recursive-self-improvement.ts                                         # Sonnet 5.5 at high effort, as coach sonnet-high
+./scripts/recursive-self-improvement.ts                                         # the coach on Sonnet 5.5 at high effort
 ./scripts/recursive-self-improvement.ts --loops 1 --slots 3                      # one loop, three games at a time
 ```
 
-Each process runs one coach: `--coach <harness>:<model>@<effort>` (the effort is for `claude` only, and must be `high` or more), named after its model and effort unless `--name` says otherwise. It opens a main game slot (an agent server and a headless game with the profile `.runs/headless-profile-<coach>`, which holds the coach's Nightmare ladder) and `--slots` training slots (5 by default, each with its own profile), then plays loops until stopped or `--loops` is done. Where it stands is in `gameplay/coaches/<coach>/state.json`, so a restarted loop goes on from the iteration it was in. Logs, every prompt and reply, and each game's bot log go to `.runs/rsi/<coach>/`. Two coaches can run at once: they share beliefs, experiments, gyms and infrastructure requests, and every write holds a lock (`gameplay/.lock`).
+There is one coach, iterated on over time: its prompts, playbook and log carry from loop to loop, whichever model runs it. `--coach <harness>:<model>@<effort>` picks that model (the effort is for `claude` only, and must be `high` or more). The loop opens a main game slot (an agent server and a headless game with the profile `.runs/coach-profile`, which holds the coach's Nightmare ladder) and `--slots` training slots (5 by default, each with its own profile), then plays loops until stopped or `--loops` is done. Where it stands is in `gameplay/coach/state.json`, so a restarted loop goes on from the iteration it was in. Logs, every prompt and reply, and each game's bot log go to `.runs/rsi/`. Every write to `gameplay/` holds a lock (`gameplay/.lock`), so a person answering an infrastructure request does not write over the loop.
 
 The coach harnesses are `claude` (run without your settings, hooks, MCP servers or tools), `grok`, `codex`, `opencode` and `cursor` (see `scripts/coach.ts`).
 
@@ -113,7 +113,7 @@ A goal ends when its target is used up, when Tibo gets no closer (or standing th
 
 ### The learning loop
 
-The loop is after understanding the game more than a score, on the way to its goal: surviving 20:00 on Open World Nightmare 10. Three models are fixed: the coach (Sonnet 5.5), the planner and the action model (Jev). Everything else lives in `gameplay/`, and the coaches rewrite it as they learn.
+The loop is after understanding the game more than a score, on the way to its goal: surviving 20:00 on Open World Nightmare 10. Three models are fixed: the coach (Sonnet 5.5), the planner and the action model (Jev). Everything else lives in `gameplay/`, and the coach rewrites it as it learns.
 
 A loop has ten iterations:
 
@@ -125,9 +125,9 @@ What is in `gameplay/`:
 
 - `beliefs.csv`: what the loop holds true, `id,about,verdict,claim,confidence,status,evidence,experiments,created,updated`. `verdict` is good (worth doing), bad (worth avoiding) or fact; `about` is game, planner, action or coach; `confidence` is lead, likely or confirmed; `status` is held, recheck or disproved. Rows are never deleted, only disproved, and the loop stamps who wrote and last changed each one.
 - `experiments/experiment_<name>.md`: one file per question, with its status, area, result, hypothesis, method and findings from the coach, and every game played for it under Games.
-- `gyms.json`: the gyms, saved game states to test ideas under known conditions. The loop starts with its own: the opening and the 1:45 mark before the first boss on the next ladder level and on Nightmare 10, and minutes 5 and 10 on the next level. Coaches add their own and retire ones that no longer teach anything.
-- `coaches/<coach>/`: the coach's three prompts (`experiments.md`, `full-run.md`, `reflect.md`), its `playbook.json` (templates, knobs and starting weapon), its `log.md` (one entry per iteration) and `state.json`. A new coach starts from `coaches/starter/`.
-- `infrastructure_feedback.csv`: requests for changes to the code, which the coaches cannot make, `date,run,status,request,why`.
+- `gyms.json`: the gyms, saved game states to test ideas under known conditions. The loop starts with its own: the opening and the 1:45 mark before the first boss on the next ladder level and on Nightmare 10, and minutes 5 and 10 on the next level. The coach adds its own and retires ones that no longer teach anything.
+- `coach/`: the coach's three prompts (`experiments.md`, `full-run.md`, `reflect.md`), its `playbook.json` (templates, knobs and starting weapon), its `log.md` (one entry per iteration) and `state.json`.
+- `infrastructure_feedback.csv`: requests for changes to the code, which the coach cannot make, `date,run,status,request,why`.
 - `notes/`: one file per full run, named `<start>_lived-<mm-ss>_<difficulty>_<mode>_<surface>.md`, with the outcome and every stat the game counted (damage taken by source, damage dealt and kills by weapon, bosses, elites, chests, shrines, gold, what was evolved), stats worked out from the log, the plan, the picks, the prompts and the coach's review.
 
 `scripts/gameplay.ts` checks every edit and turns away one that would break a file or a template (an unknown `{{name}}`, a weapon id the encyclopedia does not have, a prompt rewrite that drops a section), and the coach gets another try with the reasons.

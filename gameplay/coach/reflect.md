@@ -8,8 +8,8 @@ Write these sections: **Summary** (what happened and how far it got; say whether
 
 ## Your prompts
 
-Your three prompts (experiments.md, full-run.md and reflect.md) are how you work. Look at what the loop did: which iterations taught something and which were wasted, where you guessed instead of testing, and where your full run went against the evidence. Check that the experiments aimed at the ladder level the next run plays, were played live, and aimed at where the run actually died or took damage. Flag any belief measured under lockstep or on gyms that do not match the real run. Rewrite the prompts so the next loop works better. Keep every ## section, and keep them short.
+Your three prompts (experiments.md, full-run.md and reflect.md) are how you work. Look at what the loop did: which iterations taught something and which were wasted, where you guessed instead of testing, and where your full run went against the evidence. Check that the experiments aimed at the ladder level the next run plays, were played live, and aimed at where the run actually died or took damage. Flag any belief measured under lockstep or on gyms that do not match the real run. Check whether the rehearsal overstated how reliable the playbook was, and whether the full run shipped a change no live game had tested. Rewrite the prompts so the next loop works better. Keep every ## section, and keep them short.
 
 ## Beliefs and gyms
 
-Update the beliefs the full run bears on. Keep the gyms that will matter next loop, and retire the rest of your own.
+Update the beliefs the full run bears on. Keep the gyms that will matter next loop, and retire the rest.

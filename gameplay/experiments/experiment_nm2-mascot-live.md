@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | proposed |
+| Status | running |
 | Area | bosses |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L3.I10 |
-| Updated | sonnet-high L3.I10 |
+| Updated | L4.I1 |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ From a live-built pre-mascot gym (about 1:50, nm2-live-pre-mascot) and fresh liv
 
 ## Findings
 
-(none yet)
+L4.I1: the full package (goal text with a 120-unit boss evade exception at any hp and no low-hp elite fights from 1:30 to 2:30, plus a narrow boss-hit dash prompt) plays 5 fresh live NM2 seeds (1919, 2020, 4141, 4242, 4343). Baseline reference is 1 of 6 alive at 5:00 live. At least 4 of 5 alive counts as beating it. Then split the package into evade text and dash prompt, and watch for chest starvation on 1919 and 2020.
 
 ## Games
 

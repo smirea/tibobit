@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type BeliefRow, checkEdits, merge, promptLoss, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type Experiment, notesName, notesTemplates, parseCsv, parseExperiment, renderExperiment, renderNotes, type RunSetup, withReview, totalsBetween, totalsLines, LOCKSTEP_CRUTCH } from "./gameplay";
+import { type BeliefRow, checkEdits, upsert, promptLoss, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type Experiment, notesName, notesTemplates, parseCsv, parseExperiment, renderExperiment, renderNotes, type RunSetup, withReview, totalsBetween, totalsLines, LOCKSTEP_CRUTCH } from "./gameplay";
 
 const setup: RunSetup = { started: new Date(2026, 10, 7, 15, 4, 9), difficulty: "nightmare", mode: "daily", surface: "headless", seed: "S1", planner: "jev", action: "jev", coach: "grok", bot: "abc1234" };
 
@@ -26,12 +26,12 @@ test("templates may only use the values their slot has, and must use the require
 });
 
 test("an experiment file reads back as written", () => {
-  const e: Experiment = { name: "boss-dodge", title: "Dodge the 2:00 boss", status: "running", area: "bosses", result: "", coach: "sonnet-high", created: "L1.I2", updated: "L1.I3", hypothesis: "Evading for 12s beats 6s.", method: "Two arms from gym boss-2min.", findings: "", games: "### L1.I3 game 1\n\n- alive 120s" };
+  const e: Experiment = { name: "boss-dodge", title: "Dodge the 2:00 boss", status: "running", area: "bosses", result: "", created: "L1.I2", updated: "L1.I3", hypothesis: "Evading for 12s beats 6s.", method: "Two arms from gym boss-2min.", findings: "", games: "### L1.I3 game 1\n\n- alive 120s" };
   expect(parseExperiment(renderExperiment(e), "boss-dodge")).toEqual(e);
 });
 
 test("a coach changes only the experiment fields it sends, and a new experiment needs a title, area and hypothesis", () => {
-  const e: Experiment = { name: "boss-dodge", title: "t", status: "running", area: "bosses", result: "", coach: "c", created: "", updated: "", hypothesis: "h", method: "", findings: "", games: "" };
+  const e: Experiment = { name: "boss-dodge", title: "t", status: "running", area: "bosses", result: "", created: "", updated: "", hypothesis: "h", method: "", findings: "", games: "" };
   expect(checkEdits({ experiments: [{ name: "boss-dodge", status: "done", result: "confirmed" }] }, { experiments: [e], beliefs: [] })).toEqual({ value: { experiments: [{ name: "boss-dodge", status: "done", result: "confirmed" }] } });
   expect(checkEdits({ experiments: [{ name: "Boss Dodge" }, { name: "new-one", status: "proposed" }] }, { experiments: [e], beliefs: [] })).toEqual({
     errors: ["experiments[0] (Boss Dodge).name must be kebab-case, such as boss-dodge-distance (it names experiment_<name>.md)", "experiments[1] (new-one) is new, so it needs title", "experiments[1] (new-one) is new, so it needs area", "experiments[1] (new-one) is new, so it needs hypothesis"],
@@ -46,13 +46,9 @@ test("a belief keeps the run that wrote it, and takes the run that last changed 
   expect(stampBeliefs([raised], [held], "run-2")).toEqual([{ ...raised, created: "run-1", updated: "run-2" }]);
 });
 
-test("a coach's table keeps rows another coach added meanwhile, and its new id moves past theirs", () => {
-  const row = (id: string, hypothesis: string) => ({ id, hypothesis });
-  const before = [row("E1", "shared")];
-  const now = [row("E1", "shared"), row("E2", "the other coach's")];
-  const renamed = new Map<string, string>();
-  expect(merge([row("E1", "edited"), row("E2", "mine")], now, before, renamed)).toEqual([row("E1", "edited"), row("E2", "the other coach's"), row("E3", "mine")]);
-  expect(renamed).toEqual(new Map([["E2", "E3"]]));
+test("the coach's rows replace the rows with their ids and the new ones go at the end", () => {
+  const row = (id: string, claim: string) => ({ id, claim });
+  expect(upsert([row("B1", "edited"), row("B3", "new")], [row("B1", "old"), row("B2", "kept")])).toEqual([row("B1", "edited"), row("B2", "kept"), row("B3", "new")]);
 });
 
 test("a coach may rewrite its prompt's sections but not drop one or most of the text", () => {
@@ -69,7 +65,7 @@ test("csv fields keep their commas and quotes", () => {
 });
 
 test("the gameplay files in the repo are readable", async () => {
-  await checkLoopFiles("starter");
+  await checkLoopFiles();
 });
 
 test("a training game's stats count only what happened during it", () => {

@@ -360,3 +360,7 @@ L3.I9 tested the catalyst-first hp pick prompt on fresh NM2 seeds. It lived 1 of
 The full run on NM2 died at 2:15 to the Festival Mascot with HP 57-76 and no weapon core (Steam Vent 1/8 until 1:48, three Root Network picks first, four scattered weapons, no evolution). A planner goal text that suppresses evading above half HP chose Explore with the boss 45 units away, and the dash prompt never passed 0.5. Live play has now survived 5:00 on 1 of 6 fresh NM2 seeds, because everything credited to lockstep (including the 5 of 5 rehearsal) was measured with the game paused. Next loop: spend about two thirds of the games on live NM2 openings with paired comparisons over at least 5 seeds. Test the 2:00 Mascot handling first (boss-adjacent evade exception, boss-slam dash prompt, no elite fights at low HP before 2:00), then commit-the-weapon picks, then early routing and start weapon. Build the late NM2 gyms only after the opening survives.
 
 Rewrote experiments.md, full-run.md, reflect.md.
+
+## Note from the loop manager (2026-11-08 14:05)
+
+The loop now has one coach, iterated on over time: you. The second coach (sonnet-medium) is retired; its beliefs, experiments and gyms stay, and two of its lessons are in experiments.md and reflect.md (a regression set of seeds that starved early, a ready-made pick prompt to test live, and a check on whether the rehearsal overstated reliability). Your files moved to gameplay/coach/. Runs in the campaign table marked lockstep were played with the game paused and are not comparable to live runs.

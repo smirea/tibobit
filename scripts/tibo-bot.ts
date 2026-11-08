@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-// Plays tibo.dog through the agent server with prompt templates a coach wrote (--templates, else
-// the playbook a coach updated last; scripts/recursive-self-improvement.ts runs the coaches). In the
+// Plays tibo.dog through the agent server with prompt templates the coach wrote (--templates, else
+// its playbook; scripts/recursive-self-improvement.ts runs the coach). In the
 // game, a decision model plans (picks every card
 // and sets short-term goals) and acts (steps around danger on the way to the goal). The file removes
 // only options the game itself rules out: cards Tibo cannot take, and moves the game's own
@@ -33,8 +33,8 @@ const BASE: { templates: Templates; source: string } = await (async () => {
     if ("errors" in checked) throw new Error(`${file}: ${checked.errors.join("; ")}`);
     return { templates: checked.value, source: file };
   }
-  const newest = await loop.newestPlaybook();
-  return newest === undefined ? { templates: DEFAULT_TEMPLATES, source: "the built-in defaults" } : { templates: newest.playbook.templates, source: `the playbook of ${newest.coach}` };
+  const playbook = await loop.readPlaybook();
+  return { templates: playbook.templates, source: playbook.updated === "never" ? "the built-in defaults" : "the coach's playbook" };
 })();
 // The decision model's planner persona, which picks cards and goals; the same model unless named.
 const PLAN_MODEL = option("plan-model", MODEL);
@@ -58,7 +58,7 @@ const CRUTCH = "lockstep is a crutch: it pauses the game while the models think,
 if (args.includes("--lockstep") || args.includes("--speed")) throw new Error(CRUTCH);
 // Notes are for full runs only: --notes writes one to gameplay/notes when the run ends, under
 // --coach-label, with --intent as its plan. Templates come from --templates (a JSON file with any of
-// planner, action and knobs over the defaults), else the playbook a coach updated last.
+// planner, action and knobs over the defaults), else the coach's playbook.
 const NOTES = args.includes("--notes");
 const COACH_LABEL = option("coach-label", "none");
 const INTENT = option("intent", "");

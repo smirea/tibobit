@@ -6,19 +6,17 @@
 // reviews it, reflects on its own prompts and rewrites them, and the loop commits gameplay/.
 // Everything the coach knows between calls is in gameplay/ (see scripts/gameplay.ts).
 import path from "node:path";
-import { cpSync, existsSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { type LoadoutSpec, parseLoadout } from "../src/agent/protocol";
 import { type HarnessName, checkHarness, jsonObject, runCoach } from "./coach";
 import * as loop from "./gameplay";
 import { type Checked, type Gym, type Playbook, type PromptKey, type Templates, clock } from "./gameplay";
 import { DECISION_MODEL, type GameResult, type GameSpec, type Start, Slot, onSlots } from "./slots";
 
-const USAGE = `usage: scripts/recursive-self-improvement.ts [--coach claude:<model>@<effort>] [--name <coach>] [--loops <n>] [--slots <n>] [--eval-seed <seed>]
+const USAGE = `usage: scripts/recursive-self-improvement.ts [--coach claude:<model>@<effort>] [--loops <n>] [--slots <n>] [--eval-seed <seed>]
 
   --coach      the coach: a harness (see scripts/coach.ts), its model, and for claude a reasoning
                effort of high or more (default claude:claude-sonnet-5-5@high)
-  --name       the coach's folder in gameplay/coaches (default from the model and effort, such as sonnet-high);
-               a new coach starts from gameplay/coaches/starter
   --loops      how many loops of ten iterations to play (default: until stopped)
   --slots      training games played side by side (default 5)
   --eval-seed  the seed every full run plays (default TIBO10); training games never use it
@@ -33,7 +31,6 @@ const MAX_NEW_GYMS = 3;
 const MAX_GYM_SECONDS = 1200;
 const COACH_TIMEOUT_MS = 20 * 60_000;
 const PROMPT_LIMIT = 30_000;
-const STARTER = path.join(loop.COACHES_DIR, "starter");
 
 // ---- Arguments ---------------------------------------------------------------------------------
 
@@ -45,7 +42,7 @@ if (argv.includes("--help") || argv.includes("-h")) {
 const flags: Record<string, string> = {};
 for (let i = 0; i < argv.length; i += 2) {
   const [name, value] = [argv[i] ?? "", argv[i + 1]];
-  if (!["--coach", "--name", "--loops", "--slots", "--eval-seed"].includes(name)) throw new Error(`unexpected argument ${name}\n\n${USAGE}`);
+  if (!["--coach", "--loops", "--slots", "--eval-seed"].includes(name)) throw new Error(`unexpected argument ${name}\n\n${USAGE}`);
   if (value === undefined || value.startsWith("--")) throw new Error(`${name} needs a value\n\n${USAGE}`);
   flags[name.slice(2)] = value;
 }
@@ -57,8 +54,6 @@ const model = specMatch[2];
 const effort = specMatch[3];
 // Coaches reason at high effort or more: a lower one was ruled out for every run.
 if (harness === "claude" && !["high", "xhigh", "max"].includes(effort ?? "")) throw new Error(`the coach reasons at high effort or more (@high, @xhigh or @max), not ${effort ?? "the harness default"}`);
-const COACH = flags.name ?? `${(model ?? harness).replace(/^claude-/, "").replace(/-\d.*$/, "")}${effort === undefined ? "" : `-${effort}`}`;
-if (!/^[a-z0-9-]+$/.test(COACH) || COACH === "starter") throw new Error(`the coach's name ${COACH} must be kebab-case and not "starter"; pass --name`);
 const LOOPS = flags.loops === undefined ? Number.POSITIVE_INFINITY : Number(flags.loops);
 const SLOTS = Number(flags.slots ?? 5);
 if (!(LOOPS >= 1) || !Number.isInteger(SLOTS) || SLOTS < 1 || SLOTS > MAX_GAMES) throw new Error(`--loops must be at least 1 and --slots 1 to ${MAX_GAMES}`);
@@ -66,13 +61,11 @@ const EVAL_SEED = (flags["eval-seed"] ?? "TIBO10").toUpperCase();
 const COMMITTER = `${model ?? harness}${effort === undefined ? "" : `@${effort}`}`;
 if (Bun.which("gai") === null) throw new Error("committing gameplay/ needs gai on PATH");
 
-const files = loop.coachFiles(COACH);
-if (!existsSync(files.dir)) {
-  cpSync(STARTER, files.dir, { recursive: true });
-  console.log(`new coach ${COACH}: copied ${path.relative(ROOT, STARTER)} to ${path.relative(ROOT, files.dir)}`);
-}
-await loop.checkLoopFiles(COACH);
-const RUNS = path.join(ROOT, ".runs", "rsi", COACH);
+// The notes of a full run name the coach and the model that coached it, which can change over time.
+const COACH_LABEL = `coach ${COMMITTER}`;
+const files = loop.COACH_FILES;
+await loop.checkLoopFiles();
+const RUNS = path.join(ROOT, ".runs", "rsi");
 mkdirSync(RUNS, { recursive: true });
 
 // ---- Slots -------------------------------------------------------------------------------------
@@ -92,10 +85,10 @@ const open = async (name: string, profile: string) => {
   opened.push(slot);
   return slot;
 };
-console.log(`coach ${COACH} (${coachSpec}), ${SLOTS} training slots, evaluation seed ${EVAL_SEED}; logs in ${path.relative(ROOT, RUNS)}`);
+console.log(`the coach is ${coachSpec}, ${SLOTS} training slots, evaluation seed ${EVAL_SEED}; logs in ${path.relative(ROOT, RUNS)}`);
 const [main, ...slots] = await Promise.all([
-  open(`${COACH}-main`, path.join(ROOT, ".runs", `headless-profile-${COACH}`)),
-  ...Array.from({ length: SLOTS }, (_, i) => open(`${COACH}-slot${i + 1}`, path.join(ROOT, ".runs", `headless-profile-${COACH}-slot${i + 1}`))),
+  open("main", path.join(ROOT, ".runs", "coach-profile")),
+  ...Array.from({ length: SLOTS }, (_, i) => open(`slot${i + 1}`, path.join(ROOT, ".runs", `coach-profile-slot${i + 1}`))),
 ]);
 if (main === undefined) throw new Error("no main slot");
 
@@ -167,7 +160,7 @@ function editableFiles(phase: "experiments" | "fullRun" | "reflect"): string {
   return [
     "# What you can change",
     "",
-    `Everything lives in gameplay/, and you change it through keys in your JSON reply (see Reply at the end). Anything you leave out stays as it is. Other coaches share beliefs.csv, experiments/, gyms.json and the infrastructure requests with you; your prompts, playbook and log in gameplay/coaches/${COACH}/ are yours alone.`,
+    `Everything lives in gameplay/, and you change it through keys in your JSON reply (see Reply at the end). Anything you leave out stays as it is. Your prompts, playbook, log and where your loop stands are in gameplay/coach/.`,
     "",
     "- **beliefs.csv** (`beliefs`): what the loop holds true, each marked good (worth doing), bad (worth avoiding) or fact. Rows are never deleted, only disproved.",
     "- **experiments/** (`experiments`): one file per question, experiment_<name>.md. The loop writes every game played for an experiment into its file.",
@@ -235,7 +228,7 @@ async function facts(state: loop.CoachState, playbook: Playbook): Promise<string
   const closed = experiments.filter((e) => e.status === "done" || e.status === "retired");
   return [
     "# Where the loop stands",
-    `You are ${COACH}. This is loop ${state.loop}, iteration ${state.iteration} of 10: iterations 1 to ${EXPERIMENT_ITERATIONS} are experiments in the training ground, and iteration 10 is a full run on the evaluation seed. Your Open World Nightmare ladder: ${cleared === 0 ? "no level won yet" : `won up to Nightmare ${cleared}`}, so the next full run plays Nightmare ${cleared + 1}. The goal of the whole campaign: survive 20:00 on Nightmare 10.`,
+    `You are the coach (${coachSpec}). This is loop ${state.loop}, iteration ${state.iteration} of 10: iterations 1 to ${EXPERIMENT_ITERATIONS} are experiments in the training ground, and iteration 10 is a full run on the evaluation seed. Your Open World Nightmare ladder: ${cleared === 0 ? "no level won yet" : `won up to Nightmare ${cleared}`}, so the next full run plays Nightmare ${cleared + 1}. The goal of the whole campaign: survive 20:00 on Nightmare 10.`,
     "## Full runs so far",
     await loop.campaign(),
     "# Facts",
@@ -331,10 +324,7 @@ function checkGyms(raw: unknown, gyms: Gym[], stamp: string, errors: string[]): 
       continue;
     }
     if (g.retire === true) {
-      const gym = gyms.find((x) => x.name === name);
-      if (gym === undefined) errors.push(`${at}: there is no gym ${name} to retire`);
-      // Another coach's games may be about to use its gyms.
-      else if (gym.coach !== COACH && gym.coach !== "loop") errors.push(`${at}: gym ${name} is ${gym.coach}'s; you can retire only your own and the loop's`);
+      if (!gyms.some((x) => x.name === name)) errors.push(`${at}: there is no gym ${name} to retire`);
       out.retire.push(name);
       continue;
     }
@@ -346,7 +336,7 @@ function checkGyms(raw: unknown, gyms: Gym[], stamp: string, errors: string[]): 
     if (!Number.isInteger(seconds) || seconds < 0 || seconds > MAX_GYM_SECONDS) errors.push(`${at}.at must be whole seconds from 0 to ${MAX_GYM_SECONDS}`);
     const weapon = startWeapon(g.weapon, `${at}.weapon`, errors);
     const loadout = checkLoadout(g.loadout, at, errors);
-    out.build.push({ name, status: "pending", purpose: String(g.purpose ?? ""), coach: COACH, created: stamp, difficulty, at: seconds, weapon, ...(loadout === undefined ? {} : { loadout }), seed: "", source: `built from a fresh game to ${clock(seconds)}` });
+    out.build.push({ name, status: "pending", purpose: String(g.purpose ?? ""), coach: "coach", created: stamp, difficulty, at: seconds, weapon, ...(loadout === undefined ? {} : { loadout }), seed: "", source: `built from a fresh game to ${clock(seconds)}` });
   }
   if (out.build.length > MAX_NEW_GYMS) errors.push(`at most ${MAX_NEW_GYMS} new gyms per reply`);
   return out;
@@ -439,9 +429,8 @@ function buildGym(slot: Slot, gym: Gym, templates: Templates): Promise<Gym> {
   if (running !== undefined) return running;
   const work = (async () => {
     console.log(`building gym ${gym.name} on ${slot.name}`);
-    const { builder: _, ...recipe } = gym;
-    const built = await slot.buildGym({ ...recipe, status: "building" }, gym.templates ?? templates, EVAL_SEED);
-    // A build cut off by a stop stays building for this coach, and goes back to pending on restart.
+    const built = await slot.buildGym({ ...gym, status: "building" }, gym.templates ?? templates, EVAL_SEED);
+    // A build cut off by a stop stays building, and goes back to pending on restart.
     if (stopping) return built;
     await loop.updateGyms((gyms) => {
       const at = gyms.findIndex((g) => g.name === gym.name);
@@ -455,14 +444,11 @@ function buildGym(slot: Slot, gym: Gym, templates: Templates): Promise<Gym> {
   return work;
 }
 
-/** Claims the pending gyms this process should build, so another coach's loop does not build them too. */
-const claimPending = (mine: (g: Gym) => boolean) =>
+/** Marks the pending gyms as building and returns them to build. */
+const claimPending = () =>
   loop.updateGyms((gyms) => {
-    const claimed = gyms.filter((g) => g.status === "pending" && mine(g));
-    for (const g of claimed) {
-      g.status = "building";
-      g.builder = COACH;
-    }
+    const claimed = gyms.filter((g) => g.status === "pending");
+    for (const g of claimed) g.status = "building";
     return claimed.map((g) => ({ ...g }));
   });
 
@@ -473,7 +459,7 @@ async function buildClaimed(claimed: Gym[], templates: Templates): Promise<strin
 
 // ---- Iterations --------------------------------------------------------------------------------
 
-const stampOf = (s: loop.CoachState) => `${COACH} L${s.loop}.I${s.iteration}`;
+const stampOf = (s: loop.CoachState) => `L${s.loop}.I${s.iteration}`;
 const tagOf = (s: loop.CoachState) => `L${s.loop}.I${s.iteration}`;
 
 async function appendLog(state: loop.CoachState, title: string, body: string) {
@@ -485,7 +471,7 @@ type ExperimentReply = { summary: string; edits: loop.LoopEdits; games: GameSpec
 async function experimentIteration(state: loop.CoachState) {
   const tag = tagOf(state);
   const stamp = stampOf(state);
-  const playbook = await loop.readPlaybook(COACH);
+  const playbook = await loop.readPlaybook();
   const instructions = await Bun.file(files.experiments).text();
   const prompt = [
     editableFiles("experiments"),
@@ -517,9 +503,9 @@ async function experimentIteration(state: loop.CoachState) {
     await appendLog(state, "no usable plan", "The coach gave no usable reply, so this iteration played nothing.");
     return;
   }
-  const done = await loop.applyEdits(reply.edits, stamp, COACH, before);
+  const done = await loop.applyEdits(reply.edits, stamp);
   if (reply.playbook !== undefined) {
-    await loop.writePlaybook(COACH, reply.playbook);
+    await loop.writePlaybook(reply.playbook);
     done.push("the playbook");
   }
   await loop.updateGyms((gyms) => {
@@ -531,9 +517,9 @@ async function experimentIteration(state: loop.CoachState) {
     }
   });
   console.log(`${tag}: ${reply.summary}\n  changed ${done.join(", ") || "nothing"}; ${reply.games.length} games`);
-  const templates = (await loop.readPlaybook(COACH)).templates;
+  const templates = (await loop.readPlaybook()).templates;
   await refreshGames();
-  const gymLines = await buildClaimed(await claimPending((g) => g.coach === COACH || g.coach === "loop"), templates);
+  const gymLines = await buildClaimed(await claimPending(), templates);
   // A gym another coach's loop is building for a game here is waited for.
   const wanted = new Set(reply.games.flatMap((g) => ("gym" in g.from ? [g.from.gym] : [])));
   for (let waited = 0; waited < 60; waited++) {
@@ -560,7 +546,7 @@ async function experimentIteration(state: loop.CoachState) {
       name: save.name,
       status: "ready",
       purpose: save.purpose,
-      coach: COACH,
+      coach: "coach",
       created: stamp,
       difficulty: Number(r.difficulty.split("-")[1] ?? 0),
       at: Math.round(end),
@@ -608,7 +594,7 @@ async function rehearse(state: loop.CoachState, playbook: Playbook): Promise<str
 async function fullRun(state: loop.CoachState): Promise<string | undefined> {
   const tag = tagOf(state);
   const stamp = stampOf(state);
-  const playbook = await loop.readPlaybook(COACH);
+  const playbook = await loop.readPlaybook();
   const instructions = await Bun.file(files.fullRun).text();
   const rehearsal = await rehearse(state, playbook);
   if (stopping) return undefined;
@@ -636,10 +622,10 @@ async function fullRun(state: loop.CoachState): Promise<string | undefined> {
     return { value: { summary: String(raw.summary), intent: String(raw.intent), edits: edits.value, ...(pb === undefined ? {} : { playbook: pb }) } };
   });
   if (reply !== undefined) {
-    await loop.applyEdits(reply.edits, stamp, COACH, before);
-    if (reply.playbook !== undefined) await loop.writePlaybook(COACH, reply.playbook);
+    await loop.applyEdits(reply.edits, stamp);
+    if (reply.playbook !== undefined) await loop.writePlaybook(reply.playbook);
   }
-  const final = await loop.readPlaybook(COACH);
+  const final = await loop.readPlaybook();
   const intent = reply?.intent ?? "The coach gave no plan; the run plays the playbook as it stands.";
   await appendLog(state, "full run", reply?.summary ?? intent);
   const templatesFile = path.join(RUNS, `${tag}.full-run.templates.json`);
@@ -654,7 +640,7 @@ async function fullRun(state: loop.CoachState): Promise<string | undefined> {
       process.execPath,
       path.join(import.meta.dir, "tibo-bot.ts"),
       ...["--server", main.server, "--reload", "", "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--difficulty", "highest", "--runs", "1", "--seed", EVAL_SEED],
-      ...["--notes", "--coach-label", COACH, "--intent", intent, "--templates", templatesFile, ...(final.weapon === "" ? [] : ["--weapon", final.weapon]), "--log-dir", path.join(RUNS, "full-runs")],
+      ...["--notes", "--coach-label", COACH_LABEL, "--intent", intent, "--templates", templatesFile, ...(final.weapon === "" ? [] : ["--weapon", final.weapon]), "--log-dir", path.join(RUNS, "full-runs")],
     ],
     { cwd: ROOT, stdin: "ignore", stdout: out, stderr: out },
   );
@@ -662,7 +648,7 @@ async function fullRun(state: loop.CoachState): Promise<string | undefined> {
   if (code !== 0) console.error(`${tag}: the full run's bot exited with code ${code}; see ${out.name}`);
   for (const name of await loop.notesFiles()) {
     const file = path.join(loop.NOTES_DIR, name);
-    if (Bun.file(file).lastModified >= startedAt && loop.notesField(await Bun.file(file).text(), "Coach") === COACH) return file;
+    if (Bun.file(file).lastModified >= startedAt && loop.notesField(await Bun.file(file).text(), "Coach") === COACH_LABEL) return file;
   }
   return undefined;
 }
@@ -672,7 +658,7 @@ type ReflectReply = { review: string; summary: string; edits: loop.LoopEdits; pr
 async function reflect(state: loop.CoachState, notesFile: string | undefined) {
   const tag = `${tagOf(state)}.reflect`;
   const stamp = stampOf(state);
-  const playbook = await loop.readPlaybook(COACH);
+  const playbook = await loop.readPlaybook();
   const keys = Object.keys(loop.PROMPT_KEYS) as PromptKey[];
   const prompts = Object.fromEntries(await Promise.all(keys.map(async (k) => [k, await Bun.file(files[k]).text()] as const))) as Record<PromptKey, string>;
   const notes = notesFile === undefined ? "(the full run left no notes: it was cut short)" : await Bun.file(notesFile).text();
@@ -724,8 +710,8 @@ async function reflect(state: loop.CoachState, notesFile: string | undefined) {
     await appendLog(state, "reflection", "The coach gave no usable reflection.");
     return;
   }
-  await loop.applyEdits(reply.edits, stamp, COACH, before);
-  if (reply.playbook !== undefined) await loop.writePlaybook(COACH, reply.playbook);
+  await loop.applyEdits(reply.edits, stamp);
+  if (reply.playbook !== undefined) await loop.writePlaybook(reply.playbook);
   for (const [k, v] of Object.entries(reply.prompts) as [PromptKey, string][]) await Bun.write(files[k], `${v.trim()}\n`);
   await loop.updateGyms((gyms) => {
     for (const name of reply.gyms.retire) for (const g of gyms) if (g.name === name) g.status = "retired";
@@ -743,7 +729,7 @@ async function commit(state: loop.CoachState, notesFile: string | undefined) {
     return { ok: p.exitCode === 0, out: `${p.stdout.toString()}${p.stderr.toString()}`.trim() };
   };
   const lived = notesFile?.match(/lived-(\d+)-(\d+)/);
-  const title = `docs(gameplay): ${COACH} finishes loop ${state.loop}${lived === null || lived === undefined ? "" : `, its full run lived ${Number(lived[1])}:${lived[2]}`}`;
+  const title = `docs(gameplay): the coach finishes loop ${state.loop}${lived === null || lived === undefined ? "" : `, its full run lived ${Number(lived[1])}:${lived[2]}`}`;
   const result = await loop.locked(async () => {
     run(["git", "add", "-A", "--", "."]);
     if (run(["git", "diff", "--cached", "--quiet", "--", "."]).ok) return undefined;
@@ -766,21 +752,17 @@ async function commit(state: loop.CoachState, notesFile: string | undefined) {
 const next = (await ladder()) + 1;
 await loop.updateGyms((gyms) => {
   for (const g of standardGyms(next)) if (!gyms.some((x) => x.name === g.name)) gyms.push(g);
-  // A build this coach's loop was running when it stopped never finished.
-  for (const g of gyms)
-    if (g.status === "building" && g.builder === COACH) {
-      g.status = "pending";
-      delete g.builder;
-    }
+  // A build the loop was running when it stopped never finished.
+  for (const g of gyms) if (g.status === "building") g.status = "pending";
 });
-let state = await loop.readCoachState(COACH);
+let state = await loop.readCoachState();
 for (let played = 0; played < LOOPS && !stopping; played++) {
   while (state.iteration <= EXPERIMENT_ITERATIONS && !stopping) {
     console.log(`== ${tagOf(state)}: experiments`);
     await experimentIteration(state);
     if (stopping) break;
     state = { ...state, iteration: state.iteration + 1 };
-    await loop.writeCoachState(COACH, state);
+    await loop.writeCoachState(state);
   }
   if (stopping) break;
   console.log(`== ${tagOf(state)}: full run`);
@@ -789,6 +771,6 @@ for (let played = 0; played < LOOPS && !stopping; played++) {
   await reflect(state, notesFile);
   await commit(state, notesFile);
   state = { loop: state.loop + 1, iteration: 1 };
-  await loop.writeCoachState(COACH, state);
+  await loop.writeCoachState(state);
 }
 await shutdown(0);

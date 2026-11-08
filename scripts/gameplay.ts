@@ -1,9 +1,9 @@
-// The learning loop's files in gameplay/. Shared by every coach: beliefs.csv (what the loop holds
-// true, good and bad), experiments/ (one Markdown file per question), gyms.json (saved game states
-// the training ground starts from), infrastructure_feedback.csv and notes/ (full runs only). Each
-// coach owns gameplay/coaches/<coach>/: its three prompts, its playbook (the templates and starting
-// weapon it currently thinks best) and its log. This module owns their formats and turns away an
-// edit that would break one, so the loop can never wedge itself.
+// The learning loop's files in gameplay/: beliefs.csv (what the loop holds true, good and bad),
+// experiments/ (one Markdown file per question), gyms.json (saved game states the training ground
+// starts from), infrastructure_feedback.csv, notes/ (full runs only), and coach/, the one coach's
+// three prompts, its playbook (the templates and starting weapon it currently thinks best), its log
+// and where its loop stands. This module owns their formats and turns away an edit that would break
+// one, so the loop can never wedge itself.
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
@@ -12,7 +12,7 @@ import type { CheckpointMeta, LoadoutSpec, RunTotals } from "../src/agent/protoc
 export const GAMEPLAY = path.join(import.meta.dir, "..", "gameplay");
 export const NOTES_DIR = path.join(GAMEPLAY, "notes");
 export const EXPERIMENTS_DIR = path.join(GAMEPLAY, "experiments");
-export const COACHES_DIR = path.join(GAMEPLAY, "coaches");
+export const COACH_DIR = path.join(GAMEPLAY, "coach");
 export const BELIEFS_CSV = path.join(GAMEPLAY, "beliefs.csv");
 export const INFRA_CSV = path.join(GAMEPLAY, "infrastructure_feedback.csv");
 export const GYMS_JSON = path.join(GAMEPLAY, "gyms.json");
@@ -327,9 +327,8 @@ export function stampBeliefs(rows: BeliefRow[], before: BeliefRow[], run: string
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-// Two loops can share gameplay/, each with its own coach, so every read-modify-write of its files
-// holds this lock, and a coach's whole-table edit is merged into the table as it is now rather than
-// written over rows the other coach added meanwhile.
+// The loop and a person answering infrastructure requests can write gameplay/ at once, so every
+// read-modify-write of its files holds this lock.
 const LOCK = path.join(GAMEPLAY, ".lock");
 const STALE_LOCK_MS = 30_000;
 
@@ -352,30 +351,10 @@ export async function locked<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
-/**
- * The coach's added and changed rows over the table as it is now: a changed row is replaced where
- * it stands, and a new one goes at the end. A row the coach added under an id the other coach took
- * meanwhile gets the next free id; `renamed` maps the coach's id to the one it got.
- */
-export function merge<R extends { id: string }>(theirs: R[], now: R[], before: R[], renamed: Map<string, string>): R[] {
-  const known = (id: string) => before.some((b) => b.id === id);
-  const out = now.map((r) => (known(r.id) ? (theirs.find((t) => t.id === r.id) ?? r) : r));
-  const taken = new Set(out.map((r) => r.id));
-  for (const r of theirs) {
-    if (known(r.id) && taken.has(r.id)) continue;
-    if (!taken.has(r.id)) {
-      out.push(r);
-      taken.add(r.id);
-      continue;
-    }
-    const prefix = r.id.match(/^\D*/)?.[0] ?? "";
-    let n = Math.max(0, ...[...taken].filter((id) => id.startsWith(prefix)).map((id) => Number(id.slice(prefix.length)) || 0)) + 1;
-    while (taken.has(`${prefix}${n}`)) n++;
-    renamed.set(r.id, `${prefix}${n}`);
-    taken.add(`${prefix}${n}`);
-    out.push({ ...r, id: `${prefix}${n}` });
-  }
-  return out;
+/** The coach's added and changed rows over the table: a changed row is replaced where it stands, and a new one goes at the end. */
+export function upsert<R extends { id: string }>(changed: R[], now: R[]): R[] {
+  const out = now.map((r) => changed.find((c) => c.id === r.id) ?? r);
+  return [...out, ...changed.filter((c) => !now.some((r) => r.id === c.id))];
 }
 
 // ---- Notes ---------------------------------------------------------------------------------
@@ -517,20 +496,17 @@ export async function runRecords(): Promise<RunRecord[]> {
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-/** Each coach's climb up the Open World Nightmare ladder, level by level. */
+/** Every full run, newest first, with the coach that planned it; runs before the coach was one (sonnet-medium, sonnet-high) count too. */
 export async function campaign(): Promise<string> {
   const records = (await runRecords()).filter((r) => r.mode === "world" && r.level > 0);
   if (records.length === 0) return "No Open World Nightmare run yet.";
-  const lines = ["| Coach | Level | Runs | Wins | Best | Median | Last 5 lived |", "| --- | --- | --- | --- | --- | --- | --- |"];
-  const keys = [...new Set(records.map((r) => `${r.coach}|${r.level}`))].sort();
-  for (const key of keys) {
-    const [coach = "", level = ""] = key.split("|");
-    const rs = records.filter((r) => r.coach === coach && String(r.level) === level);
-    const lived = rs.map((r) => r.lived).sort((a, b) => a - b);
-    lines.push(`| ${coach} | Nightmare ${level} | ${rs.length} | ${rs.filter((r) => r.won).length} | ${mmss(Math.max(...lived))} | ${mmss(lived[Math.floor(lived.length / 2)] ?? 0)} | ${rs.slice(0, 5).map((r) => mmss(r.lived)).join(", ")} |`);
-  }
+  const lines = ["| Run | Level | Lived | Won | Coach | Lockstep |", "| --- | --- | --- | --- | --- | --- |"];
+  for (const r of records) lines.push(`| ${r.name.slice(0, 16).replace("_", " ")} | Nightmare ${r.level} | ${mmss(r.lived)} | ${r.won ? "yes" : "no"} | ${r.coach} | ${r.name < LIVE_SINCE ? "yes (banned since)" : "no"} |`);
   return lines.join("\n");
 }
+
+/** Runs from before this one played in lockstep, which is banned now. */
+const LIVE_SINCE = "2026-11-08_07-5";
 
 
 export async function latestNotes(count: number): Promise<string> {
@@ -669,7 +645,6 @@ export type Experiment = {
   status: (typeof EXPERIMENT_STATUSES)[number];
   area: Area;
   result: (typeof EXPERIMENT_RESULTS)[number];
-  coach: string;
   created: string;
   updated: string;
   hypothesis: string;
@@ -679,7 +654,7 @@ export type Experiment = {
   games: string;
 };
 const EXPERIMENT_TEXT = ["hypothesis", "method", "findings"] as const;
-const EXPERIMENT_FIELDS = ["status", "area", "result", "coach", "created", "updated"] as const;
+const EXPERIMENT_FIELDS = ["status", "area", "result", "created", "updated"] as const;
 export const EXPERIMENT_NAME = /^[a-z0-9]+(-[a-z0-9]+){0,7}$/;
 export const experimentFile = (name: string) => path.join(EXPERIMENTS_DIR, `experiment_${name}.md`);
 const title = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -715,7 +690,6 @@ export function parseExperiment(text: string, name: string): Experiment {
     status: field("status") as Experiment["status"],
     area: field("area") as Area,
     result: field("result") as Experiment["result"],
-    coach: field("coach"),
     created: field("created"),
     updated: field("updated"),
     hypothesis: section("hypothesis"),
@@ -771,6 +745,7 @@ export type Gym = {
   name: string;
   status: "pending" | "building" | "ready" | "failed" | "retired";
   purpose: string;
+  /** "loop" for the gyms the loop keeps from the start, else "coach". Gyms from before the one coach name the coach that asked. */
   coach: string;
   created: string;
   /** The Nightmare level, 1 to 10. */
@@ -786,8 +761,6 @@ export type Gym = {
   templates?: Templates;
   checkpoint?: CheckpointMeta;
   error?: string;
-  /** The coach whose loop is building it, while it is building. */
-  builder?: string;
 };
 
 export const GYM_NAME = /^[a-z0-9]+(-[a-z0-9]+){0,6}$/;
@@ -797,7 +770,7 @@ export async function readGyms(): Promise<Gym[]> {
   return (await f.exists()) ? ((await f.json()) as Gym[]) : [];
 }
 
-/** Changes gyms under the lock, so two coaches never write over each other. */
+/** Changes gyms under the lock. */
 export async function updateGyms<T>(change: (gyms: Gym[]) => T | Promise<T>): Promise<T> {
   return locked(async () => {
     const gyms = await readGyms();
@@ -812,72 +785,57 @@ export function gymLine(g: Gym): string {
   return `- ${g.name} (${g.status}${g.error === undefined ? "" : `: ${g.error}`}): Nightmare ${g.difficulty} at ${clock(g.at)}${g.weapon === "" ? "" : `, started with ${g.weapon}`}${g.loadout === undefined ? "" : ", build swapped in at the start"}${build}. ${g.purpose} (by ${g.coach}, ${g.source})`;
 }
 
-// ---- Coaches -----------------------------------------------------------------------------------
+// ---- The coach ---------------------------------------------------------------------------------
 
-export function coachFiles(coach: string) {
-  const dir = path.join(COACHES_DIR, coach);
-  return {
-    dir,
-    experiments: path.join(dir, "experiments.md"),
-    fullRun: path.join(dir, "full-run.md"),
-    reflect: path.join(dir, "reflect.md"),
-    playbook: path.join(dir, "playbook.json"),
-    log: path.join(dir, "log.md"),
-    state: path.join(dir, "state.json"),
-  };
-}
+export const COACH_FILES = {
+  dir: COACH_DIR,
+  experiments: path.join(COACH_DIR, "experiments.md"),
+  fullRun: path.join(COACH_DIR, "full-run.md"),
+  reflect: path.join(COACH_DIR, "reflect.md"),
+  playbook: path.join(COACH_DIR, "playbook.json"),
+  log: path.join(COACH_DIR, "log.md"),
+  state: path.join(COACH_DIR, "state.json"),
+};
 export const PROMPT_KEYS = { experiments: "experiments.md", fullRun: "full-run.md", reflect: "reflect.md" } as const;
 export type PromptKey = keyof typeof PROMPT_KEYS;
 
-/** The templates and starting weapon ("" for the game's Random) a coach currently plays best with. */
+/** The templates and starting weapon ("" for the game's Random) the coach currently plays best with. */
 export type Playbook = { templates: Templates; weapon: string; updated: string; why: string };
 
-export async function readPlaybook(coach: string): Promise<Playbook> {
-  const f = Bun.file(coachFiles(coach).playbook);
+export async function readPlaybook(): Promise<Playbook> {
+  const f = Bun.file(COACH_FILES.playbook);
   if (!(await f.exists())) return { templates: DEFAULT_TEMPLATES, weapon: "", updated: "never", why: "the built-in defaults" };
   const raw = (await f.json()) as Playbook;
   const t = checkTemplates(raw.templates, DEFAULT_TEMPLATES);
-  if ("errors" in t) throw new Error(`${coachFiles(coach).playbook}: ${t.errors.join("; ")}`);
+  if ("errors" in t) throw new Error(`${COACH_FILES.playbook}: ${t.errors.join("; ")}`);
   return { ...raw, templates: t.value };
 }
 
-export async function writePlaybook(coach: string, p: Playbook) {
-  mkdirSync(coachFiles(coach).dir, { recursive: true });
-  await Bun.write(coachFiles(coach).playbook, `${JSON.stringify(p, null, 2)}\n`);
+export async function writePlaybook(p: Playbook) {
+  await Bun.write(COACH_FILES.playbook, `${JSON.stringify(p, null, 2)}\n`);
 }
 
-/** The playbook updated last by any coach, for a bot run outside the loop (the panel's pilot). */
-export async function newestPlaybook(): Promise<{ playbook: Playbook; coach: string } | undefined> {
-  let best: { playbook: Playbook; coach: string; at: number } | undefined;
-  for (const coach of readdirSync(COACHES_DIR, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)) {
-    const f = Bun.file(coachFiles(coach).playbook);
-    if (!(await f.exists()) || (best !== undefined && f.lastModified <= best.at)) continue;
-    best = { playbook: await readPlaybook(coach), coach, at: f.lastModified };
-  }
-  return best;
-}
-
-/** Where a coach's loop stands, so a restarted loop goes on from there. */
+/** Where the coach's loop stands, so a restarted loop goes on from there. */
 export type CoachState = { loop: number; iteration: number };
-export async function readCoachState(coach: string): Promise<CoachState> {
-  const f = Bun.file(coachFiles(coach).state);
+export async function readCoachState(): Promise<CoachState> {
+  const f = Bun.file(COACH_FILES.state);
   return (await f.exists()) ? ((await f.json()) as CoachState) : { loop: 1, iteration: 1 };
 }
-export async function writeCoachState(coach: string, s: CoachState) {
-  await Bun.write(coachFiles(coach).state, `${JSON.stringify(s)}\n`);
+export async function writeCoachState(s: CoachState) {
+  await Bun.write(COACH_FILES.state, `${JSON.stringify(s)}\n`);
 }
 
-/** Fails at startup when a coach's prompts are missing or a shared file is unreadable. */
-export async function checkLoopFiles(coach: string) {
+/** Fails at startup when the coach's prompts are missing or a loop file is unreadable. */
+export async function checkLoopFiles() {
   mkdirSync(NOTES_DIR, { recursive: true });
   mkdirSync(EXPERIMENTS_DIR, { recursive: true });
   for (const key of Object.keys(PROMPT_KEYS) as PromptKey[]) {
-    const f = coachFiles(coach)[key];
-    if (!(await Bun.file(f).exists())) throw new Error(`${f} is missing; copy gameplay/coaches/starter/ to start a coach`);
+    const f = COACH_FILES[key];
+    if (!(await Bun.file(f).exists())) throw new Error(`${f} is missing`);
   }
   await readBeliefs();
   await readInfra();
-  await readPlaybook(coach);
+  await readPlaybook();
   await readGyms();
   await readExperiments();
 }
@@ -886,7 +844,7 @@ export async function checkLoopFiles(coach: string) {
 // Every coach call may change beliefs and experiments and file infrastructure requests. The rest
 // (games, gyms, the playbook, prompt rewrites) depends on the call and is checked by the loop.
 
-export type ExperimentEdit = Partial<Omit<Experiment, "games" | "coach" | "created" | "updated">> & { name: string };
+export type ExperimentEdit = Partial<Omit<Experiment, "games" | "created" | "updated">> & { name: string };
 export type LoopEdits = { experiments?: ExperimentEdit[]; beliefs?: BeliefRow[]; infra?: { request: string; why: string }[] };
 /** What the coach was shown, which its edits are checked against. */
 export type Tables = { beliefs: BeliefRow[]; experiments: Experiment[] };
@@ -939,26 +897,22 @@ export function checkEdits(raw: Record<string, unknown>, before: Tables): Checke
   return errors.length > 0 ? { errors } : { value: edits };
 }
 
-const renameIds = (text: string, renamed: Map<string, string>) => text.replace(/\b[A-Z]+\d+\b/g, (id) => renamed.get(id) ?? id);
-
 /**
- * Writes a coach's edits over what it was shown (`before`). `stamp` says when, such as
- * "sonnet-high L1.I3", and goes into the beliefs' created and updated columns and the experiments'.
+ * Writes the coach's checked edits. `stamp` says when, such as "L4.I3", and goes into the beliefs'
+ * created and updated columns and the experiments'.
  */
-export async function applyEdits(edits: LoopEdits, stamp: string, coach: string, before: Tables): Promise<string[]> {
+export async function applyEdits(edits: LoopEdits, stamp: string): Promise<string[]> {
   return locked(async () => {
     const done: string[] = [];
-    const renamed = new Map<string, string>();
     if (edits.beliefs !== undefined) {
-      const beliefs = merge(edits.beliefs, await readBeliefs(), before.beliefs, renamed);
       const now = await readBeliefs();
-      await writeTable(BELIEFS_CSV, BELIEF_COLUMNS, stampBeliefs(beliefs, now, stamp));
+      await writeTable(BELIEFS_CSV, BELIEF_COLUMNS, stampBeliefs(upsert(edits.beliefs, now), now, stamp));
       done.push(`beliefs.csv (${edits.beliefs.length} rows added or changed)`);
     }
     for (const edit of edits.experiments ?? []) {
       const file = Bun.file(experimentFile(edit.name));
       const old = (await file.exists()) ? parseExperiment(await file.text(), edit.name) : undefined;
-      const base: Experiment = old ?? { name: edit.name, title: "", status: "proposed", area: "models", result: "", coach, created: stamp, updated: stamp, hypothesis: "", method: "", findings: "", games: "" };
+      const base: Experiment = old ?? { name: edit.name, title: "", status: "proposed", area: "models", result: "", created: stamp, updated: stamp, hypothesis: "", method: "", findings: "", games: "" };
       const defined = Object.fromEntries(Object.entries(edit).filter(([, v]) => v !== undefined));
       await writeExperiment({ ...base, ...defined, updated: stamp });
       done.push(`experiment_${edit.name}.md${old === undefined ? " (new)" : ""}`);
@@ -967,7 +921,6 @@ export async function applyEdits(edits: LoopEdits, stamp: string, coach: string,
       await writeTable(INFRA_CSV, INFRA_COLUMNS, [...(await readInfra()), ...edits.infra.map((x) => ({ date: today(), run: stamp, status: "open", request: x.request, why: x.why }))]);
       done.push(`${edits.infra.length} infrastructure requests`);
     }
-    if (renamed.size > 0) done.push(`renumbered ${[...renamed].map(([a, b]) => `${a} to ${b}`).join(", ")}, taken meanwhile`);
     return done;
   });
 }
