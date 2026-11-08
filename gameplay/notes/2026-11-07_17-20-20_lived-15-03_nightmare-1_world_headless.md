@@ -7,6 +7,7 @@
 | Opening | first chest listed 1:08; 8 chests opened by 2:30; 0 elite fights and 0 elites killed by 3:00; first evolution 1:38; level 9 at 3:00 |
 | Testing | E26 |
 | Seed | 127B4T9 |
+| Starting weapon | tater-pup (random, read from the log) |
 | Planner | typesafe/jev-1.14-20261014 |
 | Action model | typesafe/jev-1.14-20261014 |
 | Coach | grok grok-4.7-build-fast |

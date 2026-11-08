@@ -7,6 +7,7 @@
 | Opening | first chest listed 3:01; 0 chests opened by 2:30; 0 elite fights and 0 elites killed by 3:00; first evolution none; level 7 at 3:00 |
 | Testing | E24 |
 | Seed | 1SIDY5R |
+| Starting weapon | peeler (random, read from the log) |
 | Planner | typesafe/jev-1.14-20261014 |
 | Action model | typesafe/jev-1.14-20261014 |
 | Coach | grok grok-4.7-build-fast |

@@ -7,6 +7,7 @@
 | Opening | first chest listed 1:32; 4 chests opened by 2:30; 0 elite fights and 0 elites killed by 3:00; first evolution none; level 9 at 3:00 |
 | Testing | E21 |
 | Seed | 1Q4CI77 |
+| Starting weapon | root-spikes (random, read from the log) |
 | Planner | typesafe/jev-1.14-20261014 |
 | Action model | typesafe/jev-1.14-20261014 |
 | Coach | claude sonnet |
