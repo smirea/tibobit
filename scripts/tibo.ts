@@ -3,8 +3,6 @@ import {
   BRIDGE_ORIGIN as DEFAULT_ORIGIN,
   type CheckpointMeta,
   type CommandStatus,
-  type EventView,
-  type PickupView,
   type Rel,
   type RunView,
   type Snapshot,
@@ -14,8 +12,8 @@ import {
 
 const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
 
-  state [--format text|json]      the game now: text (default) reads well for a person or a model;
-                                  json is the raw snapshot on one line (types in src/agent/protocol.ts)
+  state [--format text|json]      the game now: text (default) is only what a decision model acts on;
+                                  json is the whole snapshot on one line (types in src/agent/protocol.ts)
   watch                           the text state, refreshed 4 times a second
   encyclopedia [section]          JSON of weapons, passives, items, recipes, enemies, bosses, pois, biomes
   move <dir|degrees> [seconds]    dir: up, down, left, right, up-left, up-right, down-left, down-right
@@ -83,147 +81,85 @@ function flag(args: string[], name: string): string | undefined {
   return value;
 }
 
-const at = (r: Rel) => `${Math.round(r.dist)} ${r.dir}${r.onScreen ? "" : " (off screen)"}`;
+const at = (r: Rel) => `${Math.round(r.dist)} ${r.dir}`;
 
 function clock(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
-const num1 = (n: number) => String(Math.round(n * 10) / 10);
-const top = (m: Record<string, number>, n: number) =>
-  Object.entries(m)
-    .slice(0, n)
-    .map(([k, v]) => `${k} ${num1(v)}`)
-    .join(", ");
-
-// Multipliers sit at 1 (crits at 2) and flat stats at 0 until something changes them; only the changed ones say anything.
-function changedStats(stats: Record<string, number>): string {
-  const base = (k: string) => (k === "critMult" ? 2 : /Mult$/.test(k) || k === "amountBonus" ? 1 : 0);
-  return Object.entries(stats)
-    .filter(([k, v]) => k === "maxHp" || v !== base(k))
-    .map(([k, v]) => `${k} ${num1(v)}`)
-    .join(", ");
-}
-
-function eventLine(e: EventView): string {
-  const said = e.announcement as { kind?: string } | undefined;
-  const what =
-    e.type === "announce"
-      ? `${e.name ?? said?.kind ?? "banner"}${e.text ? `: ${e.text}` : ""}`
-      : `${e.type}${e.name !== undefined ? ` ${e.name}` : typeof e.id === "string" ? ` ${e.id}` : ""}${typeof e.level === "number" ? ` ${e.level}` : ""}`;
-  return `${clock(e.time)} ${what}`;
-}
-
-function summarizeRun(r: RunView): string[] {
+// Only what a decision model acts on: what can hurt Tibo, what he can take, and the open choice.
+function summarizeRun(r: RunView, screen: string): string[] {
   const p = r.player;
   const lines: string[] = [];
   const add = (label: string, value: string) => value !== "" && lines.push(`${label}: ${value}`);
   const status = [
+    p.dashReadyIn > 0 ? `dash in ${p.dashReadyIn}s` : `dash ${p.dashCharges}`,
+    p.revivesLeft > 0 ? `revives ${p.revivesLeft}` : "",
     p.invulnerable ? "invulnerable" : "",
     p.stunned > 0 ? `stunned ${p.stunned}s` : "",
     p.frozen > 0 ? `frozen ${p.frozen}s` : "",
     p.slowed > 0 ? `slowed ${p.slowed}s` : "",
   ].filter(Boolean);
 
-  lines.push(
-    `run: ${clock(r.time)} of ${clock(r.winAt)}${r.totals.won ? " (won)" : ""}  ${r.difficulty}${r.daily ? " daily" : ""}  seed ${r.seed}${r.score === undefined ? "" : `  score ${r.score}`}`,
-    `where: ${r.biome.name}${r.landmark === undefined ? "" : `, in landmark ${r.landmark.name}${r.landmark.event === undefined ? "" : ` (event ${r.landmark.event.name})`}`}  at (${p.x}, ${p.y})`,
+  lines.push(`${clock(r.time)}${screen === "" ? "" : ` ${screen}`}  hp ${Math.round(p.hp)}/${Math.round(p.maxHp)}  lv ${p.level}  gold ${p.gold}  ${status.join("  ")}`);
+  add(
+    "hurt by",
+    Object.entries(p.hurtBy)
+      .slice(0, 3)
+      .map(([k, v]) => `${k} ${Math.round(v)}`)
+      .join(", "),
   );
-  if (r.weather !== undefined) add("weather", `${r.weather.name}. ${r.weather.description}`);
-  add("gear", r.gear.map((g) => `${g.name}${g.description ? ` (${g.description})` : ""} [${g.lines.map((l) => `${l.affix} ${l.roll}`).join(", ")}]`).join("; "));
-  lines.push(
-    `player: hp ${Math.round(p.hp)}/${Math.round(p.maxHp)}  lv ${p.level} (${Math.round(p.xp)}/${Math.round(p.xpNext)} xp)  gold ${p.gold}  dash ${p.dashCharges}/${p.dashMax}${p.dashReadyIn > 0 ? ` (next in ${p.dashReadyIn}s)` : ""}${status.length > 0 ? `  ${status.join(", ")}` : ""}`,
-    `spare: rerolls ${p.rerolls}, skips ${p.skips}, banishes ${p.banishes}, revives ${p.revivesLeft}, curses ${p.curses}`,
-  );
-  add("hurt in the last 3s", top(p.hurtBy, 8));
-  add("stats", changedStats(r.stats));
-  add("buffs", r.buffs.map((b) => `${b.id}${b.mult === undefined ? "" : ` x${b.mult}`} ${b.endsIn}s left`).join(", "));
-  add("weapons", r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none");
+  add("buffs", r.buffs.map((b) => `${b.id} ${Math.round(b.endsIn)}s`).join(", "));
+  add("weapons", r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", "));
   add("passives", r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", "));
-  add("items", r.loadout.items.map((i) => `${i.name} x${i.count}`).join(", "));
-  add("banished", r.loadout.banished.join(", "));
-  if (r.combos.length > 0)
-    lines.push(`combos (+ held, ~ leveling, - missing): ${r.combos.map((c) => `${c.name}${c.ready ? " READY" : ""} (${c.parts.map((x) => `${x.state === "done" ? "+" : x.state === "leveling" ? "~" : "-"}${x.name}`).join(" ")})`).join("; ")}`);
-  if (r.unpaired.length > 0) {
-    lines.push("unpaired (* never made):");
-    for (const u of r.unpaired) lines.push(`  ${u.name}: ${u.options.map((o) => `${o.name}${o.made ? "" : "*"}${o.banished ? " (banished)" : ""}`).join(", ")}`);
-  }
+  add("items", r.loadout.items.map((i) => `${i.name}${i.count > 1 ? ` x${i.count}` : ""}`).join(", "));
+  add("ready to evolve from a chest", r.combos.filter((c) => c.ready).map((c) => c.name).join(", "));
   if (r.choice !== undefined) {
-    lines.push(`choice (${r.choice.kind}):`);
-    for (const o of r.choice.options) {
+    lines.push(`choice (${r.choice.kind}; rerolls ${p.rerolls}, skips ${p.skips}, banishes ${p.banishes}):`);
+    for (const o of r.choice.options.filter((o) => o.available || o.type !== "other")) {
       // The card text repeats the name and carries the badges and recipe arrows the helper draws on it.
       const noise = new Set([o.name, "NEW", "UNSEEN", "→", ...o.combos.map((c) => c.name)]);
       const label = o.label
         .split(" | ")
         .filter((part) => !noise.has(part) && !/^LV \d+$/.test(part))
         .join(" | ");
-      lines.push(`  [${o.index}] ${o.name}${o.level === undefined ? "" : ` Lv${o.level}`}${o.recommended ? " (recommended)" : ""}${o.unseen ? " UNSEEN" : ""}${o.available ? "" : " (unavailable)"}${label === "" ? "" : `: ${label}`}`);
-      for (const c of o.combos)
-        lines.push(`      ${c.partnerHeld ? "+" : "-"} ${c.partner.name}${c.partnerBanished ? " (banished)" : ""} -> ${c.name}${c.ready ? " READY" : ""}${c.made ? "" : " (new)"}`);
+      const pairs = o.combos.filter((c) => c.partnerHeld).map((c) => `${c.ready ? "completes" : "pairs toward"} ${c.name}`);
+      lines.push(`  [${o.index}] ${o.name}${o.level === undefined ? "" : ` Lv${o.level}`}${o.available ? "" : " (unavailable)"}${label === "" ? "" : `: ${label}`}${pairs.length > 0 ? ` (${pairs.join(", ")})` : ""}`);
     }
   }
-  add(
-    "coming",
-    r.schedule
-      .slice(0, 5)
-      .map((w) => `${clock(w.minute * 60)} ${[w.boss === undefined ? "" : `boss ${w.boss.name}`, w.elite ? "elite" : "", ...w.events.map((e) => e.name)].filter(Boolean).join(", ")}`)
-      .join("; "),
-  );
-  if (r.events.length > 0) {
-    lines.push("recent events:");
-    for (const e of r.events.slice(-10)) lines.push(`  ${eventLine(e)}`);
-  }
+  const boss = r.schedule.find((w) => w.boss !== undefined);
+  if (boss?.boss !== undefined && r.bosses.length === 0) add("next boss", `${boss.boss.name} at ${clock(boss.minute * 60)}`);
+  const news = r.events.filter((e) => r.time - e.time <= 10 && (e.text !== undefined || e.type === "bossSpawn"));
+  add("just now", news.map((e) => e.text ?? `${e.name} arrived`).join("; "));
 
-  for (const b of r.bosses) lines.push(`boss: ${b.name} hp ${Math.round(b.hp)}/${Math.round(b.maxHp)} dmg ${b.damage} speed ${b.speed} at ${at(b)}`);
-  lines.push(`enemies ${r.enemies.total}: ${r.enemies.nearest.slice(0, 6).map((e) => `${e.name}${e.elite ? " (elite)" : ""} dmg ${e.damage} ${at(e)}`).join(", ")}`);
-  const elites = r.enemies.elites.filter((e) => !r.enemies.nearest.slice(0, 6).some((n) => n.uid === e.uid));
-  add("elites", elites.map((e) => `${e.name} hp ${Math.round(e.hp)}/${Math.round(e.maxHp)} ${at(e)}`).join(", "));
-  if (r.bullets.total > 0) lines.push(`bullets ${r.bullets.total}, nearest ${at(r.bullets.nearest[0] as Rel)}; ${r.standingBulletHits} would hit Tibo standing still`);
-  add("volleys", r.volleys.slice(0, 4).map((v) => `${v.count} bullets x${v.bursts}${v.firesIn > 0 ? ` in ${v.firesIn}s` : " firing"} from ${at(v)}`).join(", "));
-  const near = r.hazards.filter((h) => h.dist - h.radius < 120);
-  add("hazards", near.map((h) => `${h.kind} (${h.source}) ${at(h)} r${h.radius}${h.inside ? " INSIDE" : ""}${h.landsIn === undefined ? "" : ` lands in ${h.landsIn}s`}`).join(", "));
+  for (const b of r.bosses) lines.push(`boss: ${b.name} ${Math.round((b.hp / b.maxHp) * 100)}% hp, ${at(b)}`);
+  const close = r.sectors.reduce((n, sec) => n + sec.enemiesNear, 0);
+  lines.push(`enemies: ${r.enemies.total}, ${close} within 60; nearest ${r.enemies.nearest.slice(0, 3).map((e) => `${e.name} ${at(e)}`).join(", ")}`);
+  add("elites", r.enemies.elites.slice(0, 3).map((e) => `${e.name} ${Math.round((e.hp / e.maxHp) * 100)}% hp ${at(e)}`).join(", "));
+  if (r.standingBulletHits + r.standingEnemyTouches > 0) lines.push(`standing still, within 0.6s: ${r.standingBulletHits} bullet hits, ${r.standingEnemyTouches} enemy touches`);
+  add("volleys", r.volleys.filter((v) => v.dist < 250).slice(0, 2).map((v) => `${v.count * Math.max(1, v.bursts)} bullets ${v.firesIn > 0 ? `in ${v.firesIn}s` : "now"} from ${at(v)}`).join(", "));
+  add("hazards", r.hazards.filter((h) => h.inside || h.dist - h.radius < 60).map((h) => `${h.kind} ${h.inside ? "UNDER TIBO" : at(h)}${h.landsIn === undefined ? "" : ` lands in ${h.landsIn}s`}`).join(", "));
 
-  const pickup = (q: PickupView) => `${q.kind} #${q.uid} ${at(q)}${q.chargeNeeded ? ` charge ${q.charge}/${q.chargeNeeded}s` : ""}`;
   const loot = [...r.pickups.chests, ...r.pickups.nearest.filter((q) => q.kind !== "gold")].sort((a, b) => a.dist - b.dist);
-  if (loot.length > 0) {
-    lines.push("pickups (by distance):");
-    for (const q of loot.slice(0, 8)) lines.push(`  ${pickup(q)}`);
-  }
+  add("pickups", loot.slice(0, 5).map((q) => `${q.kind} #${q.uid} ${at(q)}`).join(", "));
   if (r.pois.length > 0) {
-    lines.push("points of interest (by distance):");
-    const described = new Set<string>();
-    for (const q of [...r.pois].sort((a, b) => a.dist - b.dist)) {
-      const kind = q.variant ?? q.kind;
-      const what = described.has(kind) || q.description === "" ? "" : ` - ${q.description}`;
-      described.add(kind);
+    lines.push("spots:");
+    for (const q of [...r.pois].sort((a, b) => a.dist - b.dist).slice(0, 8)) {
+      const charge = q.charge > 0 ? ` charged ${q.charge}/${q.chargeNeeded}s` : "";
       const price = q.price === undefined ? "" : ` costs ${q.price}`;
-      const prices = q.prices === undefined ? "" : ` items ${q.prices.join("/")} gold by rarity`;
-      lines.push(`  #${q.uid} ${q.name} ${at(q)} r${q.radius}${q.inside ? " INSIDE" : ""}${q.chargeNeeded ? ` charge ${q.charge}/${q.chargeNeeded}s` : ""}${price}${prices}${what}`);
+      lines.push(`  #${q.uid} ${q.name} ${q.inside ? "INSIDE" : at(q)}${charge}${price}`);
     }
   }
-  add("dogs", r.pets.map((d) => `${d.name} (${d.id}) lv ${d.level} ${at(d)}`).join(", "));
-  add("grok bots", r.helpers.map((h) => `${h.name} ${h.mode} ${at(h)}, leaves in ${h.leavesIn}s - ${h.description}`).join("; "));
+  add("grok bots", r.helpers.filter((h) => h.mode === "wander" || h.mode === "hop").map((h) => `${h.name} ${at(h)}`).join(", "));
   add("visitors", r.visitors.map((v) => `${v.who} ${at(v)}`).join(", "));
-
-  const t = r.totals;
-  lines.push(`totals: kills ${t.kills}, bosses ${t.bossesKilled}, elites ${t.elitesKilled}, gold +${t.goldEarned}/-${t.goldSpent}, chests from bosses ${t.bossChests}, crates ${t.cratesBought}, shrines ${t.shrinesUsed}, items bought ${t.itemsBought}`);
-  add("made", t.made.join(", "));
-  add("damage dealt", top(t.damageDealt, 6));
-  add("damage taken", top(t.damageTaken, 6));
   return lines;
 }
 
 function summarize(s: Snap): string {
-  const head = `screen: ${s.screen}${s.mode === undefined ? "" : `  mode ${s.mode}`}${s.connected ? "" : "  (tab disconnected)"}  age ${s.ageMs}ms${s.error ? `  error: ${s.error}` : ""}`;
-  const lines = [head, ...(s.run === undefined ? [] : summarizeRun(s.run))];
-  if (s.lastRun !== undefined) {
-    const l = s.lastRun;
-    lines.push(`last run: ${clock(l.time)} lv ${l.level}, kills ${l.kills}${l.won ? ", won" : ""}${l.killer === undefined ? "" : `, killed by ${l.killer}`}`, `  damage taken: ${top(l.damageTaken, 6)}`);
-  }
-  if (s.lastRunLink !== undefined) lines.push(`last run link: ${s.lastRunLink}`);
-  if (s.run === undefined && s.ladderCleared !== undefined) lines.push(`nightmare levels won: ${s.ladderCleared}`);
-  const last = s.commands.at(-1);
-  if (last !== undefined) lines.push(`last command: #${last.id} ${last.command.type} ${last.state}${last.detail ? ` (${last.detail})` : ""}`);
+  const lines = s.run === undefined ? [s.screen] : summarizeRun(s.run, s.screen === "run" ? "" : s.screen);
+  if (!s.connected) lines.unshift("the tibo.dog tab is not connected");
+  if (s.error) lines.push(`error: ${s.error}`);
+  if (s.lastRun !== undefined) lines.push(`last run: ${clock(s.lastRun.time)} lv ${s.lastRun.level}${s.lastRun.won ? ", won" : ""}${s.lastRun.killer === undefined ? "" : `, killed by ${s.lastRun.killer}`}`);
   return lines.join("\n");
 }
 

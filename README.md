@@ -42,7 +42,7 @@ The same userscript lets a program play the game. A local server exposes the gam
 ```sh
 ./scripts/agent-server.ts     # listens on http://127.0.0.1:7357
 bun run agent-server          # the same, restarting whenever its code changes
-./scripts/tibo.ts state       # the game now as text for a person or a model; --format json for the raw snapshot
+./scripts/tibo.ts state       # the game now, only what a decision model acts on; --format json for the whole snapshot
 ```
 
 Keep one tibo.dog tab open with the userscript installed. It connects within a few seconds of the server starting and reconnects on its own, including to a run already in progress.
