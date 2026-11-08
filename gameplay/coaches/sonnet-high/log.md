@@ -103,3 +103,9 @@ L1.I8 results. Fresh seed 909: steam-vent with the chest-first playbook survived
 ## L1.I10: full run (2026-11-08 07:50)
 
 I9 checked the chest-first playbook (steam-vent, lockstep 1, eliteSeconds 20) in new places, and it held. Fresh seeds 1010 and 1111 survived 5:00 with 77 and 62 damage. The seed-909 gym from 5:00 to 10:00 took 0 damage with 19 boss chests. The weak seed-707 gym from 10:00 to 15:00 took 19 damage. Boss ranges of 250 on the natural 5:00 gym died at 74s to Late Blight (103 damage), and ranges have now shown no consistent benefit in 9 pairs. That makes 12 of 12 chest-first survivals on natural builds, against 3 of 4 deaths for the default prompt on the same gym. The weak spot is still minutes 5 to 8 on a build with no evolution, where the bosses arrive. The full run on Nightmare 1 plays the playbook unchanged.
+
+## L1.I10: reflection (2026-11-08 08:11)
+
+Loop 1 taught three things. First, steam-vent with lockstep 1 and the chest-first goal prompt makes the first 16 minutes of Nightmare 1 safe: 12 of 12 natural builds survived in training, and the full run lived 18:36 at 192/192 hp until 17:00. Second, the 5-minute training cap and my experiments centred on minutes 0-10 meant I tested knobs that were already solved, and the late game (16:00-20:00) went untested. The late gyms built by sonnet-medium and me mostly failed or crashed, so the 17:00 Titan and 18:00 Kraken killed the run with no data on how to handle them. The run died with 0 dashes, 192 max hp, 8000 unspent gold and chest goals that stayed on beside bosses. Third, I guessed some things instead of testing them (boss ranges across 9 pairs gave no benefit; the gold and shrine economy was never tested). Next loop: build natural 10:00-16:40 gyms early with a proven loadout shape, test a boss/crowd-aware goal prompt, an HP/dash pick prompt and spending gold, and take a repeat before changing the playbook.
+
+Rewrote experiments.md, full-run.md, reflect.md.

@@ -99,3 +99,27 @@ In I9 the default goal prompt died again from the natural 5:00 gym (155.9s, kill
 The chest-first lockstep steam-vent playbook lived 17:20 on NM1, the best known result, dying at 17:20 to Compost Titan after the chest goal pulled Tibo toward a boss with only 120 max hp and no dashes. Training stopped at 5:00-15:00 gyms where everything survived, so it never exposed the 16:00+ risk. Next loop: test HP/dash-focused picks and a boss-aware chest rule from the 15:00 gym, and spend iterations on minutes 15-20 rather than repeats of 5 minute survival.
 
 Rewrote experiments.md, full-run.md, reflect.md.
+
+## L2.I1: experiments (2026-11-08 08:01)
+
+Last loop's full run (steam-vent, lockstep, chest-first goal prompt) lived 17:20 on NM1 and died to Compost Titan. Max hp was still 120, there were 0 dash charges, and the chest goal walked Tibo toward a chest under the boss (hp 120 to 7 in about 20s, with grease-fiends adding damage). Training never reached 16:00+, so this iteration builds fresh late gyms (15:00 and 16:40, just before the 17:00 Titan) and spends all 5 games there. Four games start from the 16:40 gym and differ in one thing: a baseline, a boss-aware goal prompt (no chest walks when a boss is within 400 or a crowd is close), an HP/dash/regen pick prompt, and both together. A fifth game runs the combined change from the 15:00 gym, to see whether it holds over the whole 15:00-20:00 stretch. The boss ranges stay at 0, since B10 says they do not help. Differences in damage taken and survival through the Titan window are the signal.
+
+- L2.I1.G1 titan baseline (late-boss-aware-nm1): not played: gym nm1-min16-titan is failed
+- L2.I1.G2 titan boss-aware goal (late-boss-aware-nm1): not played: gym nm1-min16-titan is failed
+- L2.I1.G3 titan HP and dash picks (late-hp-dash-picks-nm1): not played: gym nm1-min16-titan is failed
+- L2.I1.G4 titan goal plus picks (late-hp-dash-picks-nm1): not played: gym nm1-min16-titan is failed
+- L2.I1.G5 min15 goal plus picks 15-20 (late-boss-aware-nm1): not played: gym nm1-min15-late is failed
+- Gym nm1-min15-late: failed (Tibo died at 08:32 on the way to 15:00).
+- Gym nm1-min16-titan: failed (Tibo died at 06:37 on the way to 16:40).
+
+## L2.I2: experiments (2026-11-08 08:02)
+
+Both L2.I1 gyms (nm1-min15-late, nm1-min16-titan) failed because the natural builds died on the way to 15:00 and 16:40, so none of the five games played and nothing new was learned. This iteration rebuilds the late gyms with a loadout swapped in at 0:00 that copies the full run's 15:00 build (pressure-cooker, eclipse-scythe, potato-patch, tater-minigun, hash-boomerang 8, skipping-cannonball 8; five passives, one slot left open so HP or dash cards can still be taken). The gyms are saved at 15:00 and 16:40, just before the 17:00 Compost Titan. Four games start from the 16:40 gym: baseline playbook, a stricter boss and crowd aware goal prompt, an HP/dash/armor pick prompt, and both together. A fifth game plays both from the 15:00 gym. Damage in the Titan window, survival, max HP and dashes held are the signals.
+
+- L2.I2.G1 titan baseline (late-boss-aware-nm1): not played: gym nm1-min16-titan-b is failed
+- L2.I2.G2 titan boss-aware goal (late-boss-aware-nm1): not played: gym nm1-min16-titan-b is failed
+- L2.I2.G3 titan HP and dash picks (late-hp-dash-picks-nm1): not played: gym nm1-min16-titan-b is failed
+- L2.I2.G4 titan goal plus picks (late-hp-dash-picks-nm1): not played: gym nm1-min16-titan-b is failed
+- L2.I2.G5 min15 goal plus picks 15-20 (late-boss-aware-nm1): not played: gym nm1-min15-late-b is failed
+- Gym nm1-min16-titan-b: failed (the bot exited with code 1; see /Users/stefan/code/tibobit/.runs/rsi/sonnet-medium/logs/gym-nm1-min16-titan-b-1794124953919.bot.log).
+- Gym nm1-min15-late-b: failed (the bot exited with code 1; see /Users/stefan/code/tibobit/.runs/rsi/sonnet-medium/logs/gym-nm1-min15-late-b-1794124953409.bot.log).
