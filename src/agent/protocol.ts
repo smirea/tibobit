@@ -122,6 +122,8 @@ export type Snapshot = {
   error?: string;
 };
 
+export type EnemyView = Rel & { uid: number; id: string; name: string; hp: number; radius: number; speed: number; elite: boolean };
+
 export type RunView = {
   /** The run's seed and whether it is today's Daily; the same Daily seed means the same map and spawns. */
   seed: string;
@@ -149,7 +151,8 @@ export type RunView = {
   unpaired: UnpairedView[];
   choice?: { kind: string; options: OptionView[]; raw?: unknown };
   bosses: (Rel & { id: string; name: string; hp: number; maxHp: number; radius: number })[];
-  enemies: { total: number; nearest: (Rel & { id: string; name: string; hp: number; radius: number; speed: number; elite: boolean })[] };
+  /** `elites` is every elite alive, nearest first, wherever it is; `uid` follows one enemy across snapshots. */
+  enemies: { total: number; nearest: EnemyView[]; elites: EnemyView[] };
   /** Counts by kind, every chest, and the nearest pickups that are not xp gems. */
   pickups: { counts: Record<string, number>; chests: PickupView[]; nearest: PickupView[] };
   /** The 15 nearest unused points of interest. Standing inside one's circle charges it; `charge` and `chargeNeeded` are seconds. */

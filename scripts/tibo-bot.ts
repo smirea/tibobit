@@ -311,7 +311,7 @@ function botFacts(): string {
     "tibo.dog is a survivors-like game. Weapons fire on their own; the player only walks, dashes, and picks level-up upgrades, chest rewards and shrine options. Tibo has 6 weapon and 6 passive slots. A base weapon at max level plus its catalyst (a passive or an item) evolves at the next chest; evolved weapons are much stronger, and two evolved weapons can sometimes fuse into a union.",
     `Two in-game models play, and which models they are is fixed: the planner (${PLAN_MODEL}) and the action model (${MODEL}). They are small, fast decision models that never write text. Each call sends one state text and a set of questions, all answered against that state: a yes/no question answered as a probability from 0 to 1 (noul), a score on a named scale, or a choice among keys. The templates you write are that state text and those questions.`,
     `The planner is asked when the run starts, when a goal ends, at every level-up, chest and shrine choice, right after a card is taken, when a boss first appears, and every few seconds while a goal is under way (5 by default; the person watching sets it). Each time it rates every goal option with planner.goal, and the highest-rated becomes Tibo's goal. At a choice it also picks a card with planner.pick; a choice with one card it can take is taken without asking.`,
-    `The goal options the bot offers: up to 4 chests within ${PLAN_RANGE} units (stand on one for its charge time to open it: a free pick, and it evolves whatever recipe is ready); up to 6 spots that charge, such as shrines, each with the game's description; up to 2 food pickups, which heal; the xp gems nearby, collected for up to gemsSeconds; exploring each of the 8 directions for exploreDistance units, stopping at the first chest never listed before; and evading enemies for evadeSeconds. Chests are not laid out on the map to be found: bosses and elites drop them when they die (extra elites and bosses, such as a curse adds, drop none), and a dropped chest stays until it is opened. So chests come from killing elites and bosses, and exploring only finds the ones already dropped. A target Tibo gave up on carries that note for ${GIVE_UP_SECONDS} seconds. A goal ends when its target is used up, after stuckSeconds without getting closer or charging, or well past the time the walk should take.`,
+    `The goal options the bot offers: up to 4 chests within ${PLAN_RANGE} units (stand on one for its charge time to open it: a free pick, and it evolves whatever recipe is ready); up to 6 spots that charge, such as shrines, each with the game's description; up to 2 food pickups, which heal; up to 2 elites within range to fight until they die (eliteSeconds at most; elites drop chests); the xp gems nearby, collected for up to gemsSeconds; exploring each of the 8 directions for exploreDistance units, stopping at the first chest never listed before; and evading enemies for evadeSeconds. Chests are not laid out on the map to be found: bosses and elites drop them when they die (extra elites and bosses, such as a curse adds, drop none), and a dropped chest stays until it is opened. So chests come from killing elites and bosses, and exploring only finds the ones already dropped. A target Tibo gave up on carries that note for ${GIVE_UP_SECONDS} seconds. A goal ends when its target is used up, after stuckSeconds without getting closer or charging, or well past the time the walk should take.`,
     "Every step (0.3 seconds by default) the game's own simulation forecasts each of the 8 directions and standing still one second ahead. While the way to the goal costs no more than the cheapest move plus extraDamage, the page walks Tibo there without asking a model. Otherwise the action model is asked action.hurt and action.useful about every move that does not cost more than that; the moves rated about as safe as the safest (within safeMargin, and below the middle of the scale) compete on usefulness, and the most useful wins. With a dash charge and an enemy or bullet close, action.dash decides whether Tibo dashes that way.",
     "Winning a run means surviving to 20:00; the run goes on after that until Tibo dies. In Open World on Nightmare, winning at Nightmare level N unlocks level N+1, and the bot always starts the highest level unlocked, so the ladder climbs one level per win and never drops. Every Nightmare level makes pests and bosses tougher; on every level they start a run at 40% of their health and grow to full by 8:00, so the opening minutes are the cheapest. A run that passes 20:00 also drops gear (hat, chest, legs, boots), which the game equips from a Loadout screen before a run; the bot cannot equip gear yet.",
     "The game runs live at normal speed and only stops at level-up, chest and shrine choices. The run log has one CSV row per model call and per goal that starts or ends, with the player's state at that moment.",
@@ -741,7 +741,7 @@ const said = (b: Book, kind: string, id: string) => {
 // The page walks Tibo to the goal on its own while the way there costs no more than the safest
 // move, by the game's own forecast. When it costs more, the action model picks the step, told
 // only the goal and what each move costs. A goal ends when it is used up, reached, stuck or late.
-type Goal = { kind: "chest" | "poi" | "food"; uid: number } | { kind: "explore"; dir: Direction } | { kind: "gems" } | { kind: "evade" };
+type Goal = { kind: "chest" | "poi" | "food" | "elite"; uid: number } | { kind: "explore"; dir: Direction } | { kind: "gems" } | { kind: "evade" };
 type TargetGoal = Extract<Goal, { uid: number }>;
 type Pursuit = {
   goal: Goal;
@@ -811,6 +811,8 @@ function goalId(g: Goal): string {
       return `P${g.uid}`;
     case "food":
       return `F${g.uid}`;
+    case "elite":
+      return `E${g.uid}`;
     case "explore":
       return `explore ${g.dir}`;
     default:
@@ -844,11 +846,17 @@ function locate(r: RunView, g: TargetGoal): Located | undefined {
       ? undefined
       : { dist: c.dist, dir: c.dir, arrived: onChest(c), charging: (c.chargeNeeded ?? 1) - (c.charge ?? 0), progress: `${c.charge ?? 0} of ${c.chargeNeeded ?? 1}s opened`, name: "the chest" };
   }
+  if (g.kind === "elite") {
+    const e = r.enemies.elites.find((x) => x.uid === g.uid);
+    return e === undefined ? undefined : { dist: e.dist, dir: e.dir, arrived: e.dist <= ELITE_REACH, charging: 0, progress: `${e.hp} health left, ${Math.round(e.dist)} away to the ${e.dir}`, name: `the ${e.name}` };
+  }
   const f = r.pickups.nearest.find((x) => x.uid === g.uid);
   return f === undefined ? undefined : { dist: f.dist, dir: f.dir, arrived: false, charging: 0, progress: "", name: "the food" };
 }
 
-const TARGET_DONE = { chest: "opened", poi: "charged and used", food: "eaten" } as const;
+// Close enough for most weapons to reach an elite; nearer, each step is the action model's.
+const ELITE_REACH = 70;
+const TARGET_DONE = { chest: "opened", poi: "charged and used", food: "eaten", elite: "killed" } as const;
 
 function goalTitle(g: Goal, r: RunView): string {
   switch (g.kind) {
@@ -858,6 +866,8 @@ function goalTitle(g: Goal, r: RunView): string {
       return `Charge the ${r.pois.find((p) => p.uid === g.uid)?.name ?? "spot"}`;
     case "food":
       return "Eat the food";
+    case "elite":
+      return `Fight the ${r.enemies.elites.find((e) => e.uid === g.uid)?.name ?? "elite"}`;
     case "explore":
       return `Explore ${g.dir}`;
     case "gems":
@@ -889,6 +899,8 @@ function goalTag(g: Goal, r: RunView): string {
     }
     case "food":
       return "Eat";
+    case "elite":
+      return "Hunt";
     case "explore":
       return "Wander";
     case "gems":
@@ -909,6 +921,14 @@ function aimAt(p: Pursuit, r: RunView): Aim | Ended {
       if (t === undefined) return p.seen ? { done: TARGET_DONE[g.kind], success: true } : { done: "it is not there", success: false };
       p.seen = true;
       return { heading: t.arrived ? "stay" : t.dir, left: t.dist + t.charging * GOAL_SPEED, progress: t.arrived ? t.progress : `${Math.round(t.dist)} away to the ${t.dir}`, to: g.kind === "poi" ? { poi: g.uid } : { pickup: g.uid } };
+    }
+    case "elite": {
+      const t = locate(r, g);
+      // Elites are listed wherever they are, so one that is gone has died.
+      if (t === undefined) return p.seen ? { done: TARGET_DONE.elite, success: true } : { done: "it is not there", success: false };
+      p.seen = true;
+      // Within reach the action model picks every step, as when evading: hold the elite there without touching it.
+      return t.arrived ? { progress: t.progress } : { heading: t.dir, left: t.dist, progress: t.progress };
     }
     case "explore": {
       const found = r.pickups.chests.find((c) => !p.known.has(`C${c.uid}`) && c.dist < PLAN_RANGE);
@@ -949,7 +969,7 @@ function begin(goal: Goal, r: RunView, log: RunLog) {
     seen: false,
   };
   const aim = aimAt(p, r);
-  const seconds = goal.kind === "gems" ? knobs().gemsSeconds : goal.kind === "evade" ? knobs().evadeSeconds : "left" in aim && aim.left !== undefined ? aim.left / GOAL_SPEED : 0;
+  const seconds = goal.kind === "gems" ? knobs().gemsSeconds : goal.kind === "evade" ? knobs().evadeSeconds : goal.kind === "elite" ? knobs().eliteSeconds : "left" in aim && aim.left !== undefined ? aim.left / GOAL_SPEED : 0;
   p.deadline = r.time + seconds + GOAL_SLACK;
   pursuit = p;
   log.write(r, { event: "goal", goal: p.id, action: "start", detail: title });
@@ -1183,6 +1203,7 @@ function goalWords(p: Pursuit, aim: Aim): string {
   if (p.goal.kind === "evade") return "keep away from enemies";
   if (p.goal.kind === "explore") return `walk ${p.goal.dir} to look for chests and shrines`;
   if (p.goal.kind === "gems") return `collect the xp gems, most of them to the ${aim.heading}`;
+  if (p.goal.kind === "elite") return `${p.title.toLowerCase()}: keep it within ${ELITE_REACH} units so Tibo's weapons kill it, without touching it; it has ${aim.progress}`;
   return aim.heading === "stay" ? `${p.title.toLowerCase()}: stay where Tibo stands, ${aim.progress}` : `${p.title.toLowerCase()}, ${aim.progress}`;
 }
 
@@ -1403,6 +1424,13 @@ function goalOptions(r: RunView): GoalOption[] {
       .filter((x) => x.kind === "heal" && x.dist < PLAN_RANGE)
       .slice(0, 2)
       .map((x) => ({ goal: { kind: "food" as const, uid: x.uid }, text: `walk to the food ${Math.round(x.dist)} away to the ${x.dir}, which heals Tibo` })),
+    ...r.enemies.elites
+      .filter((e) => e.dist < PLAN_RANGE)
+      .slice(0, 2)
+      .map((e) => ({
+        goal: { kind: "elite" as const, uid: e.uid },
+        text: `fight the ${e.name} elite ${Math.round(e.dist)} away to the ${e.dir} (${e.hp} health left): keep it within reach of Tibo's weapons for up to ${knobs().eliteSeconds} seconds until it dies, which drops a chest${given(`E${e.uid}`)}`,
+      })),
     ...(gems === 0 ? [] : [{ goal: { kind: "gems" as const }, text: `collect the ${gems} xp gems nearby, most of them to the ${gemSide?.dir}, for up to ${knobs().gemsSeconds} seconds` }]),
     ...r.sectors.map((s) => ({
       goal: { kind: "explore" as const, dir: s.dir },

@@ -230,6 +230,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     const id = def?.id ?? "unknown";
     enemies.push({
       ...relTo(s, s.enemies.x[i] ?? 0, s.enemies.y[i] ?? 0),
+      uid: s.enemies.pool.id(i),
       id,
       name: msg("enemy", id),
       hp: round(s.enemies.hp[i] ?? 0),
@@ -467,7 +468,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     })),
     ...(choice === undefined ? {} : { choice: { kind: choice.kind, options: options(d, discovery, loadout, s.loadout.banished), raw: toJson(choice) } }),
     bosses: bosses.sort((a, b) => a.dist - b.dist),
-    enemies: { total: enemies.length, nearest: nearest(enemies) },
+    enemies: { total: enemies.length, nearest: nearest(enemies), elites: enemies.filter((e) => e.elite).sort((a, b) => a.dist - b.dist) },
     pickups: { counts, chests: chests.sort((a, b) => a.dist - b.dist), nearest: nearest(loose) },
     pois,
     hazards: nearest(hazards, 20),
