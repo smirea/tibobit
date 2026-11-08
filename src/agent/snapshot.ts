@@ -278,6 +278,16 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     (kind === "chest" ? chests : loose).push(view);
   }
 
+  // The game's own crate price: base + linear·n + quad·n² + cubic·max(0, n − knee)³, n crates bought so far, times the loadout's chestPriceMult.
+  const economy = s.cfg.economy;
+  const bought = s.paidChestsBought ?? 0;
+  const cratePrice =
+    economy === undefined
+      ? undefined
+      : Math.round(
+          Math.round(economy.chestPriceBase + economy.chestPriceLinear * bought + economy.chestPriceQuad * bought * bought + economy.chestPriceCubic * Math.max(0, bought - economy.chestPriceKnee) ** 3) *
+            ((s.loadout.stats as { chestPriceMult?: number }).chestPriceMult ?? 1),
+        );
   const pois = s.world.activePois
     .filter((p) => !p.state.used && p.state.goneAt < 0)
     .map((p) => {
@@ -293,6 +303,8 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
         charge: round(p.state.charge / TICKS_PER_SECOND),
         chargeNeeded: activation[p.kind] ?? 0,
         used: p.state.used,
+        ...(p.kind === "paidChest" && cratePrice !== undefined ? { price: cratePrice } : {}),
+        ...(p.kind === "vendor" && economy?.vendorPrice !== undefined ? { prices: economy.vendorPrice } : {}),
       };
     })
     .sort((a, b) => a.dist - b.dist)

@@ -845,6 +845,9 @@ function goalId(g: Goal): string {
 const onChest = (c: RunView["pickups"]["chests"][number]) => c.dist <= ON_CHEST;
 // The name alone hides what a spot does: standing in a Beetle Nest wakes an elite.
 const poiWhat = (p: RunView["pois"][number]) => (p.description === "" ? "" : ` (${p.description.replace(/\.$/, "").replace(/\. /g, "; ").toLowerCase()})`);
+/** What a shop spot costs against the gold Tibo holds, or "" for a spot that costs nothing. */
+const priceWords = (p: RunView["pois"][number], gold: number) =>
+  p.price !== undefined ? `; it costs ${p.price} gold now, and Tibo has ${gold}` : p.prices !== undefined ? `; its items cost ${p.prices.join(", ")} gold by rarity, and Tibo has ${gold}` : "";
 
 /** Where Tibo stands, as "on a chest, 1 of 3 seconds into opening it", or undefined when on nothing. */
 function spotLine(r: RunView): string | undefined {
@@ -852,7 +855,7 @@ function spotLine(r: RunView): string | undefined {
   if (chest !== undefined) return `on a chest, ${chest.charge ?? 0} of ${chest.chargeNeeded ?? 1} seconds into opening it`;
   const inside = r.pois.find((p) => p.inside);
   if (inside === undefined) return undefined;
-  return `inside the ${inside.name}${poiWhat(inside)}${inside.chargeNeeded > 0 ? `, charged ${inside.charge} of ${inside.chargeNeeded} seconds` : ""}`;
+  return `inside the ${inside.name}${poiWhat(inside)}${inside.chargeNeeded > 0 ? `, charged ${inside.charge} of ${inside.chargeNeeded} seconds` : ""}${priceWords(inside, r.player.gold)}`;
 }
 
 type Located = { dist: number; dir: Direction; arrived: boolean; charging: number; progress: string; name: string };
@@ -1051,8 +1054,7 @@ function stuckWords(p: Pursuit, r: RunView, aim: Aim): string {
   const off = p.steppedOff === 0 ? "" : `; the action model stepped off it ${plural(p.steppedOff, "time")} to dodge`;
   if (aim.heading !== "stay") return `no closer for ${seconds} seconds${off}`;
   const spot = p.goal.kind === "poi" ? r.pois.find((x) => x.uid === (p.goal as TargetGoal).uid) : undefined;
-  const paid = spot !== undefined && /\bgold\b|\bcosts?\b|\bpay/i.test(spot.description);
-  return `standing on it charged nothing for ${seconds} seconds${paid ? ` (it costs gold, and Tibo has ${r.player.gold})` : ""}${off}`;
+  return `standing on it charged nothing for ${seconds} seconds${spot === undefined ? "" : priceWords(spot, r.player.gold)}${off}`;
 }
 
 /** One step toward the current goal: walk on while it is safe, else ask the action model. */
@@ -1440,7 +1442,7 @@ function goalOptions(r: RunView): GoalOption[] {
       .slice(0, 6)
       .map((x) => ({
         goal: { kind: "poi" as const, uid: x.uid },
-        text: `${x.inside ? `stay inside the ${x.name}` : `walk to the ${x.name} ${Math.round(x.dist)} away to the ${x.dir} and stand inside it`} for ${x.chargeNeeded} seconds${x.description === "" ? "" : ` (${x.description.replace(/\.$/, "")})`}${given(`P${x.uid}`)}`,
+        text: `${x.inside ? `stay inside the ${x.name}` : `walk to the ${x.name} ${Math.round(x.dist)} away to the ${x.dir} and stand inside it`} for ${x.chargeNeeded} seconds${x.description === "" ? "" : ` (${x.description.replace(/\.$/, "")})`}${priceWords(x, r.player.gold)}${given(`P${x.uid}`)}`,
       })),
     ...r.pickups.nearest
       .filter((x) => x.kind === "heal" && x.dist < PLAN_RANGE)

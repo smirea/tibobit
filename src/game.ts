@@ -76,7 +76,12 @@ export type GameState = {
   bullets: Pool<"x" | "y" | "radius" | "vx" | "vy" | "damage">;
   world: { activePois: Poi[]; activeHazards: Hazard[] };
   view: { width: number; height: number };
-  cfg: { activation: { seconds: Record<string, number>; pickupRadius: Record<string, number> } };
+  cfg: {
+    activation: { seconds: Record<string, number>; pickupRadius: Record<string, number> };
+    /** The Potato Crate's price grows with each one bought; vendors price items by rarity. */
+    economy?: { chestPriceBase: number; chestPriceLinear: number; chestPriceQuad: number; chestPriceCubic: number; chestPriceKnee: number; vendorPrice?: number[] };
+  };
+  paidChestsBought?: number;
   bigUpdate: Record<string, boolean>;
   choiceQueue: Choice[];
   over: boolean;

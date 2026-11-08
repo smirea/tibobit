@@ -542,6 +542,9 @@
       };
       (kind === "chest" ? chests : loose).push(view);
     }
+    const economy = s.cfg.economy;
+    const bought = s.paidChestsBought ?? 0;
+    const cratePrice = economy === undefined ? undefined : Math.round(Math.round(economy.chestPriceBase + economy.chestPriceLinear * bought + economy.chestPriceQuad * bought * bought + economy.chestPriceCubic * Math.max(0, bought - economy.chestPriceKnee) ** 3) * (s.loadout.stats.chestPriceMult ?? 1));
     const pois = s.world.activePois.filter((p) => !p.state.used && p.state.goneAt < 0).map((p) => {
       const rel = relTo(s, p.x, p.y);
       return {
@@ -554,7 +557,9 @@
         inside: rel.dist <= p.radius,
         charge: round(p.state.charge / TICKS_PER_SECOND),
         chargeNeeded: activation[p.kind] ?? 0,
-        used: p.state.used
+        used: p.state.used,
+        ...p.kind === "paidChest" && cratePrice !== undefined ? { price: cratePrice } : {},
+        ...p.kind === "vendor" && economy?.vendorPrice !== undefined ? { prices: economy.vendorPrice } : {}
       };
     }).sort((a, b) => a.dist - b.dist).slice(0, MAX_POIS);
     const zoneKind = Object.fromEntries(Object.entries(enums.zoneKinds).map(([k, v]) => [v, k]));
