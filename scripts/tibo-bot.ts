@@ -482,7 +482,9 @@ async function logForReview(file: string): Promise<string> {
   const tail = body.slice(-half).replace(/^[^\n]*\n/, "");
   return `(${notes.join("; ")}; the middle of the run is cut out where marked)\n${head}\n(... rows cut here ...)\n${tail}`;
 }
-const REVIEW_LOG_CHARS = 400_000;
+// Composer answered nothing within seconds for reviews of long runs at 400k characters of log, and
+// the Stats section now carries what the cut middle held, so the log stays under this.
+const REVIEW_LOG_CHARS = 250_000;
 
 /** The game's encyclopedia as compact JSON: every weapon, passive, item, recipe, enemy, boss and biome with the game's stats. */
 async function encyclopedia(): Promise<Encyclopedia | string> {
