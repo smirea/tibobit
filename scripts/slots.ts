@@ -9,6 +9,8 @@ import { type Gym, type Templates, type Totals, clock, runStats } from "./gamepl
 
 const ROOT = path.join(import.meta.dir, "..");
 export const DECISION_MODEL = "typesafe/jev-1.14-20261014";
+const GYM_STAGE_SECONDS = 300;
+const GYM_STAGE_TRIES = 3;
 
 /** What tibo-bot.ts --trial writes. */
 export type TrialResult = {
@@ -271,9 +273,26 @@ export class Slot {
     try {
       await this.fresh(seed, gym.difficulty, gym.weapon);
       if (gym.loadout !== undefined) await this.command({ type: "loadout", ...gym.loadout });
-      if (gym.at > 0) {
-        const { result } = await this.trial(`gym-${gym.name}-${Date.now()}`, gym.at, templates);
-        if (result.died) return { ...gym, seed, status: "failed", error: `Tibo died at ${clock(result.end)} on the way to ${clock(gym.at)}`, templates };
+      // Played in stages, each saved: a death replays that stage from its start (the models choose
+      // differently each time) rather than the whole game from 0:00.
+      const stage = `gym-${gym.name}-stage`;
+      let time = (await this.state()).run?.time ?? 0;
+      while (time < gym.at - 1) {
+        await this.command({ type: "checkpoint", op: "save", name: stage });
+        const seconds = Math.min(GYM_STAGE_SECONDS, Math.ceil(gym.at - time));
+        const deaths: number[] = [];
+        for (;;) {
+          const { result } = await this.trial(`gym-${gym.name}-${Date.now()}`, seconds, templates);
+          if (!result.died) {
+            time = result.end;
+            break;
+          }
+          deaths.push(result.end);
+          if (deaths.length >= GYM_STAGE_TRIES) return { ...gym, seed, status: "failed", error: `Tibo died ${deaths.length} times between ${clock(time)} and ${clock(time + seconds)}, at ${deaths.map((d) => clock(d)).join(", ")}, on the way to ${clock(gym.at)}`, templates };
+          await this.anyRun();
+          await this.command({ type: "checkpoint", op: "drop", name: stage });
+          await this.command({ type: "checkpoint", op: "load", name: stage });
+        }
       }
       await this.command({ type: "checkpoint", op: "save", name: `gym-${gym.name}` });
       const checkpoint = (await this.api<CheckpointMeta[]>("/checkpoints")).find((c) => c.name === `gym-${gym.name}`);

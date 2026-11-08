@@ -182,7 +182,7 @@ function editableFiles(phase: "experiments" | "fullRun" | "reflect"): string {
 }
 
 const GAMES_CONTRACT = `"games": 1 to ${MAX_GAMES} training games, played side by side, each {"experiment": the name of the experiment it serves (one that exists or that this reply adds), "label": a few words, "from": {"gym": a gym's name} or {"fresh": {"difficulty": Nightmare level 1 to 10, "weapon": a base weapon id or "random", "seed": optional, to give several fresh games the same map}}, "loadout": optional, replaces the whole build when the game starts: {"weapons": [{"id", "level"}], "passives": [{"id", "level"}], "items": [{"id", "count"}], "gold", "hp": a number or "full"} with ids from the encyclopedia, "seconds": 10 to ${MAX_GAME_SECONDS} of game time, "changes": optional {"planner", "action", "knobs"} over your playbook (only the keys that change), "saveGym": optional {"name", "purpose"} to keep the state the game ends in as a gym, if Tibo lives}. A game from a gym replays the same game state each time, so two games from one gym differ only in what the models chose; fresh games with the same seed share a map. Fresh games never get the evaluation seed.`;
-const GYMS_CONTRACT = `"gyms": gyms to build or retire: {"name": kebab-case, "purpose": what it lets you test, "difficulty": 1 to 10, "at": game seconds 0 to ${MAX_GYM_SECONDS} to save it at, "weapon": a base weapon id or "random", "loadout": optional, swapped in at 0:00} is built before this iteration's games by playing a fresh game with your playbook to that time (Tibo has to live that long; a loadout helps for late gyms), at most ${MAX_NEW_GYMS} per reply; {"name", "retire": true} retires one.`;
+const GYMS_CONTRACT = `"gyms": gyms to build or retire: {"name": kebab-case, "purpose": what it lets you test, "difficulty": 1 to 10, "at": game seconds 0 to ${MAX_GYM_SECONDS} to save it at, "weapon": a base weapon id or "random", "loadout": optional, swapped in at 0:00} is built before this iteration's games by playing a fresh game with your playbook to that time, in 5-minute stages: a death replays that stage from its start, up to 3 times (a loadout helps for late gyms), at most ${MAX_NEW_GYMS} per reply; {"name", "retire": true} retires one.`;
 const PLAYBOOK_CONTRACT = `"playbook": optional changes to your playbook: {"planner", "action", "knobs"} (only the keys that change), "weapon": a base weapon id or "random", "why": what makes this the best you know}.`;
 
 // ---- Facts -------------------------------------------------------------------------------------
@@ -329,7 +329,10 @@ function checkGyms(raw: unknown, gyms: Gym[], stamp: string, errors: string[]): 
       continue;
     }
     if (g.retire === true) {
-      if (!gyms.some((x) => x.name === name)) errors.push(`${at}: there is no gym ${name} to retire`);
+      const gym = gyms.find((x) => x.name === name);
+      if (gym === undefined) errors.push(`${at}: there is no gym ${name} to retire`);
+      // Another coach's games may be about to use its gyms.
+      else if (gym.coach !== COACH && gym.coach !== "loop") errors.push(`${at}: gym ${name} is ${gym.coach}'s; you can retire only your own and the loop's`);
       out.retire.push(name);
       continue;
     }
