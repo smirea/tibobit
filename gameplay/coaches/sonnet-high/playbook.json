@@ -1,0 +1,32 @@
+{
+  "templates": {
+    "planner": {
+      "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+      "goal": "Tibo could next: {{goal}}. {{health}} {{evolutions}} Chests are the best source of power: each gives a free pick and evolves a ready recipe, and elites and bosses drop them. While health is above half, rate opening a known chest or fighting an elite highest, then exploring for a chest, then gems; avoid evading unless enemies crowd Tibo. If health is low, rate food and evading highest. Is this the best goal now?",
+      "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+    },
+    "action": {
+      "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+      "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+      "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+      "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+    },
+    "knobs": {
+      "exploreDistance": 300,
+      "evadeSeconds": 8,
+      "gemsSeconds": 12,
+      "stuckSeconds": 6,
+      "extraDamage": 0.02,
+      "safeMargin": 0.1,
+      "distrustSeconds": 0,
+      "distrustBossRange": 0,
+      "planEvery": 5,
+      "eliteSeconds": 20,
+      "lockstep": 1,
+      "bossOfferRange": 0
+    }
+  },
+  "weapon": "steam-vent",
+  "updated": "sonnet-high L1.I9",
+  "why": "Unchanged for the full run. Steam-vent with lockstep 1 and the chest-first goal prompt has survived every natural Nightmare 1 game on 5 seeds. Chest-first survived 9 of 9 from natural 5:00 builds, against 1 of 4 for the default prompt. Steam-vent beat peeler on seed 909 (60 vs 218 damage). eliteSeconds 35 showed no gain, so it stays at 20. The evolve-pick prompt, the spot-priority sentence and a longer planEvery did not help."
+}

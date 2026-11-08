@@ -1,0 +1,1356 @@
+[
+  {
+    "name": "opening-nm1",
+    "status": "ready",
+    "purpose": "The first seconds of a game on the next ladder level: openings, first picks and early routes.",
+    "coach": "loop",
+    "created": "start",
+    "difficulty": 1,
+    "at": 0,
+    "weapon": "",
+    "seed": "ODL8FK",
+    "source": "built from a fresh game to 00:00",
+    "checkpoint": {
+      "name": "gym-opening-nm1",
+      "build": "sim-2ckLPdq7.js",
+      "seed": "ODL8FK",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 0,
+      "level": 1,
+      "hp": 120,
+      "weapons": [
+        "gravy-boat 1"
+      ],
+      "passives": [],
+      "items": [],
+      "savedAt": "2026-11-08T06:33:19.204Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 0,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "first-boss-nm1",
+    "status": "ready",
+    "purpose": "Just before the 2:00 boss on the next ladder level.",
+    "coach": "loop",
+    "created": "start",
+    "difficulty": 1,
+    "at": 105,
+    "weapon": "",
+    "seed": "9LMWYC",
+    "source": "built from a fresh game to 01:45",
+    "checkpoint": {
+      "name": "gym-first-boss-nm1",
+      "build": "sim-2ckLPdq7.js",
+      "seed": "9LMWYC",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 105.2,
+      "level": 9,
+      "hp": 106,
+      "weapons": [
+        "fry-sentry 1",
+        "hash-boomerang 2",
+        "locked-gatling 3",
+        "seeker-sprouts 1",
+        "whisk-vortex 1",
+        "potato-rain 1"
+      ],
+      "passives": [],
+      "items": [],
+      "savedAt": "2026-11-08T06:35:08.294Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 0,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "minute-5-nm1",
+    "status": "failed",
+    "purpose": "Minute 5 on the next ladder level, with a build of its own.",
+    "coach": "loop",
+    "created": "start",
+    "difficulty": 1,
+    "at": 300,
+    "weapon": "",
+    "seed": "MBKQDA",
+    "source": "built from a fresh game to 05:00",
+    "error": "Tibo died at 03:53 on the way to 05:00",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 0,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "minute-10-nm1",
+    "status": "retired",
+    "purpose": "Minute 10 on the next ladder level, where the pests have reached full health.",
+    "coach": "loop",
+    "created": "start",
+    "difficulty": 1,
+    "at": 600,
+    "weapon": "",
+    "seed": "3VJ9PX",
+    "source": "built from a fresh game to 10:00",
+    "error": "ENOENT: no such file or directory, open '/Users/stefan/code/tibobit/.runs/rsi/sonnet-high/logs/gym-minute-10-nm1-1794119599218.result.json'",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 0,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "opening-nm10",
+    "status": "ready",
+    "purpose": "The opening on Nightmare 10, the campaign's goal.",
+    "coach": "loop",
+    "created": "start",
+    "difficulty": 10,
+    "at": 0,
+    "weapon": "",
+    "seed": "FG6YMB",
+    "source": "built from a fresh game to 00:00",
+    "checkpoint": {
+      "name": "gym-opening-nm10",
+      "build": "sim-2ckLPdq7.js",
+      "seed": "FG6YMB",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 0,
+      "level": 1,
+      "hp": 120,
+      "weapons": [
+        "rosti-disc 1"
+      ],
+      "passives": [],
+      "items": [],
+      "savedAt": "2026-11-08T06:33:19.218Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 0,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "first-boss-nm10",
+    "status": "retired",
+    "purpose": "Just before the 2:00 boss on Nightmare 10.",
+    "coach": "loop",
+    "created": "start",
+    "difficulty": 10,
+    "at": 105,
+    "weapon": "",
+    "seed": "LEJZDG",
+    "source": "built from a fresh game to 01:45",
+    "error": "Tibo died at 01:31 on the way to 01:45",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 0,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "first-boss-nm10-steam",
+    "status": "retired",
+    "purpose": "Nightmare 10 just before the 2:00 boss with steam-vent, to test boss handling and picks on the campaign's difficulty.",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L1.I2",
+    "difficulty": 10,
+    "at": 105,
+    "weapon": "steam-vent",
+    "seed": "13E6JQJ",
+    "source": "built from a fresh game to 01:45",
+    "checkpoint": {
+      "name": "gym-first-boss-nm10-steam",
+      "build": "sim-2ckLPdq7.js",
+      "seed": "13E6JQJ",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 105,
+      "level": 6,
+      "hp": 31,
+      "weapons": [
+        "steam-vent 2",
+        "potato-rain 1",
+        "grab-bag 1",
+        "mezzaluna 1",
+        "frozen-fries 1"
+      ],
+      "passives": [
+        "root-network 1"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T06:42:15.103Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 0,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "boss-nm10-strong",
+    "status": "retired",
+    "purpose": "Nightmare 10 at 1:45, just before the 2:00 Festival Mascot, with a healthy mid-strength build and full hp. It isolates boss handling from early-build luck, so knob and prompt changes can be compared from one state.",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L1.I3",
+    "difficulty": 10,
+    "at": 105,
+    "weapon": "steam-vent",
+    "loadout": {
+      "weapons": [
+        {
+          "id": "steam-vent",
+          "level": 4
+        },
+        {
+          "id": "tater-twirl",
+          "level": 3
+        }
+      ],
+      "passives": [
+        {
+          "id": "gravy-heart",
+          "level": 2
+        },
+        {
+          "id": "big-bowl",
+          "level": 2
+        }
+      ],
+      "items": [],
+      "hp": "full"
+    },
+    "seed": "18OA3TT",
+    "source": "built from a fresh game to 01:45",
+    "checkpoint": {
+      "name": "gym-boss-nm10-strong",
+      "build": "sim-C7oUgQu3.js",
+      "seed": "18OA3TT",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 105,
+      "level": 10,
+      "hp": 131,
+      "weapons": [
+        "steam-vent 7",
+        "tater-twirl 3",
+        "julienne-dash 1",
+        "comet-scythe 1",
+        "harvest-moon 1"
+      ],
+      "passives": [
+        "gravy-heart 2",
+        "big-bowl 2",
+        "root-network 4"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T06:50:38.248Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "nm1-minute-6-steam",
+    "status": "retired",
+    "purpose": "Nightmare 1 at 6:00 with a healthy steam-vent build (swapped in at the start so it can evolve to pressure-cooker). Tests survival past the 5-minute mark on the ladder level, where the training games used to end.",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L1.I4",
+    "difficulty": 1,
+    "at": 360,
+    "weapon": "steam-vent",
+    "loadout": {
+      "weapons": [
+        {
+          "id": "steam-vent",
+          "level": 8
+        },
+        {
+          "id": "tater-twirl",
+          "level": 4
+        }
+      ],
+      "passives": [
+        {
+          "id": "root-network",
+          "level": 2
+        },
+        {
+          "id": "gravy-heart",
+          "level": 3
+        },
+        {
+          "id": "big-bowl",
+          "level": 2
+        }
+      ],
+      "items": [],
+      "hp": "full"
+    },
+    "seed": "9FSGX5",
+    "source": "built from a fresh game to 06:00",
+    "checkpoint": {
+      "name": "gym-nm1-minute-6-steam",
+      "build": "sim-C7oUgQu3.js",
+      "seed": "9FSGX5",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 360.1,
+      "level": 20,
+      "hp": 192,
+      "weapons": [
+        "pressure-cooker 1",
+        "tater-twister 1",
+        "root-spikes 1",
+        "hash-brown-shield 2",
+        "sprout-squad 1",
+        "hot-streak 7"
+      ],
+      "passives": [
+        "root-network 2",
+        "gravy-heart 5",
+        "big-bowl 5",
+        "aged-russet 2",
+        "mash-finisher 1",
+        "salt-shaker 1"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T06:59:20.867Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "nm1-minute-10-steam",
+    "status": "retired",
+    "purpose": "Nightmare 1 at 10:00 with the same steam-vent build. Pests are at full health, so this tests the mid-game that the 20:00 goal depends on.",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L1.I4",
+    "difficulty": 1,
+    "at": 600,
+    "weapon": "steam-vent",
+    "loadout": {
+      "weapons": [
+        {
+          "id": "steam-vent",
+          "level": 8
+        },
+        {
+          "id": "tater-twirl",
+          "level": 4
+        }
+      ],
+      "passives": [
+        {
+          "id": "root-network",
+          "level": 2
+        },
+        {
+          "id": "gravy-heart",
+          "level": 3
+        },
+        {
+          "id": "big-bowl",
+          "level": 2
+        }
+      ],
+      "items": [],
+      "hp": "full"
+    },
+    "seed": "1Q2PYDK",
+    "source": "built from a fresh game to 10:00",
+    "checkpoint": {
+      "name": "gym-nm1-minute-10-steam",
+      "build": "sim-C7oUgQu3.js",
+      "seed": "1Q2PYDK",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 600.1,
+      "level": 31,
+      "hp": 192,
+      "weapons": [
+        "pressure-cooker 1",
+        "tater-twister 1",
+        "potato-rain 8",
+        "starch-chain 8",
+        "ghee-glide 1",
+        "hash-boomerang 8"
+      ],
+      "passives": [
+        "root-network 5",
+        "gravy-heart 5",
+        "big-bowl 5",
+        "salt-shaker 1",
+        "sour-cream 5",
+        "spud-sneakers 1"
+      ],
+      "items": [
+        "receipt-spud",
+        "starch-sock"
+      ],
+      "savedAt": "2026-11-08T07:03:04.718Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "nm1-min10-mine",
+    "status": "retired",
+    "purpose": "Nightmare 1 at 10:00 with a healthy steam-vent build, to test survival from minute 10 to 15 where pests are at full health.",
+    "coach": "sonnet-medium",
+    "created": "sonnet-medium L1.I6",
+    "difficulty": 1,
+    "at": 600,
+    "weapon": "steam-vent",
+    "loadout": {
+      "weapons": [
+        {
+          "id": "steam-vent",
+          "level": 8
+        },
+        {
+          "id": "tater-twirl",
+          "level": 4
+        }
+      ],
+      "passives": [
+        {
+          "id": "root-network",
+          "level": 2
+        },
+        {
+          "id": "gravy-heart",
+          "level": 3
+        },
+        {
+          "id": "big-bowl",
+          "level": 2
+        }
+      ],
+      "items": [],
+      "hp": "full"
+    },
+    "seed": "1V0N7HF",
+    "source": "built from a fresh game to 10:00",
+    "checkpoint": {
+      "name": "gym-nm1-min10-mine",
+      "build": "sim-C7oUgQu3.js",
+      "seed": "1V0N7HF",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 600.3,
+      "level": 38,
+      "hp": 192,
+      "weapons": [
+        "tater-twirl 8",
+        "permafrost-fries 1",
+        "grease-fire 1",
+        "julienne-dash 8",
+        "reset-button 8",
+        "potato-battery 8"
+      ],
+      "passives": [
+        "root-network 5",
+        "gravy-heart 5",
+        "big-bowl 5",
+        "hot-start 4",
+        "thick-skin 2",
+        "starch-plating 5"
+      ],
+      "items": [
+        "tater-treat"
+      ],
+      "savedAt": "2026-11-08T07:03:19.437Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "nm1-min6-mine",
+    "status": "retired",
+    "purpose": "Nightmare 1 at 6:00 with the same steam-vent build, to test the window just past the training cap.",
+    "coach": "sonnet-medium",
+    "created": "sonnet-medium L1.I6",
+    "difficulty": 1,
+    "at": 360,
+    "weapon": "steam-vent",
+    "loadout": {
+      "weapons": [
+        {
+          "id": "steam-vent",
+          "level": 8
+        },
+        {
+          "id": "tater-twirl",
+          "level": 4
+        }
+      ],
+      "passives": [
+        {
+          "id": "root-network",
+          "level": 2
+        },
+        {
+          "id": "gravy-heart",
+          "level": 3
+        },
+        {
+          "id": "big-bowl",
+          "level": 2
+        }
+      ],
+      "items": [],
+      "hp": "full"
+    },
+    "seed": "BIRPGY",
+    "source": "built from a fresh game to 06:00",
+    "checkpoint": {
+      "name": "gym-nm1-min6-mine",
+      "build": "sim-C7oUgQu3.js",
+      "seed": "BIRPGY",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 360,
+      "level": 20,
+      "hp": 192,
+      "weapons": [
+        "pressure-cooker 1",
+        "tater-twister 1",
+        "hot-streak 8",
+        "comet-scythe 1",
+        "mash-wave 1",
+        "hash-brown-shield 1"
+      ],
+      "passives": [
+        "root-network 2",
+        "gravy-heart 5",
+        "big-bowl 5",
+        "butter-pat 3",
+        "salt-shaker 1",
+        "hot-start 2"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T07:00:39.466Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "nm1-min5-fresh",
+    "status": "retired",
+    "purpose": "Nightmare 1 at 5:00 from a fresh steam-vent run, a natural build to continue from past the training cap.",
+    "coach": "sonnet-medium",
+    "created": "sonnet-medium L1.I6",
+    "difficulty": 1,
+    "at": 300,
+    "weapon": "steam-vent",
+    "seed": "606",
+    "source": "saved at the end of game L1.I6.G4",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    },
+    "checkpoint": {
+      "name": "gym-nm1-min5-fresh",
+      "build": "sim-DA4RGMxM.js",
+      "seed": "606",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 300,
+      "level": 17,
+      "hp": 79,
+      "weapons": [
+        "steam-vent 3",
+        "whisk-vortex 3",
+        "spud-lob 1",
+        "hot-potato 1",
+        "mash-wave 1",
+        "peel-phantom 2"
+      ],
+      "passives": [
+        "big-bowl 3",
+        "hot-start 2",
+        "aged-russet 1"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T07:19:20.920Z"
+    }
+  },
+  {
+    "name": "nm1-min10-natural",
+    "status": "ready",
+    "purpose": "Nightmare 1 at 10:00 from a natural steam-vent run with no swapped-in loadout, to test the 10:00 to 15:00 stretch with a realistic build.",
+    "coach": "sonnet-medium",
+    "created": "sonnet-medium L1.I7",
+    "difficulty": 1,
+    "at": 600,
+    "weapon": "",
+    "seed": "606",
+    "source": "saved at the end of game L1.I7.G4",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    },
+    "checkpoint": {
+      "name": "gym-nm1-min10-natural",
+      "build": "sim-DA4RGMxM.js",
+      "seed": "606",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 600.3,
+      "level": 33,
+      "hp": 149,
+      "weapons": [
+        "pressure-cooker 1",
+        "whisk-vortex 1",
+        "railfry 1",
+        "tater-twirl 4",
+        "mandoline-fury 1",
+        "frozen-fries 1"
+      ],
+      "passives": [
+        "root-network 2",
+        "gravy-heart 2",
+        "spud-sneakers 2",
+        "butter-pat 4",
+        "hot-start 1",
+        "thick-skin 1"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T07:19:21.395Z"
+    }
+  },
+  {
+    "name": "nm1-min5-s707",
+    "status": "ready",
+    "purpose": "Nightmare 1 at 5:00 from a fresh steam-vent run on seed 707, a second natural build to continue from past the training cap.",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L1.I5",
+    "difficulty": 1,
+    "at": 300,
+    "weapon": "steam-vent",
+    "seed": "707",
+    "source": "saved at the end of game L1.I5.G4",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    },
+    "checkpoint": {
+      "name": "gym-nm1-min5-s707",
+      "build": "sim-DA4RGMxM.js",
+      "seed": "707",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 300,
+      "level": 13,
+      "hp": 101,
+      "weapons": [
+        "steam-vent 1",
+        "frozen-fries 7",
+        "comet-scythe 8",
+        "hot-potato 1",
+        "potato-rain 1"
+      ],
+      "passives": [
+        "starch-plating 3",
+        "butter-socks 1",
+        "thick-skin 1",
+        "big-bowl 1"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T07:19:24.771Z"
+    }
+  },
+  {
+    "name": "nm1-min15-natural",
+    "status": "retired",
+    "purpose": "Nightmare 1 at 15:00 from a natural build, to test the 15:00 to 20:00 stretch.",
+    "coach": "sonnet-medium",
+    "created": "sonnet-medium L1.I8",
+    "difficulty": 1,
+    "at": 900,
+    "weapon": "",
+    "seed": "606",
+    "source": "saved at the end of game L1.I8.G5",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    },
+    "checkpoint": {
+      "name": "gym-nm1-min15-natural",
+      "build": "sim-DA4RGMxM.js",
+      "seed": "606",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 900.3,
+      "level": 51,
+      "hp": 192,
+      "weapons": [
+        "pressure-cooker 1",
+        "whisk-vortex 1",
+        "railfry 1",
+        "tater-twirl 8",
+        "mandoline-fury 1",
+        "permafrost-fries 1"
+      ],
+      "passives": [
+        "root-network 5",
+        "gravy-heart 5",
+        "spud-sneakers 3",
+        "butter-pat 5",
+        "hot-start 5",
+        "thick-skin 1"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T07:25:20.299Z"
+    }
+  },
+  {
+    "name": "nm1-min5-s808-chest",
+    "status": "retired",
+    "purpose": "Nightmare 1 at 5:00 from a fresh steam-vent run on seed 808 played with the chest-first goal prompt, a third natural build to continue from past the training cap.",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L1.I7",
+    "difficulty": 1,
+    "at": 300,
+    "weapon": "steam-vent",
+    "seed": "808",
+    "source": "saved at the end of game L1.I7.G1",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "Tibo could next: {{goal}}. {{health}} {{evolutions}} Chests are the best source of power: each gives a free pick and evolves a ready recipe, and elites and bosses drop them. While health is above half, rate opening a known chest or fighting an elite highest, then exploring for a chest, then gems; avoid evading unless enemies crowd Tibo. If health is low, rate food and evading highest. Is this the best goal now?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    },
+    "checkpoint": {
+      "name": "gym-nm1-min5-s808-chest",
+      "build": "sim-wTU8O3Z8.js",
+      "seed": "IBX4YG",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 300.2,
+      "level": 19,
+      "hp": 134,
+      "weapons": [
+        "pressure-cooker 1",
+        "spud-fence 1",
+        "hot-streak 6",
+        "spud-decoy 1",
+        "hash-hawk 1",
+        "potato-battery 1"
+      ],
+      "passives": [
+        "starch-plating 5",
+        "root-network 2",
+        "gravy-splash 2",
+        "thick-skin 1",
+        "gravy-heart 1"
+      ],
+      "items": [
+        "hot-pepper"
+      ],
+      "savedAt": "2026-11-08T07:42:36.646Z"
+    }
+  },
+  {
+    "name": "nm1-min5-s909-steam",
+    "status": "retired",
+    "purpose": "Nightmare 1 at 5:00 from a fresh steam-vent run on seed 909 with the chest-first playbook, another natural build to continue from.",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L1.I8",
+    "difficulty": 1,
+    "at": 300,
+    "weapon": "steam-vent",
+    "seed": "909",
+    "source": "saved at the end of game L1.I8.G1",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "Tibo could next: {{goal}}. {{health}} {{evolutions}} Chests are the best source of power: each gives a free pick and evolves a ready recipe, and elites and bosses drop them. While health is above half, rate opening a known chest or fighting an elite highest, then exploring for a chest, then gems; avoid evading unless enemies crowd Tibo. If health is low, rate food and evading highest. Is this the best goal now?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    },
+    "checkpoint": {
+      "name": "gym-nm1-min5-s909-steam",
+      "build": "sim-wTU8O3Z8.js",
+      "seed": "909",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 300.1,
+      "level": 19,
+      "hp": 120,
+      "weapons": [
+        "pressure-cooker 1",
+        "golden-harvest 1",
+        "frozen-fries 8",
+        "fry-fortress 1",
+        "tater-mines 8",
+        "hot-streak 1"
+      ],
+      "passives": [
+        "slow-cooker 5",
+        "root-network 2",
+        "golden-fry 1",
+        "thick-skin 1",
+        "gravy-splash 1"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T07:42:34.722Z"
+    }
+  },
+  {
+    "name": "nm1-min5-s909-peeler",
+    "status": "retired",
+    "purpose": "Nightmare 1 at 5:00 from a fresh peeler run on seed 909 with the chest-first playbook, to compare the peeler line (Mandoline Fury heals) with steam-vent.",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L1.I8",
+    "difficulty": 1,
+    "at": 300,
+    "weapon": "peeler",
+    "seed": "909",
+    "source": "saved at the end of game L1.I8.G2",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "Tibo could next: {{goal}}. {{health}} {{evolutions}} Chests are the best source of power: each gives a free pick and evolves a ready recipe, and elites and bosses drop them. While health is above half, rate opening a known chest or fighting an elite highest, then exploring for a chest, then gems; avoid evading unless enemies crowd Tibo. If health is low, rate food and evading highest. Is this the best goal now?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    },
+    "checkpoint": {
+      "name": "gym-nm1-min5-s909-peeler",
+      "build": "sim-wTU8O3Z8.js",
+      "seed": "909",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 300,
+      "level": 16,
+      "hp": 131,
+      "weapons": [
+        "mandoline-fury 1",
+        "factory-reset 1",
+        "harvest-moon 8",
+        "skipping-cannonball 1",
+        "deep-fryer 1",
+        "hot-streak 2"
+      ],
+      "passives": [
+        "gravy-heart 1",
+        "four-eyed-spud 5"
+      ],
+      "items": [
+        "copper-spoon"
+      ],
+      "savedAt": "2026-11-08T07:43:51.899Z"
+    }
+  },
+  {
+    "name": "nm1-min10-s707-chest",
+    "status": "ready",
+    "purpose": "Nightmare 1 at 10:00 continuing the weak seed 707 natural build with the chest-first playbook.",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L1.I8",
+    "difficulty": 1,
+    "at": 600,
+    "weapon": "",
+    "seed": "707",
+    "source": "saved at the end of game L1.I8.G3",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "Tibo could next: {{goal}}. {{health}} {{evolutions}} Chests are the best source of power: each gives a free pick and evolves a ready recipe, and elites and bosses drop them. While health is above half, rate opening a known chest or fighting an elite highest, then exploring for a chest, then gems; avoid evading unless enemies crowd Tibo. If health is low, rate food and evading highest. Is this the best goal now?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    },
+    "checkpoint": {
+      "name": "gym-nm1-min10-s707-chest",
+      "build": "sim-DA4RGMxM.js",
+      "seed": "707",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 600.3,
+      "level": 33,
+      "hp": 120,
+      "weapons": [
+        "steam-vent 8",
+        "baked-alaska 1",
+        "eclipse-scythe 1",
+        "potato-rain 8",
+        "root-spikes 6",
+        "seeker-sprouts 1"
+      ],
+      "passives": [
+        "starch-plating 5",
+        "butter-socks 1",
+        "thick-skin 1",
+        "big-bowl 3",
+        "hot-sauce 3",
+        "hash-rush 2"
+      ],
+      "items": [
+        "copper-spoon x2",
+        "penny-spud"
+      ],
+      "savedAt": "2026-11-08T07:43:06.999Z"
+    }
+  }
+]

@@ -1,0 +1,32 @@
+{
+  "templates": {
+    "planner": {
+      "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+      "goal": "If Tibo's next goal is to {{goal}}: is that the best thing now? Rank in this order. If health is under 40%, or a boss is within 300 units, or many enemies are close, food or evading enemies come first. Otherwise: opening a chest first (free pick, and it evolves weapons), fighting an elite next (it drops a chest), then collecting nearby xp gems, then exploring for new chests. Skip anything that walks Tibo into a crowd or a boss.",
+      "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest? Finish evolutions when a recipe is nearly ready, but prefer max HP (Gravy Heart), regeneration, armor and dash charges over levelling extra weak weapons."
+    },
+    "action": {
+      "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+      "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+      "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+      "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+    },
+    "knobs": {
+      "exploreDistance": 300,
+      "evadeSeconds": 8,
+      "gemsSeconds": 12,
+      "stuckSeconds": 6,
+      "extraDamage": 0.02,
+      "safeMargin": 0.1,
+      "distrustSeconds": 0,
+      "distrustBossRange": 0,
+      "planEvery": 5,
+      "eliteSeconds": 20,
+      "lockstep": 1,
+      "bossOfferRange": 0
+    }
+  },
+  "weapon": "steam-vent",
+  "updated": "sonnet-medium L1.I10",
+  "why": "Keep the 17:20 base; add a boss-aware exception to the chest rule and an HP-leaning pick prompt, both untested but targeted at the observed death."
+}
