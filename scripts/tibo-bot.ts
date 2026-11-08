@@ -1451,7 +1451,8 @@ class Planner {
   /** A card was just taken, so the goal is planned again with it in hand. */
   picked = false;
   private lastAsked = Number.NEGATIVE_INFINITY;
-  private sawBoss = false;
+  /** Bosses already planned for, by id: each new one gets a plan the moment it shows up. */
+  private seenBosses = new Set<string>();
 
   constructor(
     readonly notes: RunNotes,
@@ -1460,11 +1461,12 @@ class Planner {
 
   /** Why to plan again while a goal is under way, if anything. */
   due(r: RunView): string | undefined {
+    const fresh = r.bosses.find((b) => !this.seenBosses.has(b.id));
     let why: string | undefined;
     if (this.picked) why = "a card was just taken";
-    else if (!this.sawBoss && r.bosses.length > 0) why = `a boss appeared: ${r.bosses[0]?.name}`;
+    else if (fresh !== undefined) why = `a boss appeared: ${fresh.name}, ${Math.round(fresh.dist)} away to the ${fresh.dir}`;
     else if (r.time - this.lastAsked >= planEvery()) why = `${planEvery()} seconds passed`;
-    this.sawBoss ||= r.bosses.length > 0;
+    for (const b of r.bosses) this.seenBosses.add(b.id);
     return why;
   }
 
