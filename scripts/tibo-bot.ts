@@ -899,6 +899,12 @@ function dashWorthAsking(r: RunView): boolean {
   return templates.action.dash.trim() !== "" && r.player.dashCharges > 0 && r.sectors.some((x) => x.enemiesNear > 0 || (x.nearestBullet ?? 999) < 40);
 }
 
+/** How sure the action model must be to dash: lower while a boss is close, if the knobs say so. */
+function dashBar(r: RunView): number {
+  const k = knobs();
+  return k.bossDashRange > 0 && r.bosses.some((b) => b.dist <= k.bossDashRange) ? k.bossDashThreshold : k.dashThreshold;
+}
+
 /**
  * The page is walking Tibo to its goal without a model, which is when crowds land most of their
  * hits, so the action model still gets the dash question; a yes dashes the way Tibo walks.
@@ -908,7 +914,7 @@ async function dashOnTheWay(r: RunView, p: Pursuit, heading: Direction, log: Run
   const started = performance.now();
   const answers = await decide(render(templates.action.state, vars), { dash: { type: "noul", instructions: render(templates.action.dash, vars) } });
   const odds = answers.dash?.noul ?? 0;
-  if (odds <= 0.5) return;
+  if (odds <= dashBar(r)) return;
   log.write(r, { event: "move", model: MODEL, goal: p.id, action: `dash ${heading}`, reason: "the page was walking to the goal, and the action model said to dash", detail: `dash asked on a walked step: ${Math.round(odds * 100)}%, dashed`, ms: Math.round(performance.now() - started) });
   await command({ type: "dash", dir: heading });
 }
@@ -949,7 +955,7 @@ async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog, why: string)
   const safe = Object.keys(moves).filter((k) => risk(k) <= safest + knobs().safeMargin && (risk(k) < SAFE_ENOUGH || risk(k) === safest));
   const choice = safe.sort((x, y) => (answers[`useful:${y}`]?.noul ?? 0) - (answers[`useful:${x}`]?.noul ?? 0) || risk(x) - risk(y))[0] ?? "stay";
   const dir = (DIRECTIONS as readonly string[]).includes(choice) ? (choice as Direction) : undefined;
-  const dash = dir !== undefined && (answers.dash?.noul ?? 0) > 0.5;
+  const dash = dir !== undefined && (answers.dash?.noul ?? 0) > dashBar(r);
   if (aim.heading === "stay" && dir !== undefined) p.steppedOff++;
   const dashWhy =
     templates.action.dash.trim() === ""
