@@ -773,6 +773,9 @@ type Outcome = { time: number; id: string; title: string; outcome: string; succe
 
 const GOAL_SPEED = 45;
 const GOAL_SLACK = 10;
+/** The panel's plan interval when someone watches, else --plan-every when given, else the coach's knob. */
+const planEvery = () => (piloted ? pace.planEvery : args.includes("--plan-every") ? PLAN_EVERY : knobs().planEvery);
+
 /** What the coach set for this run: the in-game models' prompts and the knobs below. */
 let templates: Templates = DEFAULT_TEMPLATES;
 const knobs = (): Knobs => templates.knobs;
@@ -1428,7 +1431,7 @@ class Planner {
     let why: string | undefined;
     if (this.picked) why = "a card was just taken";
     else if (!this.sawBoss && r.bosses.length > 0) why = `a boss appeared: ${r.bosses[0]?.name}`;
-    else if (r.time - this.lastAsked >= pace.planEvery) why = `${pace.planEvery} seconds passed`;
+    else if (r.time - this.lastAsked >= planEvery()) why = `${planEvery()} seconds passed`;
     this.sawBoss ||= r.bosses.length > 0;
     return why;
   }
