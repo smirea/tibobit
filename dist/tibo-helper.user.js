@@ -345,7 +345,7 @@
     return out;
   }
   function byDamage(m) {
-    return Object.fromEntries([...m].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => [k, Math.round(v)]));
+    return Object.fromEntries([...m].sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, Math.round(v * 10) / 10]));
   }
   function directionOf(dx, dy) {
     const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));

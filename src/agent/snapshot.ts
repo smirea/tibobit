@@ -47,8 +47,9 @@ function recentHurt(s: GameState): Record<string, number> {
   return out;
 }
 
+/** Every source, largest first, with one decimal, so the total is the run's own and a small ground source still shows. */
 function byDamage(m: Map<string, number>): Record<string, number> {
-  return Object.fromEntries([...m].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => [k, Math.round(v)]));
+  return Object.fromEntries([...m].sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, Math.round(v * 10) / 10]));
 }
 
 export function directionOf(dx: number, dy: number): Direction {
