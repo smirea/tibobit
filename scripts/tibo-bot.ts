@@ -1272,7 +1272,8 @@ async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog, why: string)
   const cost = (k: string) => moveCost(r, k === "stay" ? "stay" : (k as Direction));
   const offered = { ...moves };
   const cheapest = cheapestMove(r);
-  if (cheapest !== undefined) for (const k of Object.keys(moves)) if ((cost(k) ?? 0) > cheapest + knobs().extraDamage) delete moves[k];
+  const bossClose = knobs().bossOfferRange > 0 && r.bosses.some((b) => b.dist <= knobs().bossOfferRange);
+  if (cheapest !== undefined && !bossClose) for (const k of Object.keys(moves)) if ((cost(k) ?? 0) > cheapest + knobs().extraDamage) delete moves[k];
   const vars = stateVars(r, { goal });
   const state = render(templates.action.state, vars);
   const ask = (template: string, move: string) => render(template, { ...vars, move: () => move });
