@@ -168,7 +168,15 @@ export class Controller {
             choiceCards()[command.index]?.click();
             if (await until(() => shown() !== before, 300)) return this.finish(status, "done");
           }
-          this.finish(status, "failed", "the option did not take");
+          // A training loadout once left a level-up whose only card would not take, which stalled the
+          // game for good. The game's own pick is tried, and failing that the choice is dropped.
+          const queued = game.state.choiceQueue.length;
+          try {
+            game.choose({ type: "pick", index: command.index });
+          } catch {}
+          if (game.state.choiceQueue.length < queued) return this.finish(status, "done", "taken through the game, not the card");
+          game.state.choiceQueue.shift();
+          this.finish(status, "done", "dropped: the game would not take any option of this choice");
         })();
         return;
       }
