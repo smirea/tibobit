@@ -1,23 +1,32 @@
-// The learning loop's files in gameplay/: the coach's two prompts, the experiments and
-// infrastructure tables, and one notes file per run. The coach may rewrite any of them; this module
-// owns their formats and turns away an edit that would break one, so the loop can never wedge itself.
+// The learning loop's files in gameplay/. Shared by every coach: beliefs.csv (what the loop holds
+// true, good and bad), experiments/ (one Markdown file per question), gyms.json (saved game states
+// the training ground starts from), infrastructure_feedback.csv and notes/ (full runs only). Each
+// coach owns gameplay/coaches/<coach>/: its three prompts, its playbook (the templates and starting
+// weapon it currently thinks best) and its log. This module owns their formats and turns away an
+// edit that would break one, so the loop can never wedge itself.
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { mkdirSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import type { CheckpointMeta, LoadoutSpec, RunTotals } from "../src/agent/protocol";
 
 export const GAMEPLAY = path.join(import.meta.dir, "..", "gameplay");
 export const NOTES_DIR = path.join(GAMEPLAY, "notes");
-export const COACH_PLAN = path.join(GAMEPLAY, "coach-plan.md");
-export const COACH_RETROSPECTIVE = path.join(GAMEPLAY, "coach-retrospective.md");
-export const EXPERIMENTS_CSV = path.join(GAMEPLAY, "experiments.csv");
+export const EXPERIMENTS_DIR = path.join(GAMEPLAY, "experiments");
+export const COACHES_DIR = path.join(GAMEPLAY, "coaches");
 export const BELIEFS_CSV = path.join(GAMEPLAY, "beliefs.csv");
 export const INFRA_CSV = path.join(GAMEPLAY, "infrastructure_feedback.csv");
+export const GYMS_JSON = path.join(GAMEPLAY, "gyms.json");
+
+/** The bot's goal options reach this far, and a target given up on is noted for this long. */
+export const PLAN_RANGE = 600;
+export const GIVE_UP_SECONDS = 45;
 
 export type Checked<T> = { value: T } | { errors: string[] };
 
 export const clock = (seconds: number, sep = ":") => `${String(Math.floor(seconds / 60)).padStart(2, "0")}${sep}${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 export const hash = (text: string) => createHash("sha1").update(text).digest("hex").slice(0, 8);
 export const isText = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
+
 
 // ---- Tables --------------------------------------------------------------------------------
 
@@ -83,11 +92,9 @@ type Table<C extends readonly string[]> = {
   retire: string;
   stamps: C[number][];
 };
-
-const EXPERIMENT_COLUMNS = ["id", "created", "status", "area", "hypothesis", "test", "runs", "outcome", "result", "learnings"] as const;
 /**
- * The part of the game an experiment is about. The coverage table counts them, and a coach may not
- * test the same area three runs in a row, so its curiosity cannot narrow onto one mechanic.
+ * The part of the game an experiment is about. The coverage table counts them, so a coach can see
+ * which parts of the game no experiment has looked at yet.
  */
 export const AREAS = {
   build: "weapons, passives, level-up picks, recipes and evolutions, reroll, skip and banish",
@@ -102,42 +109,24 @@ export const AREAS = {
   meta: "the ladder, curses, gear and anything across runs",
   models: "how the planner and the action model read their prompts",
 } as const;
-export type ExperimentRow = Record<(typeof EXPERIMENT_COLUMNS)[number], string>;
-export const EXPERIMENTS: Table<typeof EXPERIMENT_COLUMNS> = {
-  name: "experiments",
-  file: EXPERIMENTS_CSV,
-  columns: EXPERIMENT_COLUMNS,
-  required: ["id", "hypothesis"],
-  enums: { status: ["proposed", "running", "done", "recheck", "retired"], area: Object.keys(AREAS), result: ["", "confirmed", "refuted", "inconclusive"] },
-  retire: "status retired",
-  stamps: [],
-};
 
-// What the loop holds true right now, about the game or about how the models behave. Experiments
-// are questions; beliefs are the answers that survived them, kept so a rewritten prompt cannot
-// quietly drop one.
-const BELIEF_COLUMNS = ["id", "about", "claim", "confidence", "status", "evidence", "experiments", "created", "updated"] as const;
+// What the loop holds true right now, about the game or about how the models behave, and whether
+// it is good (worth doing), bad (worth avoiding) or a plain fact. Experiments are questions;
+// beliefs are the answers that survived them, kept so a rewritten prompt cannot quietly drop one.
+const BELIEF_COLUMNS = ["id", "about", "verdict", "claim", "confidence", "status", "evidence", "experiments", "created", "updated"] as const;
 export type BeliefRow = Record<(typeof BELIEF_COLUMNS)[number], string>;
 export const BELIEFS: Table<typeof BELIEF_COLUMNS> = {
   name: "beliefs",
   file: BELIEFS_CSV,
   columns: BELIEF_COLUMNS,
   required: ["id", "claim", "evidence"],
-  enums: { about: ["game", "planner", "action", "coach"], confidence: ["lead", "likely", "confirmed"], status: ["held", "recheck", "disproved"] },
+  enums: { about: ["game", "planner", "action", "coach"], verdict: ["good", "bad", "fact"], confidence: ["lead", "likely", "confirmed"], status: ["held", "recheck", "disproved"] },
   retire: "status disproved",
   stamps: ["created", "updated"],
 };
 
-export const readExperiments = () => readTable(EXPERIMENTS_CSV, EXPERIMENT_COLUMNS);
 export const readBeliefs = () => readTable(BELIEFS_CSV, BELIEF_COLUMNS);
 export const readInfra = () => readTable(INFRA_CSV, INFRA_COLUMNS);
-/** What the coach was shown, which its edits are checked against; `prompts` are the coach prompts as they stood. */
-export type Tables = { experiments: ExperimentRow[]; beliefs: BeliefRow[]; prompts?: { coachPlan: string; coachRetrospective: string } };
-export const readTables = async (): Promise<Tables> => ({
-  experiments: await readExperiments(),
-  beliefs: await readBeliefs(),
-  prompts: { coachPlan: await Bun.file(COACH_PLAN).text(), coachRetrospective: await Bun.file(COACH_RETROSPECTIVE).text() },
-});
 
 /**
  * Why a new coach prompt would lose what the current one holds, if it would. Composer once replaced
@@ -151,13 +140,6 @@ export function promptLoss(now: string, next: string, file: string): string | un
   return undefined;
 }
 
-/** Fails at startup, not after a run, when a loop file is missing or the coach left one unreadable. */
-export async function checkLoopFiles() {
-  mkdirSync(NOTES_DIR, { recursive: true });
-  for (const f of [COACH_PLAN, COACH_RETROSPECTIVE]) if (!(await Bun.file(f).exists())) throw new Error(`${f} is missing`);
-  await readTables();
-  await readInfra();
-}
 
 // ---- Templates -----------------------------------------------------------------------------
 // The planner's and the action model's prompts are templates the coach writes before every run.
@@ -299,13 +281,6 @@ export function checkTemplates(raw: { planner?: unknown; action?: unknown; knobs
   return errors.length > 0 ? { errors } : { value: templates };
 }
 
-// ---- Coach edits ---------------------------------------------------------------------------
-// Both coach calls may rewrite the experiments and beliefs tables, file infrastructure requests,
-// and rewrite either coach prompt.
-
-export type LoopEdits = { experiments?: ExperimentRow[]; beliefs?: BeliefRow[]; infra?: { request: string; why: string }[]; coachPlan?: string; coachRetrospective?: string };
-const PROMPT_LIMIT = 30_000;
-
 function checkTable<C extends readonly string[]>(raw: unknown, table: Table<C>, before: Record<C[number], string>[], errors: string[]): Record<C[number], string>[] | undefined {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw)) {
@@ -335,34 +310,6 @@ function checkTable<C extends readonly string[]>(raw: unknown, table: Table<C>, 
   return rows;
 }
 
-export function checkEdits(raw: Record<string, unknown>, before: Tables): Checked<LoopEdits> {
-  const errors: string[] = [];
-  const edits: LoopEdits = {};
-  const experiments = checkTable(raw.experiments, EXPERIMENTS, before.experiments, errors);
-  if (experiments !== undefined) edits.experiments = experiments;
-  const beliefs = checkTable(raw.beliefs, BELIEFS, before.beliefs, errors);
-  if (beliefs !== undefined) edits.beliefs = beliefs;
-  if (raw.infra !== undefined) {
-    if (!Array.isArray(raw.infra) || !raw.infra.every((x) => typeof x === "object" && x !== null && isText((x as { request?: unknown }).request)))
-      errors.push('infra must be an array of {"request": "...", "why": "..."}');
-    else edits.infra = (raw.infra as { request: string; why?: unknown }[]).map((x) => ({ request: x.request, why: typeof x.why === "string" ? x.why : "" }));
-  }
-  for (const [key, file] of [
-    ["coachPlan", "coach-plan.md"],
-    ["coachRetrospective", "coach-retrospective.md"],
-  ] as const) {
-    const v = raw[key];
-    if (v === undefined) continue;
-    if (!isText(v) || v.length > PROMPT_LIMIT) errors.push(`${key} must be the whole new ${file}, under ${PROMPT_LIMIT} characters`);
-    else {
-      const loss = before.prompts === undefined ? undefined : promptLoss(before.prompts[key], v, file);
-      if (loss !== undefined) errors.push(loss);
-      else edits[key] = v;
-    }
-  }
-  return errors.length > 0 ? { errors } : { value: edits };
-}
-
 /** A belief keeps the run it was first written in, and gets the current run whenever the coach changes it. */
 export function stampBeliefs(rows: BeliefRow[], before: BeliefRow[], run: string): BeliefRow[] {
   const same = (a: BeliefRow, b: BeliefRow) => BELIEF_COLUMNS.every((c) => BELIEFS.stamps.includes(c) || a[c] === b[c]);
@@ -371,6 +318,7 @@ export function stampBeliefs(rows: BeliefRow[], before: BeliefRow[], run: string
     return { ...row, created: old?.created ?? run, updated: old !== undefined && same(old, row) ? old.updated : run };
   });
 }
+
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -425,54 +373,6 @@ export function merge<R extends { id: string }>(theirs: R[], now: R[], before: R
   return out;
 }
 
-const renameIds = (text: string, renamed: Map<string, string>) => text.replace(/\b[A-Z]+\d+\b/g, (id) => renamed.get(id) ?? id);
-
-/**
- * Writes the coach's edits over what it was shown (`before`). `run` is the run's id, the start of
- * its notes file name. `renamed` maps any experiment or belief id that had to change.
- */
-export async function applyEdits(edits: LoopEdits, run: string, before: Tables): Promise<{ done: string[]; renamed: Map<string, string> }> {
-  return locked(async () => {
-    const done: string[] = [];
-    const renamed = new Map<string, string>();
-    const experiments = edits.experiments === undefined ? undefined : merge(edits.experiments, await readExperiments(), before.experiments, renamed);
-    const beliefs = edits.beliefs === undefined ? undefined : merge(edits.beliefs, await readBeliefs(), before.beliefs, renamed);
-    if (experiments !== undefined) {
-      await writeTable(EXPERIMENTS_CSV, EXPERIMENT_COLUMNS, experiments);
-      done.push(`experiments.csv (${experiments.length} rows)`);
-    }
-    if (beliefs !== undefined) {
-      const linked = beliefs.map((b) => ({ ...b, experiments: renameIds(b.experiments, renamed) }));
-      await writeTable(BELIEFS_CSV, BELIEF_COLUMNS, stampBeliefs(linked, await readBeliefs(), run));
-      done.push(`beliefs.csv (${beliefs.length} rows)`);
-    }
-    if (edits.infra !== undefined && edits.infra.length > 0) {
-      await writeTable(INFRA_CSV, INFRA_COLUMNS, [...(await readInfra()), ...edits.infra.map((x) => ({ date: today(), run, status: "open", request: x.request, why: x.why }))]);
-      done.push(`${edits.infra.length} infrastructure requests`);
-    }
-    if (edits.coachPlan !== undefined) {
-      await Bun.write(COACH_PLAN, `${edits.coachPlan.trim()}\n`);
-      done.push("coach-plan.md");
-    }
-    if (edits.coachRetrospective !== undefined) {
-      await Bun.write(COACH_RETROSPECTIVE, `${edits.coachRetrospective.trim()}\n`);
-      done.push("coach-retrospective.md");
-    }
-    if (renamed.size > 0) done.push(`renumbered ${[...renamed].map(([a, b]) => `${a} to ${b}`).join(", ")}, taken meanwhile`);
-    return { done, renamed };
-  });
-}
-
-/** Marks the experiments a run tests as running, and later adds the finished run to their `runs`. */
-export async function touchExperiments(ids: string[], change: (row: ExperimentRow) => void) {
-  if (ids.length === 0) return;
-  await locked(async () => {
-    const rows = await readExperiments();
-    for (const row of rows) if (ids.includes(row.id)) change(row);
-    await writeTable(EXPERIMENTS_CSV, EXPERIMENT_COLUMNS, rows);
-  });
-}
-
 // ---- Notes ---------------------------------------------------------------------------------
 // One file per run, written when the run ends, named for when it started and how long Tibo lived.
 // The bot writes the facts, the plan and the prompts; the coach writes the review between the
@@ -482,7 +382,7 @@ export type Surface = "headless" | "browser";
 /** `bot` is the commit of the bot code that played, so a review can tell whether a fix had landed. */
 export type RunSetup = { started: Date; difficulty: string; mode: "daily" | "world"; surface: Surface; seed: string; planner: string; action: string; coach: string; bot: string };
 /** `weapon` is the starting weapon the coach chose by id, or "" for the game's Random. */
-export type RunPlan = { source: string; intent: string; testing: string[]; templates: Templates; weapon: string };
+export type RunPlan = { source: string; intent: string; templates: Templates; weapon: string };
 export type RunEnd = { lived: number; level?: number; kills?: number; ending: string; outcome: string[] };
 /** `started` is what Tibo actually started with, which says whether the coach's choice was offered. */
 export type NotesContent = { setup: RunSetup; plan: RunPlan; end: RunEnd; link: string; log: string; prompts: string; picks: string[]; review: string; started: string; stats: string; key: string };
@@ -498,7 +398,7 @@ export function notesName(setup: RunSetup, lived: number): string {
   return `${runId(setup.started)}_lived-${clock(lived, "-")}_${setup.difficulty}_${setup.mode}_${setup.surface}.md`;
 }
 
-const REVIEW_START = "<!-- review: written by the coach from coach-retrospective.md -->";
+const REVIEW_START = "<!-- review: written by the coach after the run -->";
 const REVIEW_END = "<!-- /review -->";
 
 export function renderNotes(n: NotesContent): string {
@@ -512,7 +412,6 @@ export function renderNotes(n: NotesContent): string {
     `| Replay | ${n.link} |`,
     `| Ending | ${end.ending} |`,
     `| Opening | ${n.key} |`,
-    `| Testing | ${plan.testing.join(", ") || "nothing named"} |`,
     `| Seed | ${setup.seed} |`,
     `| Starting weapon | ${n.started} |`,
     `| Planner | ${setup.planner} |`,
@@ -563,11 +462,6 @@ export function renderNotes(n: NotesContent): string {
 
 export const notesField = (text: string, name: string) => text.match(new RegExp(`^\\| ${name} \\| (.*) \\|$`, "m"))?.[1]?.trim();
 
-export function notesTesting(text: string): string[] {
-  const v = notesField(text, "Testing");
-  return v === undefined || v === "nothing named" ? [] : v.split(/,\s*/).filter(Boolean);
-}
-
 export function notesTemplates(text: string): Checked<Templates> {
   const blocks = new Map([...text.matchAll(/^### (\S+)\n\n~~~\w*\n([\s\S]*?)\n?~~~$/gm)].map((m) => [m[1] ?? "", m[2] ?? ""]));
   const planner: Record<string, string> = {};
@@ -615,46 +509,6 @@ export async function runRecords(): Promise<RunRecord[]> {
   return out;
 }
 
-/** The templates of the latest run that recorded them, by this coach when it has any, for the coach to build on. */
-export async function latestTemplates(coach?: string): Promise<{ templates: Templates; from: string } | undefined> {
-  const records = await runRecords();
-  for (const r of [...records.filter((x) => x.coach === coach), ...records]) {
-    const t = notesTemplates(r.text);
-    if ("value" in t) return { templates: t.value, from: r.name };
-  }
-  return undefined;
-}
-
-/** The weapon a run started with, by id, from its notes; undefined for runs from before the field. */
-export const startedWith = (text: string) => notesField(text, "Starting weapon")?.split(" ")[0];
-
-/**
- * The champion: of every set of templates played in Open World Nightmare (by any coach, at the
- * highest level reached), the one whose runs have the longest median life. One lucky run makes a
- * set champion until exploit runs replay it; if they die early its median falls and the title moves
- * on, so exploit runs do not keep chasing an outlier. `record` is the set's longest run, `lives`
- * every life it has had.
- */
-export async function championTemplates(): Promise<{ templates: Templates; from: string; record: RunRecord; lives: number[] } | undefined> {
-  const sets = new Map<string, { templates: Templates; runs: RunRecord[] }>();
-  for (const r of (await runRecords()).filter((x) => x.mode === "world" && x.level > 0)) {
-    const t = notesTemplates(r.text);
-    if (!("value" in t)) continue;
-    const key = `${r.level}|${JSON.stringify(t.value)}`;
-    const set = sets.get(key) ?? { templates: t.value, runs: [] };
-    set.runs.push(r);
-    sets.set(key, set);
-  }
-  const median = (xs: number[]) => {
-    const s = [...xs].sort((a, b) => a - b);
-    return s.length % 2 === 1 ? (s[(s.length - 1) / 2] ?? 0) : ((s[s.length / 2 - 1] ?? 0) + (s[s.length / 2] ?? 0)) / 2;
-  };
-  const ranked = [...sets.values()].sort((a, b) => (b.runs[0]?.level ?? 0) - (a.runs[0]?.level ?? 0) || median(b.runs.map((r) => r.lived)) - median(a.runs.map((r) => r.lived)));
-  const best = ranked[0];
-  if (best === undefined) return undefined;
-  const record = [...best.runs].sort((a, b) => b.lived - a.lived)[0] as RunRecord;
-  return { templates: best.templates, from: record.name, record, lives: best.runs.map((r) => r.lived) };
-}
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
@@ -673,20 +527,7 @@ export async function campaign(): Promise<string> {
   return lines.join("\n");
 }
 
-/** One line per finished run, newest first. */
-export async function runHistory(limit = 60): Promise<string> {
-  const lines: string[] = [];
-  for (const name of (await notesFiles()).slice(0, limit)) {
-    const text = await Bun.file(path.join(NOTES_DIR, name)).text();
-    const t = notesTemplates(text);
-    const knobs = "value" in t ? (Object.keys(KNOBS) as (keyof Knobs)[]).filter((k) => t.value.knobs[k] !== DEFAULT_TEMPLATES.knobs[k]).map((k) => `${k} ${t.value.knobs[k]}`) : [];
-    const source = notesField(text, "Templates from") ?? "";
-    lines.push(`- ${name}: ${notesField(text, "Ending") ?? "?"}; opening: ${notesField(text, "Opening") ?? "not recorded"}; knobs off default: ${knobs.join(", ") || "none"}${source.includes("exploit run") ? "; exploit run" : ""}; testing ${notesField(text, "Testing") ?? "?"}; coach ${notesField(text, "Coach") ?? "?"}`);
-  }
-  return lines.join("\n") || "(no runs yet)";
-}
 
-/** The newest notes in full, without their prompts, which the coach gets separately. */
 export async function latestNotes(count: number): Promise<string> {
   const out: string[] = [];
   for (const name of (await notesFiles()).slice(0, count)) {
@@ -711,48 +552,6 @@ export function catalog(): string {
     "",
     "Knobs:",
     ...Object.entries(KNOBS).map(([k, v]) => `- ${k} (${v.min} to ${v.max}): ${v.about}`),
-  ].join("\n");
-}
-
-function tableContract<C extends readonly string[]>(t: Table<C>, about: string): string {
-  const enums = Object.entries(t.enums as Record<string, readonly string[]>).map(([c, v]) => `${c} is ${v.includes("") ? "empty or " : ""}one of ${v.filter(Boolean).join(", ")}`);
-  const stamps = t.stamps.length === 0 ? "" : ` The bot fills ${t.stamps.join(" and ")}.`;
-  return `"${t.name}": ${about} Only the rows you add or change, as an array of row objects with the keys ${t.columns.join(", ")}; ${enums.join("; ")}. A row with an id the table already has updates that row, and the keys you leave out keep their values, so a change can be as small as {"id": "E7", "status": "done"}.${stamps} Rows cannot be deleted: set ${t.retire} instead. Leave the key out when nothing changes.`;
-}
-
-export const EDITS_CONTRACT = [
-  tableContract(EXPERIMENTS, "the questions the loop asks of the game and of the models."),
-  tableContract(
-    BELIEFS,
-    "what the loop holds true now, each claim short enough to act on, with the runs and numbers behind it in evidence and the experiment ids in experiments. Write a belief once a finding is worth acting on (lead), raise its confidence when another run agrees, set it to recheck when a run contradicts it, and to disproved when a recheck refutes it.",
-  ),
-  '"infra": new requests for the coding harness, an array of {"request": "what to build or change in the bot", "why": "what it would let the loop learn or do"}. Only for what no template, knob or prompt edit can do. Leave it out when there are none.',
-  '"coachPlan" and "coachRetrospective": the whole new coach-plan.md or coach-retrospective.md, only when the way the loop plans or reviews should change. Leave them out otherwise.',
-].join("\n");
-
-/**
- * What the coach can change, at the top of both coach prompts. Written here rather than in the
- * prompts, which the coach rewrites, so the list cannot be edited away or fall behind the code.
- */
-export function editableFiles(phase: "plan" | "review"): string {
-  const own = phase === "plan" ? "coach-plan.md" : "coach-retrospective.md";
-  return [
-    "# What you can change",
-    "",
-    "Everything below lives in gameplay/, and you change it through keys in your JSON reply (see Reply at the end). Anything you leave out stays as it is.",
-    "",
-    ...(phase === "plan"
-      ? ["- **The in-game prompts** (`planner`, `action`, `knobs`): what the planner and the action model are told, which state blocks they see, what each question asks, and the knobs, for the run about to start. They are recorded in the run's notes, and the next plan starts from them."]
-      : ["- **This run's notes** (`notes`): the review between the plan and the picks, in the sections this prompt asks for."]),
-    `- **beliefs.csv** (\`beliefs\`): what the loop holds true about the game and the in-game models. You send only the rows you add or change; rows are never deleted, only disproved.`,
-    `- **experiments.csv** (\`experiments\`): the questions the loop asks. You send only the rows you add or change; rows are never deleted, only retired.`,
-    "- **infrastructure_feedback.csv** (`infra`): requests for changes to the bot's code. You can only add rows; whoever works on the code closes them.",
-    phase === "review"
-      ? "- **training/** (`training`): scenarios for the training ground, which replay a moment of a past run from its checkpoint with two or more variants of the templates, and play before the next run. See The training ground below."
-      : "- **training/**: in a review, not here, you can ask for training-ground scenarios. Their results are under The training ground below.",
-    `- **coach-plan.md** (\`coachPlan\`) and **coach-retrospective.md** (\`coachRetrospective\`): your own prompts, before and after each run. This one is ${own}. Rewrite one only when the way the loop plans or reviews should change.`,
-    "",
-    "You cannot change which models play (the coach, the planner and the action model), the bot's code, or the parts of a notes file the bot writes: its header, outcome, plan, picks and prompts. When the code stands in the way, file an infrastructure request. After the review, the bot commits gameplay/, so every change you make is in the history.",
   ].join("\n");
 }
 
@@ -829,18 +628,6 @@ export function runStats(csv: string): string {
   ].join("\n");
 }
 
-/** Per area: how many experiments are done, open and retired, and which run tested it last. */
-export function coverage(rows: ExperimentRow[]): string {
-  const lastRun = (rs: ExperimentRow[]) => rs.flatMap((r) => r.runs.split(/;\s*/).filter(Boolean)).sort().at(-1)?.slice(0, 16).replace("_", " ") ?? "never";
-  return [
-    "| Area | What it covers | Done | Open | Last tested |",
-    "| --- | --- | --- | --- | --- |",
-    ...(Object.entries(AREAS) as [keyof typeof AREAS, string][]).map(([area, about]) => {
-      const rs = rows.filter((r) => r.area === area);
-      return `| ${area} | ${about} | ${rs.filter((r) => r.status === "done").length} | ${rs.filter((r) => ["proposed", "running", "recheck"].includes(r.status)).length} | ${lastRun(rs)} |`;
-    }),
-  ].join("\n");
-}
 
 /**
  * A run's opening in one line, for comparing runs: when the first chest was listed, how many
@@ -861,4 +648,415 @@ export function keyNumbers(csv: string): string {
   const fought = rows.filter((r) => elite(r) && r.action === "start").length;
   const killed = rows.filter((r) => elite(r) && r.action === "done").length;
   return `first chest listed ${listed}; ${opened} chests opened by 2:30; ${fought} elite fights and ${killed} elites killed by 3:00; first evolution ${evolution}; level ${level} at 3:00`;
+}
+
+// ---- Experiments -----------------------------------------------------------------------------
+// One Markdown file per question, gameplay/experiments/experiment_<name>.md. The coach writes the
+// header fields and the Hypothesis, Method and Findings sections; the loop appends one entry under
+// Games for every training-ground game played for it.
+
+export const EXPERIMENT_STATUSES = ["proposed", "running", "done", "recheck", "retired"] as const;
+export const EXPERIMENT_RESULTS = ["", "confirmed", "refuted", "inconclusive"] as const;
+export type Area = keyof typeof AREAS;
+export type Experiment = {
+  name: string;
+  title: string;
+  status: (typeof EXPERIMENT_STATUSES)[number];
+  area: Area;
+  result: (typeof EXPERIMENT_RESULTS)[number];
+  coach: string;
+  created: string;
+  updated: string;
+  hypothesis: string;
+  method: string;
+  findings: string;
+  /** Written by the loop: one entry per game played for this experiment. */
+  games: string;
+};
+const EXPERIMENT_TEXT = ["hypothesis", "method", "findings"] as const;
+const EXPERIMENT_FIELDS = ["status", "area", "result", "coach", "created", "updated"] as const;
+export const EXPERIMENT_NAME = /^[a-z0-9]+(-[a-z0-9]+){0,7}$/;
+export const experimentFile = (name: string) => path.join(EXPERIMENTS_DIR, `experiment_${name}.md`);
+const title = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+export function renderExperiment(e: Experiment): string {
+  return [
+    `# ${e.title}`,
+    "",
+    "| Field | Value |",
+    "| --- | --- |",
+    ...EXPERIMENT_FIELDS.map((f) => `| ${title(f)} | ${e[f] || "-"} |`),
+    "",
+    ...EXPERIMENT_TEXT.flatMap((f) => [`## ${title(f)}`, "", e[f].trim() || "(none yet)", ""]),
+    "## Games",
+    "",
+    e.games.trim() || "(none played yet)",
+    "",
+  ].join("\n");
+}
+
+export function parseExperiment(text: string, name: string): Experiment {
+  const field = (f: string) => {
+    const v = text.match(new RegExp(`^\\| ${title(f)} \\| (.*) \\|$`, "m"))?.[1]?.trim() ?? "";
+    return v === "-" ? "" : v;
+  };
+  const section = (f: string) => {
+    const v = text.match(new RegExp(`^## ${title(f)}\\n\\n([\\s\\S]*?)(?=\\n## |(?![\\s\\S]))`, "m"))?.[1]?.trim() ?? "";
+    return v === "(none yet)" || v === "(none played yet)" ? "" : v;
+  };
+  return {
+    name,
+    title: text.match(/^# (.+)$/m)?.[1]?.trim() ?? name,
+    status: field("status") as Experiment["status"],
+    area: field("area") as Area,
+    result: field("result") as Experiment["result"],
+    coach: field("coach"),
+    created: field("created"),
+    updated: field("updated"),
+    hypothesis: section("hypothesis"),
+    method: section("method"),
+    findings: section("findings"),
+    games: section("games"),
+  };
+}
+
+export async function readExperiments(): Promise<Experiment[]> {
+  let files: string[];
+  try {
+    files = readdirSync(EXPERIMENTS_DIR).filter((f) => /^experiment_.+\.md$/.test(f));
+  } catch {
+    return [];
+  }
+  return Promise.all(files.sort().map(async (f) => parseExperiment(await Bun.file(path.join(EXPERIMENTS_DIR, f)).text(), f.slice("experiment_".length, -3))));
+}
+
+async function writeExperiment(e: Experiment) {
+  mkdirSync(EXPERIMENTS_DIR, { recursive: true });
+  await Bun.write(experimentFile(e.name), renderExperiment(e));
+}
+
+/** Adds game entries to an experiment's Games section. */
+export async function addGames(name: string, entries: string[]) {
+  await locked(async () => {
+    const file = Bun.file(experimentFile(name));
+    if (!(await file.exists())) return;
+    const e = parseExperiment(await file.text(), name);
+    e.games = [e.games, ...entries].filter((x) => x.trim() !== "").join("\n\n");
+    await writeExperiment(e);
+  });
+}
+
+/** Per area: experiments done, open and retired. */
+export function coverage(rows: Experiment[]): string {
+  const lines = ["| Area | Done | Open | Retired | What it covers |", "| --- | --- | --- | --- | --- |"];
+  for (const [area, about] of Object.entries(AREAS)) {
+    const rs = rows.filter((r) => r.area === area);
+    lines.push(`| ${area} | ${rs.filter((r) => r.status === "done").length} | ${rs.filter((r) => r.status === "proposed" || r.status === "running" || r.status === "recheck").length} | ${rs.filter((r) => r.status === "retired").length} | ${about} |`);
+  }
+  return lines.join("\n");
+}
+
+// ---- Gyms ------------------------------------------------------------------------------------
+// Saved game states the training ground starts games from, kept so ideas can be tried again and
+// again under known conditions. A gym is built by playing a fresh game on a seed other than the
+// evaluation seed to its time, or saved from the end of a game. Its recipe stays, so a gym the game
+// can no longer load (a new game build) is built again.
+
+export type Gym = {
+  name: string;
+  status: "pending" | "building" | "ready" | "failed" | "retired";
+  purpose: string;
+  coach: string;
+  created: string;
+  /** The Nightmare level, 1 to 10. */
+  difficulty: number;
+  /** Game seconds the gym is saved at. */
+  at: number;
+  weapon: string;
+  loadout?: LoadoutSpec;
+  seed: string;
+  /** How it came to be: built from a recipe, or saved at the end of a game. */
+  source: string;
+  /** The templates that played up to it, for a rebuild. */
+  templates?: Templates;
+  checkpoint?: CheckpointMeta;
+  error?: string;
+  /** The coach whose loop is building it, while it is building. */
+  builder?: string;
+};
+
+export const GYM_NAME = /^[a-z0-9]+(-[a-z0-9]+){0,6}$/;
+
+export async function readGyms(): Promise<Gym[]> {
+  const f = Bun.file(GYMS_JSON);
+  return (await f.exists()) ? ((await f.json()) as Gym[]) : [];
+}
+
+/** Changes gyms under the lock, so two coaches never write over each other. */
+export async function updateGyms<T>(change: (gyms: Gym[]) => T | Promise<T>): Promise<T> {
+  return locked(async () => {
+    const gyms = await readGyms();
+    const out = await change(gyms);
+    await Bun.write(GYMS_JSON, `${JSON.stringify(gyms, null, 2)}\n`);
+    return out;
+  });
+}
+
+export function gymLine(g: Gym): string {
+  const build = g.checkpoint === undefined ? "" : `; lv ${g.checkpoint.level}, hp ${g.checkpoint.hp}, ${[...g.checkpoint.weapons, ...g.checkpoint.passives, ...g.checkpoint.items].join(", ")}`;
+  return `- ${g.name} (${g.status}${g.error === undefined ? "" : `: ${g.error}`}): Nightmare ${g.difficulty} at ${clock(g.at)}${g.weapon === "" ? "" : `, started with ${g.weapon}`}${g.loadout === undefined ? "" : ", build swapped in at the start"}${build}. ${g.purpose} (by ${g.coach}, ${g.source})`;
+}
+
+// ---- Coaches -----------------------------------------------------------------------------------
+
+export function coachFiles(coach: string) {
+  const dir = path.join(COACHES_DIR, coach);
+  return {
+    dir,
+    experiments: path.join(dir, "experiments.md"),
+    fullRun: path.join(dir, "full-run.md"),
+    reflect: path.join(dir, "reflect.md"),
+    playbook: path.join(dir, "playbook.json"),
+    log: path.join(dir, "log.md"),
+    state: path.join(dir, "state.json"),
+  };
+}
+export const PROMPT_KEYS = { experiments: "experiments.md", fullRun: "full-run.md", reflect: "reflect.md" } as const;
+export type PromptKey = keyof typeof PROMPT_KEYS;
+
+/** The templates and starting weapon ("" for the game's Random) a coach currently plays best with. */
+export type Playbook = { templates: Templates; weapon: string; updated: string; why: string };
+
+export async function readPlaybook(coach: string): Promise<Playbook> {
+  const f = Bun.file(coachFiles(coach).playbook);
+  if (!(await f.exists())) return { templates: DEFAULT_TEMPLATES, weapon: "", updated: "never", why: "the built-in defaults" };
+  const raw = (await f.json()) as Playbook;
+  const t = checkTemplates(raw.templates, DEFAULT_TEMPLATES);
+  if ("errors" in t) throw new Error(`${coachFiles(coach).playbook}: ${t.errors.join("; ")}`);
+  return { ...raw, templates: t.value };
+}
+
+export async function writePlaybook(coach: string, p: Playbook) {
+  mkdirSync(coachFiles(coach).dir, { recursive: true });
+  await Bun.write(coachFiles(coach).playbook, `${JSON.stringify(p, null, 2)}\n`);
+}
+
+/** The playbook updated last by any coach, for a bot run outside the loop (the panel's pilot). */
+export async function newestPlaybook(): Promise<{ playbook: Playbook; coach: string } | undefined> {
+  let best: { playbook: Playbook; coach: string; at: number } | undefined;
+  for (const coach of readdirSync(COACHES_DIR, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)) {
+    const f = Bun.file(coachFiles(coach).playbook);
+    if (!(await f.exists()) || (best !== undefined && f.lastModified <= best.at)) continue;
+    best = { playbook: await readPlaybook(coach), coach, at: f.lastModified };
+  }
+  return best;
+}
+
+/** Where a coach's loop stands, so a restarted loop goes on from there. */
+export type CoachState = { loop: number; iteration: number };
+export async function readCoachState(coach: string): Promise<CoachState> {
+  const f = Bun.file(coachFiles(coach).state);
+  return (await f.exists()) ? ((await f.json()) as CoachState) : { loop: 1, iteration: 1 };
+}
+export async function writeCoachState(coach: string, s: CoachState) {
+  await Bun.write(coachFiles(coach).state, `${JSON.stringify(s)}\n`);
+}
+
+/** Fails at startup when a coach's prompts are missing or a shared file is unreadable. */
+export async function checkLoopFiles(coach: string) {
+  mkdirSync(NOTES_DIR, { recursive: true });
+  mkdirSync(EXPERIMENTS_DIR, { recursive: true });
+  for (const key of Object.keys(PROMPT_KEYS) as PromptKey[]) {
+    const f = coachFiles(coach)[key];
+    if (!(await Bun.file(f).exists())) throw new Error(`${f} is missing; copy gameplay/coaches/starter/ to start a coach`);
+  }
+  await readBeliefs();
+  await readInfra();
+  await readPlaybook(coach);
+  await readGyms();
+  await readExperiments();
+}
+
+// ---- Coach edits ---------------------------------------------------------------------------------
+// Every coach call may change beliefs and experiments and file infrastructure requests. The rest
+// (games, gyms, the playbook, prompt rewrites) depends on the call and is checked by the loop.
+
+export type ExperimentEdit = Partial<Omit<Experiment, "games" | "coach" | "created" | "updated">> & { name: string };
+export type LoopEdits = { experiments?: ExperimentEdit[]; beliefs?: BeliefRow[]; infra?: { request: string; why: string }[] };
+/** What the coach was shown, which its edits are checked against. */
+export type Tables = { beliefs: BeliefRow[]; experiments: Experiment[] };
+export const readTables = async (): Promise<Tables> => ({ beliefs: await readBeliefs(), experiments: await readExperiments() });
+
+function checkExperimentEdits(raw: unknown, before: Experiment[], errors: string[]): ExperimentEdit[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) {
+    errors.push("experiments must be an array of the experiments to add or change");
+    return undefined;
+  }
+  const out: ExperimentEdit[] = [];
+  const keys = ["name", "title", "status", "area", "result", ...EXPERIMENT_TEXT];
+  for (const [i, r] of raw.entries()) {
+    if (typeof r !== "object" || r === null) {
+      errors.push(`experiments[${i}] must be an object`);
+      continue;
+    }
+    const o = r as Record<string, unknown>;
+    const at = `experiments[${i}]${typeof o.name === "string" ? ` (${o.name})` : ""}`;
+    for (const k of Object.keys(o)) if (!keys.includes(k)) errors.push(`${at}.${k} is not a field; the fields are ${keys.join(", ")}`);
+    for (const k of keys) if (o[k] !== undefined && typeof o[k] !== "string") errors.push(`${at}.${k} must be a string`);
+    const name = String(o.name ?? "");
+    if (!EXPERIMENT_NAME.test(name)) {
+      errors.push(`${at}.name must be kebab-case, such as boss-dodge-distance (it names experiment_<name>.md)`);
+      continue;
+    }
+    const exists = before.some((e) => e.name === name);
+    if (!exists) for (const k of ["title", "area", "hypothesis"]) if (!isText(o[k])) errors.push(`${at} is new, so it needs ${k}`);
+    if (o.status !== undefined && !(EXPERIMENT_STATUSES as readonly string[]).includes(String(o.status))) errors.push(`${at}.status must be one of ${EXPERIMENT_STATUSES.join(", ")}`);
+    if (o.result !== undefined && !(EXPERIMENT_RESULTS as readonly string[]).includes(String(o.result))) errors.push(`${at}.result must be empty or one of ${EXPERIMENT_RESULTS.filter(Boolean).join(", ")}`);
+    if (o.area !== undefined && !(String(o.area) in AREAS)) errors.push(`${at}.area must be one of ${Object.keys(AREAS).join(", ")}`);
+    out.push(o as ExperimentEdit);
+  }
+  return out;
+}
+
+export function checkEdits(raw: Record<string, unknown>, before: Tables): Checked<LoopEdits> {
+  const errors: string[] = [];
+  const edits: LoopEdits = {};
+  const experiments = checkExperimentEdits(raw.experiments, before.experiments, errors);
+  if (experiments !== undefined) edits.experiments = experiments;
+  const beliefs = checkTable(raw.beliefs, BELIEFS, before.beliefs, errors);
+  if (beliefs !== undefined) edits.beliefs = beliefs;
+  if (raw.infra !== undefined) {
+    if (!Array.isArray(raw.infra) || !raw.infra.every((x) => typeof x === "object" && x !== null && isText((x as { request?: unknown }).request)))
+      errors.push('infra must be an array of {"request": "...", "why": "..."}');
+    else edits.infra = (raw.infra as { request: string; why?: unknown }[]).map((x) => ({ request: x.request, why: typeof x.why === "string" ? x.why : "" }));
+  }
+  return errors.length > 0 ? { errors } : { value: edits };
+}
+
+const renameIds = (text: string, renamed: Map<string, string>) => text.replace(/\b[A-Z]+\d+\b/g, (id) => renamed.get(id) ?? id);
+
+/**
+ * Writes a coach's edits over what it was shown (`before`). `stamp` says when, such as
+ * "sonnet-high L1.I3", and goes into the beliefs' created and updated columns and the experiments'.
+ */
+export async function applyEdits(edits: LoopEdits, stamp: string, coach: string, before: Tables): Promise<string[]> {
+  return locked(async () => {
+    const done: string[] = [];
+    const renamed = new Map<string, string>();
+    if (edits.beliefs !== undefined) {
+      const beliefs = merge(edits.beliefs, await readBeliefs(), before.beliefs, renamed);
+      const now = await readBeliefs();
+      await writeTable(BELIEFS_CSV, BELIEF_COLUMNS, stampBeliefs(beliefs, now, stamp));
+      done.push(`beliefs.csv (${edits.beliefs.length} rows added or changed)`);
+    }
+    for (const edit of edits.experiments ?? []) {
+      const file = Bun.file(experimentFile(edit.name));
+      const old = (await file.exists()) ? parseExperiment(await file.text(), edit.name) : undefined;
+      const base: Experiment = old ?? { name: edit.name, title: "", status: "proposed", area: "models", result: "", coach, created: stamp, updated: stamp, hypothesis: "", method: "", findings: "", games: "" };
+      const defined = Object.fromEntries(Object.entries(edit).filter(([, v]) => v !== undefined));
+      await writeExperiment({ ...base, ...defined, updated: stamp });
+      done.push(`experiment_${edit.name}.md${old === undefined ? " (new)" : ""}`);
+    }
+    if (edits.infra !== undefined && edits.infra.length > 0) {
+      await writeTable(INFRA_CSV, INFRA_COLUMNS, [...(await readInfra()), ...edits.infra.map((x) => ({ date: today(), run: stamp, status: "open", request: x.request, why: x.why }))]);
+      done.push(`${edits.infra.length} infrastructure requests`);
+    }
+    if (renamed.size > 0) done.push(`renumbered ${[...renamed].map(([a, b]) => `${a} to ${b}`).join(", ")}, taken meanwhile`);
+    return done;
+  });
+}
+
+export const EDITS_CONTRACT = [
+  `"beliefs": the rows you add or change in beliefs.csv, each an object with the keys ${BELIEF_COLUMNS.filter((c) => !BELIEFS.stamps.includes(c)).join(", ")}. verdict is good (worth doing), bad (worth avoiding) or fact; about is game, planner, action or coach; confidence is lead, likely or confirmed; status is held, recheck or disproved. A row with an id the table has updates it and the keys you leave out keep their values, so {"id": "B7", "confidence": "likely"} is a whole edit. Evidence names the games or runs and their numbers. Rows are never deleted: set status disproved. The loop stamps created and updated.`,
+  `"experiments": the experiments you add or change, each {"name": kebab-case, "title", "status", "area", "result", "hypothesis", "method", "findings"}. A new one needs title, area and hypothesis; status is ${EXPERIMENT_STATUSES.join(", ")}; result is empty or ${EXPERIMENT_RESULTS.filter(Boolean).join(", ")}; area is one of ${Object.keys(AREAS).join(", ")}. A field left out keeps its value. The loop writes each game played for an experiment under its Games section.`,
+  '"infra": requests for the people who work on the bot\'s code, an array of {"request": what to build or change, "why": what it would let the loop learn or do}. Only for what no template, knob, gym or game can do. Leave it out when there are none.',
+].join("\n");
+
+// ---- What the coach is told about the game and the bot ------------------------------------------
+
+/** How the game and the bot work. Only code changes this; the coach asks through infrastructure requests. */
+export function botFacts(models: { planner: string; action: string }): string {
+  return [
+    "tibo.dog is a survivors-like game. Weapons fire on their own; the player only walks, dashes, and picks level-up upgrades, chest rewards and shrine options. Tibo has 6 weapon and 6 passive slots. A base weapon at max level plus its catalyst (a passive or an item) evolves at the next chest; evolved weapons are much stronger, and two evolved weapons can sometimes fuse into a union.",
+    `Two in-game models play, and which models they are is fixed: the planner (${models.planner}) and the action model (${models.action}). They are small, fast decision models that never write text. Each call sends one state text and a set of questions, all answered against that state: a yes/no question answered as a probability from 0 to 1 (noul), a score on a named scale, or a choice among keys. The templates are that state text and those questions.`,
+    "The planner is asked when the game starts, when a goal ends, at every level-up, chest and shrine choice, right after a card is taken, when a boss first appears, and every planEvery seconds while a goal is under way. Each time it rates every goal option with planner.goal, and the highest-rated becomes Tibo's goal. At a choice it also picks a card with planner.pick; a choice with one card it can take is taken without asking.",
+    `The goal options the bot offers: up to 4 chests within ${PLAN_RANGE} units (stand on one for its charge time to open it: a free pick, and it evolves whatever recipe is ready); up to 6 spots that charge, such as shrines, each with the game's description; up to 2 food pickups, which heal; up to 2 elites within range to fight until they die (eliteSeconds at most; elites drop chests); the xp gems nearby, collected for up to gemsSeconds; exploring each of the 8 directions for exploreDistance units, stopping at the first chest never listed before; and evading enemies for evadeSeconds. Chests are not laid out on the map: bosses and elites drop them when they die (extra elites and bosses, such as a curse adds, drop none), and a dropped chest stays until it is opened. A target Tibo gave up on carries that note for ${GIVE_UP_SECONDS} seconds. A goal ends when its target is used up, after stuckSeconds without getting closer or charging, or well past the time the walk should take.`,
+    "Every step (0.35 seconds of game time in lockstep, about 0.2 to 0.3 seconds live) the game's own simulation forecasts each of the 8 directions and standing still one second ahead; live, it first plays the held move for the time the decision takes. While the way to the goal costs no more than the cheapest move plus extraDamage, the page walks Tibo there without asking a model. Otherwise the action model is asked action.hurt and action.useful about every move that does not cost more than that; the moves rated about as safe as the safest (within safeMargin, and below the middle of the scale) compete on usefulness, and the most useful wins. With a dash charge and an enemy or bullet close, action.dash decides whether Tibo dashes that way.",
+    "Winning means surviving to 20:00; the game goes on after that until Tibo dies. In Open World on Nightmare, winning at Nightmare level N unlocks level N+1, and a full run starts the highest level unlocked, so the ladder climbs one level per win and never drops. Every Nightmare level makes pests and bosses tougher; on every level they start at 40% of their health and grow to full by 8:00, so the opening minutes are the cheapest. A run that passes 20:00 also drops gear, which the bot cannot equip yet.",
+  ].join("\n\n");
+}
+
+/**
+ * A run's CSV log cut to fit a prompt. Moves that cost nothing go first, then the odds of every
+ * goal option on plan rows, and last the middle of the run: a run's end is where it was lost, so a
+ * cut never drops it.
+ */
+export async function logForPrompt(file: string, limit: number): Promise<string> {
+  const f = Bun.file(file);
+  if (!(await f.exists())) return "(no log: it was not found)";
+  const text = await f.text();
+  if (text.length <= limit) return text;
+  const [header = [], ...rows] = parseCsv(text);
+  const event = header.indexOf("event");
+  const lost = header.indexOf("hp_lost");
+  const options = header.indexOf("options");
+  const line = (r: string[]) => r.map(csvField).join(",");
+  const costly = rows.filter((r) => r[event] !== "move" || Number(r[lost]) > 0);
+  const notes = ["moves that cost no health are left out"];
+  let lines = [header, ...costly].map(line);
+  if (lines.join("\n").length > limit) {
+    notes.push("plan rows leave out the odds of each goal option");
+    lines = [header, ...costly.map((r) => (r[event] === "plan" ? r.map((x, i) => (i === options ? "" : x)) : r))].map(line);
+  }
+  const body = lines.join("\n");
+  if (body.length <= limit) return `(${notes.join("; ")})\n${body}`;
+  const half = limit / 2;
+  const head = body.slice(0, half).replace(/\n[^\n]*$/, "");
+  const tail = body.slice(-half).replace(/^[^\n]*\n/, "");
+  return `(${notes.join("; ")}; the middle is cut out where marked)\n${head}\n(... rows cut here ...)\n${tail}`;
+}
+
+// ---- End-of-game stats ---------------------------------------------------------------------------
+// What the game counts over a game: the damage taken by source, the damage dealt and kills by
+// weapon, and the gold, bosses, elites, chests, shrines and items. A training game reports what
+// changed between its start and its end; a full run reports the whole run.
+
+const COUNTERS = ["goldEarned", "goldSpent", "bossesKilled", "elitesKilled", "bossChests", "cratesBought", "shrinesUsed", "itemsBought", "revivesUsed"] as const;
+export type Totals = Pick<RunTotals, "kills" | "damageTaken" | "damageDealt" | "killsBy" | "made" | (typeof COUNTERS)[number]> & { killer?: string };
+
+const byKey = (end: Record<string, number>, start: Record<string, number>) =>
+  Object.fromEntries(
+    Object.entries(end)
+      .map(([k, v]) => [k, Math.round((v - (start[k] ?? 0)) * 10) / 10] as const)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1]),
+  );
+
+/** What happened between two snapshots' totals; `start` undefined counts the whole run. */
+export function totalsBetween(end: RunTotals, start?: RunTotals): Totals {
+  const zero = { damageTaken: {}, damageDealt: {}, killsBy: {}, made: [] as string[] };
+  const s = start ?? ({ ...zero, kills: 0, ...Object.fromEntries(COUNTERS.map((c) => [c, 0])) } as unknown as RunTotals);
+  return {
+    kills: end.kills - s.kills,
+    damageTaken: byKey(end.damageTaken, s.damageTaken),
+    damageDealt: byKey(end.damageDealt, s.damageDealt),
+    killsBy: byKey(end.killsBy, s.killsBy),
+    made: end.made.filter((m) => !s.made.includes(m)),
+    ...(Object.fromEntries(COUNTERS.map((c) => [c, Math.round(end[c] - s[c])])) as Record<(typeof COUNTERS)[number], number>),
+    ...(end.killer === undefined ? {} : { killer: end.killer }),
+  };
+}
+
+/** The stats as lines a coach reads. */
+export function totalsLines(t: Totals): string[] {
+  const list = (r: Record<string, number>, limit = 8) => Object.entries(r).slice(0, limit).map(([k, v]) => `${k} ${v}`).join(", ") || "none";
+  const sum = (r: Record<string, number>) => Math.round(Object.values(r).reduce((a, b) => a + b, 0));
+  return [
+    `Damage taken ${sum(t.damageTaken)}, by source: ${list(t.damageTaken)}${t.killer === undefined ? "" : `; the killing blow: ${t.killer}`}.`,
+    `Damage dealt ${sum(t.damageDealt)}, by weapon: ${list(t.damageDealt)}.`,
+    `Kills ${t.kills}, by weapon: ${list(t.killsBy)}.`,
+    `Bosses killed ${t.bossesKilled}, elites killed ${t.elitesKilled}, boss chests ${t.bossChests}, crates bought ${t.cratesBought}, shrines used ${t.shrinesUsed}, items bought ${t.itemsBought}, revives used ${t.revivesUsed}; gold earned ${t.goldEarned}, spent ${t.goldSpent}.`,
+    `Made: ${t.made.join(", ") || "no evolution, union or evolved item"}.`,
+  ];
 }

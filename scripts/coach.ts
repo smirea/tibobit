@@ -13,8 +13,8 @@ const resultError = (e: Record<string, unknown>): Delta => (e.type === "result" 
 type Harness = {
   /** The model when none is named; undefined leaves it to the harness's own setting. */
   model?: string;
-  /** The command line; the prompt goes on stdin unless `argv` puts it in the command. */
-  command: (model: string | undefined, prompt: string) => string[];
+  /** The command line; the prompt goes on stdin unless `argv` puts it in the command. `effort` is a reasoning effort only Claude Code takes. */
+  command: (model: string | undefined, prompt: string, effort?: string) => string[];
   argv?: boolean;
   read: (event: Record<string, unknown>) => Delta;
 };
@@ -32,7 +32,7 @@ export const HARNESSES = {
   // No settings sources: the person's hooks and plugins would otherwise talk to the coach.
   claude: {
     model: "opus",
-    command: (m) => ["claude", "-p", "--setting-sources", "", "--strict-mcp-config", "--tools", "", "--output-format", "stream-json", "--verbose", ...(m === undefined ? [] : ["--model", m])],
+    command: (m, _, effort) => ["claude", "-p", "--setting-sources", "", "--strict-mcp-config", "--tools", "", "--output-format", "stream-json", "--verbose", ...(m === undefined ? [] : ["--model", m]), ...(effort === undefined ? [] : ["--effort", effort])],
     read: (e) =>
       e.type !== "assistant"
         ? resultError(e)
@@ -80,7 +80,7 @@ export const isHarness = (name: string): name is HarnessName => name in HARNESSE
 /** Throws at startup when the harness is unknown or its CLI is not installed. */
 export function checkHarness(name: string): HarnessName {
   if (!isHarness(name)) throw new Error(`unknown coach harness ${name}; use one of ${Object.keys(HARNESSES).join(", ")}`);
-  const bin = HARNESSES[name].command(undefined, "")[0] ?? name;
+  const bin = (HARNESSES[name] as Harness).command(undefined, "")[0] ?? name;
   if (Bun.which(bin) === null) throw new Error(`the ${name} coach needs ${bin} on PATH`);
   return name;
 }
@@ -101,10 +101,11 @@ process.on("exit", () => {
  * Runs the harness once and returns everything it said, calling `onUpdate` as it streams. Stops it
  * after `timeoutMs`; `timedOut` says whether it did.
  */
-export async function runCoach(name: HarnessName, model: string | undefined, prompt: string, timeoutMs: number, onUpdate: (s: Stream) => void): Promise<Said> {
+export async function runCoach(name: HarnessName, model: string | undefined, prompt: string, timeoutMs: number, onUpdate: (s: Stream) => void, effort?: string): Promise<Said> {
   const h: Harness = HARNESSES[name];
+  if (effort !== undefined && name !== "claude") throw new Error(`only the claude harness takes a reasoning effort, not ${name}`);
   const cwd = mkdtempSync(path.join(os.tmpdir(), "tibo-coach-"));
-  const proc = Bun.spawn(h.command(model, prompt), { cwd, stdin: h.argv ? "ignore" : new Blob([prompt]), stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawn(h.command(model, prompt, effort), { cwd, stdin: h.argv ? "ignore" : new Blob([prompt]), stdout: "pipe", stderr: "pipe" });
   running.add(proc);
   let timedOut = false;
   const timer = setTimeout(() => {

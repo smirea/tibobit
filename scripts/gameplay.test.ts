@@ -1,14 +1,13 @@
 import { expect, test } from "bun:test";
-import { type BeliefRow, checkEdits, merge, promptLoss, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type ExperimentRow, notesName, notesTemplates, notesTesting, parseCsv, readExperiments, renderNotes, type RunSetup, withReview } from "./gameplay";
+import { type BeliefRow, checkEdits, merge, promptLoss, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type Experiment, notesName, notesTemplates, parseCsv, parseExperiment, renderExperiment, renderNotes, type RunSetup, withReview, totalsBetween, totalsLines } from "./gameplay";
 
 const setup: RunSetup = { started: new Date(2026, 10, 7, 15, 4, 9), difficulty: "nightmare", mode: "daily", surface: "headless", seed: "S1", planner: "jev", action: "jev", coach: "grok", bot: "abc1234" };
 
 test("a notes file names the run and gives back the templates it played with", () => {
   const templates = { ...DEFAULT_TEMPLATES, planner: { ...DEFAULT_TEMPLATES.planner, state: "Rule one.\n\n{{state}}\n" }, action: { ...DEFAULT_TEMPLATES.action, dash: "" }, knobs: { ...DEFAULT_TEMPLATES.knobs, exploreDistance: 650 } };
-  const text = renderNotes({ setup, plan: { source: "coach-plan.md", intent: "Test E2.", testing: ["E2", "E5"], templates, weapon: "" }, end: { lived: 754, ending: "died at 12:34", outcome: [] }, link: "none", log: "/tmp/x.csv", prompts: "coach-plan.md abc", picks: [], review: "(not reviewed yet)", started: "frozen-fries (random)", stats: "(no log rows)", key: "first chest listed never" });
+  const text = renderNotes({ setup, plan: { source: "the playbook", intent: "Test E2.", templates, weapon: "" }, end: { lived: 754, ending: "died at 12:34", outcome: [] }, link: "none", log: "/tmp/x.csv", prompts: "coach-plan.md abc", picks: [], review: "(not reviewed yet)", started: "frozen-fries (random)", stats: "(no log rows)", key: "first chest listed never" });
   expect(notesName(setup, 754)).toBe("2026-11-07_15-04-09_lived-12-34_nightmare_daily_headless.md");
   expect(notesTemplates(text)).toEqual({ value: templates });
-  expect(notesTesting(text)).toEqual(["E2", "E5"]);
   const reviewed = withReview(text, "## Summary\n\nIt went fine.");
   expect(reviewed).toContain("## Summary\n\nIt went fine.");
   expect(reviewed).not.toContain("(not reviewed yet)");
@@ -26,14 +25,21 @@ test("templates may only use the values their slot has, and must use the require
   });
 });
 
-test("a coach sends only the rows it changes, and a partial row keeps the fields it leaves out", () => {
-  const row: ExperimentRow = { id: "E1", created: "2026-11-07", status: "proposed", area: "movement", hypothesis: "h", test: "t", runs: "", outcome: "", result: "", learnings: "" };
-  expect(checkEdits({ experiments: [{ id: "E1", status: "done", result: "confirmed" }] }, { experiments: [row], beliefs: [] })).toEqual({ value: { experiments: [{ ...row, status: "done", result: "confirmed" }] } });
-  expect(checkEdits({ experiments: [{ id: "E2", status: "proposed" }] }, { experiments: [row], beliefs: [] })).toEqual({ errors: ["experiments E2 has no hypothesis", "experiments E2 area must be one of build, items, spots, enemies, bosses, hazards, movement, economy, map, meta, models"] });
+test("an experiment file reads back as written", () => {
+  const e: Experiment = { name: "boss-dodge", title: "Dodge the 2:00 boss", status: "running", area: "bosses", result: "", coach: "sonnet-high", created: "L1.I2", updated: "L1.I3", hypothesis: "Evading for 12s beats 6s.", method: "Two arms from gym boss-2min.", findings: "", games: "### L1.I3 game 1\n\n- alive 120s" };
+  expect(parseExperiment(renderExperiment(e), "boss-dodge")).toEqual(e);
+});
+
+test("a coach changes only the experiment fields it sends, and a new experiment needs a title, area and hypothesis", () => {
+  const e: Experiment = { name: "boss-dodge", title: "t", status: "running", area: "bosses", result: "", coach: "c", created: "", updated: "", hypothesis: "h", method: "", findings: "", games: "" };
+  expect(checkEdits({ experiments: [{ name: "boss-dodge", status: "done", result: "confirmed" }] }, { experiments: [e], beliefs: [] })).toEqual({ value: { experiments: [{ name: "boss-dodge", status: "done", result: "confirmed" }] } });
+  expect(checkEdits({ experiments: [{ name: "Boss Dodge" }, { name: "new-one", status: "proposed" }] }, { experiments: [e], beliefs: [] })).toEqual({
+    errors: ["experiments[0] (Boss Dodge).name must be kebab-case, such as boss-dodge-distance (it names experiment_<name>.md)", "experiments[1] (new-one) is new, so it needs title", "experiments[1] (new-one) is new, so it needs area", "experiments[1] (new-one) is new, so it needs hypothesis"],
+  });
 });
 
 test("a belief keeps the run that wrote it, and takes the run that last changed it", () => {
-  const held: BeliefRow = { id: "B1", about: "game", claim: "Hot oil hurts most.", confidence: "lead", status: "held", evidence: "run 1", experiments: "E1", created: "run-1", updated: "run-1" };
+  const held: BeliefRow = { id: "B1", about: "game", verdict: "bad", claim: "Hot oil hurts most.", confidence: "lead", status: "held", evidence: "run 1", experiments: "E1", created: "run-1", updated: "run-1" };
   const raised = { ...held, confidence: "likely", created: "", updated: "" };
   const fresh = { ...held, id: "B2", created: "made up", updated: "made up" };
   expect(stampBeliefs([{ ...held, updated: "" }, fresh], [held], "run-2")).toEqual([held, { ...fresh, created: "run-2", updated: "run-2" }]);
@@ -63,6 +69,13 @@ test("csv fields keep their commas and quotes", () => {
 });
 
 test("the gameplay files in the repo are readable", async () => {
-  await checkLoopFiles();
-  expect((await readExperiments()).length).toBeGreaterThan(0);
+  await checkLoopFiles("starter");
+});
+
+test("a training game's stats count only what happened during it", () => {
+  const base = { kills: 10, damageTaken: { "enemy:aphid": 5 }, damageDealt: { peeler: 100 }, killsBy: { peeler: 10 }, goldEarned: 20, goldSpent: 0, bossesKilled: 0, elitesKilled: 0, bossChests: 0, cratesBought: 0, shrinesUsed: 0, itemsBought: 0, made: [], revivesUsed: 0, won: false };
+  const end = { ...base, kills: 40, damageTaken: { "enemy:aphid": 12.5, "boss:amusing": 30 }, damageDealt: { peeler: 400, "spud-lob": 250 }, killsBy: { peeler: 25, "spud-lob": 15 }, goldEarned: 50, elitesKilled: 1, made: ["peel-storm"], killer: "boss:amusing" };
+  const t = totalsBetween(end, base);
+  expect(t).toMatchObject({ kills: 30, damageTaken: { "boss:amusing": 30, "enemy:aphid": 7.5 }, damageDealt: { peeler: 300, "spud-lob": 250 }, killsBy: { peeler: 15, "spud-lob": 15 }, goldEarned: 30, elitesKilled: 1, made: ["peel-storm"], killer: "boss:amusing" });
+  expect(totalsLines(t)[0]).toBe("Damage taken 38, by source: boss:amusing 30, enemy:aphid 7.5; the killing blow: boss:amusing.");
 });

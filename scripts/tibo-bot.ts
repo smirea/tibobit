@@ -1,17 +1,15 @@
 #!/usr/bin/env bun
-// Plays tibo.dog through the agent server. Before a run the coach (grok) reads gameplay/ and writes
-// the prompt templates the in-game models play with; after it, the coach reviews the run's log and
-// edits gameplay/ (see scripts/gameplay.ts). In the game, a decision model plans (picks every card
+// Plays tibo.dog through the agent server with prompt templates a coach wrote (--templates, else
+// the playbook a coach updated last; scripts/recursive-self-improvement.ts runs the coaches). In the
+// game, a decision model plans (picks every card
 // and sets short-term goals) and acts (steps around danger on the way to the goal). The file removes
 // only options the game itself rules out: cards Tibo cannot take, and moves the game's own
 // simulation says cost clearly more health over the next second than the cheapest one.
 import path from "node:path";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type CheckpointMeta, type ChatLine, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type GameMode, type Inspect, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
-import { checkHarness, defaultModel, jsonObject, runCoach } from "./coach";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type GameMode, type Inspect, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 import * as loop from "./gameplay";
-import { type Scenario, TRAINING_CONTRACT, checkTraining, checkpointList, readScenarios, scenarioSummary, writeScenario } from "./scenarios";
 import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "./gameplay";
 
 const args = process.argv.slice(2);
@@ -20,19 +18,23 @@ const option = (name: string, fallback: string) => {
   return i >= 0 ? (args[i + 1] ?? fallback) : fallback;
 };
 const MODEL = option("model", "h2o-lightning-4b@q8_0");
-// A trial (scripts/training.ts) plays the run in progress, usually a loaded checkpoint, for this many
+// A trial (a training game, scripts/slots.ts) plays the run in progress, usually a loaded checkpoint, for this many
 // seconds of game time with the templates in --templates, then writes what happened to --result and
 // exits: no plan, notes, review or commit.
 const TRIAL = args.includes("--trial") ? Number(option("trial", "")) : undefined;
 if (TRIAL !== undefined && !(TRIAL > 0)) throw new Error(`--trial takes the seconds of game time to play; got ${option("trial", "nothing")}`);
 const TRIAL_RESULT = option("result", "");
 if (TRIAL !== undefined && TRIAL_RESULT === "") throw new Error("--trial needs --result <file> for what happened");
-const TRIAL_TEMPLATES = TRIAL === undefined ? undefined : await (async () => {
+const BASE: { templates: Templates; source: string } = await (async () => {
   const file = option("templates", "");
-  if (file === "") throw new Error("--trial needs --templates <file>, a JSON object with planner, action and knobs");
-  const checked = loop.checkTemplates(await Bun.file(file).json(), DEFAULT_TEMPLATES);
-  if ("errors" in checked) throw new Error(`${file}: ${checked.errors.join("; ")}`);
-  return checked.value;
+  if (file === "" && TRIAL !== undefined) throw new Error("--trial needs --templates <file>, a JSON object with planner, action and knobs");
+  if (file !== "") {
+    const checked = loop.checkTemplates(await Bun.file(file).json(), DEFAULT_TEMPLATES);
+    if ("errors" in checked) throw new Error(`${file}: ${checked.errors.join("; ")}`);
+    return { templates: checked.value, source: file };
+  }
+  const newest = await loop.newestPlaybook();
+  return newest === undefined ? { templates: DEFAULT_TEMPLATES, source: "the built-in defaults" } : { templates: newest.playbook.templates, source: `the playbook of ${newest.coach}` };
 })();
 // The decision model's planner persona, which picks cards and goals; the same model unless named.
 const PLAN_MODEL = option("plan-model", MODEL);
@@ -53,23 +55,15 @@ let difficulty = DIFFICULTY;
 const MODE_ARG = option("mode", "daily");
 if (MODE_ARG !== "daily" && MODE_ARG !== "openWorld" && MODE_ARG !== "current") throw new Error(`--mode must be daily, openWorld or current; got ${MODE_ARG}`);
 const SPEED = Number(option("speed", "4"));
-// The coach (grok) only works between runs: it plans the next one and reviews the last.
-// `--coach` names the harness (see scripts/coach.ts) or "none"; `--coach-model` defaults per harness.
-const COACH_ARG = TRIAL === undefined ? option("coach", "grok") : "none";
-const COACH = COACH_ARG === "none" ? "none" : checkHarness(COACH_ARG);
-const COACH_MODEL = args.includes("--coach-model") ? option("coach-model", "") || undefined : COACH === "none" ? undefined : defaultModel(COACH);
-// For "Grok take the wheel": play the run already in progress instead of starting a fresh one.
+// Notes are for full runs only: --notes writes one to gameplay/notes when the run ends, under
+// --coach-label, with --intent as its plan. Templates come from --templates (a JSON file with any of
+// planner, action and knobs over the defaults), else the playbook a coach updated last.
+const NOTES = args.includes("--notes");
+const COACH_LABEL = option("coach-label", "none");
+const INTENT = option("intent", "");
+const WEAPON = option("weapon", "");
+// For "Grok take the wheel" and trials: play the run already in progress instead of starting a fresh one.
 const TAKEOVER = TRIAL !== undefined || args.includes("--takeover");
-// Incognito runs just play: no notes file, no review, and they do not count toward experiments.
-const INCOGNITO = TRIAL !== undefined || args.includes("--incognito");
-// After each review the bot commits and pushes gameplay/, so every edit the coach makes to its own
-// files can be read back and undone.
-const COMMIT = TRIAL === undefined && !args.includes("--no-commit");
-// Every this many runs a coach plays, the run replays the champion's templates unplanned: a real shot
-// at 20:00 and a replicate of the best run, between runs that each try something new. 0 turns it off.
-const EXPLOIT_EVERY = Number(option("exploit-every", "3"));
-if (!Number.isInteger(EXPLOIT_EVERY) || EXPLOIT_EVERY < 0) throw new Error(`--exploit-every must be a whole number, 0 to turn it off; got ${option("exploit-every", "3")}`);
-if (COMMIT && Bun.which("gai") === null) throw new Error("committing gameplay/ after each review needs gai on PATH; pass --no-commit to skip it");
 const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
 
@@ -84,7 +78,6 @@ let pace: PilotPace = { planEvery: PLAN_EVERY, actEvery: STEP };
 let piloted = false;
 const PICK_SHOW_MS = 2000;
 
-const COACH_NAME = `${COACH} ${COACH_MODEL ?? "(its default model)"}`;
 let chatQueue = Promise.resolve();
 /**
  * A line for the panel's chat, shown while the bot has the wheel. Never awaited, so the chat cannot
@@ -95,18 +88,6 @@ function say(line: ChatLine) {
   chatQueue = chatQueue.then(() => fetch(`${SERVER}/pilot/say`, { method: "POST", headers: { "content-type": "application/json" }, body }).then(() => undefined, () => undefined));
 }
 
-/** One coach message, rewritten as the coach reads its prompt, thinks, and answers. */
-class CoachBubble {
-  private static made = 0;
-  private line: ChatLine;
-  constructor(text: string, time?: number) {
-    this.line = { role: "planner", model: COACH_NAME, text, key: `coach-${process.pid}-${CoachBubble.made++}`, ...(time === undefined ? {} : { time }) };
-  }
-  set(fields: Partial<ChatLine>) {
-    this.line = { ...this.line, ...fields };
-    say(this.line);
-  }
-}
 type Question =
   | { type: "choice"; instructions: string; criteria: Record<string, string | null> }
   | { type: "noul"; instructions: string }
@@ -215,17 +196,9 @@ async function decide(state: string, questions: Record<string, Question>, model 
   return json.answers;
 }
 
-// ---- Learning loop -------------------------------------------------------------------------
-// Before a run the coach plans it from gameplay/coach-plan.md, and after it reviews it from
-// gameplay/coach-retrospective.md. Both may edit gameplay/; scripts/gameplay.ts checks each edit.
-const PLAN_TIMEOUT_MS = 600_000;
-// A review reads the whole run log and may rewrite several files, which can take grok a few minutes.
-const REVIEW_TIMEOUT_MS = 900_000;
-const LATEST_NOTES = 3;
+// ---- The run -------------------------------------------------------------------------------
 const MODE: GameMode = MODE_ARG === "current" ? ((await api<Snap>("/state")).mode ?? "daily") : MODE_ARG;
 const MODE_NAME = MODE === "daily" ? "daily" : "world";
-/** Seconds of game time between the checkpoints a run saves for the training ground, from 0:00. */
-const CHECKPOINT_EVERY = 120;
 const WIN_SECONDS = 1200;
 // Read once at startup: the code this process runs, whatever is committed while it plays.
 const BOT_CODE = (() => {
@@ -236,82 +209,6 @@ const BOT_CODE = (() => {
 
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 const csvField = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-
-const STREAM_EVERY_MS = 250;
-const STREAM_TAIL = 900;
-
-/**
- * Runs the coach once and returns the JSON object in its reply, or undefined. Its reasoning and
- * reply stream into `bubble` as they arrive, and hovering the bubble shows the prompt.
- */
-/**
- * The coach's reply, `{ unusable }` when it answered with text that holds no JSON object (Composer
- * once replied only "Gathering details from the log…"), or undefined when the harness failed.
- */
-async function askCoach(prompt: string, timeoutMs: number, bubble: CoachBubble): Promise<Record<string, unknown> | { unusable: string } | undefined> {
-  if (COACH === "none") return undefined;
-  const started = performance.now();
-  bubble.set({ inspect: { kind: "prompt", prompt } });
-  let shown = 0;
-  const said = await runCoach(COACH, COACH_MODEL, prompt, timeoutMs, ({ reasoning, text }) => {
-    if (performance.now() - shown < STREAM_EVERY_MS) return;
-    shown = performance.now();
-    const live = text === "" ? reasoning : `${reasoning}\n\n${text}`;
-    if (live !== "") bubble.set({ stream: live.length > STREAM_TAIL ? `…${live.slice(-STREAM_TAIL)}` : live });
-  });
-  const seconds = Math.round((performance.now() - started) / 1000);
-  const late = said.timedOut ? " (timed out)" : "";
-  const finish = (fields: Partial<ChatLine>) =>
-    bubble.set({ stream: undefined, inspect: { kind: "prompt", prompt, ...(said.reasoning === "" ? {} : { reasoning: said.reasoning }), ...(said.text === "" ? {} : { reply: said.text }) }, ...fields });
-  const json = said.text.match(/\{[\s\S]*\}/)?.[0];
-  const parsed = jsonObject(said.text);
-  if (parsed !== undefined) {
-    finish({});
-    return parsed;
-  }
-  if (json === undefined) {
-    const why = said.error || said.text.trim() || said.stderr || "(empty output)";
-    console.error(`coach gave no JSON after ${seconds}s${late}: ${why.slice(0, 600)}`);
-    finish({ text: `No answer after ${seconds}s${late}: ${why.slice(0, 300)}` });
-    return said.text.trim() === "" || said.timedOut ? undefined : { unusable: "your reply held no JSON object, only text. You cannot read files or run tools here: everything you need is in the prompt" };
-  }
-  try {
-    const reply = JSON.parse(json) as Record<string, unknown>;
-    finish({});
-    return reply;
-  } catch (e) {
-    console.error(`coach reply unreadable after ${seconds}s:`, e instanceof Error ? e.message : e);
-    finish({ text: `Unreadable answer after ${seconds}s.` });
-    return { unusable: `your reply's JSON did not parse: ${e instanceof Error ? e.message : String(e)}` };
-  }
-}
-
-const QUICK_FAILURE_MS = 60_000;
-
-/** Asks the coach until its reply passes `check`; a rejected reply is asked for again once, with the reasons. */
-async function consult<T>(prompt: string, timeoutMs: number, bubble: CoachBubble, check: (reply: Record<string, unknown>) => loop.Checked<T>): Promise<T | undefined> {
-  let ask = prompt;
-  let retried = false;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const started = performance.now();
-    const reply = await askCoach(ask, timeoutMs, bubble);
-    // A harness that gives up within seconds has hit a passing error (Composer once answered a
-    // review with nothing after 4s, then reviewed the same prompt fine); a slow failure is not retried.
-    if (reply === undefined && !retried && performance.now() - started < QUICK_FAILURE_MS) {
-      retried = true;
-      attempt--;
-      await Bun.sleep(10_000);
-      continue;
-    }
-    if (reply === undefined) return undefined;
-    const checked: loop.Checked<T> = "unusable" in reply && typeof reply.unusable === "string" && Object.keys(reply).length === 1 ? { errors: [reply.unusable] } : check(reply as Record<string, unknown>);
-    if ("value" in checked) return checked.value;
-    console.error(`coach reply rejected:\n- ${checked.errors.join("\n- ")}`);
-    bubble.set({ text: `Reply rejected${attempt === 0 ? ", asking again" : ""}: ${checked.errors.join("; ")}` });
-    ask = `${prompt}\n\n# Your previous reply was rejected\n\n- ${checked.errors.join("\n- ")}\n\nReply again in full, with only the JSON object.`;
-  }
-  return undefined;
-}
 
 /** The run's notes, written to gameplay/notes when the run ends; scripts/gameplay.ts has the format. */
 class RunNotes {
@@ -360,19 +257,6 @@ class RunNotes {
 
 const pct = (part: number, whole: number) => Math.round((100 * part) / Math.max(1, whole));
 const near = (r: RunView) => r.sectors.reduce((n, s) => n + s.enemiesNear, 0);
-
-/** How the game and the bot work, for the coach. Only code changes this; the coach asks through infrastructure requests. */
-function botFacts(): string {
-  return [
-    "tibo.dog is a survivors-like game. Weapons fire on their own; the player only walks, dashes, and picks level-up upgrades, chest rewards and shrine options. Tibo has 6 weapon and 6 passive slots. A base weapon at max level plus its catalyst (a passive or an item) evolves at the next chest; evolved weapons are much stronger, and two evolved weapons can sometimes fuse into a union.",
-    `Two in-game models play, and which models they are is fixed: the planner (${PLAN_MODEL}) and the action model (${MODEL}). They are small, fast decision models that never write text. Each call sends one state text and a set of questions, all answered against that state: a yes/no question answered as a probability from 0 to 1 (noul), a score on a named scale, or a choice among keys. The templates you write are that state text and those questions.`,
-    `The planner is asked when the run starts, when a goal ends, at every level-up, chest and shrine choice, right after a card is taken, when a boss first appears, and every few seconds while a goal is under way (5 by default; the person watching sets it). Each time it rates every goal option with planner.goal, and the highest-rated becomes Tibo's goal. At a choice it also picks a card with planner.pick; a choice with one card it can take is taken without asking.`,
-    `The goal options the bot offers: up to 4 chests within ${PLAN_RANGE} units (stand on one for its charge time to open it: a free pick, and it evolves whatever recipe is ready); up to 6 spots that charge, such as shrines, each with the game's description; up to 2 food pickups, which heal; up to 2 elites within range to fight until they die (eliteSeconds at most; elites drop chests); the xp gems nearby, collected for up to gemsSeconds; exploring each of the 8 directions for exploreDistance units, stopping at the first chest never listed before; and evading enemies for evadeSeconds. Chests are not laid out on the map to be found: bosses and elites drop them when they die (extra elites and bosses, such as a curse adds, drop none), and a dropped chest stays until it is opened. So chests come from killing elites and bosses, and exploring only finds the ones already dropped. A target Tibo gave up on carries that note for ${GIVE_UP_SECONDS} seconds. A goal ends when its target is used up, after stuckSeconds without getting closer or charging, or well past the time the walk should take.`,
-    "Every step (0.3 seconds by default) the game's own simulation forecasts each of the 8 directions and standing still one second ahead. While the way to the goal costs no more than the cheapest move plus extraDamage, the page walks Tibo there without asking a model. Otherwise the action model is asked action.hurt and action.useful about every move that does not cost more than that; the moves rated about as safe as the safest (within safeMargin, and below the middle of the scale) compete on usefulness, and the most useful wins. With a dash charge and an enemy or bullet close, action.dash decides whether Tibo dashes that way.",
-    "Winning a run means surviving to 20:00; the run goes on after that until Tibo dies. In Open World on Nightmare, winning at Nightmare level N unlocks level N+1, and the bot always starts the highest level unlocked, so the ladder climbs one level per win and never drops. Every Nightmare level makes pests and bosses tougher; on every level they start a run at 40% of their health and grow to full by 8:00, so the opening minutes are the cheapest. A run that passes 20:00 also drops gear (hat, chest, legs, boots), which the game equips from a Loadout screen before a run; the bot cannot equip gear yet.",
-    "The game runs live at normal speed and only stops at level-up, chest and shrine choices. The run log has one CSV row per model call and per goal that starts or ends, with the player's state at that moment.",
-  ].join("\n\n");
-}
 
 // ---- Run log -------------------------------------------------------------------------------
 // One CSV row per model call and per goal that starts or ends, with the player's state at that
@@ -496,326 +380,6 @@ class RunLog {
   }
 }
 
-/**
- * The run log for the review, cut to fit. Moves that cost nothing go first, then the odds of every
- * goal option on plan rows, and last the middle of the run: a run's end is where it was lost, so a
- * cut never drops it.
- */
-async function logForReview(file: string): Promise<string> {
-  const f = Bun.file(file);
-  if (!(await f.exists())) return "(no log: it was not found)";
-  const text = await f.text();
-  if (text.length <= REVIEW_LOG_CHARS) return text;
-  const [header = [], ...rows] = loop.parseCsv(text);
-  const event = header.indexOf("event");
-  const lost = header.indexOf("hp_lost");
-  const options = header.indexOf("options");
-  const line = (r: string[]) => r.map(csvField).join(",");
-  const costly = rows.filter((r) => r[event] !== "move" || Number(r[lost]) > 0);
-  const notes = ["moves that cost no health are left out"];
-  let lines = [header, ...costly].map(line);
-  if (lines.join("\n").length > REVIEW_LOG_CHARS) {
-    notes.push("plan rows leave out the odds of each goal option");
-    lines = [header, ...costly.map((r) => (r[event] === "plan" ? r.map((x, i) => (i === options ? "" : x)) : r))].map(line);
-  }
-  const body = lines.join("\n");
-  if (body.length <= REVIEW_LOG_CHARS) return `(${notes.join("; ")})\n${body}`;
-  const half = REVIEW_LOG_CHARS / 2;
-  const head = body.slice(0, half).replace(/\n[^\n]*$/, "");
-  const tail = body.slice(-half).replace(/^[^\n]*\n/, "");
-  return `(${notes.join("; ")}; the middle of the run is cut out where marked)\n${head}\n(... rows cut here ...)\n${tail}`;
-}
-// Composer answered nothing within seconds for reviews of long runs at 400k characters of log, and
-// the Stats section now carries what the cut middle held, so the log stays under this.
-const REVIEW_LOG_CHARS = 250_000;
-
-/** The game's encyclopedia as compact JSON: every weapon, passive, item, recipe, enemy, boss and biome with the game's stats. */
-async function encyclopedia(): Promise<Encyclopedia | string> {
-  try {
-    const res = await fetch(`${SERVER}/encyclopedia`, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return (await res.json()) as Encyclopedia;
-  } catch (e) {
-    return `(not available: ${e instanceof Error ? e.message : String(e)})`;
-  }
-}
-
-async function encyclopediaText(): Promise<string> {
-  const e = await encyclopedia();
-  if (typeof e === "string") return e;
-  const { capturedAt: _, ...rest } = e;
-  return JSON.stringify(rest);
-}
-
-/** The base weapons a run can start with, by id; the profile may not have unlocked them all. */
-const baseWeapons = (e: Encyclopedia | string) => (typeof e === "string" ? [] : (e.weapons as { id?: string; tier?: string }[]).filter((w) => w.tier === "base" && w.id !== undefined).map((w) => w.id as string));
-
-const NO_TOOLS = "Answer from these facts alone; do not browse, search or use tools. Reply with only one JSON object with these keys:";
-
-const PLAN_CONTRACT = [
-  '"intent": what this run tests and how the templates set it up, in a short paragraph for a person about to watch the run.',
-  '"testing": the ids of the experiments.csv rows this run tests; the bot marks them running. An empty array only when the run tests nothing. A row still running whose runs column lacks a later run was cut short: plan it again or reset it.',
-  '"planner": {"state", "goal", "pick"} and "action": {"state", "hurt", "useful", "dash"}: the templates for this run. One left out keeps the template above.',
-  '"knobs": the knobs to change; one left out keeps its value above.',
-  '"startWeapon": the base weapon id Tibo starts with (a weapon from the encyclopedia whose tier is base), or "random" for the game\'s own pick. The profile may not offer every one yet; a weapon it does not offer starts the run on Random, and the notes say so.',
-  loop.EDITS_CONTRACT,
-].join("\n");
-
-const REVIEW_CONTRACT = [
-  '"notes": the review in Markdown with the sections coach-retrospective.md asks for, under ## headings. The bot puts it into the notes file between the plan and the picks.',
-  'For each experiment this run tested, update its row in "experiments" (status, outcome, result, learnings); the bot adds this run to its runs column.',
-  loop.EDITS_CONTRACT,
-  TRAINING_CONTRACT,
-].join("\n");
-
-type PlanReply = { intent: string; testing: string[]; templates: Templates; edits: loop.LoopEdits; weapon: string };
-
-/** `recent` holds the areas each of this coach's last two runs tested, newest first. */
-function checkPlan(raw: Record<string, unknown>, base: Templates, before: loop.Tables, weapons: string[], recent: string[][]): loop.Checked<PlanReply> {
-  const errors: string[] = [];
-  const templates = loop.checkTemplates(raw as { planner?: unknown; action?: unknown; knobs?: unknown }, base);
-  const edits = loop.checkEdits(raw, before);
-  if ("errors" in templates) errors.push(...templates.errors);
-  if ("errors" in edits) errors.push(...edits.errors);
-  if (!loop.isText(raw.intent)) errors.push("intent must be a short paragraph");
-  const testing = Array.isArray(raw.testing) && raw.testing.every((x) => typeof x === "string") ? (raw.testing as string[]) : undefined;
-  if (testing === undefined) errors.push("testing must be an array of experiment ids");
-  const rows = ("value" in edits ? edits.value.experiments : undefined) ?? before.experiments;
-  for (const id of testing ?? []) if (!rows.some((r) => r.id === id)) errors.push(`testing names ${id}, which is not a row of the experiments table`);
-  const areas = [...new Set((testing ?? []).map((id) => rows.find((r) => r.id === id)?.area ?? ""))].filter(Boolean);
-  const [last = [], before2 = []] = recent;
-  const stale = areas.filter((a) => last.includes(a) && before2.includes(a));
-  if (areas.length > 0 && stale.length === areas.length)
-    errors.push(`your last two runs both tested ${stale.join(" and ")}; this run must test another area as well (see the coverage table), so curiosity does not narrow onto one mechanic`);
-  const weapon = raw.startWeapon === undefined || raw.startWeapon === "random" ? "" : raw.startWeapon;
-  if (typeof weapon !== "string" || (weapon !== "" && weapons.length > 0 && !weapons.includes(weapon))) errors.push(`startWeapon must be "random" or a base weapon id: ${weapons.join(", ")}`);
-  if (errors.length > 0 || !("value" in templates) || !("value" in edits)) return { errors };
-  return { value: { intent: String(raw.intent), testing: testing ?? [], templates: templates.value, edits: edits.value, weapon: String(weapon) } };
-}
-
-function checkReview(raw: Record<string, unknown>, before: loop.Tables, training: (raw: unknown) => loop.Checked<Scenario[]>): loop.Checked<{ notes: string; edits: loop.LoopEdits; training: Scenario[] }> {
-  const errors: string[] = [];
-  const edits = loop.checkEdits(raw, before);
-  if ("errors" in edits) errors.push(...edits.errors);
-  const scenarios = training(raw.training);
-  if ("errors" in scenarios) errors.push(...scenarios.errors);
-  if (!loop.isText(raw.notes)) errors.push("notes must be the review in Markdown");
-  else if (/<!--|^## (Outcome|Stats|Plan|Picks|Prompts)\s*$/m.test(raw.notes)) errors.push("notes must not hold HTML comments or the headings Outcome, Stats, Plan, Picks or Prompts, which the bot writes");
-  if (errors.length > 0 || !("value" in edits) || !("value" in scenarios)) return { errors };
-  return { value: { notes: String(raw.notes), edits: edits.value, training: scenarios.value } };
-}
-
-const TRAINING_ABOUT = [
-  "Besides whole runs, the loop can settle a question in a controlled setting. Every run with notes saves a checkpoint, the whole game as it was, at 0:00 and every 2:00 after. A scenario loads one checkpoint for every trial, optionally replaces Tibo's whole build there, and lets the bot play it for a fixed time with each arm's templates. The game's own dice then roll the same in every trial, so the arms differ only in what the models chose: a few minutes of trials can compare two knob values or prompts at the moment that matters (a boss, the 16:00 surge, an opening) without waiting for a run to get there.",
-  "A trial plays like a run (the planner picks cards and goals, the action model steps), stops after its seconds or at death, and gets no notes or review. Scenarios you ask for in a review play before the next run, and their results show up here, in your next plan and review.",
-].join("\n\n");
-
-/** The training ground as the coach sees it: the checkpoints it can start from, and this coach's results. */
-async function trainingFacts(): Promise<{ text: string; checkpoints: string[] }> {
-  const state = await api<Snap>("/state").catch(() => undefined);
-  const metas = state === undefined ? [] : await api<CheckpointMeta[]>("/checkpoints").catch(() => []);
-  const build = state?.gameBuild;
-  const mine = (await readScenarios()).filter((x) => x.coach === COACH).slice(-6).reverse();
-  return {
-    // Before its first run the page has not loaded the sim, so it cannot name its build yet.
-    checkpoints: metas.filter((c) => build === undefined || c.build === build).map((c) => c.name),
-    text: [
-      "## The training ground",
-      TRAINING_ABOUT,
-      "### Checkpoints on this game build",
-      state === undefined ? "(no game is connected, so no checkpoint can be loaded now)" : checkpointList(metas, build),
-      "### Your latest training scenarios, newest first",
-      mine.map(scenarioSummary).join("\n\n") || "(none yet)",
-    ].join("\n\n"),
-  };
-}
-
-const loopFiles = async () => [
-  "## Beliefs (gameplay/beliefs.csv): what the loop holds true now",
-  await Bun.file(loop.BELIEFS_CSV).text(),
-  "## Experiments (gameplay/experiments.csv)",
-  await Bun.file(loop.EXPERIMENTS_CSV).text(),
-  "## Infrastructure requests (gameplay/infrastructure_feedback.csv)",
-  await Bun.file(loop.INFRA_CSV).text(),
-  "## Every run so far, newest first",
-  await loop.runHistory(),
-];
-
-/**
- * Asks the coach, from gameplay/coach-plan.md, what the run should test and for the templates that
- * play it. Without a usable answer the run plays the latest run's templates.
- */
-async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ plan: RunPlan; prompts: string }> {
-  const latest = await loop.latestTemplates(COACH);
-  const base = latest ?? { templates: DEFAULT_TEMPLATES, from: "the built-in defaults" };
-  const champion = await loop.championTemplates();
-  const reuse = (why: string) => ({ plan: { source: `${base.from} (${why})`, intent: "", testing: [], templates: base.templates, weapon: "" }, prompts: "none" });
-  if (skip !== undefined) return reuse(skip);
-  if (COACH === "none") return reuse("no coach");
-  const played = (await loop.runRecords()).filter((r) => r.coach === COACH && r.mode === setup.mode).length;
-  // Only Open World has a champion: it is the best Open World Nightmare run.
-  if (EXPLOIT_EVERY > 0 && setup.mode === "world" && champion !== undefined && (played + 1) % EXPLOIT_EVERY === 0) {
-    const weapon = loop.startedWith(champion.record.text) ?? "";
-    const intent = `Exploit run (one run in ${EXPLOIT_EVERY} of this coach): the champion templates from ${champion.from} (Nightmare ${champion.record.level}; their runs lived ${champion.lives.map(clock).join(", ")}), unchanged, starting with ${weapon === "" ? "a random weapon" : weapon}. It tests nothing new: it is a real attempt at 20:00 and a second sample of the best play so far, so the review can tell how much of that run was luck.`;
-    console.log(`plan: ${intent}`);
-    say({ role: "planner", model: COACH_NAME, time: 0, text: intent });
-    return { plan: { source: `${champion.from} (exploit run)`, intent, testing: [], templates: champion.templates, weapon }, prompts: "none (exploit run)" };
-  }
-  const instructions = await Bun.file(loop.COACH_PLAN).text();
-  const prompt = [
-    loop.editableFiles("plan"),
-    instructions,
-    "# Facts",
-    "## The game and the bot",
-    botFacts(),
-    "## Templates, state blocks and knobs",
-    loop.catalog(),
-    "## This run",
-    `${setup.difficulty} ${setup.mode === "daily" ? "Daily (the same seed for everyone today)" : "Open World"}, in a ${setup.surface === "headless" ? "headless browser nobody watches" : "browser someone may be watching"}, starting ${setup.started.toString()}. You are ${setup.coach}. Other coaches may run their own loops at the same time on these same files, each on its own Nightmare ladder: their rows and notes are theirs, and the coach of each run is in the run list.`,
-    "## The campaign",
-    "The long-term goal: win Nightmare 10 in Open World, which means surviving 20:00 there. A win at a level unlocks the next, so every level from 1 to 9 has to be won first, and only a run that survives 20:00 moves the ladder. Each coach climbs its own ladder:",
-    await loop.campaign(),
-    ...(await loopFiles()),
-    "## Coverage: experiments by area",
-    "Every experiment names its area. A run may not test only areas that both of your last two runs tested.",
-    loop.coverage(await loop.readExperiments()),
-    `## The latest ${LATEST_NOTES} notes`,
-    await loop.latestNotes(LATEST_NOTES),
-    `## Your latest templates, from ${base.from}`,
-    JSON.stringify(base.templates, null, 2),
-    ...(champion === undefined || champion.from === base.from
-      ? []
-      : [`## The champion templates, from ${champion.from} (Nightmare ${champion.record.level}, coach ${champion.record.coach}): the templates whose runs have the longest median life, ${champion.lives.map(clock).join(", ")}`, "Your latest templates may be an experiment that failed. These have played best so far; build on whichever serves this run.", JSON.stringify(champion.templates, null, 2)]),
-    (await trainingFacts()).text,
-    "## The game's encyclopedia",
-    await encyclopediaText(),
-    "# Reply",
-    NO_TOOLS,
-    PLAN_CONTRACT,
-  ].join("\n\n");
-  const bubble = new CoachBubble("Planning the run…", 0);
-  const before = await loop.readTables();
-  const weapons = baseWeapons(await encyclopedia());
-  const recent = (await loop.runRecords())
-    .filter((r) => r.coach === COACH)
-    .slice(0, 2)
-    .map((r) => loop.notesTesting(r.text).map((id) => before.experiments.find((e) => e.id === id)?.area ?? ""));
-  const reply = await consult(prompt, PLAN_TIMEOUT_MS, bubble, (raw) => checkPlan(raw, base.templates, before, weapons, recent));
-  if (reply === undefined) return reuse("the coach gave no usable plan");
-  const { done: changed, renamed } = await loop.applyEdits(reply.edits, loop.runId(setup.started), before);
-  const testing = reply.testing.map((id) => renamed.get(id) ?? id);
-  await loop.touchExperiments(testing, (row) => {
-    row.status = "running";
-  });
-  const detail = `Testing ${testing.join(", ") || "nothing named"}.${changed.length === 0 ? "" : ` Updated ${changed.join(", ")}.`}`;
-  console.log(`plan: ${reply.intent}\n  ${detail}`);
-  bubble.set({ text: reply.intent, detail });
-  return { plan: { source: "coach-plan.md", intent: reply.intent, testing, templates: reply.templates, weapon: reply.weapon }, prompts: `coach-plan.md ${loop.hash(instructions)}` };
-}
-
-/**
- * Asks the coach, from gameplay/coach-retrospective.md, to review a finished run from its notes and
- * log, and applies its edits to gameplay/. Returns the review for the notes file.
- */
-async function reviewRun(text: string, name: string): Promise<{ review: string; prompts: string } | undefined> {
-  if (COACH === "none") return undefined;
-  const instructions = await Bun.file(loop.COACH_RETROSPECTIVE).text();
-  const training = await trainingFacts();
-  const played = loop.notesTemplates(text);
-  const prompt = [
-    loop.editableFiles("review"),
-    instructions,
-    "# Facts",
-    "## The game and the bot",
-    botFacts(),
-    "## Templates, state blocks and knobs",
-    loop.catalog(),
-    `## This run's notes so far (gameplay/notes/${name})`,
-    text,
-    "## This run's log",
-    "One row per model call (plan: the planner chose the next goal; pick: the planner took a level-up, chest or shrine option; move: the action model chose a step because the way to the goal was costly), with the odds it gave each option, and one row per goal that started or ended, with the player's state at that moment. hp_lost is health lost since the row before.",
-    await logForReview(loop.notesField(text, "Log") ?? ""),
-    ...(await loopFiles()),
-    "## Coverage: experiments by area",
-    loop.coverage(await loop.readExperiments()),
-    "## The campaign",
-    await loop.campaign(),
-    training.text,
-    "## gameplay/coach-plan.md, which plans the next run",
-    await Bun.file(loop.COACH_PLAN).text(),
-    "# Reply",
-    NO_TOOLS,
-    REVIEW_CONTRACT,
-  ].join("\n\n");
-  const bubble = new CoachBubble("Reviewing the run…");
-  const before = await loop.readTables();
-  const run = name.slice(0, 19);
-  const checkScenarios = (raw: unknown): loop.Checked<Scenario[]> => {
-    if (raw === undefined) return { value: [] };
-    if (!("value" in played)) return { errors: [`this run's notes hold no usable templates (${played.errors.join("; ")}), so it cannot ask for training`] };
-    return checkTraining(raw, played.value, training.checkpoints, { coach: COACH, run });
-  };
-  const reply = await consult(prompt, REVIEW_TIMEOUT_MS, bubble, (raw) => checkReview(raw, before, checkScenarios));
-  if (reply === undefined) return undefined;
-  for (const scenario of reply.training) await writeScenario(scenario);
-  if (reply.training.length > 0) console.log(`review asked for training ${reply.training.map((x) => x.id).join(", ")}`);
-  const { done: changed } = await loop.applyEdits(reply.edits, run, before);
-  await loop.touchExperiments(loop.notesTesting(text), (row) => {
-    const runs = row.runs.split(/;\s*/).filter(Boolean);
-    if (!runs.includes(name)) row.runs = [...runs, name].join("; ");
-  });
-  bubble.set({ text: summaryOf(reply.notes), ...(changed.length === 0 ? {} : { detail: `Updated ${changed.join(", ")}.` }) });
-  if (changed.length > 0) console.log(`review updated ${changed.join(", ")}`);
-  return { review: reply.notes, prompts: `${(loop.notesField(text, "Coach prompts") ?? "none").replace(/; coach-retrospective\.md \w+/g, "")}; coach-retrospective.md ${loop.hash(instructions)}` };
-}
-
-const summaryOf = (review: string) => (review.match(/^## Summary\s*\n+([^\n]+(?:\n[^\n#]+)*)/m)?.[1] ?? review.slice(0, 600)).trim();
-
-/** Commits gameplay/ with the reviewed run's notes and pushes it; a failure is reported, never fatal. */
-/** `review` is undefined when the coach gave none; the run is committed all the same. */
-async function commitGameplay(name: string, review: string | undefined, testing: string[]) {
-  if (!COMMIT) return;
-  const run = (cmd: string[], env?: Record<string, string>) => {
-    const p = Bun.spawnSync(cmd, { cwd: loop.GAMEPLAY, stdout: "pipe", stderr: "pipe", env: { ...process.env, ...env } });
-    return { ok: p.exitCode === 0, out: `${p.stdout.toString()}${p.stderr.toString()}`.trim() };
-  };
-  const lived = name.match(/lived-(\d+)-(\d+)/);
-  const title = `docs(gameplay): ${review === undefined ? `the ${COACH} loop records, unreviewed,` : `${COACH} reviews`} the ${name.slice(0, 16).replace("_", " ").replace(/-(\d\d)$/, ":$1")} run, lived ${lived === null ? "?" : `${Number(lived[1])}:${lived[2]}`}${testing.length === 0 ? "" : `, testing ${testing.join(", ")}`}`;
-  // Under the gameplay lock, so a commit never catches another loop's file half written. --only
-  // commits gameplay/ alone, whatever else someone has staged; a busy index is tried again.
-  const commit = await loop.locked(async () => {
-    run(["git", "add", "-A", "--", "."]);
-    if (run(["git", "diff", "--cached", "--quiet", "--", "."]).ok) return undefined;
-    const body = review === undefined ? `The coach gave no usable review; rerun it with ./scripts/tibo-bot.ts --review gameplay/notes/${name}` : summaryOf(review);
-    let tried = run(["gai", "-m", `${title}\n\n${body}`, "--only", "--", "."], { AI_COMITTER_NAME: COACH_MODEL ?? COACH });
-    for (let attempt = 1; !tried.ok && tried.out.includes("index.lock") && attempt < 5; attempt++) {
-      await Bun.sleep(2000);
-      tried = run(["gai", "-m", `${title}\n\n${body}`, "--only", "--", "."], { AI_COMITTER_NAME: COACH_MODEL ?? COACH });
-    }
-    return tried;
-  });
-  if (commit === undefined) return;
-  if (!commit.ok) {
-    console.error(`could not commit gameplay/: ${commit.out}`);
-    say({ role: "system", text: "Could not commit gameplay/ after the review.", detail: commit.out.slice(0, 500) });
-    return;
-  }
-  const push = run(["git", "push"]);
-  console.log(push.ok ? `committed and pushed gameplay/: ${title}` : `committed gameplay/ but could not push: ${push.out}`);
-}
-
-const withPrompts = (text: string, prompts: string) => text.replace(/^\| Coach prompts \| .* \|$/m, () => `| Coach prompts | ${prompts} |`);
-
-/** `--review <notes.md>`: reviews a finished run whose review never got written (the bot was stopped mid-review). */
-async function reviewNotesFile(file: string) {
-  const text = await Bun.file(file).text();
-  const done = await reviewRun(text, path.basename(file));
-  if (done === undefined) throw new Error("the coach gave no review");
-  await Bun.write(file, withPrompts(loop.withReview(text, done.review), done.prompts));
-  console.log(`reviewed ${file}`);
-  await commitGameplay(path.basename(file), done.review, loop.notesTesting(text));
-}
-
 // ---- What the game says about things -------------------------------------------------------
 // The planner reads the game's own description of every card it holds or is offered.
 type Book = Map<string, string>;
@@ -896,11 +460,8 @@ const planEvery = () => (piloted ? pace.planEvery : args.includes("--plan-every"
 /** What the coach set for this run: the in-game models' prompts and the knobs below. */
 let templates: Templates = DEFAULT_TEMPLATES;
 const knobs = (): Knobs => templates.knobs;
-const PLAN_RANGE = 600;
+const { PLAN_RANGE, GIVE_UP_SECONDS } = loop;
 const ON_CHEST = 14;
-// A target given up on is marked for the planner and skipped by the bot's own goals for a while: a
-// Potato Crate charges nothing without the gold for it.
-const GIVE_UP_SECONDS = 45;
 // A lockstep goal step ends by timing out, and food collected on touch ends as "gone" before the
 // goto counts it as reached; the next step's look at the target tells which it was.
 const STEP_OVER = new Set(["timeout", "the target is gone"]);
@@ -1686,13 +1247,13 @@ class Planner {
 
   /** The run ended: its notes are written, then the coach reviews it. */
   async finish(lastRun: NonNullable<Snapshot["lastRun"]>, last: RunView | undefined, ladder: number | undefined, healed: number) {
-    const damage = Object.entries(lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ");
     await this.notes.finish({
       lived: lastRun.time,
       ending: `${lastRun.time >= WIN_SECONDS ? "won (passed 20:00), then " : ""}died at ${clock(lastRun.time)}, level ${lastRun.level}, ${lastRun.kills} kills`,
       outcome: [
         `Lived **${clock(lastRun.time)}** (${lastRun.time}s), level ${lastRun.level}, ${lastRun.kills} kills.`,
-        `Damage taken by source: ${damage || "none recorded"}; ${Math.round(Object.values(lastRun.damageTaken).reduce((a, b) => a + b, 0))} in all. Health gained over the run, by food, regeneration and anything else: about ${healed} (the game does not say from what).`,
+        ...loop.totalsLines(loop.totalsBetween(lastRun)),
+        `Health gained over the run, by food, regeneration and anything else: about ${healed} (the game does not say from what).`,
         ...(last === undefined ? [] : loadoutLines(last)),
         `Planner asked ${this.calls} times.`,
         ...(ladder === undefined ? [] : [`Nightmare ladder after the run: ${ladder === 0 ? "no level won yet" : `won up to Nightmare ${ladder}`}, so the next Open World Nightmare run plays Nightmare ${ladder + 1}.`]),
@@ -1700,18 +1261,6 @@ class Planner {
     });
   }
 
-  async review() {
-    const file = this.notes.file;
-    if (!this.notes.saved || file === undefined) return;
-    this.notes.review = "(the coach is reviewing the run)";
-    await this.notes.write();
-    const done = await reviewRun(await Bun.file(file).text(), path.basename(file));
-    this.notes.review = done?.review ?? `(no review: the coach gave none. Rerun it with ./scripts/tibo-bot.ts --review ${file})`;
-    if (done !== undefined) this.notes.prompts = done.prompts;
-    await this.notes.write();
-    // Committed reviewed or not, so a run whose review failed is not left out of the history.
-    await commitGameplay(path.basename(file), done?.review, this.notes.plan.testing);
-  }
 }
 
 const loadoutLines = (r: RunView) => [
@@ -1786,23 +1335,18 @@ async function main() {
   let lastReport = -1;
   let steps = 0;
   let notes: RunNotes | undefined;
-  let reviewing: RunNotes | undefined;
   let planner: Planner | undefined;
   let runLog: RunLog | undefined;
   let last: RunView | undefined;
   // The previous run's notes wait for its share link, which appears while the next run starts.
   let awaitingLink: { notes: RunNotes; known: string | undefined } | undefined;
-  console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, speed x${SPEED}, planner ${PLAN_MODEL}, coach ${COACH === "none" ? "none" : COACH_NAME}, run logs in ${LOG_DIR}`);
+  console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, speed x${SPEED}, planner ${PLAN_MODEL}, templates from ${BASE.source}, run logs in ${LOG_DIR}`);
   // A run the bot is stopped in the middle of leaves no notes: it ended neither in the game nor in a bug.
-  const stop = async (signal: string) => {
-    if (reviewing !== undefined) {
-      reviewing.review = `(interrupted: the bot was stopped (${signal}) before the review finished. Rerun it with ./scripts/tibo-bot.ts --review ${reviewing.file})`;
-      await reviewing.write();
-    }
+  const stop = async () => {
     process.exit(0);
   };
-  process.on("SIGINT", () => void stop("SIGINT"));
-  process.on("SIGTERM", () => void stop("SIGTERM"));
+  process.on("SIGINT", () => void stop());
+  process.on("SIGTERM", () => void stop());
   /** A run cut short by the bot or the page gets notes that say so, and no review. */
   const cutShort = async (n: RunNotes, ending: string) => {
     n.link = "none";
@@ -1818,17 +1362,10 @@ async function main() {
   let adopted = TAKEOVER && now.run !== undefined && now.screen !== "over" && now.screen !== "title";
   if (TRIAL !== undefined && !adopted) throw new Error("--trial plays the run in progress, and there is none; start a run and load a checkpoint first");
   let trialStart: RunView | undefined;
-  let lastCheckpoint = -1;
-  const endTrial = async (end: RunView | undefined, died: { time: number; level: number; kills: number; damageTaken: Record<string, number> } | undefined) => {
+  const endTrial = async (end: RunView | undefined, died: NonNullable<Snapshot["lastRun"]> | undefined) => {
     const start = trialStart;
     if (start === undefined || end === undefined) throw new Error("the trial ended before its first step");
-    const taken = died?.damageTaken ?? end.totals.damageTaken;
-    const damageTaken = Object.fromEntries(
-      Object.entries(taken)
-        .map(([k, v]) => [k, Math.round((v - (start.totals.damageTaken[k] ?? 0)) * 10) / 10] as const)
-        .filter(([, v]) => v > 0)
-        .sort((a, b) => b[1] - a[1]),
-    );
+    const totals = loop.totalsBetween(died ?? end.totals, start.totals);
     const endTime = died?.time ?? end.time;
     const result = {
       survived: Math.round((endTime - start.time) * 10) / 10,
@@ -1837,8 +1374,9 @@ async function main() {
       end: endTime,
       hp: { start: Math.round(start.player.hp), end: died === undefined ? Math.round(end.player.hp) : 0, max: Math.round(end.player.maxHp) },
       level: { start: start.player.level, end: died?.level ?? end.player.level },
-      kills: (died?.kills ?? end.totals.kills) - start.totals.kills,
-      damageTaken,
+      kills: totals.kills,
+      damageTaken: totals.damageTaken,
+      totals,
       weapons: end.loadout.weapons.map((w) => `${w.id} ${w.level}`),
       passives: end.loadout.passives.map((p) => `${p.id} ${p.level}`),
       steps,
@@ -1857,24 +1395,11 @@ async function main() {
     role: "system",
     tag: adopted ? "Take over" : "Start",
     time: now.run?.time ?? 0,
-    text: `${adopted ? `Taking over the run at ${clock(now.run?.time ?? 0)}` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}`}${(now.incognito ?? INCOGNITO) ? ", incognito: no notes, no review" : ""}.`,
-    detail: `Planner ${PLAN_MODEL}, action model ${MODEL}, run plan and review by ${COACH === "none" ? "nobody" : COACH_NAME}. Run logs: ${LOG_DIR}`,
+    text: `${adopted ? `Taking over the run at ${clock(now.run?.time ?? 0)}` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}`}.`,
+    detail: `Planner ${PLAN_MODEL}, action model ${MODEL}, templates from ${BASE.source}. Run logs: ${LOG_DIR}`,
   });
-  /**
-   * The coach plans a run before it starts, since the plan picks the starting weapon. The difficulty
-   * it plans for is the one "highest" will pick: the level after the highest the ladder has won.
-   */
-  let prepared: { setup: RunSetup; plan: RunPlan; prompts: string; saved: boolean } | undefined;
-  const prepareAndStart = async () => {
-    const s = await api<Snap>("/state");
-    const skip = (s.incognito ?? INCOGNITO) ? "incognito" : undefined;
-    const expected = DIFFICULTY === "highest" && MODE !== "daily" ? `nightmare-${(s.ladderCleared ?? 0) + 1}` : DIFFICULTY;
-    const setup: RunSetup = { started: new Date(), difficulty: expected, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: "", planner: PLAN_MODEL, action: MODEL, coach: COACH === "none" ? "none" : COACH_NAME, bot: BOT_CODE };
-    const { plan, prompts } = await planRun(setup, skip);
-    await start(plan.weapon);
-    setup.difficulty = difficulty;
-    prepared = { setup, plan, prompts, saved: skip === undefined };
-  };
+  const plan: RunPlan = { source: BASE.source, intent: INTENT, templates: BASE.templates, weapon: WEAPON };
+  const prepareAndStart = () => start(WEAPON);
   if (!adopted) await prepareAndStart();
   runs = 1;
 
@@ -1893,7 +1418,7 @@ async function main() {
     if (!s.connected) throw new Error("the game tab is not connected to the agent server");
     await fillLink(s);
     if (s.screen === "title" || s.screen === "over") {
-      if (TRIAL !== undefined) return endTrial(last, s.lastRun ?? { time: last?.time ?? 0, level: last?.player.level ?? 0, kills: last?.totals.kills ?? 0, damageTaken: last?.totals.damageTaken ?? {} });
+      if (TRIAL !== undefined) return endTrial(last, s.lastRun ?? (last === undefined ? undefined : { time: last.time, level: last.player.level, ...last.totals }));
       if (s.screen === "over" && s.lastRun !== undefined && runs > 0 && notes !== undefined && planner !== undefined && runLog !== undefined) {
         const avg = latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length);
         console.log(`run ${runs} ended at ${s.lastRun.time}s, level ${s.lastRun.level}, ${s.lastRun.kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
@@ -1910,7 +1435,6 @@ async function main() {
         log.flush();
         // The run is over; a stop from here on only notes the missing review.
         const ended = notes;
-        reviewing = ended;
         notes = undefined;
         await planner.finish(s.lastRun, last, s.ladderCleared, runLog.healed);
         // The share link only exists on the run summary, and a page reload loses it, so it goes into
@@ -1925,8 +1449,6 @@ async function main() {
           console.log(`run summary showed no link (${summary.detail ?? summary.state}); it is read again when the next run starts`);
           awaitingLink = { notes: ended, known: s.lastRunLink };
         }
-        await planner.review();
-        reviewing = undefined;
         console.log(`notes: ${ended.saved ? ended.file : "not saved"}, log: ${runLog.file}`);
         planner = undefined;
         runLog = undefined;
@@ -1961,20 +1483,12 @@ async function main() {
     }
     pace = s.pace ?? pace;
     piloted = s.pace !== undefined;
-    const incognito = s.incognito ?? INCOGNITO;
+    const incognito = s.incognito ?? false;
     if (notes === undefined || planner === undefined || runLog === undefined) {
-      // A run taken over in progress is played with the latest templates: planning would stall it.
-      const ready =
-        prepared ??
-        (await (async () => {
-          const setup: RunSetup = { started: new Date(), difficulty: r.difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: "", planner: PLAN_MODEL, action: MODEL, coach: COACH === "none" ? "none" : COACH_NAME, bot: BOT_CODE };
-          return { setup, ...(await planRun(setup, "taken over mid-run")), saved: false };
-        })());
-      prepared = undefined;
-      const { setup, plan, prompts } = ready;
-      const skip = ready.saved && !incognito ? undefined : adopted ? "taken over mid-run" : "incognito";
-      setup.seed = r.seed;
-      templates = TRIAL_TEMPLATES ?? plan.templates;
+      const setup: RunSetup = { started: new Date(), difficulty: r.difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: r.seed, planner: PLAN_MODEL, action: MODEL, coach: COACH_LABEL, bot: BOT_CODE };
+      const skip = !NOTES ? "no --notes" : adopted ? "taken over mid-run" : incognito ? "incognito" : undefined;
+      const prompts = "see the coach's log";
+      templates = plan.templates;
       LIVE = !args.includes("--lockstep") && (piloted || templates.knobs.lockstep < 0.5);
       notes = new RunNotes(setup, plan, prompts, skip === undefined);
       const first = r.loadout.weapons[0]?.id ?? "none";
@@ -1982,21 +1496,12 @@ async function main() {
       adopted = false;
       runLog = new RunLog(notes.log);
       planner = new Planner(notes, runLog);
-      lastCheckpoint = -1;
       resetGoals();
       console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}, ${skip === undefined ? "notes at the end" : `no notes (${skip})`}, templates from ${plan.source}, log ${notes.log}`);
     }
     last = r;
     trialStart ??= r;
     if (TRIAL !== undefined && r.time - trialStart.time >= TRIAL) return endTrial(r, undefined);
-    if (TRIAL === undefined && notes?.saved === true && Math.floor(r.time / CHECKPOINT_EVERY) > lastCheckpoint) {
-      lastCheckpoint = Math.floor(r.time / CHECKPOINT_EVERY);
-      const name = `${notes.id}@${loop.clock(lastCheckpoint * CHECKPOINT_EVERY, "-")}`;
-      // Not awaited: live, the step must not wait on the upload.
-      void command({ type: "checkpoint", op: "save", name }).then((c) => {
-        if (c.state !== "done") console.log(`checkpoint ${name} not saved: ${c.detail ?? c.state}`);
-      });
-    }
     if (Math.floor(r.time / 30) !== lastReport) {
       lastReport = Math.floor(r.time / 30);
       const per = (ms: number) => Math.round(ms / Math.max(1, timings.steps));
@@ -2035,11 +1540,7 @@ async function main() {
   }
 }
 
-await loop.checkLoopFiles();
-const reviewTarget = option("review", "");
-if (reviewTarget !== "") await reviewNotesFile(reviewTarget);
-else
-  await main().catch(async (e: unknown) => {
-    await recordCrash?.(e);
-    throw e;
-  });
+await main().catch(async (e: unknown) => {
+  await recordCrash?.(e);
+  throw e;
+});
