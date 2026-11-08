@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | build |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L1.I2 |
-| Updated | sonnet-medium L1.I2 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ Fresh NM10 seed 303 with steam-vent, sprout-satellites, rosti-disc, and steam-ve
 
 ## Findings
 
-(none yet)
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

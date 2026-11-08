@@ -30,6 +30,7 @@ export type TrialResult = {
   plannerCalls?: number;
   actionCalls?: number;
   avgDecisionMs: number;
+  snapshotAgeMs?: { p50: number; p90: number };
   log?: string;
 };
 

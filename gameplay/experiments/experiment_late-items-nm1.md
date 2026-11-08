@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | items |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L2.I4 |
-| Updated | sonnet-high L2.I7 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ From nm1-min16-full, 240s (to 20:40), loadout of the full gym build plus items A
 ## Findings
 
 L2.I4: the nine-item defensive set B passed 20:00 in 2 of 2 games, while damage items A died at 18:06-18:14. L2.I7 splits set B on top of items A into armor and dodge (2 Baked Buckler, 2 Ghost Skin) and max hp and sustain (2 Spud Muffin, 2 Vampire Tot, Thorny Jacket), two games each, to find which half carries the effect. If one half passes 20:00 in 2 of 2, the late pick and shop rules should favour those items.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

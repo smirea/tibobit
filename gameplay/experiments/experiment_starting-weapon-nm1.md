@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | build |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L1.I1 |
-| Updated | sonnet-high L1.I1 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ Four fresh Nightmare 1 games on seed 101 with the default playbook, 300s each, d
 
 ## Findings
 
-(none yet)
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

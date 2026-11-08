@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | movement |
 | Result | - |
-| Coach | sonnet-medium |
 | Created | sonnet-medium L1.I1 |
-| Updated | sonnet-medium L1.I1 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ Raising extraDamage from 0.02 to 0.06 lets the page walk to goals on its own mor
 
 ## Findings
 
-(none yet)
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

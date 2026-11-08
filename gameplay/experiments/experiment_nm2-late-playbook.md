@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | meta |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L3.I2 |
-| Updated | sonnet-high L3.I5 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ nm2-min15-natural (and nm2-min15-natural-b once built), 300s, unchanged playbook
 ## Findings
 
 L3.I4: natural-b baseline died 18:03 (Kraken 305, Titan 132). Across both maps 3 of 4 deaths came in the 18:00-18:03 Kraken window. L3.I5 adds a natural-b repeat and a baseline from nm2-min15-gold.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

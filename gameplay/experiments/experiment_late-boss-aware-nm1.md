@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | bosses |
 | Result | - |
-| Coach | sonnet-medium |
 | Created | sonnet-medium L2.I1 |
-| Updated | sonnet-medium L2.I8 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ From nm1-min16-natural-b (16:40), 300s: chest-first baseline vs boss-aware goal,
 ## Findings
 
 L2.I7: playbook text died 18:04 and 18:41 on the full gym; evade 15 mixed. L2.I8 tests a stricter 450-unit evade-only text alone, with boss ranges 300, with evade 15, with a boss-aware hurt prompt, and boss ranges on the old text.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

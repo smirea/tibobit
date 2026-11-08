@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | economy |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L1.I7 |
-| Updated | sonnet-high L1.I7 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ From nm1-min5-fresh, 300s, the chest-first prompt with one added sentence rankin
 
 ## Findings
 
-(none yet)
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

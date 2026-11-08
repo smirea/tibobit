@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | proposed |
 | Area | movement |
 | Result | - |
 | Created | sonnet-high L3.I10 |
-| Updated | L4.I1 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 

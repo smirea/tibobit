@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | spots |
 | Result | - |
-| Coach | sonnet-medium |
 | Created | sonnet-medium L1.I8 |
-| Updated | sonnet-medium L1.I9 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ Preferring chests and elites yields more boss chests and evolutions than the def
 ## Findings
 
 I8: chest-elite prompt survived with 17 boss chests and 4 evolutions. I9 repeats it twice on the 5:00 gym and on fresh seed 808 against baselines.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

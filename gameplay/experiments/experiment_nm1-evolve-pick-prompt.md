@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | models |
 | Result | - |
-| Coach | sonnet-medium |
 | Created | sonnet-medium L1.I8 |
-| Updated | sonnet-medium L1.I8 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ A pick prompt that ranks recipe completion first gives more evolutions and less 
 
 ## Findings
 
-(none yet)
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

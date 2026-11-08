@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | meta |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L1.I4 |
-| Updated | sonnet-high L1.I6 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ From own NM1 gyms at 6:00 and 10:00 (steam-vent 8, tater-twirl 4, root-network 2
 ## Findings
 
 L1.I6 adds a baseline repeat on nm1-min5-fresh and the first natural 10:00 gym (nm1-min10-natural) to see whether the default playbook survives the natural mid-game.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

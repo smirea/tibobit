@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | models |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L1.I5 |
-| Updated | sonnet-high L1.I5 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ From gym nm1-min5-fresh, 300s with the default pick prompt vs the evolve prompt,
 
 ## Findings
 
-(none yet)
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

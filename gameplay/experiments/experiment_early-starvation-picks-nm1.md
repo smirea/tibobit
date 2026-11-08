@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | models |
 | Result | - |
-| Coach | sonnet-medium |
 | Created | sonnet-medium L4.I10 |
-| Updated | sonnet-medium L5.I3 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ Fresh NM1 steam-vent games of 300s on known starving seeds and 3 new seeds: plai
 ## Findings
 
 L5.I1-I2 (lockstep): picks only lived 8 of 8, and the early-elite text starved 2020 and was dropped. Lockstep is banned, so L5.I3 plays the shipped playbook live on 1919, 2020, 2121, 1313 and 4141.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

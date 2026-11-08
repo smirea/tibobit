@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | models |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L1.I2 |
-| Updated | sonnet-high L1.I2 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ Two fresh Nightmare 10 steam-vent games on seed 101, 300s, differing only in the
 
 ## Findings
 
-(none yet)
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type BeliefRow, checkEdits, upsert, promptLoss, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type Experiment, notesName, notesTemplates, parseCsv, parseExperiment, renderExperiment, renderNotes, type RunSetup, withReview, totalsBetween, totalsLines, LOCKSTEP_CRUTCH } from "./gameplay";
+import { type BeliefRow, checkEdits, upsert, promptLoss, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type Experiment, notesName, notesTemplates, parseCsv, parseExperiment, renderExperiment, renderNotes, type RunSetup, withReview, totalsBetween, totalsLines, LOCKSTEP_CRUTCH, splitPrompts, checkPromptPart, stateFromLog, wordsChanged, overdueAreas, hasFreshGames } from "./gameplay";
 
 const setup: RunSetup = { started: new Date(2026, 10, 7, 15, 4, 9), difficulty: "nightmare", mode: "daily", surface: "headless", seed: "S1", planner: "jev", action: "jev", coach: "grok", bot: "abc1234" };
 
@@ -79,4 +79,34 @@ test("a training game's stats count only what happened during it", () => {
 test("lockstep cannot be turned on: it is a crutch", () => {
   expect(checkTemplates({ knobs: { lockstep: 1 } }, DEFAULT_TEMPLATES)).toEqual({ errors: [LOCKSTEP_CRUTCH] });
   expect(LOCKSTEP_CRUTCH).toContain("crutch and is not to be enabled");
+});
+
+test("coach.md splits into its three parts, and a rewritten part may not add a # heading", () => {
+  const text = "# Experiments\n\n## The goal\n\nWin.\n\n# Full run\n\nPlay.\n\n# Reflect\n\nLook back.\n";
+  expect(splitPrompts(text)).toEqual({ experiments: "# Experiments\n\n## The goal\n\nWin.", fullRun: "# Full run\n\nPlay.", reflect: "# Reflect\n\nLook back." });
+  expect(checkPromptPart("fullRun", "Play harder.")).toEqual({ value: "# Full run\n\nPlay harder." });
+  expect(checkPromptPart("fullRun", "# Full run\n\nPlay.\n\n# Notes\n\nx")).toEqual({ errors: ['prompts.fullRun may hold only its own # heading; use ## for sections, not "# Notes"'] });
+});
+
+test("the loop goes on from the coach log's last entry", () => {
+  const entry = (tag: string, title: string) => `\n## ${tag}: ${title} (2026-11-08 10:00)\n\nText.\n`;
+  expect(stateFromLog("")).toEqual({ loop: 1, iteration: 1 });
+  expect(stateFromLog(entry("L4.I3", "experiments") + "\n## Note from the loop manager\n\nx\n")).toEqual({ loop: 4, iteration: 4 });
+  expect(stateFromLog(entry("L4.I9", "no usable plan"))).toEqual({ loop: 4, iteration: 10 });
+  expect(stateFromLog(entry("L4.I10", "rehearsal") + entry("L4.I10", "full run"))).toEqual({ loop: 4, iteration: 10 });
+  expect(stateFromLog(entry("L4.I10", "reflection"))).toEqual({ loop: 5, iteration: 1 });
+});
+
+test("games a few words apart test wording, and different knobs are never wording", () => {
+  const goal = (g: string) => ({ ...DEFAULT_TEMPLATES, planner: { ...DEFAULT_TEMPLATES.planner, goal: g } });
+  const base = goal("If Tibo's next goal is to {{goal}}: is that the best thing to do now?");
+  expect(wordsChanged(base, goal("If Tibo's next goal is to {{goal}}: is that the best move to make now?"))).toBe(2);
+  expect(wordsChanged(base, { ...base, knobs: { ...base.knobs, evadeSeconds: 12 } })).toBeUndefined();
+});
+
+test("an area with no games this loop or the last is overdue, and fresh-start games are told apart", () => {
+  const e = (name: string, area: Experiment["area"], games: string): Experiment => ({ name, title: name, status: "done", area, result: "confirmed", created: "", updated: "", hypothesis: "h", method: "", findings: "", games });
+  const rows = [e("a", "build", "### L4.I2.G1: x\n\n- Start: a fresh game on Nightmare 2, seed 1"), e("b", "items", "### L2.I5.G3: y\n\n- Start: gym opening-nm2, seed 2")];
+  expect(overdueAreas(rows, 4)).toEqual(["items", "economy", "bosses", "movement", "spots", "models"]);
+  expect([hasFreshGames(rows[0] as Experiment), hasFreshGames(rows[1] as Experiment)]).toEqual([true, false]);
 });

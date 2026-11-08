@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | movement |
 | Result | - |
-| Coach | sonnet-medium |
 | Created | sonnet-medium L1.I3 |
-| Updated | sonnet-medium L1.I5 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ Five fresh NM10 steam-vent games on seed 303, 150s, differing only in one change
 ## Findings
 
 L1.I4: lockstep 1 survived 300s in 2 of 4 games (seeds 303 and 404), the live control died at 124s. extraDamage 0 under lockstep died at 213s, so no gain. Survivors opened chests early and evolved. L1.I5 repeats on seed 505 and tests boss ranges and planEvery 10.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

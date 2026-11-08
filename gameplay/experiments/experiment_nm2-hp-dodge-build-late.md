@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | build |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L3.I6 |
-| Updated | sonnet-high L3.I9 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ From nm2-min15-natural (4 baselines: 2 alive, 2 dead), 300s: three games with a 
 ## Findings
 
 L3.I8 natural-c: hp+armor+dodge 2 of 2 alive with 64 and 94 damage; unchanged control died 18:23. Across three maps hp builds live 6 of 7, unchanged about 4 of 10. The open question is whether natural play can reach such a build, which nm2-hp-picks-early tests.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

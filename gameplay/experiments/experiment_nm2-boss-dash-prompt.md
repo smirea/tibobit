@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | movement |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L3.I3 |
-| Updated | sonnet-high L3.I3 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ From nm2-min15-natural, 300s: two games with the narrow prompt against the uncha
 
 ## Findings
 
-(none yet)
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

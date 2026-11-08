@@ -1,9 +1,10 @@
-// The learning loop's files in gameplay/: beliefs.csv (what the loop holds true, good and bad),
-// experiments/ (one Markdown file per question), gyms.json (saved game states the training ground
-// starts from), infrastructure_feedback.csv, notes/ (full runs only), and coach/, the one coach's
-// three prompts, its playbook (the templates and starting weapon it currently thinks best), its log
-// and where its loop stands. This module owns their formats and turns away an edit that would break
-// one, so the loop can never wedge itself.
+// The learning loop's files in gameplay/: coach.md (the coach's three prompts), coach-log.md (one
+// entry per iteration, which also says where the loop stands), playbook.json (the templates and
+// starting weapon the coach currently thinks best), beliefs.csv (what the loop holds true, good and
+// bad), experiments/ (one Markdown file per question, with its games), gyms.jsonl (saved game states
+// the training ground starts from), infrastructure_feedback.csv and notes/ (full runs only). This
+// module owns their formats and turns away an edit that would break one, so the loop can never
+// wedge itself.
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
@@ -12,10 +13,12 @@ import type { CheckpointMeta, LoadoutSpec, RunTotals } from "../src/agent/protoc
 export const GAMEPLAY = path.join(import.meta.dir, "..", "gameplay");
 export const NOTES_DIR = path.join(GAMEPLAY, "notes");
 export const EXPERIMENTS_DIR = path.join(GAMEPLAY, "experiments");
-export const COACH_DIR = path.join(GAMEPLAY, "coach");
+export const COACH_MD = path.join(GAMEPLAY, "coach.md");
+export const COACH_LOG = path.join(GAMEPLAY, "coach-log.md");
+export const PLAYBOOK_JSON = path.join(GAMEPLAY, "playbook.json");
 export const BELIEFS_CSV = path.join(GAMEPLAY, "beliefs.csv");
 export const INFRA_CSV = path.join(GAMEPLAY, "infrastructure_feedback.csv");
-export const GYMS_JSON = path.join(GAMEPLAY, "gyms.json");
+export const GYMS_JSONL = path.join(GAMEPLAY, "gyms.jsonl");
 
 /** The bot's goal options reach this far, and a target given up on is noted for this long. */
 export const PLAN_RANGE = 600;
@@ -727,13 +730,32 @@ export async function addGames(name: string, entries: string[]) {
 
 /** Per area: experiments done, open and retired. */
 export function coverage(rows: Experiment[]): string {
-  const lines = ["| Area | Done | Open | Retired | What it covers |", "| --- | --- | --- | --- | --- |"];
+  const lines = ["| Area | Done | Open | Retired | Last loop with games | What it covers |", "| --- | --- | --- | --- | --- | --- |"];
   for (const [area, about] of Object.entries(AREAS)) {
     const rs = rows.filter((r) => r.area === area);
-    lines.push(`| ${area} | ${rs.filter((r) => r.status === "done").length} | ${rs.filter((r) => r.status === "proposed" || r.status === "running" || r.status === "recheck").length} | ${rs.filter((r) => r.status === "retired").length} | ${about} |`);
+    const last = lastLoopTested(rows, area as Area);
+    lines.push(`| ${area} | ${rs.filter((r) => r.status === "done").length} | ${rs.filter((r) => r.status === "proposed" || r.status === "running" || r.status === "recheck").length} | ${rs.filter((r) => r.status === "retired").length} | ${last === 0 ? "never" : `loop ${last}`} | ${about} |`);
   }
   return lines.join("\n");
 }
+
+/** The loops an experiment had games in, from its game ids (L4.I3.G2). */
+export const gameLoops = (e: Experiment) => [...e.games.matchAll(/^### L(\d+)\.I\d+\.G\d+/gm)].map((m) => Number(m[1]));
+
+/** The ids of an experiment's games, such as L4.I3.G2. */
+export const gameIds = (e: Experiment) => [...e.games.matchAll(/^### (L\d+\.I\d+\.G\d+)/gm)].map((m) => m[1] ?? "");
+
+export const lastLoopTested = (rows: Experiment[], area: Area) => Math.max(0, ...rows.filter((r) => r.area === area).flatMap(gameLoops));
+
+/**
+ * The areas every loop has to look at. One that had no games this loop or the last is overdue,
+ * and while any is, each iteration plays at least one game for an overdue area.
+ */
+export const REQUIRED_AREAS = ["build", "items", "economy", "bosses", "movement", "spots", "models"] as const satisfies readonly Area[];
+export const overdueAreas = (rows: Experiment[], loop: number) => REQUIRED_AREAS.filter((a) => lastLoopTested(rows, a) < loop - 1);
+
+/** Whether an experiment's games include one from a fresh start (0:00 on a new seed). */
+export const hasFreshGames = (e: Experiment) => /^- Start: a fresh game/m.test(e.games);
 
 // ---- Gyms ------------------------------------------------------------------------------------
 // Saved game states the training ground starts games from, kept so ideas can be tried again and
@@ -757,6 +779,8 @@ export type Gym = {
   seed: string;
   /** How it came to be: built from a recipe, or saved at the end of a game. */
   source: string;
+  /** Every iteration a game started from it, with when. */
+  used?: { iteration: string; at: string }[];
   /** The templates that played up to it, for a rebuild. */
   templates?: Templates;
   checkpoint?: CheckpointMeta;
@@ -766,8 +790,12 @@ export type Gym = {
 export const GYM_NAME = /^[a-z0-9]+(-[a-z0-9]+){0,6}$/;
 
 export async function readGyms(): Promise<Gym[]> {
-  const f = Bun.file(GYMS_JSON);
-  return (await f.exists()) ? ((await f.json()) as Gym[]) : [];
+  const f = Bun.file(GYMS_JSONL);
+  if (!(await f.exists())) return [];
+  return (await f.text())
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line) as Gym);
 }
 
 /** Changes gyms under the lock. */
@@ -775,64 +803,90 @@ export async function updateGyms<T>(change: (gyms: Gym[]) => T | Promise<T>): Pr
   return locked(async () => {
     const gyms = await readGyms();
     const out = await change(gyms);
-    await Bun.write(GYMS_JSON, `${JSON.stringify(gyms, null, 2)}\n`);
+    await Bun.write(GYMS_JSONL, gyms.map((g) => `${JSON.stringify(g)}\n`).join(""));
     return out;
   });
 }
 
 export function gymLine(g: Gym): string {
   const build = g.checkpoint === undefined ? "" : `; lv ${g.checkpoint.level}, hp ${g.checkpoint.hp}, ${[...g.checkpoint.weapons, ...g.checkpoint.passives, ...g.checkpoint.items].join(", ")}`;
-  return `- ${g.name} (${g.status}${g.error === undefined ? "" : `: ${g.error}`}): Nightmare ${g.difficulty} at ${clock(g.at)}${g.weapon === "" ? "" : `, started with ${g.weapon}`}${g.loadout === undefined ? "" : ", build swapped in at the start"}${build}. ${g.purpose} (by ${g.coach}, ${g.source})`;
+  const used = g.used === undefined || g.used.length === 0 ? "never used" : `used in ${g.used.length} iterations, last ${g.used.at(-1)?.iteration}`;
+  return `- ${g.name} (${g.status}${g.error === undefined ? "" : `: ${g.error}`}): Nightmare ${g.difficulty} at ${clock(g.at)}${g.weapon === "" ? "" : `, started with ${g.weapon}`}${g.loadout === undefined ? "" : ", build swapped in at the start"}${build}. ${g.purpose} (by ${g.coach}, ${g.source}; ${used})`;
 }
 
 // ---- The coach ---------------------------------------------------------------------------------
+// coach.md holds the coach's three prompts, each a part under its own # heading; the coach rewrites
+// one part at a time.
 
-export const COACH_FILES = {
-  dir: COACH_DIR,
-  experiments: path.join(COACH_DIR, "experiments.md"),
-  fullRun: path.join(COACH_DIR, "full-run.md"),
-  reflect: path.join(COACH_DIR, "reflect.md"),
-  playbook: path.join(COACH_DIR, "playbook.json"),
-  log: path.join(COACH_DIR, "log.md"),
-  state: path.join(COACH_DIR, "state.json"),
-};
-export const PROMPT_KEYS = { experiments: "experiments.md", fullRun: "full-run.md", reflect: "reflect.md" } as const;
-export type PromptKey = keyof typeof PROMPT_KEYS;
+export const PROMPT_TITLES = { experiments: "Experiments", fullRun: "Full run", reflect: "Reflect" } as const;
+export type PromptKey = keyof typeof PROMPT_TITLES;
+const PROMPT_KEYS = Object.keys(PROMPT_TITLES) as PromptKey[];
+
+export function splitPrompts(text: string): Record<PromptKey, string> {
+  const parts = text.split(/^(?=# )/m).map((p) => p.trim()).filter(Boolean);
+  const out = {} as Record<PromptKey, string>;
+  for (const key of PROMPT_KEYS) {
+    const part = parts.find((p) => p.split("\n")[0] === `# ${PROMPT_TITLES[key]}`);
+    if (part === undefined) throw new Error(`coach.md has no "# ${PROMPT_TITLES[key]}" part`);
+    out[key] = part;
+  }
+  return out;
+}
+
+export const readPrompts = async () => splitPrompts(await Bun.file(COACH_MD).text());
+
+export async function writePrompts(prompts: Record<PromptKey, string>) {
+  await Bun.write(COACH_MD, `${PROMPT_KEYS.map((k) => prompts[k].trim()).join("\n\n")}\n`);
+}
+
+/** A rewritten part: it keeps its # heading and adds no other, so coach.md still splits into its three parts. */
+export function checkPromptPart(key: PromptKey, text: string): Checked<string> {
+  const heading = `# ${PROMPT_TITLES[key]}`;
+  const body = text.trim().startsWith(heading) ? text.trim() : `${heading}\n\n${text.trim()}`;
+  const other = body.split("\n").slice(1).find((l) => /^# /.test(l));
+  return other === undefined ? { value: body } : { errors: [`prompts.${key} may hold only its own # heading; use ## for sections, not "${other}"`] };
+}
 
 /** The templates and starting weapon ("" for the game's Random) the coach currently plays best with. */
 export type Playbook = { templates: Templates; weapon: string; updated: string; why: string };
 
 export async function readPlaybook(): Promise<Playbook> {
-  const f = Bun.file(COACH_FILES.playbook);
+  const f = Bun.file(PLAYBOOK_JSON);
   if (!(await f.exists())) return { templates: DEFAULT_TEMPLATES, weapon: "", updated: "never", why: "the built-in defaults" };
   const raw = (await f.json()) as Playbook;
   const t = checkTemplates(raw.templates, DEFAULT_TEMPLATES);
-  if ("errors" in t) throw new Error(`${COACH_FILES.playbook}: ${t.errors.join("; ")}`);
+  if ("errors" in t) throw new Error(`${PLAYBOOK_JSON}: ${t.errors.join("; ")}`);
   return { ...raw, templates: t.value };
 }
 
 export async function writePlaybook(p: Playbook) {
-  await Bun.write(COACH_FILES.playbook, `${JSON.stringify(p, null, 2)}\n`);
+  await Bun.write(PLAYBOOK_JSON, `${JSON.stringify(p, null, 2)}\n`);
 }
 
-/** Where the coach's loop stands, so a restarted loop goes on from there. */
+/** Where the coach's loop stands. */
 export type CoachState = { loop: number; iteration: number };
-export async function readCoachState(): Promise<CoachState> {
-  const f = Bun.file(COACH_FILES.state);
-  return (await f.exists()) ? ((await f.json()) as CoachState) : { loop: 1, iteration: 1 };
+
+/**
+ * Where the loop goes on from, read off the last entry of the coach's log: an experiment
+ * iteration is logged when it is done, and a loop when its reflection is. A full run that never
+ * got its reflection is played again.
+ */
+export function stateFromLog(log: string): CoachState {
+  const last = [...log.matchAll(/^## L(\d+)\.I(\d+): ([^(\n]+)/gm)].at(-1);
+  if (last === undefined) return { loop: 1, iteration: 1 };
+  const [loop, iteration, title] = [Number(last[1]), Number(last[2]), (last[3] ?? "").trim()];
+  if (title === "reflection") return { loop: loop + 1, iteration: 1 };
+  if (iteration >= 10) return { loop, iteration: 10 };
+  return { loop, iteration: iteration + 1 };
 }
-export async function writeCoachState(s: CoachState) {
-  await Bun.write(COACH_FILES.state, `${JSON.stringify(s)}\n`);
-}
+
+export const readCoachState = async () => stateFromLog(await Bun.file(COACH_LOG).text().catch(() => ""));
 
 /** Fails at startup when the coach's prompts are missing or a loop file is unreadable. */
 export async function checkLoopFiles() {
   mkdirSync(NOTES_DIR, { recursive: true });
   mkdirSync(EXPERIMENTS_DIR, { recursive: true });
-  for (const key of Object.keys(PROMPT_KEYS) as PromptKey[]) {
-    const f = COACH_FILES[key];
-    if (!(await Bun.file(f).exists())) throw new Error(`${f} is missing`);
-  }
+  await readPrompts();
   await readBeliefs();
   await readInfra();
   await readPlaybook();
@@ -1018,3 +1072,25 @@ export function totalsLines(t: Totals): string[] {
     `Made: ${t.made.map((m) => `${m.id} at ${clock(m.at)}`).join(", ") || "no evolution, union or evolved item"}.`,
   ];
 }
+
+// ---- Telling games apart --------------------------------------------------------------------------
+
+function wordDistance(a: string[], b: string[]): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) row[j] = Math.min((prev[j] ?? 0) + 1, (row[j - 1] ?? 0) + 1, (prev[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = row;
+  }
+  return prev[b.length] ?? 0;
+}
+
+/** Words added, removed or replaced between two sets of templates, over every slot; undefined when their knobs differ. */
+export function wordsChanged(a: Templates, b: Templates): number | undefined {
+  if (JSON.stringify(a.knobs) !== JSON.stringify(b.knobs)) return undefined;
+  const words = (t: string) => t.toLowerCase().match(/[\w{}%.'-]+/g) ?? [];
+  return (Object.keys(SLOTS) as Slot[]).reduce((n, slot) => n + wordDistance(words(slotText(a, slot)), words(slotText(b, slot))), 0);
+}
+
+/** At most this many words apart, with the same knobs, two games test wording, not play. */
+export const WORDING_ONLY = 6;

@@ -10,8 +10,8 @@ import { mkdirSync } from "node:fs";
 import { type LoadoutSpec, parseLoadout } from "../src/agent/protocol";
 import { type HarnessName, checkHarness, jsonObject, runCoach } from "./coach";
 import * as loop from "./gameplay";
-import { type Checked, type Gym, type Playbook, type PromptKey, type Templates, clock } from "./gameplay";
-import { DECISION_MODEL, type GameResult, type GameSpec, type Start, Slot, onSlots } from "./slots";
+import { type BeliefRow, type Checked, type Experiment, type Gym, type Playbook, type PromptKey, type Templates, clock } from "./gameplay";
+import { DECISION_MODEL, type GameResult, type GameSpec, type Start, Slot, freshSeed, onSlots } from "./slots";
 
 const USAGE = `usage: scripts/recursive-self-improvement.ts [--coach claude:<model>@<effort>] [--loops <n>] [--slots <n>] [--eval-seed <seed>]
 
@@ -63,7 +63,6 @@ if (Bun.which("gai") === null) throw new Error("committing gameplay/ needs gai o
 
 // The notes of a full run name the coach and the model that coached it, which can change over time.
 const COACH_LABEL = `coach ${COMMITTER}`;
-const files = loop.COACH_FILES;
 await loop.checkLoopFiles();
 const RUNS = path.join(ROOT, ".runs", "rsi");
 mkdirSync(RUNS, { recursive: true });
@@ -160,15 +159,17 @@ function editableFiles(phase: "experiments" | "fullRun" | "reflect"): string {
   return [
     "# What you can change",
     "",
-    `Everything lives in gameplay/, and you change it through keys in your JSON reply (see Reply at the end). Anything you leave out stays as it is. Your prompts, playbook, log and where your loop stands are in gameplay/coach/.`,
+    `Everything lives in gameplay/, and you change it through keys in your JSON reply (see Reply at the end). Anything you leave out stays as it is. Your prompts are coach.md, your log is coach-log.md and your playbook is playbook.json.`,
     "",
     "- **beliefs.csv** (`beliefs`): what the loop holds true, each marked good (worth doing), bad (worth avoiding) or fact. Rows are never deleted, only disproved.",
     "- **experiments/** (`experiments`): one file per question, experiment_<name>.md. The loop writes every game played for an experiment into its file.",
-    "- **your playbook** (`playbook`): the templates the planner and the action model play with, their knobs, and the starting weapon. Training games play it with each game's changes; the full run plays it as it stands.",
+    phase === "fullRun"
+      ? "- **your playbook**: settled by the rehearsal above; the full run plays it, and it changes only in an experiment iteration or the reflection, on evidence."
+      : "- **your playbook** (`playbook`): the templates the planner and the action model play with, their knobs, and the starting weapon. Training games play it with each game's changes; the full run plays it as it stands. It changes only on evidence: confirmed experiments with games from 0:00 on fresh seeds.",
     ...(phase === "experiments"
-      ? ["- **games** (`games`): up to 5 training games this iteration, played side by side.", "- **gyms.json** (`gyms`): saved game states to build or retire."]
+      ? ["- **games** (`games`): up to 5 training games this iteration, played side by side.", "- **gyms.jsonl** (`gyms`): saved game states to build or retire."]
       : phase === "reflect"
-        ? ["- **the full run's notes** (`review`): your review, written into the notes file.", "- **your prompts** (`prompts`): experiments.md, full-run.md and reflect.md, which you rewrite from what this loop taught you about how you work.", "- **gyms.json** (`gyms`)."]
+        ? ["- **the full run's notes** (`review`): your review, written into the notes file.", "- **your prompts** (`prompts`): the three parts of coach.md (# Experiments, # Full run, # Reflect), which you rewrite from what this loop taught you about how you work.", "- **gyms.jsonl** (`gyms`)."]
         : []),
     "- **infrastructure_feedback.csv** (`infra`): requests for changes to the bot's code, which you cannot make. People read them and answer in the status column.",
     "",
@@ -178,7 +179,7 @@ function editableFiles(phase: "experiments" | "fullRun" | "reflect"): string {
 
 const GAMES_CONTRACT = `"games": 1 to ${MAX_GAMES} training games, played side by side, each {"experiment": the name of the experiment it serves (one that exists or that this reply adds), "label": a few words, "from": {"gym": a gym's name} or {"fresh": {"difficulty": Nightmare level 1 to 10, "weapon": a base weapon id or "random", "seed": optional, to give several fresh games the same map}}, "loadout": optional, replaces the whole build when the game starts: {"weapons": [{"id", "level"}], "passives": [{"id", "level"}], "items": [{"id", "count"}], "gold", "hp": a number or "full"} with ids from the encyclopedia, "seconds": 10 to ${MAX_GAME_SECONDS} of game time, "changes": optional {"planner", "action", "knobs"} over your playbook (only the keys that change), "saveGym": optional {"name", "purpose"} to keep the state the game ends in as a gym, if Tibo lives}. A game from a gym replays the same game state each time, so two games from one gym differ only in what the models chose; fresh games with the same seed share a map. Fresh games never get the evaluation seed.`;
 const GYMS_CONTRACT = `"gyms": gyms to build or retire: {"name": kebab-case, "purpose": what it lets you test, "difficulty": 1 to 10, "at": game seconds 0 to ${MAX_GYM_SECONDS} to save it at, "weapon": a base weapon id or "random", "loadout": optional, swapped in at 0:00} is built before this iteration's games by playing a fresh game with your playbook to that time, in 5-minute stages: a death replays that stage from its start, up to 3 times (a loadout helps for late gyms), at most ${MAX_NEW_GYMS} per reply; {"name", "retire": true} retires one.`;
-const PLAYBOOK_CONTRACT = `"playbook": optional changes to your playbook: {"planner", "action", "knobs"} (only the keys that change), "weapon": a base weapon id or "random", "why": what makes this the best you know}.`;
+const PLAYBOOK_CONTRACT = `"playbook": optional changes to your playbook: {"planner", "action", "knobs"} (only the keys that change), "weapon": a base weapon id or "random", "why": what makes this better than the playbook it replaces, "evidence": the names of the experiments that show it}. A change goes in only on evidence: every experiment named must have the result confirmed (in this reply or before) and games from 0:00 on fresh seeds, so the change beat the playbook where every run starts. Before the full run the loop plays the last full run's playbook against yours on the same fresh seeds, and keeps the old one if yours does worse.`;
 
 // ---- Facts -------------------------------------------------------------------------------------
 
@@ -203,7 +204,7 @@ function outcome(r: GameResult): string {
   if (t === undefined) return "no result";
   const taken = Object.values(t.damageTaken).reduce((a, b) => a + b, 0);
   const top = Object.entries(t.damageTaken).slice(0, 4).map(([k, v]) => `${k} ${v}`).join(", ");
-  return `${t.died ? `died after ${t.survived}s (game clock ${clock(t.end)})` : `alive after ${t.survived}s (game clock ${clock(t.end)}), health ${t.hp.end}/${t.hp.max}`}; damage taken ${Math.round(taken)}${top === "" ? "" : ` (${top})`}; ${t.kills} kills; level ${t.level.start} to ${t.level.end}${t.plannerCalls === undefined ? "" : `; planner asked ${t.plannerCalls} times, action model ${t.actionCalls ?? 0}`}; ended with ${[...t.weapons, ...t.passives].join(", ") || "nothing"}${r.savedGym === undefined ? "" : `; saved as gym ${r.spec.saveGym?.name}`}`;
+  return `${t.died ? `died after ${t.survived}s (game clock ${clock(t.end)})` : `alive after ${t.survived}s (game clock ${clock(t.end)}), health ${t.hp.end}/${t.hp.max}`}; damage taken ${Math.round(taken)}${top === "" ? "" : ` (${top})`}; ${t.kills} kills; level ${t.level.start} to ${t.level.end}${t.plannerCalls === undefined ? "" : `; planner asked ${t.plannerCalls} times, action model ${t.actionCalls ?? 0}`}${t.snapshotAgeMs === undefined ? "" : `; the models saw the game ${t.snapshotAgeMs.p50} ms late (p90 ${t.snapshotAgeMs.p90})`}; ended with ${[...t.weapons, ...t.passives].join(", ") || "nothing"}${r.savedGym === undefined ? "" : `; saved as gym ${r.spec.saveGym?.name}`}`;
 }
 
 function gameEntry(r: GameResult, gyms: Gym[], full: boolean): string {
@@ -222,7 +223,7 @@ async function facts(state: loop.CoachState, playbook: Playbook): Promise<string
   const experiments = await loop.readExperiments();
   const gyms = await loop.readGyms();
   const last = await lastGames();
-  const log = await Bun.file(files.log).text().catch(() => "");
+  const log = await Bun.file(loop.COACH_LOG).text().catch(() => "");
   const cleared = await ladder();
   const open = experiments.filter((e) => e.status !== "done" && e.status !== "retired");
   const closed = experiments.filter((e) => e.status === "done" || e.status === "retired");
@@ -247,7 +248,7 @@ async function facts(state: loop.CoachState, playbook: Playbook): Promise<string
     open.map((e) => loop.renderExperiment(e)).join("\n\n---\n\n") || "(none)",
     "## Finished experiments",
     closed.map((e) => `- ${e.name} (${e.status}${e.result === "" ? "" : `, ${e.result}`}, ${e.area}): ${e.title}. ${e.findings.split("\n")[0] ?? ""}`).join("\n") || "(none)",
-    "## Gyms (gameplay/gyms.json)",
+    "## Gyms (gameplay/gyms.jsonl)",
     gyms.map(loop.gymLine).join("\n") || "(none)",
     "## Your log, newest last",
     log.length > 40_000 ? `(older entries cut)\n${log.slice(-40_000)}` : log || "(empty)",
@@ -294,17 +295,37 @@ function describeChanges(raw: { planner?: unknown; action?: unknown; knobs?: unk
   ].join(", ");
 }
 
-function checkPlaybook(raw: unknown, now: Playbook, stamp: string, errors: string[]): Playbook | undefined {
+/** The experiments and beliefs as they would stand with a reply's edits. */
+function afterEdits(before: loop.Tables, edits: loop.LoopEdits | undefined): { experiments: Experiment[]; beliefs: BeliefRow[] } {
+  const defined = <T extends object>(o: T) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+  const experiments = before.experiments.map((e) => {
+    const edit = edits?.experiments?.find((x) => x.name === e.name);
+    return edit === undefined ? e : ({ ...e, ...defined(edit) } as Experiment);
+  });
+  for (const edit of edits?.experiments ?? [])
+    if (!experiments.some((e) => e.name === edit.name)) experiments.push({ title: "", status: "proposed", area: "models", result: "", created: "", updated: "", hypothesis: "", method: "", findings: "", games: "", ...defined(edit) } as Experiment);
+  return { experiments, beliefs: loop.upsert(edits?.beliefs ?? [], before.beliefs) };
+}
+
+function checkPlaybook(raw: unknown, now: Playbook, stamp: string, experiments: Experiment[], errors: string[]): Playbook | undefined {
   if (raw === undefined) return undefined;
   if (typeof raw !== "object" || raw === null) {
     errors.push("playbook must be an object");
     return undefined;
   }
   const p = raw as Record<string, unknown>;
+  const evidence = Array.isArray(p.evidence) ? p.evidence.filter((x): x is string => typeof x === "string") : [];
+  if (evidence.length === 0) errors.push("playbook.evidence must name the confirmed experiments that show the change beats the playbook");
+  for (const name of evidence) {
+    const e = experiments.find((x) => x.name === name);
+    if (e === undefined) errors.push(`playbook.evidence: no experiment ${name}`);
+    else if (e.result !== "confirmed") errors.push(`playbook.evidence: ${name} is ${e.result || "not concluded"}, not confirmed`);
+    else if (!loop.hasFreshGames(e)) errors.push(`playbook.evidence: ${name} has no games from 0:00 on a fresh seed, where every run starts`);
+  }
   const t = loop.checkTemplates(p as { planner?: unknown; action?: unknown; knobs?: unknown }, now.templates);
   if ("errors" in t) errors.push(...t.errors.map((e) => `playbook: ${e}`));
   const weapon = p.weapon === undefined ? now.weapon : startWeapon(p.weapon, "playbook.weapon", errors);
-  if (!loop.isText(p.why)) errors.push("playbook.why must say what makes it the best you know");
+  if (!loop.isText(p.why)) errors.push("playbook.why must say what makes it better than the playbook it replaces");
   return "value" in t ? { templates: t.value, weapon, updated: stamp, why: String(p.why ?? "") } : undefined;
 }
 
@@ -403,6 +424,20 @@ function checkGames(raw: unknown, ctx: { playbook: Playbook; gyms: Gym[]; experi
       ...(saveGym === undefined ? {} : { saveGym }),
     });
   }
+  // Two games that are the same game but for a few words test phrasing, not play.
+  const sameStart = (a: GameSpec, b: GameSpec) => JSON.stringify([a.from, a.loadout, a.seconds]) === JSON.stringify([b.from, b.loadout, b.seconds]);
+  const close = (a: Templates, b: Templates) => {
+    const n = loop.wordsChanged(a, b);
+    return n !== undefined && n > 0 && n <= loop.WORDING_ONLY ? n : undefined;
+  };
+  for (const [i, a] of out.entries()) {
+    const fromPlaybook = a.changes === "" ? undefined : close(a.templates, ctx.playbook.templates);
+    if (fromPlaybook !== undefined) errors.push(`${a.id} differs from your playbook in ${fromPlaybook} words only; test changes to what the bot does, not to how a prompt is phrased`);
+    for (const b of out.slice(i + 1)) {
+      const n = sameStart(a, b) ? close(a.templates, b.templates) : undefined;
+      if (n !== undefined) errors.push(`${a.id} and ${b.id} differ in ${n} words only; test changes to what the bot does, not to how a prompt is phrased`);
+    }
+  }
   return out;
 }
 
@@ -462,8 +497,9 @@ async function buildClaimed(claimed: Gym[], templates: Templates): Promise<strin
 const stampOf = (s: loop.CoachState) => `L${s.loop}.I${s.iteration}`;
 const tagOf = (s: loop.CoachState) => `L${s.loop}.I${s.iteration}`;
 
+/** One entry per iteration; the last one also tells a restarted loop where it stands (see stateFromLog). */
 async function appendLog(state: loop.CoachState, title: string, body: string) {
-  await Bun.write(files.log, `${await Bun.file(files.log).text().catch(() => "")}\n## ${tagOf(state)}: ${title} (${new Date().toISOString().slice(0, 16).replace("T", " ")})\n\n${body.trim()}\n`);
+  await Bun.write(loop.COACH_LOG, `${await Bun.file(loop.COACH_LOG).text().catch(() => "")}\n## ${tagOf(state)}: ${title} (${new Date().toISOString().slice(0, 16).replace("T", " ")})\n\n${body.trim()}\n`);
 }
 
 type ExperimentReply = { summary: string; edits: loop.LoopEdits; games: GameSpec[]; gyms: GymRequest; playbook?: Playbook };
@@ -472,7 +508,7 @@ async function experimentIteration(state: loop.CoachState) {
   const tag = tagOf(state);
   const stamp = stampOf(state);
   const playbook = await loop.readPlaybook();
-  const instructions = await Bun.file(files.experiments).text();
+  const instructions = (await loop.readPrompts()).experiments;
   const prompt = [
     editableFiles("experiments"),
     instructions,
@@ -493,9 +529,14 @@ async function experimentIteration(state: loop.CoachState) {
     if ("errors" in edits) errors.push(...edits.errors);
     if (!loop.isText(raw.summary)) errors.push("summary must be a short paragraph");
     const gyms = checkGyms(raw.gyms, gymsBefore, stamp, errors);
-    const pb = checkPlaybook(raw.playbook, playbook, stamp, errors);
-    const experiments = new Set([...before.experiments.map((e) => e.name), ...("value" in edits ? (edits.value.experiments ?? []).map((e) => e.name) : [])]);
+    const after = afterEdits(before, "value" in edits ? edits.value : undefined);
+    const pb = checkPlaybook(raw.playbook, playbook, stamp, after.experiments, errors);
+    const experiments = new Set(after.experiments.map((e) => e.name));
     const games = checkGames(raw.games, { playbook: pb ?? playbook, gyms: [...gymsBefore, ...gyms.build], experiments, tag }, errors);
+    const overdue = loop.overdueAreas(after.experiments, state.loop);
+    const areaOf = (name: string | undefined) => after.experiments.find((e) => e.name === name)?.area;
+    if (overdue.length > 0 && !games.some((g) => (overdue as readonly string[]).includes(areaOf(g.experiment) ?? "")))
+      errors.push(`no game this loop or the last has tested ${overdue.join(", ")}; this iteration must play at least one game for an experiment in one of those areas`);
     if (errors.length > 0 || !("value" in edits)) return { errors };
     return { value: { summary: String(raw.summary), edits: edits.value, games, gyms, ...(pb === undefined ? {} : { playbook: pb }) } };
   });
@@ -563,51 +604,88 @@ async function experimentIteration(state: loop.CoachState) {
       else all.push(gym);
     });
   }
+  const usedGyms = new Set(results.flatMap((r) => ("gym" in r.spec.from && r.error === undefined ? [r.spec.from.gym] : [])));
+  if (usedGyms.size > 0)
+    await loop.updateGyms((all) => {
+      for (const g of all) if (usedGyms.has(g.name) && !g.used?.some((u) => u.iteration === tag)) g.used = [...(g.used ?? []), { iteration: tag, at: new Date().toISOString() }];
+    });
   for (const r of results) if (r.spec.experiment !== undefined) await loop.addGames(r.spec.experiment, [gameEntry(r, gyms, false)]);
   await Bun.write(path.join(RUNS, "last-games.json"), JSON.stringify({ tag, results, gyms: gymLines } satisfies LastGames, null, 2));
-  await appendLog(state, "experiments", [reply.summary, "", ...results.map((r) => `- ${r.spec.id} ${r.spec.label} (${r.spec.experiment}): ${outcome(r)}`), ...gymLines.map((l) => `- ${l}`)].join("\n"));
+  const lived = results.filter((r) => r.result !== undefined && !r.result.died).length;
+  const played = [...new Set(results.map((r) => r.spec.experiment))].join(", ");
+  // The games themselves are in their experiments' files; the log keeps what the coach made of them.
+  await appendLog(state, "experiments", `${reply.summary}\n\nGames: ${results.length}, ${lived} lived, for ${played || "no experiment"}.${gymLines.length === 0 ? "" : ` ${gymLines.join(" ")}`}`);
 }
 
-type FullRunReply = { summary: string; intent: string; edits: loop.LoopEdits; playbook?: Playbook };
+type FullRunReply = { summary: string; intent: string; edits: loop.LoopEdits };
+
+/** The playbook the last full run played, from its notes: what a candidate playbook has to beat. */
+async function lastFullRunPlaybook(): Promise<{ templates: Templates; weapon: string; from: string } | undefined> {
+  for (const name of await loop.notesFiles()) {
+    const text = await Bun.file(path.join(loop.NOTES_DIR, name)).text();
+    const t = loop.notesTemplates(text);
+    // Runs from before the lockstep ban carry the knob and do not parse; they are not a baseline any more.
+    if (!("value" in t)) continue;
+    const started = loop.notesField(text, "Starting weapon")?.split(" ")[0] ?? "";
+    return { templates: t.value, weapon: IDS.base.has(started) ? started : "", from: name };
+  }
+  return undefined;
+}
+
+type Rehearsal = { text: string; reverted: boolean };
 
 /**
- * The playbook as it stands, played unchanged from fresh games on new seeds at the full run's level.
- * Nine iterations of tuning one moment can break another (sonnet-medium's loop 2 tuned minutes 16
- * to 20 and its full run died at 6:42), so the full-run plan sees this before it settles.
+ * Before the full run: the playbook as it stands against the last full run's, on the same fresh
+ * seeds at the full run's level from 0:00. Nine iterations of tuning one moment can break another
+ * (sonnet-medium's loop 2 tuned minutes 16 to 20 and its full run died at 6:42), so a candidate
+ * that lives in fewer games than the old playbook is set aside, and the full run plays the old one.
  */
-async function rehearse(state: loop.CoachState, playbook: Playbook): Promise<string> {
+async function rehearse(state: loop.CoachState, playbook: Playbook): Promise<Rehearsal> {
   const tag = tagOf(state);
   const level = (await ladder()) + 1;
   await refreshGames();
-  const specs: GameSpec[] = slots.map((_, i) => ({ id: `${tag}.R${i + 1}`, label: "the playbook, unchanged", from: { fresh: { difficulty: level, weapon: playbook.weapon } }, seconds: MAX_GAME_SECONDS, templates: playbook.templates, changes: "" }));
+  const baseline = await lastFullRunPlaybook();
+  const same = baseline === undefined || (JSON.stringify(baseline.templates) === JSON.stringify(playbook.templates) && baseline.weapon === playbook.weapon);
+  const seeds = slots.map(() => freshSeed(EVAL_SEED));
+  const arm = (label: string, templates: Templates, weapon: string, mark: string): GameSpec[] =>
+    seeds.map((seed, i) => ({ id: `${tag}.R${i + 1}${mark}`, label, from: { fresh: { difficulty: level, weapon, seed } }, seconds: MAX_GAME_SECONDS, templates, changes: "" }));
+  const specs = [...arm("your playbook", playbook.templates, playbook.weapon, same ? "" : "a"), ...(same || baseline === undefined ? [] : arm("the last full run's playbook", baseline.templates, baseline.weapon, "b"))];
   const gyms = await loop.readGyms();
   const results = await onSlots(slots, specs, async (slot, spec) => {
-    const r = await slot.play(spec, gyms, EVAL_SEED, (g) => buildGym(slot, g, playbook.templates));
+    const r = await slot.play(spec, gyms, EVAL_SEED, (g) => buildGym(slot, g, spec.templates));
     console.log(`${spec.id}: ${outcome(r)}`);
     return r;
   });
-  const lived = results.filter((r) => r.result !== undefined && !r.result.died).length;
-  await appendLog(state, "rehearsal", `The playbook, unchanged, on ${results.length} fresh Nightmare ${level} games of ${MAX_GAME_SECONDS}s: ${lived} lived.\n\n${results.map((r) => `- ${r.spec.id}: ${outcome(r)}`).join("\n")}`);
-  return [`## Your playbook as it stands, rehearsed: ${lived} of ${results.length} fresh Nightmare ${level} games on new seeds lived ${MAX_GAME_SECONDS}s`, "The loop played your playbook unchanged on fresh seeds, to catch a change that helped one moment but hurt the opening. Weigh it before you settle the playbook.", ...results.map((r) => gameEntry(r, gyms, false))].join("\n\n");
+  const livedOf = (rs: GameResult[]) => rs.filter((r) => r.result !== undefined && !r.result.died).length;
+  const mine = results.filter((r) => r.spec.label === "your playbook");
+  const theirs = results.filter((r) => r.spec.label !== "your playbook");
+  const reverted = !same && baseline !== undefined && livedOf(mine) < livedOf(theirs);
+  if (reverted && baseline !== undefined)
+    await loop.writePlaybook({ templates: baseline.templates, weapon: baseline.weapon, updated: stampOf(state), why: `set back by the loop before the full run: on the same ${seeds.length} fresh seeds the candidate lived in ${livedOf(mine)} games and the last full run's playbook (${baseline.from}) in ${livedOf(theirs)}` });
+  const verdict = same
+    ? `Your playbook is the one the last full run played; it lived in ${livedOf(mine)} of ${mine.length} fresh Nightmare ${level} games of ${MAX_GAME_SECONDS}s.`
+    : `On the same ${seeds.length} fresh Nightmare ${level} seeds, your playbook lived in ${livedOf(mine)} games and the last full run's in ${livedOf(theirs)}. ${reverted ? "Yours did worse, so the loop set it back to the last full run's playbook, which the full run will play." : "Yours did no worse, so the full run plays it."}`;
+  await appendLog(state, "rehearsal", verdict);
+  return { reverted, text: ["## The rehearsal", verdict, ...results.map((r) => gameEntry(r, gyms, false))].join("\n\n") };
 }
 
 async function fullRun(state: loop.CoachState): Promise<string | undefined> {
   const tag = tagOf(state);
   const stamp = stampOf(state);
-  const playbook = await loop.readPlaybook();
-  const instructions = await Bun.file(files.fullRun).text();
-  const rehearsal = await rehearse(state, playbook);
+  const instructions = (await loop.readPrompts()).fullRun;
+  const rehearsal = await rehearse(state, await loop.readPlaybook());
   if (stopping) return undefined;
+  const playbook = await loop.readPlaybook();
   const prompt = [
     editableFiles("fullRun"),
     instructions,
-    rehearsal,
+    rehearsal.text,
     await facts(state, playbook),
     "# Reply",
     NO_TOOLS,
-    '"summary": what the last games showed and what the full run puts into practice, in a short paragraph for your log.',
-    '"intent": what the full run plays and why, in a short paragraph for the notes and for a person watching.',
-    PLAYBOOK_CONTRACT,
+    '"summary": what this loop\'s games showed and what the full run puts into practice, in a short paragraph for your log.',
+    '"intent": what the full run plays and why, in a short paragraph for the notes and for a person watching. The full run plays the playbook the rehearsal settled; it cannot change here.',
+    "Every experiment that had games this loop needs its verdict now: its result (confirmed, refuted or inconclusive) and status done, and a belief in beliefs.csv whose experiments column names it, carrying what it found.",
     loop.EDITS_CONTRACT,
   ].join("\n\n");
   const before = await loop.readTables();
@@ -617,14 +695,16 @@ async function fullRun(state: loop.CoachState): Promise<string | undefined> {
     if ("errors" in edits) errors.push(...edits.errors);
     if (!loop.isText(raw.summary)) errors.push("summary must be a short paragraph");
     if (!loop.isText(raw.intent)) errors.push("intent must be a short paragraph");
-    const pb = checkPlaybook(raw.playbook, playbook, stamp, errors);
+    if (raw.playbook !== undefined) errors.push("the full run plays the playbook the rehearsal settled; leave playbook out, and change it in an experiment iteration, on evidence");
+    const after = afterEdits(before, "value" in edits ? edits.value : undefined);
+    for (const e of after.experiments.filter((x) => loop.gameLoops(x).includes(state.loop))) {
+      if (e.result === "" || e.status !== "done") errors.push(`experiment ${e.name} had games this loop: give it a result (confirmed, refuted or inconclusive) and status done`);
+      if (!after.beliefs.some((b) => b.experiments.split(/[\s,;]+/).includes(e.name))) errors.push(`experiment ${e.name} had games this loop: add or update a belief whose experiments column names it, with what it found`);
+    }
     if (errors.length > 0 || !("value" in edits)) return { errors };
-    return { value: { summary: String(raw.summary), intent: String(raw.intent), edits: edits.value, ...(pb === undefined ? {} : { playbook: pb }) } };
+    return { value: { summary: String(raw.summary), intent: String(raw.intent), edits: edits.value } };
   });
-  if (reply !== undefined) {
-    await loop.applyEdits(reply.edits, stamp);
-    if (reply.playbook !== undefined) await loop.writePlaybook(reply.playbook);
-  }
+  if (reply !== undefined) await loop.applyEdits(reply.edits, stamp);
   const final = await loop.readPlaybook();
   const intent = reply?.intent ?? "The coach gave no plan; the run plays the playbook as it stands.";
   await appendLog(state, "full run", reply?.summary ?? intent);
@@ -659,8 +739,8 @@ async function reflect(state: loop.CoachState, notesFile: string | undefined) {
   const tag = `${tagOf(state)}.reflect`;
   const stamp = stampOf(state);
   const playbook = await loop.readPlaybook();
-  const keys = Object.keys(loop.PROMPT_KEYS) as PromptKey[];
-  const prompts = Object.fromEntries(await Promise.all(keys.map(async (k) => [k, await Bun.file(files[k]).text()] as const))) as Record<PromptKey, string>;
+  const keys = Object.keys(loop.PROMPT_TITLES) as PromptKey[];
+  const prompts = await loop.readPrompts();
   const notes = notesFile === undefined ? "(the full run left no notes: it was cut short)" : await Bun.file(notesFile).text();
   const runLog = notesFile === undefined ? "" : await loop.logForPrompt(loop.notesField(notes, "Log") ?? "", 200_000);
   const prompt = [
@@ -672,13 +752,14 @@ async function reflect(state: loop.CoachState, notesFile: string | undefined) {
     "One row per model call (plan: the planner chose the next goal; pick: it took a card; move: the action model chose a step) and per goal that started or ended, with the player's state. hp_lost is health lost since the row before.",
     runLog || "(no log)",
     "# Your prompts as they stand",
-    ...keys.flatMap((k) => [`## ${loop.PROMPT_KEYS[k]} (\`${k}\`)`, prompts[k]]),
+    "Each part of coach.md, as it stands (the key to rewrite it with is in brackets):",
+    ...keys.map((k) => `(\`${k}\`)\n${prompts[k]}`),
     await facts(state, playbook),
     "# Reply",
     NO_TOOLS,
-    '"review": your review of the full run in Markdown, with the sections reflect.md asks for, under ## headings; it goes into the notes file.',
+    '"review": your review of the full run in Markdown, with the sections coach.md # Reflect asks for, under ## headings; it goes into the notes file.',
     '"summary": what this loop taught you and what the next loop should do differently, in a short paragraph for your log.',
-    `"prompts": {"experiments", "fullRun", "reflect"}: the whole new text of each prompt you rewrite (under ${PROMPT_LIMIT} characters, keeping every ## section). Rewrite what this loop showed works badly for you; leave a prompt out to keep it.`,
+    `"prompts": {"experiments", "fullRun", "reflect"}: the whole new text of each part of coach.md you rewrite, with its # heading (under ${PROMPT_LIMIT} characters, keeping every ## section and adding no other # heading). Rewrite what this loop showed works badly for you; leave a prompt out to keep it.`,
     GYMS_CONTRACT,
     PLAYBOOK_CONTRACT,
     loop.EDITS_CONTRACT,
@@ -693,16 +774,21 @@ async function reflect(state: loop.CoachState, notesFile: string | undefined) {
     if (!loop.isText(raw.summary)) errors.push("summary must be a short paragraph");
     const rewrites: Partial<Record<PromptKey, string>> = {};
     for (const [k, v] of Object.entries((raw.prompts ?? {}) as Record<string, unknown>)) {
-      if (!(k in loop.PROMPT_KEYS)) errors.push(`prompts.${k} is not a prompt; they are ${keys.join(", ")}`);
-      else if (!loop.isText(v) || v.length > PROMPT_LIMIT) errors.push(`prompts.${k} must be the whole new text, under ${PROMPT_LIMIT} characters`);
+      if (!(k in loop.PROMPT_TITLES)) errors.push(`prompts.${k} is not a part of coach.md; they are ${keys.join(", ")}`);
+      else if (!loop.isText(v) || v.length > PROMPT_LIMIT) errors.push(`prompts.${k} must be the whole new text of the part, under ${PROMPT_LIMIT} characters`);
       else {
-        const loss = loop.promptLoss(prompts[k as PromptKey], v, loop.PROMPT_KEYS[k as PromptKey]);
+        const part = loop.checkPromptPart(k as PromptKey, v);
+        if ("errors" in part) {
+          errors.push(...part.errors);
+          continue;
+        }
+        const loss = loop.promptLoss(prompts[k as PromptKey], part.value, `coach.md # ${loop.PROMPT_TITLES[k as PromptKey]}`);
         if (loss !== undefined) errors.push(loss);
-        else rewrites[k as PromptKey] = v;
+        else rewrites[k as PromptKey] = part.value;
       }
     }
     const gyms = checkGyms(raw.gyms, gymsBefore, stamp, errors);
-    const pb = checkPlaybook(raw.playbook, playbook, stamp, errors);
+    const pb = checkPlaybook(raw.playbook, playbook, stamp, afterEdits(before, "value" in edits ? edits.value : undefined).experiments, errors);
     if (errors.length > 0 || !("value" in edits)) return { errors };
     return { value: { review: String(raw.review), summary: String(raw.summary), edits: edits.value, prompts: rewrites, gyms, ...(pb === undefined ? {} : { playbook: pb }) } };
   });
@@ -712,13 +798,13 @@ async function reflect(state: loop.CoachState, notesFile: string | undefined) {
   }
   await loop.applyEdits(reply.edits, stamp);
   if (reply.playbook !== undefined) await loop.writePlaybook(reply.playbook);
-  for (const [k, v] of Object.entries(reply.prompts) as [PromptKey, string][]) await Bun.write(files[k], `${v.trim()}\n`);
+  if (Object.keys(reply.prompts).length > 0) await loop.writePrompts({ ...prompts, ...reply.prompts });
   await loop.updateGyms((gyms) => {
     for (const name of reply.gyms.retire) for (const g of gyms) if (g.name === name) g.status = "retired";
     gyms.push(...reply.gyms.build.filter((g) => !gyms.some((x) => x.name === g.name)));
   });
   if (notesFile !== undefined) await Bun.write(notesFile, loop.withReview(await Bun.file(notesFile).text(), reply.review));
-  const rewrote = Object.keys(reply.prompts).map((k) => loop.PROMPT_KEYS[k as PromptKey]);
+  const rewrote = Object.keys(reply.prompts).map((k) => `coach.md # ${loop.PROMPT_TITLES[k as PromptKey]}`);
   await appendLog(state, "reflection", `${reply.summary}${rewrote.length === 0 ? "" : `\n\nRewrote ${rewrote.join(", ")}.`}`);
 }
 
@@ -762,7 +848,6 @@ for (let played = 0; played < LOOPS && !stopping; played++) {
     await experimentIteration(state);
     if (stopping) break;
     state = { ...state, iteration: state.iteration + 1 };
-    await loop.writeCoachState(state);
   }
   if (stopping) break;
   console.log(`== ${tagOf(state)}: full run`);
@@ -771,6 +856,5 @@ for (let played = 0; played < LOOPS && !stopping; played++) {
   await reflect(state, notesFile);
   await commit(state, notesFile);
   state = { loop: state.loop + 1, iteration: 1 };
-  await loop.writeCoachState(state);
 }
 await shutdown(0);

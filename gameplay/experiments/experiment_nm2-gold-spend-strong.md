@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | economy |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L3.I4 |
-| Updated | sonnet-high L3.I6 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ L3.I4: nm2-min15-natural three games with the strong text against the four uncha
 ## Findings
 
 L3.I5: strong rule lived 3 of 5 games overall (natural 1 of 2 in I4, 1 of 2 in I5 repeats, natural-b 1 of 1), against 3 of 7 for baselines on the same gyms. Deaths for both are the 18:03-18:22 Kraken window. Not adopted into the playbook; the effect is not separable.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

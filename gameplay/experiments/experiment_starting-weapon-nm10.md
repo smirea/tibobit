@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | proposed |
 | Area | build |
 | Result | - |
-| Coach | sonnet-medium |
 | Created | sonnet-medium L1.I2 |
-| Updated | sonnet-medium L1.I2 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 

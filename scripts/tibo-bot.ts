@@ -25,7 +25,7 @@ const TRIAL = args.includes("--trial") ? Number(option("trial", "")) : undefined
 if (TRIAL !== undefined && !(TRIAL > 0)) throw new Error(`--trial takes the seconds of game time to play; got ${option("trial", "nothing")}`);
 const TRIAL_RESULT = option("result", "");
 if (TRIAL !== undefined && TRIAL_RESULT === "") throw new Error("--trial needs --result <file> for what happened");
-const BASE: { templates: Templates; source: string } = await (async () => {
+const BASE: { templates: Templates; weapon?: string; source: string } = await (async () => {
   const file = option("templates", "");
   if (file === "" && TRIAL !== undefined) throw new Error("--trial needs --templates <file>, a JSON object with planner, action and knobs");
   if (file !== "") {
@@ -34,7 +34,7 @@ const BASE: { templates: Templates; source: string } = await (async () => {
     return { templates: checked.value, source: file };
   }
   const playbook = await loop.readPlaybook();
-  return { templates: playbook.templates, source: playbook.updated === "never" ? "the built-in defaults" : "the coach's playbook" };
+  return { templates: playbook.templates, weapon: playbook.weapon, source: playbook.updated === "never" ? "the built-in defaults" : "the coach's playbook" };
 })();
 // The decision model's planner persona, which picks cards and goals; the same model unless named.
 const PLAN_MODEL = option("plan-model", MODEL);
@@ -62,7 +62,8 @@ if (args.includes("--lockstep") || args.includes("--speed")) throw new Error(CRU
 const NOTES = args.includes("--notes");
 const COACH_LABEL = option("coach-label", "none");
 const INTENT = option("intent", "");
-const WEAPON = option("weapon", "");
+// Without --templates, the bot plays as the coach would: its playbook's templates and starting weapon.
+const WEAPON = args.includes("--weapon") ? option("weapon", "") : (BASE.weapon ?? "");
 // The first run plays this Open World seed in a freshly reloaded tab, or the bot stops rather than play another.
 let SEED = option("seed", "").toUpperCase();
 // For "Grok take the wheel" and trials: play the run already in progress instead of starting a fresh one.
@@ -169,6 +170,8 @@ async function setMode() {
 }
 
 const latency: number[] = [];
+/** How old each step's snapshot was, in ms: games side by side that starve each other of CPU show it here. */
+const snapshotAges: number[] = [];
 async function decide(state: string, questions: Record<string, Question>, model = MODEL): Promise<Record<string, Answer>> {
   const started = performance.now();
   const body = JSON.stringify({ model, state, questions });
@@ -1395,6 +1398,11 @@ async function main() {
       plannerCalls: planner?.calls ?? 0,
       actionCalls: latency.length - (planner?.calls ?? 0),
       avgDecisionMs: Math.round(latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length)),
+      snapshotAgeMs: (() => {
+        const sorted = [...snapshotAges].sort((a, b) => a - b);
+        const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))] ?? 0;
+        return { p50: at(0.5), p90: at(0.9) };
+      })(),
       log: runLog?.file,
     };
     if (died === undefined) {
@@ -1539,6 +1547,7 @@ async function main() {
     }
     const stepStarted = performance.now();
     modelSteered = false;
+    snapshotAges.push(s.ageMs);
     await tellLag(s.ageMs);
     if (s.screen === "choice") await choose(r, planner, runLog);
     else {

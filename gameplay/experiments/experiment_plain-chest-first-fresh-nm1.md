@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | models |
 | Result | - |
-| Coach | sonnet-medium |
 | Created | sonnet-medium L3.I2 |
-| Updated | sonnet-medium L3.I9 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ Fresh NM1 steam-vent, seeds 1313, 1414, 1515, 300s, plus the natural 5:00 gym nm
 ## Findings
 
 L3.I9 plays the unchanged playbook on seeds 2323-2727 to estimate the early death rate before the full run.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

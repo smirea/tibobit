@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | models |
 | Result | - |
-| Coach | sonnet-medium |
 | Created | sonnet-medium L3.I1 |
-| Updated | sonnet-medium L3.I2 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ Fresh NM1 steam-vent on seeds 1212, 1313, 1414 with the narrow text, a catalyst 
 ## Findings
 
 L3.I1: narrow text survived 3 of 3 but starved chests on 1313 and 1414; catalyst picks worse on 1212; control died 4:28. L3.I2 tests a tighter boss-within-100 variant on 1414.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

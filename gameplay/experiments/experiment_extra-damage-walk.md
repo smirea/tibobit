@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | movement |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L1.I1 |
-| Updated | sonnet-high L1.I1 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ Fry-knives on fresh Nightmare 1, seed 101, 300s, with extraDamage 0.06, compared
 
 ## Findings
 
-(none yet)
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

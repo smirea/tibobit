@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | build |
 | Result | - |
-| Coach | sonnet-medium |
 | Created | sonnet-medium L2.I1 |
-| Updated | sonnet-high L1.I10 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ From nm1-min10-natural-b (10:00) play to 15:00, then from nm1-min16-natural-b: d
 ## Findings
 
 L1.I10 had 0 dashes and 192 max hp when it died.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

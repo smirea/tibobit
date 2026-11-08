@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | build |
 | Result | - |
-| Coach | sonnet-medium |
 | Created | sonnet-medium L1.I7 |
-| Updated | sonnet-medium L1.I7 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ Three fresh NM1 seed 202 games, 300s: steam-vent baseline, steam-vent with planE
 
 ## Findings
 
-(none yet)
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

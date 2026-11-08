@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | items |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L2.I8 |
-| Updated | sonnet-high L2.I8 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -19,7 +18,7 @@ From nm1-min15-natural-b-gold, 300s: baseline playbook twice vs armor/dodge pick
 
 ## Findings
 
-(none yet)
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

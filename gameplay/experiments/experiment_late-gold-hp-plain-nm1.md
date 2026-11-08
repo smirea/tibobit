@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | economy |
 | Result | - |
-| Coach | sonnet-medium |
 | Created | sonnet-medium L4.I1 |
-| Updated | sonnet-medium L4.I6 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ L4.I2: from nm1-min15-plain-f, plain repeat, gold rule alone twice, hp picks alo
 ## Findings
 
 L4.I5: on plain-g 15:00 the gold rule died twice (19:21, 18:19) and plain survived twice. L4.I6 plays the plain playbook from the two 15:00 gyms saved from the 10:00 plain-g games (plain-h, gold-h), plus the gold rule on plain-h.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 

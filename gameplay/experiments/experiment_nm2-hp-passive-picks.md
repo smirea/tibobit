@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | build |
 | Result | - |
-| Coach | sonnet-high |
 | Created | sonnet-high L2.I10 |
-| Updated | sonnet-high L3.I2 |
+| Updated | reset at the restart (L4) |
 
 ## Hypothesis
 
@@ -20,6 +19,8 @@ L3.I1: from nm2-min10-natural, 300s, one game with a Gravy-Heart-after-catalysts
 ## Findings
 
 L3.I1.G5: Gravy Heart picks gave 155 max hp vs 120 and 37 vs 22 damage from the 10:00 gym; both survived. Needs a repeat from the 15:00 gym, where boss bursts are larger.
+
+Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
 
 ## Games
 
