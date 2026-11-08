@@ -135,7 +135,8 @@ async function send(c: unknown) {
 // decision replaces it. A level-up or chest still stops the game, as it does for a person.
 // `--lockstep` instead runs the game a step at a time and pauses it while the models think, so the
 // same model on the same Daily replays the same game.
-const LIVE = !args.includes("--lockstep");
+// The coach's lockstep knob can switch a run to lockstep too, unless someone watches it in the panel.
+let LIVE = !args.includes("--lockstep");
 /** Whether this run's game has been set to play live or in lockstep; a new run starts unset. */
 let modeSet = false;
 
@@ -1828,6 +1829,7 @@ async function main() {
       const skip = ready.saved && !incognito ? undefined : adopted ? "taken over mid-run" : "incognito";
       setup.seed = r.seed;
       templates = plan.templates;
+      LIVE = !args.includes("--lockstep") && (piloted || templates.knobs.lockstep < 0.5);
       notes = new RunNotes(setup, plan, prompts, skip === undefined);
       const first = r.loadout.weapons[0]?.id ?? "none";
       notes.started = startNote === "chosen" ? `${first} (chosen by the coach)` : `${first} (${startNote})`;
