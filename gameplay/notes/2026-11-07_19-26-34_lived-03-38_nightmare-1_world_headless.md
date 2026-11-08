@@ -4,7 +4,7 @@
 | --- | --- |
 | Replay | https://tibo.dog/r/?run=84z3dt42fq8kc&stats=A59mAt4IDIoBAHvqAQEAuAoIAPUBBcFQAA3vAtE4AKLwAc8eAAPWAfMUAJxqAd8UAoYLAT4wyAQACsABqgQCogAB2nEBB3pFCdvj95y2KE-Pp0OPWgERegAHAwABAAAABQEAALQBAAACCwEDCgQIpgH8AsAGAwgHLR8NKhkYJgQLCOsCkQJ0a1VUFA4FFQUARCMUAL5iEgB76hAB-EcLAHoRCgYGAQI-MK4BBwIAAAkGA9rvAXoACgKzDREBAxICA9YWAQEgEgAQYCeccwXuMjEMjvZj0N86AA |
 | Ending | died at 3:38, level 12, 1118 kills |
-| Opening | first chest listed 2:34; 0 chests opened by 2:30; 3 elite fights and 1 elites killed by 3:00; first evolution none; level 11 at 3:00 |
+| Opening | first chest listed 2:34; 0 chests opened by 2:30; first evolution none; level 11 at 3:00 |
 | Testing | E66 |
 | Seed | MRDVER |
 | Starting weapon | tater-pup (chosen by the coach) |
@@ -12,7 +12,7 @@
 | Action model | typesafe/jev-1.14-20261014 |
 | Coach | cursor composer-2.5 |
 | Bot code | e4764da docs(gameplay): cursor reviews the 2026-11-07 19:10 run, lived 14:03, testing E51 |
-| Coach prompts | coach-plan.md 99ee6853 |
+| Coach prompts | coach-plan.md 99ee6853; coach-retrospective.md 29ea3ff1 |
 | Templates from | coach-plan.md |
 | Log | /tmp/tibobit/2026-11-07_19-26-34_nightmare-1_world_headless.csv |
 
@@ -50,7 +50,69 @@ This run serves the Nightmare 1 ladder by holding the 14:03 champion stack—E44
 
 <!-- review: written by the coach from coach-retrospective.md -->
 
-(the coach is reviewing the run)
+## Summary
+
+E66 changed only `planner.goal`: while a boss is within 200, evade/keep-away should score above explore, chest, elite, gems, and charge spots. The stack matched the 14:03 champion except for that goal template (`distrustBossRange` 400, E44 directive, E60 elite line, exploreDistance 300, tater-pup). Tibo lived **3:38** (218s), level 12, on seed **MRDVER**—shorter than the E59 XEPS03 control (3:45) and far from ladder progress. The boss-window part of the hypothesis **did run**: amusing appeared at **2:00** and Colorado Queen at **3:00**; planner plans in those windows show keep-away at **84–92%** while explore stayed in the teens or twenties, unlike E59’s fade where explore beat keep-away at 2:24+ with amusing still inside 200. **Confirmed (one seed):** E66’s goal wording stops the explore takeover during boss proximity. **Inconclusive:** no chest was **listed** while a live boss was within 200 (first chest list **2:34**; amusing at **0%** by **2:34**; the only open came from the **2:43** elite at **42 hp**). The run mainly teaches that fixing boss-window goals does not fix **pre-chest explore bleed** (health **108→32** by 2:00, **0** chests opened by 2:30, **0** evolutions).
+
+## Findings
+
+- **E66 anti-fade worked on this sample (likely).** With amusing inside ~200 from **2:00–2:32** and the queen from **3:00–3:19+**, plan rows show `Keep away from enemies` at **86%** (2:00, reason boss appeared), **84%** (2:05), **92%** (2:13), **69%** (2:29); queen cycle **92%** (3:00), **90%** (3:05), **92%** (3:11, 3:14). No plan in those windows had explore above keep-away while `bosses` listed distance under 200—contrast E59 at 2:24 explore **36%** vs keep-away **27%** (amusing **91** away).
+- **Chest-during-boss rule untested (inconclusive).** Stats: first chest listed **2:34**; goals chest **1 done / 2 gave up**. Log at **2:34**: amusing **137 down-right 0%**; chest options appear only after elite kill **2:43** (`Open the chest` **86%** at **2:43**). Zero contested “open chest vs evade with boss <200.”
+- **Opening damage dominated, not boss policy (confirmed for this seed).** Minute table: **0:00** end **108/120** (−12); **1:00** **68/120** (−41, bog-slime/ketchup); **2:00** **32/120** (−36, bowling-ball/garden-slug); **3:00** **1/120** (−32, fry-fly/beetle-queen). Outcome pests: bowling-ball **19.9**, bog-slime **17.7**, fry-fly **16.2**; queen line **10.9**—minute 3 collapse matches queen-minute evade at **1 hp**, not E66 failure.
+- **Elite-at-2:00+ fired once (lead).** E60 line in `planner.goal`: after **2:36** pick, goal `Fight the Garden Slug` started; elite done **2:43** at **42/120**, chest opened **2:44** (Hash **5/8**). Goals elite **1/3** gave up—mostly explore era never listing elites as winning goal before **2:00**.
+- **Compare E59 on different seed:** E66 run is **not** a controlled replay of XEPS03; shorter life is consistent with **MRDVER** never listing a chest until **2:34** and **~0** healing vs XEPS03’s **~30** heal at 1:44.
+
+## Went well
+
+- **2:00** boss-appearance plan: keep-away **86%**, evade goal started immediately; distrustBossRange forced model steps (`forecast was not trusted: the amusing boss is 184 away` at 2:00).
+- **3:00** queen appearance: keep-away **92%** with queen **175** away; evade through **3:04** at **27/120** before bleed.
+- **2:43–2:44** elite→chest chain at **42 hp**: only evolution-adjacent power spike (Hash **5/8**, Sour Cream **2:38**).
+- **E24 dashes** at clutch: **2:34** dash **68%** during amusing telegraph; **2:57** and **3:06** dashes under bowling-ball pressure; **8** total dashes per stats.
+
+## Went poorly
+
+- **0:00–2:00 explore without chest income:** **14** explore completes, **0** chest finds; health **120→32** before amusing—directive explore-until-listed worked but seed gave no early drop.
+- **1:00–2:00** minute lost **41 hp** (stats: bog-slime, ketchup, fry-fly wave)—weak six weapons, no chest by **2:30**.
+- **2:58–3:00** evade at **32→24 hp** lost **10** on bowling-ball during evade timer (**2:58** goal end note); entered queen at **1/120** (**3:04** first under 25%).
+- **2:50–3:06** chest goals **dropped** (unopened chests **87** and **256** away in plans) for more evade—could not capitalize on post-elite chests at dying hp.
+- **3:19+** planner switched to `Fight the Bowling Ball` at **24 hp** with queen **287** away—evade dropped; death **3:38** fry-fly **10.5** last 3s, **122** total damage, **~0** healed.
+
+## Moments
+
+- **0:00** explore left **75%**—opening per E44; Spore vent minute 0 hurt. **Right call** for directive, costly seed.
+- **1:04** plan lists elite fights **34–37%** but explore **76%** wins—E60 not triggered before **2:00**. **Better:** same as E60 1:59 pivot only after clock, not here.
+- **2:00** amusing **184 down**; keep-away **86%**. **Right call**—E66 test engaged.
+- **2:16** evade cycle lost **2 hp** in 8s with amusing **83** away. **Right call** to stay evade; hp already **66/120**.
+- **2:34** amusing **0%**; dash **68%** on evade. **Right call** mechanically; amusing effectively gone.
+- **2:36** level-up during evade; elite goal **78–83%** vs open chest **45%**. **Right call** for E60 post-2:00 no-chest window.
+- **2:43** elite killed at **42 hp** on chest charge. **Right call**—first and only chest open.
+- **2:50** chest open goal dropped for evade **75%** at **42 hp**. **Better:** open second chest if boss dead and hp low.
+- **3:00** queen plan keep-away **92%** at **175** away, **32/120**. **Right call**.
+- **3:06** evade at **27 hp** lost **5** in 8s (beetle-queen in hurt_by). **Right call** on goal type; **too late** on hp budget.
+- **3:19** fight Bowling Ball **48%** vs keep-away **39%** at **24 hp**. **Questionable**—low hp evade might beat chasing elite.
+- **3:38** died evading with queen **160** away, fry-fly finish. **Outcome:** movement didn’t kill; **1 hp** entering minute 3 did.
+
+## Questions
+
+- Does **planner.goal** boss-200 rule hold on **XEPS03** replay (same seed as E59 fade)? → proposed experiment.
+- Can **E60 + E66** open an elite chest before **2:00** on chest-starved seeds without explore bleed? → spots/map.
+- Why **MRDVER** lists first chest **2:34** vs champion seeds **~1:45–2:04**? → map belief.
+- At **<25% hp**, should `planner.goal` forbid **fight elite** over open chest? → movement.
+
+## Next
+
+1. **Replay XEPS03 with E66 stack** (only `planner.goal` E66 vs E59 log)—tests fade fix on the seed that showed explore winning at 2:24; moves campaign by validating boss-window policy before more seeds.
+2. **E65 recipe directive on a chest-friendly seed** (e.g. 1AS5RU0 or 12NR1J6 class)—evolution before queen minute; campaign needs power, not more evade-only runs on starved seeds.
+3. **E67 pest control** once hp **>40%** at queen: same boss templates, measure garden-slug/tomato-leech/sand-crab vs XEPS03 **97** hp minute-3—campaign blocker after goal policy fixed.
+
+## Beliefs changed
+
+- **B59** (recheck): E59 state-only boss line still fades; **E66 `planner.goal` lines on MRDVER prevented explore beating keep-away while boss <200** (evidence: plan odds 2:00–2:29, 3:00–3:14).
+- **B71** (new, lead): `planner.goal` explicit boss-within-200 yes/no on evade beats explore in-plan while boss listed under 200 (MRDVER E66 run only).
+
+## Process changes
+
+(none)
 
 <!-- /review -->
 
