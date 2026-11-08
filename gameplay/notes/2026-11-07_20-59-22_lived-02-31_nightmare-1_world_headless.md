@@ -12,7 +12,7 @@
 | Action model | typesafe/jev-1.14-20261014 |
 | Coach | cursor composer-2.5 |
 | Bot code | 7f7e456 docs(gameplay): cursor reviews the 2026-11-07 20:55 run, lived 2:21, testing E91 |
-| Coach prompts | coach-plan.md 71e16386 |
+| Coach prompts | coach-plan.md 71e16386; coach-retrospective.md 29ea3ff1 |
 | Templates from | coach-plan.md |
 | Log | /tmp/tibobit/2026-11-07_20-59-22_nightmare-1_world_headless.csv |
 
@@ -49,7 +49,72 @@ This run serves Nightmare 1 by keeping the confirmed E81 chest loop and E91 buil
 
 <!-- review: written by the coach from coach-retrospective.md -->
 
-(the coach is reviewing the run)
+## Summary
+
+This run isolated **E96**: the 1/8 new-weapon ban moved to the **first** sentence of `planner.pick`, on the E81 opener + E91 pup/catalyst stack and seed **1GKFGV6**. Tibo lived **2:31** (level 8, pup **5/8**, Gravy Heart **2/5**), listed a chest at **1:47**, and **never finished opening it** (0 chest opens). Early level-ups while pup was **1/8** took Tater Tot Pup at **100%** (0:13, 0:17); after **0:35** no held weapon stayed **1/8**, so the Rotten-Spud-at-1:06-style pick never appeared. **E96 is inconclusive** for the reorder hypothesis; **E91 readouts are partially met** (pup past 1/8 long before 6:00, Gravy Heart taken) but evolution was untested. Death was the familiar **minute-2 collapse**: **121 hp lost** in minute 2 (stats), top sources **garden-slug** (59) and **boss:amusing** (17.7), with the last stretch on a failed chest channel and elite goals that scored high but **0 elite kills**.
+
+## Findings
+
+- **E96 pick reorder untested on the critical case** — Evidence: picks at 0:13 and 0:17 with pup **1/8** were Tater Tot Pup **100%**; last weapon at **1/8** ended by 0:35 (pup 4/8). No level-up offered a **new weapon** while any held weapon was still **1/8** after that. **Surety: inconclusive** (plan's own branch: inconclusive if no qualifying pick).
+
+- **First-sentence ban does not change early pup behaviour versus E91 on a different seed** — Same pattern as 20-55-09 (pup 100% at 1/8) without needing reorder to be the cause; here reorder + directive still produced disciplined early pup levels only. **Surety: lead** (one seed, confounded with fast pup leveling).
+
+- **Chest listed 1:47 but 0 opens; channel failed under swarm before amusing** — Goals: chest **0 done / 2 failed**; explore found chest at **1:47** (goal C262165 **95%**); charging from **1:48** lost **16 hp** opening steps (1:49–1:50 compost-maggot/cave-grub); failed **1:55** (stuck 6s, action stepped off twice); amusing first seen **2:00**; second chest attempt failed **2:02**. **Surety: likely** (log + stats).
+
+- **E60 elite-after-2:00 fired in votes but produced no kills and no chest drops** — After chest fail **2:02**, Fight Potato Beetle **69%**; elite goal **dropped** same second; later elite fights (**E65565**, garden slug **E327704**) with **0 kills** by death; stats **3 elite fights, 0 killed by 3:00**. **Surety: confirmed** (this run only; matches B80/B75 patterns on short seeds).
+
+- **Minute 2 health cliff matches pest + boss, not pick failure** — Stats: **1:00** 118/149 (−28, maggot/cave-grub); **2:00** 0/149 (−121, garden-slug/amusing); first under **25%** at **2:21** (40 hp); died **2:31** at **0 hp** inside Stray Dog charge with spore vent + amusing in last 3s. **Surety: likely**.
+
+## Went well
+
+- **0:13–0:35**: Pup **1/8 → 4/8** on four straight pup picks (100%, 100%, 98%, 97% at 1:19 for 5/8) — keeps E91 build path alive on this seed.
+- **0:44–1:48**: Gravy Heart **94%** and **96%** when offered — catalyst line still wins (B67).
+- **1:47**: Planner rated **Open the chest 95%** with chest listed — directive + goal chest-yes executed (same family as E81).
+- **Opening minute**: **134 max hp** after Gravy Heart 1/5 at 0:45; only **28** lost in minute 1 per stats — better opener than 2LICF7 E91 minute-0 (−85).
+
+## Went poorly
+
+- **1:48–1:55**: Chest channel with **19+ enemies_near**; model walked off charge → **failed** at 1:55 — should have held channel or switched goal once hp bled during 1s open (B13/B54 class).
+- **2:00–2:06**: Continued chest/elite intent with **amusing** at **~100%** and **distrustBossRange 0** — page walked into **−55 hp** ruled-out steps and boss ticks; should evade or abandon chest until boss farther (E59/E66 lesson not in this template set).
+- **2:19–2:31**: **Fight elite** at **81%** inside Beetle Nest at **81 hp**, then garden-slug burst **40→0** in ~10s — should not start nest/elite chains under amusing with sub-40% hp.
+- **Pre-1:47**: **9 gems** goals vs **3 explore done / 8 dropped** — exploreDistance 300 + planEvery 5 delayed first chest list vs H53WEU-class **1:15** (B25/B85).
+
+## Moments
+
+- **0:13** level-up with pup **1/8**: Tater Tot Pup **100%** over Fry Lance / Golden Fry. Better: right call (E96/E91 intent).
+- **0:45** Gravy Heart 1/5: max hp **120→134**. Better: right call.
+- **0:59** Couch Potato **53%** with pup **4/8** (no weapon at 1/8). Better: right call per rules.
+- **1:12** dash **62%** on gems with compost-maggot — small chip. Better: acceptable.
+- **1:47** explore done, chest **56 right**, open chest **95%**. Better: right call.
+- **1:48** chest pick Gravy Heart **96%** while on chest. Better: right call; evolution still needs finished open.
+- **1:49–1:50** on chest: **−10 hp** in two steps, enemies **23–24**. Better: dash off or abort open sooner.
+- **1:55** chest goal **failed** (stuck, stepped off twice). Better: action.useful/hurt should favour stay on chest when charging.
+- **2:00** amusing appears; still **Open chest 55%**. Better: boss-within-200 evade (E66/E85) not in stack.
+- **2:02** chest failed; plan picks **Fight Potato Beetle 69%**. Better: evade, not elite, at **118 hp** with boss up.
+- **2:21** hp **40/149** (−32 slug tick). Better: food/evade if listed; none taken.
+- **2:31** stand still on Stray Dog **0 hp**, forecast rated stand still **dead**. Better: any move out; likely already doomed.
+
+## Questions
+
+- Does **first-in-pick 1/8 ban + explicit Skip line** change the **1:06** Rotten Spud case on **2LICF7** where Root Cellar stayed **1/8**?
+- Can the **E81 chest yes** stack **finish** the first open on **1GKFGV6**-class seeds if **distrustBossRange 400** or **boss-within-200 evade** is added without dropping pre-2:00 explores?
+- Why did **Potato Beetle elite** win **69–84%** repeatedly yet **0 kills** — fight duration, weapon DPS at pup 5/8, or action kiting away?
+
+## Next
+
+1. **E96 retest on 2LICF7** (or replay seed with documented 1:06 new-weapon offer): same pick order plus optional **"otherwise Skip"** when all non-held options are new slots — only run that can confirm/refute reorder vs E91's Rotten Spud failure.
+2. **E85/E66 on a chest-friendly seed** (H53WEU / 20-13-48 class) with **E81 goal lines + E96 pick** — separates boss evade from chest listing; campaign needs opens before amusing, not another 1GKFGV6 gems stall.
+3. **E86 or E89** on a run that reaches **12:00+** (exploit or E81) — late death is still the ladder gap; opening pick tests do not move Nightmare 10.
+
+## Beliefs changed
+
+- **B94** — confidence **likely** → **likely** (unchanged); evidence adds 1GKFGV6 E96: early **1/8** pup picks **100%**, **no** new-weapon-vs-1/8 contest after 0:35; reorder not scored on Rotten-Spud case.
+- **B85** — status **recheck** → **recheck**; evidence adds **1GKFGV6**: first chest **1:47**, **0** opens by **2:31** death with E81-style chest goal yes.
+- **B72** — confidence **likely** → **likely**; evidence adds **1GKFGV6**: pup **5/8** at death, **no** evolution, amusing window death.
+
+## Process changes
+
+(none)
 
 <!-- /review -->
 
