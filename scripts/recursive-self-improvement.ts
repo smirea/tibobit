@@ -16,7 +16,7 @@ import { DECISION_MODEL, type GameResult, type GameSpec, type Start, Slot, onSlo
 const USAGE = `usage: scripts/recursive-self-improvement.ts [--coach claude:<model>@<effort>] [--name <coach>] [--loops <n>] [--slots <n>] [--eval-seed <seed>]
 
   --coach      the coach: a harness (see scripts/coach.ts), its model, and for claude a reasoning
-               effort (default claude:claude-sonnet-5-5@high)
+               effort of high or more (default claude:claude-sonnet-5-5@high)
   --name       the coach's folder in gameplay/coaches (default from the model and effort, such as sonnet-high);
                a new coach starts from gameplay/coaches/starter
   --loops      how many loops of ten iterations to play (default: until stopped)
@@ -55,6 +55,8 @@ if (specMatch === null) throw new Error(`--coach must look like claude:claude-so
 const harness: HarnessName = checkHarness(specMatch[1] ?? "");
 const model = specMatch[2];
 const effort = specMatch[3];
+// Coaches reason at high effort or more: a lower one was ruled out for every run.
+if (harness === "claude" && !["high", "xhigh", "max"].includes(effort ?? "")) throw new Error(`the coach reasons at high effort or more (@high, @xhigh or @max), not ${effort ?? "the harness default"}`);
 const COACH = flags.name ?? `${(model ?? harness).replace(/^claude-/, "").replace(/-\d.*$/, "")}${effort === undefined ? "" : `-${effort}`}`;
 if (!/^[a-z0-9-]+$/.test(COACH) || COACH === "starter") throw new Error(`the coach's name ${COACH} must be kebab-case and not "starter"; pass --name`);
 const LOOPS = flags.loops === undefined ? Number.POSITIVE_INFINITY : Number(flags.loops);

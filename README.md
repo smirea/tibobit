@@ -92,11 +92,10 @@ The scripts split the work this way:
 
 ```sh
 ./scripts/recursive-self-improvement.ts                                         # Sonnet 5.5 at high effort, as coach sonnet-high
-./scripts/recursive-self-improvement.ts --coach claude:claude-sonnet-5-5@medium  # a second coach, sonnet-medium, alongside
 ./scripts/recursive-self-improvement.ts --loops 1 --slots 3                      # one loop, three games at a time
 ```
 
-Each process runs one coach: `--coach <harness>:<model>@<effort>` (the effort is for `claude` only), named after its model and effort unless `--name` says otherwise. It opens a main game slot (an agent server and a headless game with the profile `.runs/headless-profile-<coach>`, which holds the coach's Nightmare ladder) and `--slots` training slots (5 by default, each with its own profile), then plays loops until stopped or `--loops` is done. Where it stands is in `gameplay/coaches/<coach>/state.json`, so a restarted loop goes on from the iteration it was in. Logs, every prompt and reply, and each game's bot log go to `.runs/rsi/<coach>/`. Two coaches can run at once: they share beliefs, experiments, gyms and infrastructure requests, and every write holds a lock (`gameplay/.lock`).
+Each process runs one coach: `--coach <harness>:<model>@<effort>` (the effort is for `claude` only, and must be `high` or more), named after its model and effort unless `--name` says otherwise. It opens a main game slot (an agent server and a headless game with the profile `.runs/headless-profile-<coach>`, which holds the coach's Nightmare ladder) and `--slots` training slots (5 by default, each with its own profile), then plays loops until stopped or `--loops` is done. Where it stands is in `gameplay/coaches/<coach>/state.json`, so a restarted loop goes on from the iteration it was in. Logs, every prompt and reply, and each game's bot log go to `.runs/rsi/<coach>/`. Two coaches can run at once: they share beliefs, experiments, gyms and infrastructure requests, and every write holds a lock (`gameplay/.lock`).
 
 The coach harnesses are `claude` (run without your settings, hooks, MCP servers or tools), `grok`, `codex`, `opencode` and `cursor` (see `scripts/coach.ts`).
 
