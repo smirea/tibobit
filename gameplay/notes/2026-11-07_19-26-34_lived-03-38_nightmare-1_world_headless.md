@@ -4,7 +4,7 @@
 | --- | --- |
 | Replay | https://tibo.dog/r/?run=84z3dt42fq8kc&stats=A59mAt4IDIoBAHvqAQEAuAoIAPUBBcFQAA3vAtE4AKLwAc8eAAPWAfMUAJxqAd8UAoYLAT4wyAQACsABqgQCogAB2nEBB3pFCdvj95y2KE-Pp0OPWgERegAHAwABAAAABQEAALQBAAACCwEDCgQIpgH8AsAGAwgHLR8NKhkYJgQLCOsCkQJ0a1VUFA4FFQUARCMUAL5iEgB76hAB-EcLAHoRCgYGAQI-MK4BBwIAAAkGA9rvAXoACgKzDREBAxICA9YWAQEgEgAQYCeccwXuMjEMjvZj0N86AA |
 | Ending | died at 3:38, level 12, 1118 kills |
-| Opening | first chest listed 2:34; 0 chests opened by 2:30; first evolution none; level 11 at 3:00 |
+| Opening | first chest listed 2:34; 0 chests opened by 2:30; 3 elite fights and 1 elites killed by 3:00; first evolution none; level 11 at 3:00 |
 | Testing | E66 |
 | Seed | MRDVER |
 | Starting weapon | tater-pup (chosen by the coach) |

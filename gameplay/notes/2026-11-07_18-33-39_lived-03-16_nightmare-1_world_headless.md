@@ -4,7 +4,7 @@
 | --- | --- |
 | Replay | https://tibo.dog/r/?run=kc8667v9ffrjy&stats=A-5bAKEECAYB-EcAAADUCQMApggDj1QAy-cB5wcAxuEB8AMC-6ACOH8BCHpF4_flIY-nCdsoT5y2jDoBEo8BFwkAAAEAAAAFAAAApwEAAAILAQMIBAKiAYwCrgMDCQgPFxskJB4IFwQFA-cDIBoFHgUAe-oeAGAIEAIKU3BvcmUgdmVudBAAvmINAXG3DQYBAAcCAAAJBgPmX48BAAoCqAwRAQMWAQEgEgAQYCeccwXuMjEMjvZj0N86AA |
 | Ending | died at 3:16, level 8, 545 kills |
-| Opening | first chest listed never; 0 chests opened by 2:30; first evolution none; level 7 at 3:00 |
+| Opening | first chest listed never; 0 chests opened by 2:30; 0 elite fights and 0 elites killed by 3:00; first evolution none; level 7 at 3:00 |
 | Testing | E48, E49 |
 | Seed | 6BZ2E7 |
 | Starting weapon | starch-bolt (random) |

@@ -4,7 +4,7 @@
 | --- | --- |
 | Replay | https://tibo.dog/r/?run=q1rfwdngza4rd&stats=A4dnAOUKDLABAKOAAQMAwQoFABQNBuHJAQAD1gPQNQAjmQGBLQAfdQH8EgJ0AutHA7YuAQZ6RZy2CduMOihP4_cBEsEBRw0DAAEAAAAFAAAArQEAAAILAQMMAgjGAa4DvggDBwYMOjQwCikECQWMBsoCywE8CAUVBQD5TRoAo4AaAfhHGQDH-A8AevkOBgEABwIAAAkHA6LAAsEBAAoC1AwRAQMWAQEgEgAQYCeccwXuMjEMHZuKdO4RAA |
 | Ending | died at 3:39, level 12, 1381 kills |
-| Opening | first chest listed 2:20; 1 chests opened by 2:30; first evolution none; level 11 at 3:00 |
+| Opening | first chest listed 2:20; 1 chests opened by 2:30; 0 elite fights and 0 elites killed by 3:00; first evolution none; level 11 at 3:00 |
 | Testing | E30 |
 | Seed | Y9N9T2 |
 | Planner | typesafe/jev-1.14-20261014 |

@@ -4,7 +4,7 @@
 | --- | --- |
 | Replay | https://tibo.dog/r/?run=shnmh241myrr5&stats=A6pmAIwDCI0BAXG3AAEA1AoFAC3aBYAhAC_GAbEcAAPWAf8WANS2AccCAlACE-ACPIUBCHpF5SEJ2-P3j6coT4w6nLYBEp0BIgsCAAEAAAADAAAAtgEAAAIKAQMGBgJc6AGmAgMJCD1GExMFDQ4SBAcFlQF8bwcFBRsFAXG3TwB76iQCB0hvdCBvaWwKAAK9CQH4RwUGAQAHAgAACQYDyFedAQAKApkOEQEDEgID1hYBASASABBgJ5xzBe4yMQyO9mPQ3zoA |
 | Ending | died at 3:38, level 8, 396 kills |
-| Opening | first chest listed never; 0 chests opened by 2:30; first evolution none; level ? at 3:00 |
+| Opening | (no numbers: the log is damaged) |
 | Testing | E41 |
 | Seed | 1UNSC63 |
 | Starting weapon | tater-pup (chosen by the coach) |

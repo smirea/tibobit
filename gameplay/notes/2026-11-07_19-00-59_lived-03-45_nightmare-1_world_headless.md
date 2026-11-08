@@ -4,7 +4,7 @@
 | --- | --- |
 | Replay | https://tibo.dog/r/?run=1p5ax8en5vt9q&stats=A71pAMYJCvQBAKOAAQMAwwoHAB_xA_SAAQAUDQGTPQAttwjiOQAD1gHxFwDUtgGIEAA8LAHyDAKgAwEZKgIJekWctgnb4_flIUOPjDooT4-nARKXAR4NAgABAQAAAwAAALMBAAACCwEDCAYEiAHQA64GAwoJEUALGQwNJh8PBAwHsgSbAfEBjgFDLAsFFQUAehEgAKOAFQACvRIA-U0OAHpyDAYBAAcCAAAJBwP2rwKXAQAKAvwNEQEDEgID1hYBASASABBgJ5xzBe4yMQyO9mPQ3zoA |
 | Ending | died at 3:45, level 10, 1222 kills |
-| Opening | first chest listed 1:44; 2 chests opened by 2:30; first evolution none; level 9 at 3:00 |
+| Opening | first chest listed 1:44; 2 chests opened by 2:30; 0 elite fights and 0 elites killed by 3:00; first evolution none; level 9 at 3:00 |
 | Testing | E59 |
 | Seed | XEPS03 |
 | Starting weapon | tater-pup (chosen by the coach) |

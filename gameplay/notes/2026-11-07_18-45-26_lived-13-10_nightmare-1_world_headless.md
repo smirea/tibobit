@@ -4,7 +4,7 @@
 | --- | --- |
 | Replay | https://tibo.dog/r/?run=cw97ta788s4rh&stats=A8fyAgKYkQEnyRoAk30JHgDkJAoAx9EA4L_iAQBKZgDk6zEAtsMAt_gbACl2ANP6BgAD1gijkAYAnIcIks4DANS2CLT2AgKXiQEAyToA8oUBAMvnAPsZBjh_BertBRPgBTyFBaLNBVZnAwp6RShPjDpDj5y2CdvlIY-n7gnj97kQARPrBOUDHxoAAQAAABIEAAC9AwIAAigBDQYMBAIIBgYGAgQEDgRe9gK6Bb4KrAmSE54N-h3iIKAnkiDgLfwoAwwKYD88MEC-AV84JVIEEwrXWcYV5geeEo8BngEqkAHBAUMFFgUBMU-LAQCTfXMBb_VJAIaCRwBYHTYGDwMASmbEAQDH0c4BALbDLAcHAQUCAgUFBQkIA7nnyALrBAAKAtgtEQEDEgID1hYBASASABBgJ5xzBe4yMQyO9mPQ3zoA |
 | Ending | died at 13:10, level 39, 18584 kills |
-| Opening | first chest listed 1:34; 2 chests opened by 2:30; first evolution 3:15; level 11 at 3:00 |
+| Opening | first chest listed 1:34; 2 chests opened by 2:30; 2 elite fights and 0 elites killed by 3:00; first evolution 3:15; level 11 at 3:00 |
 | Testing | E54, E53 |
 | Seed | 10FG7AE |
 | Starting weapon | tater-pup (chosen by the coach) |

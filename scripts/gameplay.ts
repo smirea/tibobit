@@ -794,7 +794,8 @@ export function coverage(rows: ExperimentRow[]): string {
 
 /**
  * A run's opening in one line, for comparing runs: when the first chest was listed, how many
- * chests were open by 2:30, when the first evolution came, and the level at 3:00. Across the first
+ * chests were open by 2:30, how many elites (which drop chests) were fought and killed by 3:00, when
+ * the first evolution came, and the level at 3:00. Across the first
  * nine Open World runs, the three that passed 15:00 had opened three or four chests by 2:15.
  */
 export function keyNumbers(csv: string): string {
@@ -806,5 +807,8 @@ export function keyNumbers(csv: string): string {
   const opened = rows.filter((r) => r.event === "goal" && (r.goal ?? "").startsWith("C") && r.action === "done" && at(r) <= 150).length;
   const evolution = rows.find((r) => r.event === "loadout" && / 1\/1 new/.test(r.action ?? ""))?.time ?? "none";
   const level = [...rows].reverse().find((r) => r.seconds !== "" && at(r) <= 180)?.level ?? "?";
-  return `first chest listed ${listed}; ${opened} chests opened by 2:30; first evolution ${evolution}; level ${level} at 3:00`;
+  const elite = (r: Record<string, string>) => r.event === "goal" && /^E\d/.test(r.goal ?? "") && at(r) <= 180;
+  const fought = rows.filter((r) => elite(r) && r.action === "start").length;
+  const killed = rows.filter((r) => elite(r) && r.action === "done").length;
+  return `first chest listed ${listed}; ${opened} chests opened by 2:30; ${fought} elite fights and ${killed} elites killed by 3:00; first evolution ${evolution}; level ${level} at 3:00`;
 }
