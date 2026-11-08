@@ -582,14 +582,38 @@ async function experimentIteration(state: loop.CoachState) {
 
 type FullRunReply = { summary: string; intent: string; edits: loop.LoopEdits; playbook?: Playbook };
 
+/**
+ * The playbook as it stands, played unchanged from fresh games on new seeds at the full run's level.
+ * Nine iterations of tuning one moment can break another (sonnet-medium's loop 2 tuned minutes 16
+ * to 20 and its full run died at 6:42), so the full-run plan sees this before it settles.
+ */
+async function rehearse(state: loop.CoachState, playbook: Playbook): Promise<string> {
+  const tag = tagOf(state);
+  const level = (await ladder()) + 1;
+  await refreshGames();
+  const specs: GameSpec[] = slots.map((_, i) => ({ id: `${tag}.R${i + 1}`, label: "the playbook, unchanged", from: { fresh: { difficulty: level, weapon: playbook.weapon } }, seconds: MAX_GAME_SECONDS, templates: playbook.templates, changes: "" }));
+  const gyms = await loop.readGyms();
+  const results = await onSlots(slots, specs, async (slot, spec) => {
+    const r = await slot.play(spec, gyms, EVAL_SEED, (g) => buildGym(slot, g, playbook.templates));
+    console.log(`${spec.id}: ${outcome(r)}`);
+    return r;
+  });
+  const lived = results.filter((r) => r.result !== undefined && !r.result.died).length;
+  await appendLog(state, "rehearsal", `The playbook, unchanged, on ${results.length} fresh Nightmare ${level} games of ${MAX_GAME_SECONDS}s: ${lived} lived.\n\n${results.map((r) => `- ${r.spec.id}: ${outcome(r)}`).join("\n")}`);
+  return [`## Your playbook as it stands, rehearsed: ${lived} of ${results.length} fresh Nightmare ${level} games on new seeds lived ${MAX_GAME_SECONDS}s`, "The loop played your playbook unchanged on fresh seeds, to catch a change that helped one moment but hurt the opening. Weigh it before you settle the playbook.", ...results.map((r) => gameEntry(r, gyms, false))].join("\n\n");
+}
+
 async function fullRun(state: loop.CoachState): Promise<string | undefined> {
   const tag = tagOf(state);
   const stamp = stampOf(state);
   const playbook = await loop.readPlaybook(COACH);
   const instructions = await Bun.file(files.fullRun).text();
+  const rehearsal = await rehearse(state, playbook);
+  if (stopping) return undefined;
   const prompt = [
     editableFiles("fullRun"),
     instructions,
+    rehearsal,
     await facts(state, playbook),
     "# Reply",
     NO_TOOLS,
