@@ -175,13 +175,20 @@ export class Slot {
    * ladder is set to just below the level, so "highest" picks it.
    */
   async fresh(seed: string, difficulty: number, weapon: string): Promise<string> {
-    const picked = await this.freshOnce(seed, difficulty, weapon);
-    const got = (await this.state()).run?.seed;
-    if (got === seed) return picked;
-    console.error(`${this.name}: asked for seed ${seed}, the game rolled ${got ?? "nothing"}; trying once more`);
+    let first: string;
+    try {
+      const picked = await this.freshOnce(seed, difficulty, weapon);
+      const got = (await this.state()).run?.seed;
+      if (got === seed) return picked;
+      first = `the game rolled seed ${got ?? "nothing"}`;
+    } catch (e) {
+      // The start screen sometimes misses a click, such as the weapon picker showing nothing picked.
+      first = e instanceof Error ? e.message : String(e);
+    }
+    console.error(`${this.name}: a fresh game on seed ${seed} failed (${first}); trying once more`);
     const again = await this.freshOnce(seed, difficulty, weapon);
     const second = (await this.state()).run?.seed;
-    if (second !== seed) throw new Error(`asked for seed ${seed} twice, the game rolled ${got ?? "nothing"} and ${second ?? "nothing"}`);
+    if (second !== seed) throw new Error(`asked for seed ${seed} twice: ${first}, then the game rolled ${second ?? "nothing"}`);
     return again;
   }
 
@@ -226,10 +233,21 @@ export class Slot {
   }
 
   /** Loads a gym into a run here, building it first when this game build cannot load it. */
+  /**
+   * Loads a gym into a run here. A gym saved on another game build means tibo.dog shipped a new
+   * one: this game restarts onto the newest build first, and the gym is built again only when it is
+   * still older, so every slot and gym moves to the newest build instead of trading places.
+   */
   async loadGym(gym: Gym, build: (gym: Gym) => Promise<Gym>): Promise<Gym> {
     if (gym.status !== "ready" || gym.checkpoint === undefined) throw new Error(`gym ${gym.name} is ${gym.status}`);
     await this.anyRun();
-    const page = (await this.state()).gameBuild;
+    let page = (await this.state()).gameBuild;
+    if (gym.checkpoint.build !== page) {
+      console.error(`${this.name}: gym ${gym.name} is on game build ${gym.checkpoint.build}, this game on ${page ?? "?"}; restarting the game onto the newest build`);
+      await this.restartGame();
+      await this.anyRun();
+      page = (await this.state()).gameBuild;
+    }
     let ready = gym;
     if (gym.checkpoint.build !== page) ready = await build(gym);
     // Another slot may have built the gym again since this page last loaded it.

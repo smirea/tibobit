@@ -540,10 +540,10 @@ async function experimentIteration(state: loop.CoachState) {
     await Bun.sleep(30_000);
   }
   const gyms = await loop.readGyms();
-  const rebuild = (g: Gym) => buildGym(main, g, templates);
   const results = await onSlots(slots, reply.games, async (slot, spec) => {
     console.log(`${spec.id} on ${slot.name}: ${spec.label}`);
-    const r = await slot.play(spec, gyms, EVAL_SEED, rebuild);
+    // A gym is built again on the slot that needs it, which runs the newest game build.
+    const r = await slot.play(spec, gyms, EVAL_SEED, (g) => buildGym(slot, g, templates));
     console.log(`${spec.id}: ${outcome(r)}`);
     return r;
   });
