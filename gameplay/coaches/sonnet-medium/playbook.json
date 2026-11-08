@@ -2,7 +2,7 @@
   "templates": {
     "planner": {
       "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
-      "goal": "If Tibo's next goal is to {{goal}}: is that the best thing now? Rank in this order. If health is under 25%, food or evading comes first. Otherwise: opening a chest first (free pick, and it evolves weapons), fighting an elite next (it drops a chest), then collecting nearby xp gems, then exploring for new chests. Do not evade just because many pests or a boss are around; the weapons handle them.",
+      "goal": "If Tibo's next goal is to {{goal}}: is that the best thing now? Rank in this order. If health is under 25%, food or evading comes first. Otherwise: opening a chest first (free pick, and it evolves weapons), fighting an elite next (it drops a chest), then collecting nearby xp gems, then exploring for new chests. Exception: only when the game time {{time}} is between 10:00 and 15:45, gold is 300 or more, and no boss is within 300, buying a Potato Crate, visiting a Fry Cart, Spud Whetstone or a shrine rates as high as a chest. After 15:45 ignore shops and shrines. Do not evade just because many pests or a boss are around; the weapons handle them.",
       "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest? Commit to one evolution line: level the weapon that has its catalyst passive held or on offer (Steam Vent with Root Network, Locked Gatling with Masher Grip) and take the catalyst when offered. Never take Reroll when a useful card is shown. Take Gravy Heart for max hp early. Keep damage passives (Butter Pat, Hot Sauce) next, and prefer armor and dodge items when offered."
     },
     "action": {
@@ -27,6 +27,6 @@
     }
   },
   "weapon": "steam-vent",
-  "updated": "sonnet-medium L3.I10",
-  "why": "No change yet: the gold rule and hp picks need testing on 2+ seeds before shipping."
+  "updated": "sonnet-medium L4.I10",
+  "why": "No change: the L4.I10 failure was early starvation and no variant has been tested yet; shipping untested text would repeat the L3 mistake."
 }

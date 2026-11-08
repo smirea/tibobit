@@ -8,7 +8,7 @@ Write these sections: **Summary**, **What worked**, **What failed** (with game t
 
 ## Your prompts
 
-Look at which iterations taught something and which repeated known safe results, where you guessed instead of testing, and where the full run went against evidence (for example leaving out a rule that won earlier). Check whether the full run used an untested change. Rewrite the prompts so the next loop works better. Keep every ## section, and keep them short.
+Look at which iterations taught something and which repeated known safe results, where you guessed instead of testing, and where the full run went against evidence. Check whether the full run used an untested change, and whether the rehearsal overstated reliability. Rewrite the prompts so the next loop works better. Keep every ## section, and keep them short.
 
 ## Beliefs and gyms
 

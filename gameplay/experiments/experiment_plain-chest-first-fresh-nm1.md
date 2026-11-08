@@ -202,3 +202,23 @@ L3.I9 plays the unchanged playbook on seeds 2323-2727 to estimate the early deat
 - Kills 2690, by weapon: pressure-cooker 2210, steam-vent 252, hot-streak 140, grok-bot 88.
 - Bosses killed 3, elites killed 6, boss chests 9, crates bought 0, shrines used 0, items bought 0, revives used 0; gold earned 917, spent 0.
 - Made: pressure-cooker at 02:08.
+
+### L4.I9.G4: fresh plain seed 3535
+
+- Start: a fresh game on Nightmare 1 with steam-vent, seed 3535; 300s; plays the playbook.
+- Outcome: alive after 300.3s (game clock 05:00), health 66/120; damage taken 282 (boss:amusing 35.8, enemy:compost-maggot 27.6, boss:beetle-queen 22, enemy:sprout-mite 21.5); 1964 kills; level 1 to 15; planner asked 102 times, action model 781, in lockstep; ended with steam-vent 8, butter-streak 2, peeler 1, starch-plating 3, spud-sneakers 2, slow-cooker 1, root-network 3.
+- Damage taken 282, by source: boss:amusing 35.8, enemy:compost-maggot 27.6, boss:beetle-queen 22, enemy:sprout-mite 21.5, enemy:aphid 20.2, enemy:cave-grub 19.6, enemy:potato-beetle 17.1, enemy:bog-slime 16.5.
+- Damage dealt 70221, by weapon: steam-vent 38052, butter-streak 20261.2, alex 11820.9, grok-bot 87.
+- Kills 1964, by weapon: steam-vent 1019, butter-streak 677, alex 262, grok-bot 6.
+- Bosses killed 1, elites killed 4, boss chests 3, crates bought 1, shrines used 0, items bought 0, revives used 0; gold earned 500, spent 30.
+- Made: no evolution, union or evolved item.
+
+### L4.I9.G5: fresh plain seed 3636
+
+- Start: a fresh game on Nightmare 1 with steam-vent, seed 3636; 300s; plays the playbook.
+- Outcome: alive after 300s (game clock 05:00), health 192/192; damage taken 69 (boss:beetle-queen 18.4, enemy:sand-crab 10.1, enemy:snow-mold 7.8, enemy:fry-fly 5.2); 2441 kills; level 1 to 18; planner asked 102 times, action model 287, in lockstep; ended with pressure-cooker 1, hash-brown-shield 7, gravy-heart 5, butter-socks 2, hot-start 1, root-network 3, starch-plating 3.
+- Damage taken 69, by source: boss:beetle-queen 18.4, enemy:sand-crab 10.1, enemy:snow-mold 7.8, enemy:fry-fly 5.2, enemy:potato-beetle 5, Hot oil 4.8, enemy:beetle-brood 3.4, enemy:aphid 3.
+- Damage dealt 89136, by weapon: pressure-cooker 75014.8, hash-brown-shield 6382.6, alex 3806.4, steam-vent 3475.7, grok-bot 456.2.
+- Kills 2441, by weapon: pressure-cooker 2023, hash-brown-shield 208, steam-vent 101, alex 97, grok-bot 12.
+- Bosses killed 4, elites killed 8, boss chests 12, crates bought 0, shrines used 0, items bought 0, revives used 0; gold earned 630, spent 0.
+- Made: pressure-cooker at 01:56.

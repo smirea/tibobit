@@ -62,3 +62,23 @@ L3.I1: fresh seeds 3131 and 3232 lived at 5:00 with 25 and 42 damage, the NM2 5:
 - Kills 43597, by weapon: grease-fire 28464, baked-alaska 14644, spud-fence 321, potato-rain 89, alex 33, mash-golem 24, grok-bot 22.
 - Bosses killed 9, elites killed 6, boss chests 15, crates bought 6, shrines used 0, items bought 0, revives used 0; gold earned 7862, spent 838.
 - Made: no evolution, union or evolved item.
+
+### L3.I2.G5: fresh seed 3333 baseline
+
+- Start: a fresh game on Nightmare 2 with steam-vent, seed 3333; 300s; plays the playbook.
+- Outcome: alive after 300.1s (game clock 05:00), health 161/161; damage taken 84 (boss:the-masher 46.9, enemy:aphid 11.3, enemy:crumb-ant 6.2, enemy:potato-beetle 4.8); 4295 kills; level 1 to 19; planner asked 124 times, action model 380, in lockstep; ended with steam-vent 1, sack-of-russets 1, potato-rain 8, mashquake 1, tater-minigun 1, skipping-cannonball 6, masher-grip 2, gravy-heart 2, chives 1, stuffed-skin 1, big-bowl 1, butter-pat 3.
+- Damage taken 84, by source: boss:the-masher 46.9, enemy:aphid 11.3, enemy:crumb-ant 6.2, enemy:potato-beetle 4.8, enemy:sprout-mite 4.3, boss:beetle-queen 2.8, enemy:frost-flea 2.8, Hot oil 2.5.
+- Damage dealt 180961, by weapon: mashquake 82718.7, tater-minigun 29091.5, mash-wave 18547.4, sack-of-russets 16894.9, spud-lob 14347.6, locked-gatling 11451.1, potato-rain 3522.6, skipping-cannonball 2597.1.
+- Kills 4295, by weapon: mashquake 1972, mash-wave 524, tater-minigun 520, spud-lob 385, sack-of-russets 346, locked-gatling 310, potato-rain 92, skipping-cannonball 90.
+- Bosses killed 9, elites killed 12, boss chests 21, crates bought 0, shrines used 0, items bought 0, revives used 0; gold earned 1470, spent 0.
+- Made: tater-minigun at 02:58, mashquake at 03:15, sack-of-russets at 04:11.
+
+### L3.I3.G5: fresh NM2 seed 3434 baseline
+
+- Start: a fresh game on Nightmare 2 with steam-vent, seed 3434; 300s; plays the playbook.
+- Outcome: alive after 300.2s (game clock 05:00), health 130/130; damage taken 23 (Spore vent 8.8, enemy:potato-beetle 4.8, enemy:sprout-mite 2.8, enemy:aphid 2.6); 3431 kills; level 1 to 18; planner asked 121 times, action model 228, in lockstep; ended with skipping-cannonball 1, clockwork-spud 1, mashquake 1, bottomless-sack 1, grease-fire 1, root-network 2, big-bowl 3, four-eyed-spud 1, sprouting-eyes 2, thick-skin 1.
+- Damage taken 23, by source: Spore vent 8.8, enemy:potato-beetle 4.8, enemy:sprout-mite 2.8, enemy:aphid 2.6, enemy:fry-fly 2.2, enemy:compost-maggot 1.4.
+- Damage dealt 161984, by weapon: mashquake 55599, grease-fire 28266.7, pressure-cooker 23891, bottomless-sack 18889.2, grab-bag 8731.1, clockwork-spud 8658.2, mash-wave 6628.5, grok-bot 3451.9.
+- Kills 3431, by weapon: mashquake 1123, grease-fire 556, pressure-cooker 478, bottomless-sack 376, mash-wave 228, grab-bag 173, clockwork-spud 124, grok-bot 118.
+- Bosses killed 9, elites killed 9, boss chests 18, crates bought 0, shrines used 1, items bought 0, revives used 0; gold earned 1654, spent 0.
+- Made: pressure-cooker at 01:37, mashquake at 02:53, clockwork-spud at 03:13, bottomless-sack at 04:13, wildfire-roast at 04:45, grease-fire at 04:45.
