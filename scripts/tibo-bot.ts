@@ -1119,8 +1119,10 @@ function goalOptions(r: RunView): GoalOption[] {
       .filter((x) => x.kind === "heal" && x.dist < PLAN_RANGE)
       .slice(0, 2)
       .map((x) => ({ goal: { kind: "food" as const, uid: x.uid }, text: `walk to the food ${Math.round(x.dist)} away to the ${x.dir}, which heals Tibo` })),
+    // The knobs can keep elite fights off the table early or at low health, which no prompt rule
+    // managed: on Nightmare 2 a 1:00 elite fight cost 37 to 103 health in live games.
     ...r.enemies.elites
-      .filter((e) => e.dist < PLAN_RANGE)
+      .filter((e) => e.dist < PLAN_RANGE && r.time >= knobs().eliteFrom && r.player.hp >= knobs().eliteMinHp * r.player.maxHp)
       .slice(0, 2)
       .map((e) => ({
         goal: { kind: "elite" as const, uid: e.uid },

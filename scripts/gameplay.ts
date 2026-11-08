@@ -185,7 +185,7 @@ export const SLOTS = {
 } as const;
 export type Slot = keyof typeof SLOTS;
 
-export type Knobs = { exploreDistance: number; evadeSeconds: number; gemsSeconds: number; stuckSeconds: number; extraDamage: number; safeMargin: number; distrustSeconds: number; distrustBossRange: number; planEvery: number; eliteSeconds: number; bossOfferRange: number; dashThreshold: number; bossDashThreshold: number; bossDashRange: number };
+export type Knobs = { exploreDistance: number; evadeSeconds: number; gemsSeconds: number; stuckSeconds: number; extraDamage: number; safeMargin: number; distrustSeconds: number; distrustBossRange: number; planEvery: number; eliteSeconds: number; bossOfferRange: number; dashThreshold: number; bossDashThreshold: number; bossDashRange: number; eliteFrom: number; eliteMinHp: number };
 export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: string }> = {
   exploreDistance: { min: 100, max: 1500, about: "units an explore goal walks before it ends; it also ends at the first chest never listed before" },
   evadeSeconds: { min: 2, max: 30, about: "seconds an evade goal lasts" },
@@ -201,6 +201,8 @@ export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: strin
   dashThreshold: { min: 0.05, max: 0.95, about: "how sure the action model's answer to action.dash must be (a probability) for Tibo to dash; lower dashes more often" },
   bossDashThreshold: { min: 0.05, max: 0.95, about: "the dash threshold instead of dashThreshold while a boss is within bossDashRange" },
   bossDashRange: { min: 0, max: 600, about: "while a boss is within this many units, bossDashThreshold applies; 0 never" },
+  eliteFrom: { min: 0, max: 1200, about: "game seconds before which no fight-the-elite goal is offered, so the planner cannot pick one; 0 offers them from the start" },
+  eliteMinHp: { min: 0, max: 1, about: "share of max health below which no fight-the-elite goal is offered; 0 offers them at any health" },
 };
 
 export const LOCKSTEP_CRUTCH = "knobs.lockstep is a crutch and is not to be enabled: it paused the game while the models thought, which no player can do. Every game plays live, as a person plays it.";
@@ -225,7 +227,7 @@ export const DEFAULT_TEMPLATES: Templates = {
     useful: "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
     dash: "Is Tibo about to be hit or surrounded, so a quick dash away would save it?",
   },
-  knobs: { exploreDistance: 300, evadeSeconds: 8, gemsSeconds: 12, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1, distrustSeconds: 0, distrustBossRange: 0, planEvery: 5, eliteSeconds: 20, bossOfferRange: 0, dashThreshold: 0.5, bossDashThreshold: 0.5, bossDashRange: 0 },
+  knobs: { exploreDistance: 300, evadeSeconds: 8, gemsSeconds: 12, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1, distrustSeconds: 0, distrustBossRange: 0, planEvery: 5, eliteSeconds: 20, bossOfferRange: 0, dashThreshold: 0.5, bossDashThreshold: 0.5, bossDashRange: 0, eliteFrom: 0, eliteMinHp: 0 },
 };
 
 const STATE_LIMIT = 8000;
