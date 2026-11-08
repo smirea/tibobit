@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | recheck |
+| Status | done |
 | Area | economy |
-| Result | - |
+| Result | inconclusive |
 | Created | sonnet-medium L4.I1 |
-| Updated | reset at the restart (L4) |
+| Updated | L4.I10 |
 
 ## Hypothesis
 
@@ -18,9 +18,7 @@ L4.I2: from nm1-min15-plain-f, plain repeat, gold rule alone twice, hp picks alo
 
 ## Findings
 
-L4.I5: on plain-g 15:00 the gold rule died twice (19:21, 18:19) and plain survived twice. L4.I6 plays the plain playbook from the two 15:00 gyms saved from the 10:00 plain-g games (plain-h, gold-h), plus the gold rule on plain-h.
-
-Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
+Across the plain-f, plain-g and plain-h NM1 gyms (L4.I1-I6, lockstep), plain play took 0-250 damage and the gyms were too easy to separate variants. The ungated gold rule died 3 of 6 on 15:00 gyms; the gold rule gated before 15:45 did not die but never lowered damage versus plain. hp picks did nothing measurable. The gated rule is already in the playbook. The NM1 gyms are retired, so further gold-rule tests need NM2 live gyms.
 
 ## Games
 

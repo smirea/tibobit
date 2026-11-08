@@ -6,7 +6,7 @@
 | Area | movement |
 | Result | - |
 | Created | sonnet-high L3.I10 |
-| Updated | reset at the restart (L4) |
+| Updated | L4.I3 |
 
 ## Hypothesis
 
@@ -18,7 +18,7 @@ Fresh NM2 steam-vent seeds, 300s, live, 3 or more seeds per variant against the 
 
 ## Findings
 
-Live baseline 1 of 6 alive at 5:00 (L3.I10 rehearsal 1 of 5, full run died 2:15 to the Mascot). L3.I9 games appear live: baselines 2 of 2 alive, catalyst picks 1 of 3. L4.I1 puts the Mascot package on 5 fresh seeds. L4.I2 onward: commit-the-weapon picks, routing and starting weapon, each paired live on at least 5 seeds.
+Live NM2 5:00 survival of the unchanged playbook is 3 of 10 (L3.I10 rehearsal 1 of 5, full run 0 of 1, L4.I1 control 0 of 1, L4.I2 controls 2 of 3). The package arm is 2 of 4 and the armor arm 0 of 2. Survivors evolve by about 1:24-1:56 with 15-21 chests; deaths have 1-3 chests and no evolution. L4.I3 tests commit picks, a Hot Streak upper bound and free-spot goals on the dying seeds 1919 and 4141.
 
 ## Games
 

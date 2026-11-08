@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | recheck |
+| Status | done |
 | Area | models |
-| Result | - |
+| Result | inconclusive |
 | Created | sonnet-medium L3.I2 |
-| Updated | reset at the restart (L4) |
+| Updated | L4.I10 |
 
 ## Hypothesis
 
@@ -18,9 +18,7 @@ Fresh NM1 steam-vent, seeds 1313, 1414, 1515, 300s, plus the natural 5:00 gym nm
 
 ## Findings
 
-L3.I9 plays the unchanged playbook on seeds 2323-2727 to estimate the early death rate before the full run.
-
-Reset at the restart: still running from an earlier loop and measured with lockstep on, so its games need replaying live before they count.
+The last two games (L4.I9.G4 seed 3535, G5 seed 3636) were fresh NM1 plain games under lockstep and both lived, 3 and 12 boss chests. Across the experiment plain chest-first lived about 15 of 19 fresh NM1 seeds under lockstep. The ladder is on NM2 and lockstep is banned, so this does not carry to live play. Closed in favour of the live NM2 opening experiments.
 
 ## Games
 
