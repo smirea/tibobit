@@ -9,7 +9,7 @@ import path from "node:path";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ChatLine, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
-import { checkHarness, defaultModel, runCoach } from "./coach";
+import { checkHarness, defaultModel, jsonObject, runCoach } from "./coach";
 import * as loop from "./gameplay";
 import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "./gameplay";
 
@@ -216,6 +216,11 @@ async function askCoach(prompt: string, timeoutMs: number, bubble: CoachBubble):
   const finish = (fields: Partial<ChatLine>) =>
     bubble.set({ stream: undefined, inspect: { kind: "prompt", prompt, ...(said.reasoning === "" ? {} : { reasoning: said.reasoning }), ...(said.text === "" ? {} : { reply: said.text }) }, ...fields });
   const json = said.text.match(/\{[\s\S]*\}/)?.[0];
+  const parsed = jsonObject(said.text);
+  if (parsed !== undefined) {
+    finish({});
+    return parsed;
+  }
   if (json === undefined) {
     const why = said.error || said.text.trim() || said.stderr || "(empty output)";
     console.error(`coach gave no JSON after ${seconds}s${late}: ${why.slice(0, 600)}`);
