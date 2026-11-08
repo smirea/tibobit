@@ -25,6 +25,8 @@ export type TrialResult = {
   weapons: string[];
   passives: string[];
   steps: number;
+  plannerCalls?: number;
+  actionCalls?: number;
   avgDecisionMs: number;
   live: boolean;
   log?: string;
@@ -199,7 +201,7 @@ export class Slot {
     await Bun.write(`${base}.templates.json`, JSON.stringify(templates));
     const bot = this.spawn(
       "tibo-bot.ts",
-      ["--server", this.server, "--reload", `${this.game}/reload`, "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--trial", String(seconds), "--templates", `${base}.templates.json`, "--result", `${base}.result.json`, "--log-dir", this.logs],
+      ["--server", this.server, "--reload", `${this.game}/reload`, "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--trial", String(seconds), "--templates", `${base}.templates.json`, "--result", `${base}.result.json`, "--log-dir", base],
       `${base}.bot.log`,
     );
     const code = await bot.exited;

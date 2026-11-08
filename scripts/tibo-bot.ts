@@ -1380,6 +1380,8 @@ async function main() {
       weapons: end.loadout.weapons.map((w) => `${w.id} ${w.level}`),
       passives: end.loadout.passives.map((p) => `${p.id} ${p.level}`),
       steps,
+      plannerCalls: planner?.calls ?? 0,
+      actionCalls: latency.length - (planner?.calls ?? 0),
       avgDecisionMs: Math.round(latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length)),
       live: LIVE,
       log: runLog?.file,
