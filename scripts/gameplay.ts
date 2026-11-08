@@ -637,7 +637,10 @@ export async function runHistory(limit = 60): Promise<string> {
   const lines: string[] = [];
   for (const name of (await notesFiles()).slice(0, limit)) {
     const text = await Bun.file(path.join(NOTES_DIR, name)).text();
-    lines.push(`- ${name}: ${notesField(text, "Ending") ?? "?"}; opening: ${notesField(text, "Opening") ?? "not recorded"}; testing ${notesField(text, "Testing") ?? "?"}; coach ${notesField(text, "Coach") ?? "?"}`);
+    const t = notesTemplates(text);
+    const knobs = "value" in t ? (Object.keys(KNOBS) as (keyof Knobs)[]).filter((k) => t.value.knobs[k] !== DEFAULT_TEMPLATES.knobs[k]).map((k) => `${k} ${t.value.knobs[k]}`) : [];
+    const source = notesField(text, "Templates from") ?? "";
+    lines.push(`- ${name}: ${notesField(text, "Ending") ?? "?"}; opening: ${notesField(text, "Opening") ?? "not recorded"}; knobs off default: ${knobs.join(", ") || "none"}${source.includes("exploit run") ? "; exploit run" : ""}; testing ${notesField(text, "Testing") ?? "?"}; coach ${notesField(text, "Coach") ?? "?"}`);
   }
   return lines.join("\n") || "(no runs yet)";
 }
