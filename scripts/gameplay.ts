@@ -289,7 +289,7 @@ const PROMPT_LIMIT = 30_000;
 function checkTable<C extends readonly string[]>(raw: unknown, table: Table<C>, before: Record<C[number], string>[], errors: string[]): Record<C[number], string>[] | undefined {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw)) {
-    errors.push(`${table.name} must be the whole table as an array of rows`);
+    errors.push(`${table.name} must be an array of the rows to add or change`);
     return undefined;
   }
   const columns = table.columns as readonly C[number][];
@@ -301,7 +301,9 @@ function checkTable<C extends readonly string[]>(raw: unknown, table: Table<C>, 
     }
     const o = r as Record<string, unknown>;
     for (const k of Object.keys(o)) if (!(columns as readonly string[]).includes(k)) errors.push(`${table.name}[${i}].${k} is not a column; the columns are ${columns.join(", ")}`);
-    const row = Object.fromEntries(columns.map((c) => [c, o[c] === undefined || o[c] === null ? "" : String(o[c])])) as Record<C[number], string>;
+    // A row with an id the table has updates it, and the keys it leaves out keep their values.
+    const old = before.find((b) => b[columns[0] as C[number]] === String(o[columns[0] as string] ?? ""));
+    const row = Object.fromEntries(columns.map((c) => [c, o[c] === undefined || o[c] === null ? (old?.[c] ?? "") : String(o[c])])) as Record<C[number], string>;
     const id = row[columns[0] as C[number]] || `[${i}]`;
     for (const c of table.required) if (!isText(row[c])) errors.push(`${table.name} ${id} has no ${c}`);
     for (const [c, allowed] of Object.entries(table.enums) as [C[number], readonly string[]][])
@@ -310,10 +312,6 @@ function checkTable<C extends readonly string[]>(raw: unknown, table: Table<C>, 
   }
   const ids = rows.map((r) => r[columns[0] as C[number]]);
   for (const id of new Set(ids.filter((id, i) => ids.indexOf(id) !== i))) errors.push(`${table.name} id ${id} is used twice`);
-  for (const old of before) {
-    const id = old[columns[0] as C[number]];
-    if (!ids.includes(id)) errors.push(`${table.name} ${id} is missing: rows are never deleted, set ${table.retire} instead`);
-  }
   return rows;
 }
 
@@ -378,22 +376,29 @@ export async function locked<T>(work: () => Promise<T>): Promise<T> {
 }
 
 /**
- * The coach's rows over the table as it is now. A row the coach added under an id the other coach
- * took meanwhile gets the next free id; `renamed` maps the coach's id to the one it got.
+ * The coach's added and changed rows over the table as it is now: a changed row is replaced where
+ * it stands, and a new one goes at the end. A row the coach added under an id the other coach took
+ * meanwhile gets the next free id; `renamed` maps the coach's id to the one it got.
  */
 export function merge<R extends { id: string }>(theirs: R[], now: R[], before: R[], renamed: Map<string, string>): R[] {
-  const taken = new Set(now.map((r) => r.id));
-  const out = theirs.map((r) => {
-    if (before.some((b) => b.id === r.id) || !taken.has(r.id)) return r;
+  const known = (id: string) => before.some((b) => b.id === id);
+  const out = now.map((r) => (known(r.id) ? (theirs.find((t) => t.id === r.id) ?? r) : r));
+  const taken = new Set(out.map((r) => r.id));
+  for (const r of theirs) {
+    if (known(r.id) && taken.has(r.id)) continue;
+    if (!taken.has(r.id)) {
+      out.push(r);
+      taken.add(r.id);
+      continue;
+    }
     const prefix = r.id.match(/^\D*/)?.[0] ?? "";
     let n = Math.max(0, ...[...taken].filter((id) => id.startsWith(prefix)).map((id) => Number(id.slice(prefix.length)) || 0)) + 1;
     while (taken.has(`${prefix}${n}`)) n++;
     renamed.set(r.id, `${prefix}${n}`);
     taken.add(`${prefix}${n}`);
-    return { ...r, id: `${prefix}${n}` };
-  });
-  const ids = new Set(out.map((r) => r.id));
-  return [...out, ...now.filter((r) => !ids.has(r.id))];
+    out.push({ ...r, id: `${prefix}${n}` });
+  }
+  return out;
 }
 
 const renameIds = (text: string, renamed: Map<string, string>) => text.replace(/\b[A-Z]+\d+\b/g, (id) => renamed.get(id) ?? id);
@@ -664,7 +669,7 @@ export function catalog(): string {
 function tableContract<C extends readonly string[]>(t: Table<C>, about: string): string {
   const enums = Object.entries(t.enums as Record<string, readonly string[]>).map(([c, v]) => `${c} is ${v.includes("") ? "empty or " : ""}one of ${v.filter(Boolean).join(", ")}`);
   const stamps = t.stamps.length === 0 ? "" : ` The bot fills ${t.stamps.join(" and ")}.`;
-  return `"${t.name}": ${about} The whole table as an array of row objects with the keys ${t.columns.join(", ")}; ${enums.join("; ")}.${stamps} Rows are never deleted: set ${t.retire} instead. Leave the key out to keep the table as it is.`;
+  return `"${t.name}": ${about} Only the rows you add or change, as an array of row objects with the keys ${t.columns.join(", ")}; ${enums.join("; ")}. A row with an id the table already has updates that row, and the keys you leave out keep their values, so a change can be as small as {"id": "E7", "status": "done"}.${stamps} Rows cannot be deleted: set ${t.retire} instead. Leave the key out when nothing changes.`;
 }
 
 export const EDITS_CONTRACT = [
@@ -691,8 +696,8 @@ export function editableFiles(phase: "plan" | "review"): string {
     ...(phase === "plan"
       ? ["- **The in-game prompts** (`planner`, `action`, `knobs`): what the planner and the action model are told, which state blocks they see, what each question asks, and the knobs, for the run about to start. They are recorded in the run's notes, and the next plan starts from them."]
       : ["- **This run's notes** (`notes`): the review between the plan and the picks, in the sections this prompt asks for."]),
-    `- **beliefs.csv** (\`beliefs\`): what the loop holds true about the game and the in-game models. You rewrite the whole table; rows are never deleted, only disproved.`,
-    `- **experiments.csv** (\`experiments\`): the questions the loop asks. You rewrite the whole table; rows are never deleted, only retired.`,
+    `- **beliefs.csv** (\`beliefs\`): what the loop holds true about the game and the in-game models. You send only the rows you add or change; rows are never deleted, only disproved.`,
+    `- **experiments.csv** (\`experiments\`): the questions the loop asks. You send only the rows you add or change; rows are never deleted, only retired.`,
     "- **infrastructure_feedback.csv** (`infra`): requests for changes to the bot's code. You can only add rows; whoever works on the code closes them.",
     `- **coach-plan.md** (\`coachPlan\`) and **coach-retrospective.md** (\`coachRetrospective\`): your own prompts, before and after each run. This one is ${own}. Rewrite one only when the way the loop plans or reviews should change.`,
     "",

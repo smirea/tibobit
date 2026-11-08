@@ -26,10 +26,10 @@ test("templates may only use the values their slot has, and must use the require
   });
 });
 
-test("the coach may retire an experiment but not delete it", () => {
+test("a coach sends only the rows it changes, and a partial row keeps the fields it leaves out", () => {
   const row: ExperimentRow = { id: "E1", created: "2026-11-07", status: "proposed", area: "movement", hypothesis: "h", test: "t", runs: "", outcome: "", result: "", learnings: "" };
-  expect(checkEdits({ experiments: [{ ...row, id: "E2" }] }, { experiments: [row], beliefs: [] })).toEqual({ errors: ["experiments E1 is missing: rows are never deleted, set status retired instead"] });
-  expect(checkEdits({ experiments: [{ ...row, status: "retired" }] }, { experiments: [row], beliefs: [] })).toEqual({ value: { experiments: [{ ...row, status: "retired" }] } });
+  expect(checkEdits({ experiments: [{ id: "E1", status: "done", result: "confirmed" }] }, { experiments: [row], beliefs: [] })).toEqual({ value: { experiments: [{ ...row, status: "done", result: "confirmed" }] } });
+  expect(checkEdits({ experiments: [{ id: "E2", status: "proposed" }] }, { experiments: [row], beliefs: [] })).toEqual({ errors: ["experiments E2 has no hypothesis", "experiments E2 area must be one of build, items, spots, enemies, bosses, hazards, movement, economy, map, meta, models"] });
 });
 
 test("a belief keeps the run that wrote it, and takes the run that last changed it", () => {
@@ -45,7 +45,7 @@ test("a coach's table keeps rows another coach added meanwhile, and its new id m
   const before = [row("E1", "shared")];
   const now = [row("E1", "shared"), row("E2", "the other coach's")];
   const renamed = new Map<string, string>();
-  expect(merge([row("E1", "edited"), row("E2", "mine")], now, before, renamed)).toEqual([row("E1", "edited"), row("E3", "mine"), row("E2", "the other coach's")]);
+  expect(merge([row("E1", "edited"), row("E2", "mine")], now, before, renamed)).toEqual([row("E1", "edited"), row("E2", "the other coach's"), row("E3", "mine")]);
   expect(renamed).toEqual(new Map([["E2", "E3"]]));
 });
 
