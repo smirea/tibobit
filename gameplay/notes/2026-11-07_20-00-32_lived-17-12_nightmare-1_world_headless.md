@@ -12,7 +12,7 @@
 | Action model | typesafe/jev-1.14-20261014 |
 | Coach | grok grok-4.7-build-fast |
 | Bot code | 11455a3 docs(gameplay): grok reviews the 2026-11-07 19:46 run, lived 4:21, testing E27 |
-| Coach prompts | coach-plan.md 71e16386 |
+| Coach prompts | coach-plan.md 71e16386; coach-retrospective.md 29ea3ff1 |
 | Templates from | coach-plan.md |
 | Log | /tmp/tibobit/2026-11-07_20-00-32_nightmare-1_world_headless.csv |
 
@@ -64,7 +64,97 @@ This run is the chest step the Nightmare 1 ladder is missing on the way to Night
 
 <!-- review: written by the coach from coach-retrospective.md -->
 
-(the coach is reviewing the run)
+## Summary
+
+This run tested E81 on world seed SBBOHY: a planner.goal yes on the open-chest option, and a no on gems and on explore while a chest is listed, on the state stack that opened nothing on UM213V. The bot played the test. The first chest was listed at 1:14, and at 1:17 a chest 2 down scored 85% against gems at 16% and explore at 28%, and a chest goal started. Near chests kept leading (1:39 73%, 2:08 68%, 5:11 73%, 6:18 81%), 40 chest goals finished, and four weapons had evolved by 6:20. The model hypothesis is confirmed on this seed: a 1-point explore miss at 43 units (3:08) and far chests at 5:57 still losing are the limits of that claim. Tibo lived 17:12, level 53, and died with a full board after minute 16 lost 54 among 720 enemies and minute 17 lost 168 among 762, led by ice-imps (141.1), grease-fiends (106.9) and Compost Titan (76.8). Nightmare 1 is still unwon. The chest sentence is in place; the last three minutes are the gap.
+
+## Findings
+
+- The chest sentence starts a chest goal for a chest within about 30 units and puts it above gems and above explore. At 1:17, Open the chest (2 down) scored 85% and a second chest 74%, gems 16%, best explore 28%, and the chest goal started while Tibo was already on it. Later scored plans agree: 1:39 a chest 13 up-left at 73%, 2:08 a chest 26 down-right at 68% over gems 29% and explore 36%, 5:11 chests at 73%, 54% and 50% over gems 19%, 6:18 a chest 15 down-right at 81%. Chest goals: 40 done, 0 gave up, 3 dropped. On UM213V the state line alone scored a chest 24% against gems 57% at 3:20 and 26% against 55% at 3:44, and opened none. Confirmed for the model question: one world seed, several plans. The 17:12 beside UM213V's 4:21 is a lead, because the seeds differ.
+- A chest around 40 units can tie explore, and a chest past 250 loses. At 3:08 Open the chest (43 down-right) scored 47% against Explore left 48% and gems 33%, and a chest goal still started after the card. At 5:57 chests at 255 left and 264 up-left scored 19% and 14% against gems 36% and explore down-left 39%. Likely. It fits the within-about-100 clause: the yes is strong up close and weak when the chest is far.
+- The explore line in the state lost the opening, before any chest existed for E81 to bind. Goals: gems at 0:20, Charge the Tater Lantern at 0:26, gems at 0:58, Fight the Bowling Ball at 1:06 (43% on the level-up plan). The minute labeled 1:00 ended at 78/120 after losing 34, hurt most by potato-beetles and wireworm larvae. Lead. This is a template finding, and E81's hypothesis stands: those sentences apply once a chest is listed.
+- The evolved board was finished early, and later level-ups had no weapon or passive left. Hash Bulwark at 2:10, Tater Twister at 3:33, Hunter's Moon at 4:55, Tailgate Party at 6:20, Tater Tot Pup 8/8 at 7:07, Peel Phantom 8/8 at 9:09, all six passives at 5/5 by 12:01. From 13:07 the level-ups were Sack of Gold, Baked Potato, or Skip. Items none. Lead, one seed.
+- The death is the minute-16 and minute-17 swarm on that finished board. The 16:00 minute ended at 120/120 after losing 54 and gaining 55, with 720 enemies, hurt most by ice-imps and Grater Golem. The 17:00 minute ended at 12/120 after losing 168 and gaining 60, with 762 enemies, hurt most by grease-fiends and ice-imps. First time under 25% health: 17:12. Outcome totals: ice-imp 141.1, grease-fiend 106.9, compost-titan 76.8. Lead.
+- Compost Titan dealt a large hit from about 300 away on a step the forecast called free. At 17:12 the walk down-right carried no damage in the forecast and a hurt rating of 1.98; health went 60 to 12; titan damage in the last window went 6.1 to 54.3; nine telegraph tiles were underfoot; the dash was not asked because the charge was spent. He had been listed since 17:00 at 167 left, and that plan started Fight the Grease Fiend. Likely, beside the older afar-hit evidence.
+- With distrustBossRange 0 and distrustSeconds 0, page walks took boss and hazard damage the action model never saw. Great Wireworm at 10:04: health 120 to 101 while charging a Seed Vault. Deep Freezer at 14:03: a walk lost 15 with the boss 103 down at 4%. Spore vent 45.9 and Brambles 17.6 across the run, and the page walked through 40 hits. Likely.
+- Food under 70% lost to an elite when no chest was listed. At 17:10 health was 77/120, Fight the Grease Fiend 65%, Eat the food 46% and 45%. The Baked Potato on that level-up is a card, and the food goal never started. Lead, one plan.
+- A Spud Freezer goal can finish when no chest is listed. One started at 16:32 and finished at 16:38, with about 480 enemies. Lead. It puts the freezer-loses-to-explore belief on recheck.
+- The Masher minute was cheap on this evolved board. The 4:00 minute lost 3 and gained 5. The damage list has no the-masher line. Lead, one seed, beside an older run where he dealt about 109.7 before any evolution.
+
+## Went well
+
+- 1:14 to 2:30: five chests opened, first evolution at 2:10 (Hash Bulwark), and health back to 120/120 by the end of the 2:00 minute after gaining 43.
+- 1:17, 1:39, 2:08, 5:11 and 6:18: near chests led the plan and the goal followed.
+- The 9:00 minute lost 0 at level 31. From the 2:00 minute through the 15:00 minute, health ended at or next to full, with healing matching the damage.
+- 4:00 to 5:00: the Masher minute lost 3. An evade in that window kept the cost small.
+- 10:08 to 10:24: after the Wireworm hit, an evade ran and that window added no further Wireworm damage.
+- Dashes on real drops: 1:09 at 60% (bowling ball), 16:09 at 69% with Grater Golem close, 17:05 at 58% as health fell. 43 dashes in the run. Asks under 0.5 stayed walks (12:23 at 4%, 16:14 at 49%).
+- Shrines once the slots were full: crit 0% to 4% at 8:10, move speed 0% to +10% at 15:39, area +50% to +62% at 16:52.
+
+## Went poorly
+
+- 0:20 to 1:14: gems, a lantern and Bowling Ball fights while the directive says explore. The 1:00 minute lost 34 and ended at 78/120. The opening should have stayed on explore until the 1:14 chest.
+- 10:04: a page walk into Great Wireworm dropped health from 120 to 101 on a Seed Vault. That step should have been asked, or the vault left, while the boss was in the walk.
+- 14:03: a page walk toward Deep Freezer lost 15. Same gap, distrustBossRange 0.
+- Spore vents and brambles on walks the model was not offered: 45.9 and 17.6. Those steps should have been treated as unsafe ground.
+- 17:00: Compost Titan appeared 167 to the left and the planner started Fight the Grease Fiend. With the crowd past 700 and a boss that hits from far away, the goal should have been keep-away.
+- 17:05: a dash down as health went 104 to 54, ice-imp 66.3 in the window. 17:08 spent the next dash on hot oil and a telegraph. 17:10 food at 46% lost to the fiend at 65% at 77/120. 17:12 the last walk was scored free and the titan tick landed with the dash already spent.
+- After 12:01 every level-up was gold, a Baked Potato, or Skip. Skips at 13:21, 13:37 and 14:44, and late potatoes, added no weapon. The board had no power left for the last three minutes.
+
+## Moments
+
+- **0:20** Gems started after three explore legs, no chest listed, health 118. Better: stay on explore until a chest or food is listed.
+- **1:06** Fight the Bowling Ball scored 43% and became the goal. Better: keep exploring. That fight sits inside the 34 health the 1:00 minute lost.
+- **1:17** Open the chest 2 down scored 85%, gems 16%, explore 28%, already standing on it. Better: right call.
+- **2:10** The chest opened into Hash Bulwark and removed Hash Brown Shield. Better: right call.
+- **3:08** A chest 43 down-right scored 47% against Explore left at 48%. Better: the explore no has to hold for a chest inside 50 as well as one underfoot.
+- **6:12** Late Blight ticks landed while a chest was opening, and a dash at 63% fired. Better: right call on the dash. Opening during that boss is the 20.1 blight total.
+- **10:04** The page walked into Great Wireworm and health went 120 to 101, then an evade ran to 10:24. Better: leave the Seed Vault while that boss is in the walk.
+- **14:03** A page walk lost 15 to Deep Freezer, 103 down at 4% health. Better: ask the action model while a boss is inside a few hundred units.
+- **16:32** A Spud Freezer goal started and finished at 16:38, about 480 enemies, no chest listed. Better: right call.
+- **17:00** Compost Titan listed 167 left and the planner started Fight the Grease Fiend. Better: keep away while that boss is listed and the crowd is past 700.
+- **17:10** At 77/120 the fiend scored 65% and both foods scored 46% and 45%. The Baked Potato card healed about 30. Better: eat the food when health is under 70% and no chest is listed.
+- **17:12** Walk down-right, forecast free, hurt 1.98, health 60 to 12, Compost Titan about 291 away, nine telegraphs, no dash charge. Grease-fiend damage in the last seconds reached 106.9. Better: treat a listed boss as unsafe when the forecast says the step is free, and keep the dash for that step.
+
+## Questions
+
+- Once the six passives are maxed and the enemy count is high, does a keep-away yes, and an explore no, cut the 16:00 minute plus the 17:00 minute health loss below 222? E84, area enemies.
+- On this chest stack, does distrustBossRange 400 cut Compost Titan below 76.8 and the 17:00 minute's loss below 168? E85, area bosses. Inconclusive if he never appears.
+- Do the Spore vent and Bramble hits on page walks shrink if distrustSeconds is raised above 0? E88, area hazards. Those walks (45.9 and 17.6, and 40 page-walked hits) never reach action.hurt.
+- With no chest listed and health under 70%, does a food yes and an elite no make eat-the-food win? At 17:10 the fiend scored 65% over food at 46%. E86, area models.
+- Before a chest is listed, does a goal-template yes on explore and a no on gems, spots and elites hold the opening? The state line lost at 0:20, 0:26, 0:58 and 1:06. E87, area models.
+
+## Next
+
+The campaign is a 20:00 win on Nightmare 10. This stack still has no Nightmare 1 win. Chests, evolutions and a full six-weapon six-passive board are in hand by 12:01. The missing piece is the last three minutes: 720 enemies on the 16:00 minute, 762 on the 17:00 minute, ice-imps, grease-fiends, and a Compost Titan the one-second forecast prices as free. The last two grok tests were economy (E27) and models (E81), so the next run leaves models.
+
+1. E84 (enemies). After the board is full, a keep-away yes and an explore no while the crowd is high. Read the 16:00 minute against 54 lost and the 17:00 minute against 168 lost, ice-imp against 141.1 and grease-fiend against 106.9. If field-rats appear, read them against the earlier 243.6 as well. A lower total is a real step toward 20:00 on this level. Inconclusive if the run dies before 14:00.
+2. E85 (bosses). Change only distrustBossRange from 0 to 400 on the E81 stack. The knob already forces a model step and names the boss. This run left it at 0 and paid 76.8 to Compost Titan, plus Great Wireworm, Deep Freezer, Grater Golem and Late Blight on unasked walks. Inconclusive if Compost Titan is absent. This is the forecast gap the swarm test leaves in place on purpose.
+3. E88 (hazards). Change only distrustSeconds from 0. Spore vent 45.9 and Brambles 17.6 were mostly page walks, so a wording change in action.hurt (E61) is read only on steps the model is asked. E61 stays proposed for that share. E88 asks whether the walks get asked, and whether the two totals fall.
+
+Items remain the area with nothing done (E69). This run offered no item, so an items test stays inconclusive until one appears. E80 (chest versus elite on 1SGEC23) and E82 (shop yes) can run now that chest goals start; they wait behind the death question. E83 (the Masher) is less urgent on an evolved board: the 4:00 minute lost 3. E86 and E87 are real model questions and wait, because the last test was already models.
+
+## Beliefs changed
+
+- B12: stays likely / held. Evidence adds the 17:12 step, titan about 291 away, forecast free, health 60 to 12.
+- B21: stays likely / recheck. Evidence adds that the same state line plus the goal sentence started 40 chest goals on SBBOHY, after UM213V opened none.
+- B22: stays recheck. Evidence adds the distance curve (about 30 units at 68–85%, 43 units at 47%, past 250 at 14–19%).
+- B25: stays likely / recheck. Evidence adds a first chest at 1:14 on exploreDistance 300.
+- B28: stays recheck. Evidence adds 43 dashes and the sampled asks above and under 0.5.
+- B32: stays likely / held. Evidence adds a 17:12 world run. The stack includes the E81 sentence and distrustBossRange 0, so the champion with those knobs unchanged stays at likely.
+- B62: status held to recheck. A Spud Freezer goal finished at 16:32–16:38 with no chest listed.
+- B66: confidence stays lead, status held to recheck. Ice-imp 141.1, with a 104-to-54 step at 17:05 carrying 66.3 in the window, beside a 12.9 page walk at 14:41.
+- B74: confidence lead to likely, status held. A listed chest at 1:39 scored 73% against an elite at 35%. The template carried the chest yes, and the elite-no sentence was absent.
+- B82: confidence lead to likely, status held. The option sentence is what moved near chests from the mid-20s on UM213V to 68–85% here.
+- B84: status held to recheck. A finished board still died after 15:00. This seed's killers are ice-imp, grease-fiend and Compost Titan, and the damage list has no field-rat line.
+- B85: new, planner, confirmed / held. While a chest is listed, the yes/no sentence makes a chest within about 30 the goal, above gems and above explore.
+- B86: new, game, lead / held. A full evolved board on Nightmare 1 world still dies in minute 17 once enemies pass about 700, to ice-imp bursts, grease-fiends and Compost Titan ticks from a few hundred away.
+- B87: new, planner, lead / held. Before a chest is listed, an explore line in the state loses to gems, a charge spot or an elite.
+- B88: new, planner, lead / held. With no chest listed, an elite can outrank food while health is under 70% (17:10, 65% against 46% at 77/120).
+
+## Process changes
+
+No coach prompt was edited.
 
 <!-- /review -->
 
