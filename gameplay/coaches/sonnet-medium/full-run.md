@@ -8,7 +8,7 @@ Survive 20:00. A win moves the Nightmare ladder up one level.
 
 ## Choosing the playbook
 
-Use what beliefs and experiments support. The last full run (steam-vent, lockstep, chest-first) lived 17:20; keep that base and add only late-game fixes that were tested from 15:00 gyms (HP picks, boss-aware chest rule). If two choices are equal, keep the one that has already played well.
+Use only what was tested on at least two seeds. The 17:20 and 18:36 runs used steam-vent, lockstep, plain chest-first (no exception). The exception text lived 6:42. Default to the plain chest-first base unless a narrower exception beat it in fresh-seed games. Keep the pick prompt focused on completing one evolution (weapon at max plus its catalyst) and early max hp.
 
 ## Generalizing
 
