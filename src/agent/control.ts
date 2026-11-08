@@ -306,6 +306,9 @@ export class Controller {
     const started = await until(() => inRun(this.link) && this.link.game !== before, 20000);
     window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", bubbles: true }));
     if (!started) throw new Error("the run did not start within 20 seconds");
+    try {
+      sessionStorage.removeItem(SEED_KEY);
+    } catch {}
     this.finish(status, "done", picked);
   }
 

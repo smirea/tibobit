@@ -173,6 +173,17 @@ export class Slot {
    * ladder is set to just below the level, so "highest" picks it.
    */
   async fresh(seed: string, difficulty: number, weapon: string): Promise<string> {
+    const picked = await this.freshOnce(seed, difficulty, weapon);
+    const got = (await this.state()).run?.seed;
+    if (got === seed) return picked;
+    console.error(`${this.name}: asked for seed ${seed}, the game rolled ${got ?? "nothing"}; trying once more`);
+    const again = await this.freshOnce(seed, difficulty, weapon);
+    const second = (await this.state()).run?.seed;
+    if (second !== seed) throw new Error(`asked for seed ${seed} twice, the game rolled ${got ?? "nothing"} and ${second ?? "nothing"}`);
+    return again;
+  }
+
+  private async freshOnce(seed: string, difficulty: number, weapon: string): Promise<string> {
     await this.evaluate(`(() => { const k = "tibo.ladder.v1"; const o = JSON.parse(localStorage.getItem(k) ?? "{}"); o.cleared = ${difficulty - 1}; localStorage.setItem(k, JSON.stringify(o)); return true; })()`);
     await this.command({ type: "seed", seed });
     // The page reloads after the seed command finishes.

@@ -616,18 +616,15 @@ async function fullRun(state: loop.CoachState): Promise<string | undefined> {
   const templatesFile = path.join(RUNS, `${tag}.full-run.templates.json`);
   await Bun.write(templatesFile, JSON.stringify(final.templates));
   await refreshGames();
-  // The full run always plays the evaluation seed in a freshly loaded tab, as its first run there.
-  await main.command({ type: "seed", seed: EVAL_SEED });
-  await Bun.sleep(4000);
-  await main.connected(90_000);
   const startedAt = Date.now();
+  // The bot plays the evaluation seed in a freshly loaded tab, as its first run there, and checks it.
   console.log(`${tag}: full run on Nightmare ${(await ladder()) + 1}, seed ${EVAL_SEED}`);
   const out = Bun.file(path.join(RUNS, `${tag}.full-run.log`));
   const bot = Bun.spawn(
     [
       process.execPath,
       path.join(import.meta.dir, "tibo-bot.ts"),
-      ...["--server", main.server, "--reload", "", "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--difficulty", "highest", "--runs", "1"],
+      ...["--server", main.server, "--reload", "", "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--difficulty", "highest", "--runs", "1", "--seed", EVAL_SEED],
       ...["--notes", "--coach-label", COACH, "--intent", intent, "--templates", templatesFile, ...(final.weapon === "" ? [] : ["--weapon", final.weapon]), "--log-dir", path.join(RUNS, "full-runs")],
     ],
     { cwd: ROOT, stdin: "ignore", stdout: out, stderr: out },

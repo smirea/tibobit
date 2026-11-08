@@ -6,15 +6,15 @@ export const SEED_KEY = "tibobit.seed";
 declare const unsafeWindow: Window | undefined;
 
 /**
- * Open World rolls its seed once per page load, from one crypto.getRandomValues(new Uint32Array(1))
- * call, as `n.toString(36).toUpperCase()`. A `seed` command stores the seed it wants and reloads;
- * this hands that number to every such call of the new page, before the game's scripts run.
+ * Open World rolls its seed from one crypto.getRandomValues(new Uint32Array(1)) call, as
+ * `n.toString(36).toUpperCase()`. A `seed` command stores the seed it wants and reloads; this hands
+ * that number to every such call of the new page, before the game's scripts run. The stored seed
+ * stays until a run starts (see the start command), so a reload in between keeps it.
  */
 export function installSeedHook() {
   let want: string | null = null;
   try {
     want = sessionStorage.getItem(SEED_KEY);
-    sessionStorage.removeItem(SEED_KEY);
   } catch {}
   if (want === null) return;
   const n = parseInt(want, 36);

@@ -62,6 +62,8 @@ const NOTES = args.includes("--notes");
 const COACH_LABEL = option("coach-label", "none");
 const INTENT = option("intent", "");
 const WEAPON = option("weapon", "");
+// The first run plays this Open World seed in a freshly reloaded tab, or the bot stops rather than play another.
+let SEED = option("seed", "").toUpperCase();
 // For "Grok take the wheel" and trials: play the run already in progress instead of starting a fresh one.
 const TAKEOVER = TRIAL !== undefined || args.includes("--takeover");
 const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
@@ -1301,7 +1303,30 @@ let rescuedLink: string | undefined;
 /** What the last start asked for and got: the starting weapon, or why the game's Random was used instead. */
 let startNote = "random";
 
+/** Reloads the tab into SEED and waits until the page is back. */
+async function seedPage() {
+  const sent = await command({ type: "seed", seed: SEED }, 30);
+  if (sent.state !== "done") throw new Error(`could not set seed ${SEED}: ${sent.detail ?? sent.state}`);
+  await Bun.sleep(4000);
+  for (let i = 0; i < 90 && !(await api<Snap>("/state")).connected; i++) await Bun.sleep(1000);
+}
+
 async function start(weapon = ""): Promise<void> {
+  if (SEED === "") return startRun(weapon);
+  const want = SEED;
+  for (let attempt = 1; ; attempt++) {
+    await seedPage();
+    await startRun(weapon);
+    const got = (await api<Snap>("/state")).run?.seed;
+    if (got === want) break;
+    if (attempt === 2) throw new Error(`asked for seed ${want} twice, the game rolled ${got ?? "nothing"}`);
+    console.log(`asked for seed ${want}, the game rolled ${got ?? "nothing"}; trying once more`);
+  }
+  // Only the first run: a later one in this tab is a new attempt on the seed, another map.
+  SEED = "";
+}
+
+async function startRun(weapon = ""): Promise<void> {
   startNote = weapon === "" ? "random" : "chosen";
   let started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY, ...(weapon === "" ? {} : { weapon }) }, 120);
   if (started.state !== "done" && /is not offered/.test(started.detail ?? "")) {

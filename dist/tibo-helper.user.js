@@ -1248,7 +1248,6 @@
     let want = null;
     try {
       want = sessionStorage.getItem(SEED_KEY);
-      sessionStorage.removeItem(SEED_KEY);
     } catch {}
     if (want === null)
       return;
@@ -1909,6 +1908,9 @@
       window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", bubbles: true }));
       if (!started)
         throw new Error("the run did not start within 20 seconds");
+      try {
+        sessionStorage.removeItem(SEED_KEY);
+      } catch {}
       this.finish(status, "done", picked);
     }
     steer(game) {
