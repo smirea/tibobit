@@ -131,9 +131,10 @@ export type GameState = {
     damageTakenBySource: Map<string, number>;
     damageBySource: Map<string, number>;
     killsBySource: Map<string, number>;
-    evolutions: string[];
-    unions: string[];
-    itemEvolutions: string[];
+    /** Each with the game time it was made at. */
+    evolutions: { id: string; at: number }[];
+    unions: { id: string; at: number }[];
+    itemEvolutions: { id: string; at: number }[];
     killer: string;
     won: boolean;
     goldEarned: number;

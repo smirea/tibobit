@@ -74,8 +74,8 @@ test("the gameplay files in the repo are readable", async () => {
 
 test("a training game's stats count only what happened during it", () => {
   const base = { kills: 10, damageTaken: { "enemy:aphid": 5 }, damageDealt: { peeler: 100 }, killsBy: { peeler: 10 }, goldEarned: 20, goldSpent: 0, bossesKilled: 0, elitesKilled: 0, bossChests: 0, cratesBought: 0, shrinesUsed: 0, itemsBought: 0, made: [], revivesUsed: 0, won: false };
-  const end = { ...base, kills: 40, damageTaken: { "enemy:aphid": 12.5, "boss:amusing": 30 }, damageDealt: { peeler: 400, "spud-lob": 250 }, killsBy: { peeler: 25, "spud-lob": 15 }, goldEarned: 50, elitesKilled: 1, made: ["peel-storm"], killer: "boss:amusing" };
+  const end = { ...base, kills: 40, damageTaken: { "enemy:aphid": 12.5, "boss:amusing": 30 }, damageDealt: { peeler: 400, "spud-lob": 250 }, killsBy: { peeler: 25, "spud-lob": 15 }, goldEarned: 50, elitesKilled: 1, made: [{ id: "peel-storm", at: 95.5 }], killer: "boss:amusing" };
   const t = totalsBetween(end, base);
-  expect(t).toMatchObject({ kills: 30, damageTaken: { "boss:amusing": 30, "enemy:aphid": 7.5 }, damageDealt: { peeler: 300, "spud-lob": 250 }, killsBy: { peeler: 15, "spud-lob": 15 }, goldEarned: 30, elitesKilled: 1, made: ["peel-storm"], killer: "boss:amusing" });
+  expect(t).toMatchObject({ kills: 30, damageTaken: { "boss:amusing": 30, "enemy:aphid": 7.5 }, damageDealt: { peeler: 300, "spud-lob": 250 }, killsBy: { peeler: 15, "spud-lob": 15 }, goldEarned: 30, elitesKilled: 1, made: [{ id: "peel-storm", at: 95.5 }], killer: "boss:amusing" });
   expect(totalsLines(t)[0]).toBe("Damage taken 38, by source: boss:amusing 30, enemy:aphid 7.5; the killing blow: boss:amusing.");
 });

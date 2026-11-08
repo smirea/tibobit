@@ -90,7 +90,7 @@ function totals(run: GameState["run"]): RunTotals {
     cratesBought: run.paidChests,
     shrinesUsed: run.shrinesUsed,
     itemsBought: run.itemsBought,
-    made: [...run.evolutions, ...run.unions, ...run.itemEvolutions],
+    made: [...run.evolutions, ...run.unions, ...run.itemEvolutions].map((m) => ({ id: m.id, at: round(m.at) })),
     revivesUsed: run.revivesUsed,
     won: run.won,
     ...(run.killer === "" ? {} : { killer: run.killer }),

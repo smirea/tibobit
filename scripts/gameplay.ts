@@ -1035,14 +1035,14 @@ const byKey = (end: Record<string, number>, start: Record<string, number>) =>
 
 /** What happened between two snapshots' totals; `start` undefined counts the whole run. */
 export function totalsBetween(end: RunTotals, start?: RunTotals): Totals {
-  const zero = { damageTaken: {}, damageDealt: {}, killsBy: {}, made: [] as string[] };
+  const zero = { damageTaken: {}, damageDealt: {}, killsBy: {}, made: [] };
   const s = start ?? ({ ...zero, kills: 0, ...Object.fromEntries(COUNTERS.map((c) => [c, 0])) } as unknown as RunTotals);
   return {
     kills: end.kills - s.kills,
     damageTaken: byKey(end.damageTaken, s.damageTaken),
     damageDealt: byKey(end.damageDealt, s.damageDealt),
     killsBy: byKey(end.killsBy, s.killsBy),
-    made: end.made.filter((m) => !s.made.includes(m)),
+    made: end.made.filter((m) => !s.made.some((x) => x.id === m.id)),
     ...(Object.fromEntries(COUNTERS.map((c) => [c, Math.round(end[c] - s[c])])) as Record<(typeof COUNTERS)[number], number>),
     ...(end.killer === undefined ? {} : { killer: end.killer }),
   };
@@ -1057,6 +1057,6 @@ export function totalsLines(t: Totals): string[] {
     `Damage dealt ${sum(t.damageDealt)}, by weapon: ${list(t.damageDealt)}.`,
     `Kills ${t.kills}, by weapon: ${list(t.killsBy)}.`,
     `Bosses killed ${t.bossesKilled}, elites killed ${t.elitesKilled}, boss chests ${t.bossChests}, crates bought ${t.cratesBought}, shrines used ${t.shrinesUsed}, items bought ${t.itemsBought}, revives used ${t.revivesUsed}; gold earned ${t.goldEarned}, spent ${t.goldSpent}.`,
-    `Made: ${t.made.join(", ") || "no evolution, union or evolved item"}.`,
+    `Made: ${t.made.map((m) => `${m.id} at ${clock(m.at)}`).join(", ") || "no evolution, union or evolved item"}.`,
   ];
 }

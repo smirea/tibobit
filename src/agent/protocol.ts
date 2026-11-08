@@ -196,8 +196,8 @@ export type RunTotals = {
   cratesBought: number;
   shrinesUsed: number;
   itemsBought: number;
-  /** Every evolution, union and evolved item made this run, by id. */
-  made: string[];
+  /** Every evolution, union and evolved item made this run, by id, with the game time it was made at. */
+  made: { id: string; at: number }[];
   revivesUsed: number;
   /** Survived to `winAt`. The run goes on after a win until Tibo dies. */
   won: boolean;

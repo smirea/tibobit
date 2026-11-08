@@ -97,6 +97,16 @@ const [main, ...slots] = await Promise.all([
 ]);
 if (main === undefined) throw new Error("no main slot");
 
+// A rebuilt userscript reaches the games when they restart, which happens between iterations.
+const DIST = path.join(ROOT, "dist", "tibo-helper.user.js");
+let gamesBuilt = Bun.file(DIST).lastModified;
+async function refreshGames() {
+  if (Bun.file(DIST).lastModified === gamesBuilt) return;
+  gamesBuilt = Bun.file(DIST).lastModified;
+  console.log("the userscript was rebuilt; restarting the games");
+  await Promise.all(opened.map((s) => s.restartGame()));
+}
+
 // The game sends its encyclopedia once a run has loaded its content.
 async function encyclopedia(): Promise<Record<string, unknown[]>> {
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -517,6 +527,7 @@ async function experimentIteration(state: loop.CoachState) {
   });
   console.log(`${tag}: ${reply.summary}\n  changed ${done.join(", ") || "nothing"}; ${reply.games.length} games`);
   const templates = (await loop.readPlaybook(COACH)).templates;
+  await refreshGames();
   const gymLines = await buildClaimed(await claimPending((g) => g.coach === COACH || g.coach === "loop"), templates);
   // A gym another coach's loop is building for a game here is waited for.
   const wanted = new Set(reply.games.flatMap((g) => ("gym" in g.from ? [g.from.gym] : [])));
@@ -604,6 +615,7 @@ async function fullRun(state: loop.CoachState): Promise<string | undefined> {
   await appendLog(state, "full run", reply?.summary ?? intent);
   const templatesFile = path.join(RUNS, `${tag}.full-run.templates.json`);
   await Bun.write(templatesFile, JSON.stringify(final.templates));
+  await refreshGames();
   // The full run always plays the evaluation seed in a freshly loaded tab, as its first run there.
   await main.command({ type: "seed", seed: EVAL_SEED });
   await Bun.sleep(4000);
