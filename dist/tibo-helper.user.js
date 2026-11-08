@@ -315,6 +315,21 @@
     return data;
   }
 
+  // src/agent/menu.ts
+  function button(label) {
+    return [...document.querySelectorAll("button")].find((b) => {
+      if (b.closest("#tibo-helper, [class*='tbh-']"))
+        return false;
+      const text = b.textContent?.trim() ?? "";
+      return typeof label === "string" ? text === label : label.test(text);
+    });
+  }
+  function modeScreen() {
+    if (button("Start") === undefined)
+      return;
+    return button("Leaderboard") === undefined ? "openWorld" : "daily";
+  }
+
   // src/agent/snapshot.ts
   var NEAREST = 10;
   var TICKS_PER_SECOND = 60;
@@ -754,17 +769,21 @@
   }
   function snapshot(link, discovery, commands) {
     link.noteRunLink();
+    const game = link.game;
+    const playing = game !== undefined && inRun(link);
+    const runMode = game === undefined ? undefined : game.state.daily === undefined ? "openWorld" : "daily";
+    const mode = playing ? runMode : modeScreen() ?? runMode;
     const base = {
       capturedAt: Date.now(),
       headless: navigator.webdriver,
       ladderCleared: ladderCleared(),
       commands,
       ...link.error === undefined ? {} : { error: link.error },
-      ...link.runLink === undefined ? {} : { lastRunLink: link.runLink }
+      ...link.runLink === undefined ? {} : { lastRunLink: link.runLink },
+      ...mode === undefined ? {} : { mode }
     };
-    const game = link.game;
     const ended = game?.state.over ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, kills: game.state.run.kills, damageTaken: byDamage(game.state.run.damageTakenBySource) } } : {};
-    if (game === undefined || !inRun(link))
+    if (!playing)
       return { ...base, ...ended, screen: game?.state.over ? "over" : "title" };
     const d = liveData(link);
     if (d === undefined || !link.ready)
@@ -1007,19 +1026,6 @@
   function wait(ms) {
     return new Promise((r) => setTimeout(r, ms));
   }
-  function button(label) {
-    return [...document.querySelectorAll("button")].find((b) => {
-      if (b.closest("#tibo-helper, [class*='tbh-']"))
-        return false;
-      const text = b.textContent?.trim() ?? "";
-      return typeof label === "string" ? text === label : label.test(text);
-    });
-  }
-  function onModeScreen(mode) {
-    if (button("Start") === undefined)
-      return;
-    return button("Leaderboard") !== undefined === (mode === "daily");
-  }
   async function press(el) {
     el.click();
     await wait(300);
@@ -1214,7 +1220,7 @@
         }
       }
       this.link.noteRunLink();
-      for (let i = 0;i < 15 && button(entry) === undefined && onModeScreen(mode) !== true; i++) {
+      for (let i = 0;i < 15 && button(entry) === undefined && modeScreen() !== mode; i++) {
         if (i === 14) {
           const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
           throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
@@ -1232,7 +1238,7 @@
         }
         await wait(1200);
       }
-      if (onModeScreen(mode) !== true) {
+      if (modeScreen() !== mode) {
         const open = button(entry);
         if (open === undefined)
           throw new Error(`no ${mode} button on the title screen`);

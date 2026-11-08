@@ -57,7 +57,7 @@ export type Command =
    * `weapon` picks the starting weapon by id (Random when left out); a weapon the game does not
    * offer fails the command with the ids it does offer.
    */
-  | { type: "start"; mode?: "openWorld" | "daily"; difficulty?: "easy" | "normal" | "hard" | "nightmare" | "highest"; weapon?: string }
+  | { type: "start"; mode?: GameMode; difficulty?: "easy" | "normal" | "hard" | "nightmare" | "highest"; weapon?: string }
   /** After a run ends, step forward through the end screens to the run summary, which puts the run's share link in `lastRunLink`. */
   | { type: "summary" };
 
@@ -106,9 +106,13 @@ export type OptionView = {
   combos: PairingView[];
 };
 
+export type GameMode = "openWorld" | "daily";
+
 export type Snapshot = {
   capturedAt: number;
   screen: "title" | "run" | "choice" | "paused" | "over";
+  /** The mode the game is on: the mode screen that is open, else the run in play or the one that just ended. Absent before any run. */
+  mode?: GameMode;
   run?: RunView;
   /** The share link of the last finished run, once the game has shown its summary (https://tibo.dog/r/?...). */
   lastRunLink?: string;

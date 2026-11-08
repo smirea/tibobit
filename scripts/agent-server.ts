@@ -12,7 +12,7 @@ const PORT = Number(option("port", String(BRIDGE_PORT)));
 const WAIT_LIMIT_MS = 120_000;
 // The bot "Grok take the wheel" runs: Jev moves and picks, grok plans. Override with
 // --pilot "<tibo-bot.ts flags>", such as --pilot "--model laya@q8_0" for LM Studio.
-const PILOT_ARGS = option("pilot", "--decider openrouter --model typesafe/jev-1.14-20261014 --mode daily --difficulty nightmare").split(/\s+/).filter(Boolean);
+const PILOT_ARGS = option("pilot", "--decider openrouter --model typesafe/jev-1.14-20261014 --mode current --difficulty nightmare").split(/\s+/).filter(Boolean);
 
 let latest: { snapshot: Snapshot } | undefined;
 let book: Encyclopedia | undefined;

@@ -8,7 +8,7 @@
 import path from "node:path";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type GameMode, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 import { checkHarness, defaultModel, jsonObject, runCoach } from "./coach";
 import * as loop from "./gameplay";
 import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "./gameplay";
@@ -34,7 +34,9 @@ const RUNS = Number(option("runs", "1"));
 // "highest" takes the hardest the game allows; `difficulty` then holds what the game picked, such as nightmare-3.
 const DIFFICULTY = option("difficulty", "easy");
 let difficulty = DIFFICULTY;
-const MODE = option("mode", "daily");
+// "current" plays the mode the game is on (its open mode screen, or the run in play or just ended), else the Daily.
+const MODE_ARG = option("mode", "daily");
+if (MODE_ARG !== "daily" && MODE_ARG !== "openWorld" && MODE_ARG !== "current") throw new Error(`--mode must be daily, openWorld or current; got ${MODE_ARG}`);
 const SPEED = Number(option("speed", "4"));
 // The coach (grok) only works between runs: it plans the next one and reviews the last.
 // `--coach` names the harness (see scripts/coach.ts) or "none"; `--coach-model` defaults per harness.
@@ -182,6 +184,7 @@ const PLAN_TIMEOUT_MS = 600_000;
 // A review reads the whole run log and may rewrite several files, which can take grok a few minutes.
 const REVIEW_TIMEOUT_MS = 900_000;
 const LATEST_NOTES = 3;
+const MODE: GameMode = MODE_ARG === "current" ? ((await api<Snap>("/state")).mode ?? "daily") : MODE_ARG;
 const MODE_NAME = MODE === "daily" ? "daily" : "world";
 const WIN_SECONDS = 1200;
 // Read once at startup: the code this process runs, whatever is committed while it plays.

@@ -13,6 +13,7 @@ import {
   unpaired,
 } from "../catalog";
 import { type Data, liveData } from "../data";
+import { modeScreen } from "./menu";
 import type { Discovery } from "../discovery";
 import type { Game, GameLink, GameState, Pool } from "../game";
 import { type ComboView, type CommandStatus, DIRECTIONS, type Direction, type ForecastView, type OptionView, type PickupView, type Rel, type RunView, type Snapshot } from "./protocol";
@@ -510,6 +511,10 @@ function ladderCleared(): number {
 
 export function snapshot(link: GameLink, discovery: Discovery, commands: CommandStatus[]): Snapshot {
   link.noteRunLink();
+  const game = link.game;
+  const playing = game !== undefined && inRun(link);
+  const runMode = game === undefined ? undefined : game.state.daily === undefined ? "openWorld" : "daily";
+  const mode = playing ? runMode : (modeScreen() ?? runMode);
   const base = {
     capturedAt: Date.now(),
     headless: navigator.webdriver,
@@ -517,12 +522,12 @@ export function snapshot(link: GameLink, discovery: Discovery, commands: Command
     commands,
     ...(link.error === undefined ? {} : { error: link.error }),
     ...(link.runLink === undefined ? {} : { lastRunLink: link.runLink }),
+    ...(mode === undefined ? {} : { mode }),
   };
-  const game = link.game;
   const ended = game?.state.over
     ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, kills: game.state.run.kills, damageTaken: byDamage(game.state.run.damageTakenBySource) } }
     : {};
-  if (game === undefined || !inRun(link)) return { ...base, ...ended, screen: game?.state.over ? "over" : "title" };
+  if (!playing) return { ...base, ...ended, screen: game?.state.over ? "over" : "title" };
   const d = liveData(link);
   if (d === undefined || !link.ready) return { ...base, screen: "run", error: link.error ?? "game content not loaded yet" };
   const s = game.state;

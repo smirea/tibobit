@@ -1,5 +1,6 @@
 import type { Game, GameLink, GameState } from "../game";
-import { type Command, type CommandStatus, DIRECTIONS, type Envelope, type Heading, type Target } from "./protocol";
+import { type Command, type CommandStatus, type GameMode, DIRECTIONS, type Envelope, type Heading, type Target } from "./protocol";
+import { button, modeScreen } from "./menu";
 import { choiceCards, inRun } from "./snapshot";
 
 const TICKS_PER_SECOND = 60;
@@ -28,21 +29,6 @@ const STILL = { x: 0, y: 0 };
 
 function wait(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
-}
-
-// The game's own buttons; the helper's panel and port box are never pressed by an agent command.
-function button(label: string | RegExp): HTMLButtonElement | undefined {
-  return [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => {
-    if (b.closest("#tibo-helper, [class*='tbh-']")) return false;
-    const text = b.textContent?.trim() ?? "";
-    return typeof label === "string" ? text === label : label.test(text);
-  });
-}
-
-/** On a mode screen (difficulty buttons and Start), the Daily one also has a Leaderboard button. */
-function onModeScreen(mode: "openWorld" | "daily"): boolean | undefined {
-  if (button("Start") === undefined) return undefined;
-  return (button("Leaderboard") !== undefined) === (mode === "daily");
 }
 
 // Some menu buttons only answer a click and others only a focused Enter, so try both.
@@ -223,7 +209,7 @@ export class Controller {
     throw new Error("the run summary did not show a share link");
   }
 
-  private async start(status: CommandStatus, mode: "openWorld" | "daily", difficulty: string, weapon: string | undefined) {
+  private async start(status: CommandStatus, mode: GameMode, difficulty: string, weapon: string | undefined) {
     const entry = mode === "daily" ? /^Daily/ : "Open World";
     if (inRun(this.link)) {
       // Leave the current run through the pause menu: Main menu, then confirm. An agent's lockstep
@@ -240,7 +226,7 @@ export class Controller {
     this.link.noteRunLink();
     // After a death the game walks through a few screens (a promo, a summary) before the title.
     // Advance through them, never pressing anything that leaves the game, such as "Try Grok Bot".
-    for (let i = 0; i < 15 && button(entry) === undefined && onModeScreen(mode) !== true; i++) {
+    for (let i = 0; i < 15 && button(entry) === undefined && modeScreen() !== mode; i++) {
       if (i === 14) {
         const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
         throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
@@ -258,7 +244,7 @@ export class Controller {
       }
       await wait(1200);
     }
-    if (onModeScreen(mode) !== true) {
+    if (modeScreen() !== mode) {
       const open = button(entry);
       if (open === undefined) throw new Error(`no ${mode} button on the title screen`);
       await press(open);
