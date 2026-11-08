@@ -252,6 +252,11 @@ export class Slot {
     if (gym.checkpoint.build !== page) ready = await build(gym);
     // Another slot may have built the gym again since this page last loaded it.
     await this.command({ type: "checkpoint", op: "drop", name: `gym-${ready.name}` });
+    const loaded = await this.api<CommandStatus>("/command?wait=1&timeout=120", { type: "checkpoint", op: "load", name: `gym-${ready.name}` });
+    if (loaded.state === "done") return ready;
+    // The screen read a moment before can be stale: the last game's run had just ended.
+    if (!/no run in progress/.test(loaded.detail ?? "")) throw new Error(`checkpoint ${loaded.state}: ${loaded.detail ?? ""}`);
+    await this.command({ type: "start", mode: "openWorld", difficulty: "nightmare" });
     await this.command({ type: "checkpoint", op: "load", name: `gym-${ready.name}` });
     return ready;
   }
