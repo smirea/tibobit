@@ -2,12 +2,12 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | done |
 | Area | spots |
-| Result | - |
+| Result | confirmed |
 | Coach | sonnet-high |
 | Created | sonnet-high L1.I5 |
-| Updated | sonnet-high L1.I10 |
+| Updated | sonnet-high L2.I10 |
 
 ## Hypothesis
 
@@ -19,7 +19,7 @@ From gym nm1-min5-fresh, 300s, the same playbook with only planner.goal replaced
 
 ## Findings
 
-I9: chest-first survived fresh seeds 1010 and 1111 (77 and 62 damage), the seed-909 gym from 5:00 (0 damage) and the seed-707 gym from 10:00 (19 damage). Adding boss ranges 250 died at 74s on nm1-min5-fresh. The playbook stays unchanged for the I10 full run.
+Chest-first with the 10:00 gold rule won Nightmare 1 in the L2.I10 full run (24:47).
 
 ## Games
 

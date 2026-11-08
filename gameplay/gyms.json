@@ -1849,7 +1849,7 @@
   },
   {
     "name": "nm1-min10-natural-b",
-    "status": "ready",
+    "status": "retired",
     "purpose": "A natural chest-first steam-vent build at 10:00 on Nightmare 1, to test gold spending, shrines and HP/dash picks over 10:00-15:00.",
     "coach": "sonnet-high",
     "created": "sonnet-high L1.I10",
@@ -1860,36 +1860,36 @@
     "source": "built from a fresh game to 10:00",
     "checkpoint": {
       "name": "gym-nm1-min10-natural-b",
-      "build": "sim-DwWYU7G5.js",
+      "build": "sim-BEF9Qth5.js",
       "seed": "1V0HDWX",
       "mode": "standard",
       "difficulty": "nightmare",
-      "time": 600.2,
-      "level": 34,
-      "hp": 102,
+      "time": 600.4,
+      "level": 31,
+      "hp": 134,
       "weapons": [
-        "steam-vent 8",
-        "spud-decoy 8",
-        "fry-fortress 1",
-        "tater-minigun 1",
-        "tailgate-party 1",
-        "mash-avalanche 1"
+        "steam-vent 1",
+        "clockwork-spud 1",
+        "eclipse-scythe 1",
+        "harvest-moon 8",
+        "peeler 1",
+        "mashquake 1"
       ],
       "passives": [
-        "slow-cooker 5",
-        "masher-grip 5",
-        "aged-russet 5",
-        "butter-socks 5",
-        "hot-start 4",
-        "butter-pat 5"
+        "starch-plating 4",
+        "big-bowl 5",
+        "four-eyed-spud 5",
+        "gravy-heart 1",
+        "butter-pat 5",
+        "potato-magnet 2"
       ],
       "items": [
-        "tater-treat",
-        "starch-sock",
-        "spud-muffin",
-        "meteor-russet"
+        "hot-pepper x2",
+        "lightning-spud",
+        "salt-crystal",
+        "thorny-jacket"
       ],
-      "savedAt": "2026-11-08T08:23:28.957Z"
+      "savedAt": "2026-11-08T09:41:10.372Z"
     },
     "templates": {
       "planner": {
@@ -1933,7 +1933,7 @@
   },
   {
     "name": "nm1-min16-lo-full",
-    "status": "ready",
+    "status": "retired",
     "purpose": "Nightmare 1 at 16:40 with the full run's weapon line at level 8 and its damage passives (Butter Pat, Aged Russet), played with the chest-first playbook. Baseline for the 17:00 Compost Titan and 18:00 Ketchup Kraken fights.",
     "coach": "sonnet-high",
     "created": "sonnet-high L2.I1",
@@ -2321,14 +2321,314 @@
   },
   {
     "name": "nm1-min5-fresh-d",
-    "status": "pending",
+    "status": "retired",
     "purpose": "natural 5:00 gym from a fresh chest-first game to test 5:00-10:00 survival and evolution commitment",
     "coach": "sonnet-medium",
     "created": "sonnet-medium L2.I10",
     "difficulty": 1,
     "at": 300,
     "weapon": "steam-vent",
+    "seed": "1KOOT67",
+    "source": "built from a fresh game to 05:00",
+    "checkpoint": {
+      "name": "gym-nm1-min5-fresh-d",
+      "build": "sim-BEF9Qth5.js",
+      "seed": "1KOOT67",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 300.3,
+      "level": 15,
+      "hp": 141,
+      "weapons": [
+        "steam-vent 5",
+        "hash-brown-shield 2"
+      ],
+      "passives": [
+        "big-bowl 3",
+        "stuffed-skin 4",
+        "gravy-splash 1",
+        "root-network 2"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T09:46:28.051Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing now? Rank in this order. If health is under 40%, or a boss is within 200 units, food or evading comes first. Otherwise: opening a chest first (free pick, and it evolves weapons), fighting an elite next (it drops a chest), then collecting nearby xp gems, then exploring for new chests. Do not evade just because many pests are around; the weapons handle them. Skip anything that walks Tibo directly into a boss.",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest? Commit to one evolution line: level the weapon that has its catalyst passive held or on offer (Steam Vent with Root Network, Locked Gatling with Masher Grip) and take the catalyst when offered. Never take Reroll when a useful card is shown. Take Gravy Heart for max hp early. Keep damage passives (Butter Pat, Hot Sauce) next, and prefer armor and dodge items when offered."
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "nm1-min15-natural-b-gold",
+    "status": "retired",
+    "purpose": "Nightmare 1 at 15:00 from a natural chest-first build that was allowed to spend gold on crates, shops and shrines from 10:00 to 15:00, to continue through 15:00-20:00 with the items it bought.",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L2.I7",
+    "difficulty": 1,
+    "at": 900,
+    "weapon": "",
+    "seed": "1V0HDWX",
+    "source": "saved at the end of game L2.I7.G5",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "Tibo could next: {{goal}}. {{health}} {{gold}} {{evolutions}} Chests are the best source of power: each gives a free pick and evolves a ready recipe, and elites and bosses drop them. While health is above half, rate opening a known chest or fighting an elite highest, then exploring for a chest, then gems; avoid evading unless enemies crowd Tibo. If gold is 300 or more, health is above 70% and no boss is close, rate a Potato Crate, Fry Cart, Spud Whetstone or Spud Shrine goal as high as a chest. If health is low, rate food and evading highest. Is this the best goal now?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    },
+    "checkpoint": {
+      "name": "gym-nm1-min15-natural-b-gold",
+      "build": "sim-BEF9Qth5.js",
+      "seed": "1V0HDWX",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 900.4,
+      "level": 51,
+      "hp": 244,
+      "weapons": [
+        "steam-vent 8",
+        "clockwork-spud 1",
+        "eclipse-scythe 1",
+        "hunters-moon 1",
+        "mandoline-fury 1",
+        "mashquake 1"
+      ],
+      "passives": [
+        "starch-plating 5",
+        "big-bowl 5",
+        "four-eyed-spud 5",
+        "gravy-heart 5",
+        "butter-pat 5",
+        "potato-magnet 5"
+      ],
+      "items": [
+        "hot-pepper x2",
+        "lightning-spud",
+        "salt-crystal",
+        "thorny-jacket",
+        "potato-knish",
+        "lucky-peel",
+        "golden-gravy",
+        "extra-eye",
+        "crit-chip",
+        "compost-tea",
+        "heavy-russet",
+        "tater-tank"
+      ],
+      "savedAt": "2026-11-08T09:44:45.206Z"
+    }
+  },
+  {
+    "name": "nm1-min15-natural-c",
+    "status": "ready",
+    "purpose": "A second natural chest-first steam-vent build at 15:00 on a different map, to check that late item, gold and pick findings hold beyond the nm1-min15-natural-b-gold map.",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L2.I8",
+    "difficulty": 1,
+    "at": 900,
+    "weapon": "steam-vent",
+    "seed": "1FWJ9T6",
+    "source": "built from a fresh game to 15:00",
+    "checkpoint": {
+      "name": "gym-nm1-min15-natural-c",
+      "build": "sim-BEF9Qth5.js",
+      "seed": "1FWJ9T6",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 900.6,
+      "level": 56,
+      "hp": 138,
+      "weapons": [
+        "pressure-cooker 1",
+        "mashquake 1",
+        "factory-reset 1",
+        "bottomless-sack 1",
+        "spud-artillery 1",
+        "starch-chain 8"
+      ],
+      "passives": [
+        "big-bowl 5",
+        "root-network 5",
+        "four-eyed-spud 5",
+        "hot-sauce 5",
+        "sprouting-eyes 5",
+        "butter-pat 5"
+      ],
+      "items": [
+        "sharp-peeler",
+        "potato-knish",
+        "lucky-peel",
+        "hot-pepper",
+        "bonfire-spud",
+        "tater-treat"
+      ],
+      "savedAt": "2026-11-08T09:57:08.320Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "Tibo could next: {{goal}}. {{health}} {{evolutions}} Chests are the best source of power: each gives a free pick and evolves a ready recipe, and elites and bosses drop them. While health is above half, rate opening a known chest or fighting an elite highest, then exploring for a chest, then gems; avoid evading unless enemies crowd Tibo. If health is low, rate food and evading highest. Is this the best goal now?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "nm1-min5-fresh-e",
+    "status": "ready",
+    "purpose": "Natural 5:00 build from a fresh plain chest-first steam-vent game on seed 1616, to test 5:00-10:00 survival and evolution commitment.",
+    "coach": "sonnet-medium",
+    "created": "sonnet-medium L3.I3",
+    "difficulty": 1,
+    "at": 300,
+    "weapon": "steam-vent",
+    "seed": "1616",
+    "source": "saved at the end of game L3.I3.G1",
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing now? Rank in this order. If health is under 25%, food or evading comes first. Otherwise: opening a chest first (free pick, and it evolves weapons), fighting an elite next (it drops a chest), then collecting nearby xp gems, then exploring for new chests. Do not evade just because many pests or a boss are around; the weapons handle them.",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest? Commit to one evolution line: level the weapon that has its catalyst passive held or on offer (Steam Vent with Root Network, Locked Gatling with Masher Grip) and take the catalyst when offered. Never take Reroll when a useful card is shown. Take Gravy Heart for max hp early. Keep damage passives (Butter Pat, Hot Sauce) next, and prefer armor and dodge items when offered."
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    },
+    "checkpoint": {
+      "name": "gym-nm1-min5-fresh-e",
+      "build": "sim-BYbipzJm.js",
+      "seed": "1616",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 300.1,
+      "level": 17,
+      "hp": 120,
+      "weapons": [
+        "pressure-cooker 1",
+        "tater-minigun 1"
+      ],
+      "passives": [
+        "butter-socks 1",
+        "masher-grip 4",
+        "root-network 2",
+        "mash-finisher 1"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T10:03:17.560Z"
+    }
+  },
+  {
+    "name": "nm2-min5-fresh",
+    "status": "pending",
+    "purpose": "Nightmare 2 at 5:00 from a natural playbook start, to test 5:00-10:00 survival and evolution commitment on the next ladder level",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L2.I10",
+    "difficulty": 2,
+    "at": 300,
+    "weapon": "steam-vent",
     "seed": "",
     "source": "built from a fresh game to 05:00"
+  },
+  {
+    "name": "nm2-min10-natural",
+    "status": "pending",
+    "purpose": "Nightmare 2 at 10:00 from a natural playbook start, to test the gold rule, hp passive picks and the 10:00-15:00 bosses on the next ladder level",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L2.I10",
+    "difficulty": 2,
+    "at": 600,
+    "weapon": "steam-vent",
+    "seed": "",
+    "source": "built from a fresh game to 10:00"
+  },
+  {
+    "name": "nm2-min15-natural",
+    "status": "pending",
+    "purpose": "Nightmare 2 at 15:00 from a natural playbook start, to test the 15:00-20:00 crowd and the Titan, Kraken and Harvester windows on the next ladder level",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L2.I10",
+    "difficulty": 2,
+    "at": 900,
+    "weapon": "steam-vent",
+    "seed": "",
+    "source": "built from a fresh game to 15:00"
   }
 ]

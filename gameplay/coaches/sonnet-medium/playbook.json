@@ -2,7 +2,7 @@
   "templates": {
     "planner": {
       "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
-      "goal": "If Tibo's next goal is to {{goal}}: is that the best thing now? Rank in this order. If health is under 40%, or a boss is within 200 units, food or evading comes first. Otherwise: opening a chest first (free pick, and it evolves weapons), fighting an elite next (it drops a chest), then collecting nearby xp gems, then exploring for new chests. Do not evade just because many pests are around; the weapons handle them. Skip anything that walks Tibo directly into a boss.",
+      "goal": "If Tibo's next goal is to {{goal}}: is that the best thing now? Rank in this order. If health is under 25%, food or evading comes first. Otherwise: opening a chest first (free pick, and it evolves weapons), fighting an elite next (it drops a chest), then collecting nearby xp gems, then exploring for new chests. Do not evade just because many pests or a boss are around; the weapons handle them.",
       "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest? Commit to one evolution line: level the weapon that has its catalyst passive held or on offer (Steam Vent with Root Network, Locked Gatling with Masher Grip) and take the catalyst when offered. Never take Reroll when a useful card is shown. Take Gravy Heart for max hp early. Keep damage passives (Butter Pat, Hot Sauce) next, and prefer armor and dodge items when offered."
     },
     "action": {
@@ -27,6 +27,6 @@
     }
   },
   "weapon": "steam-vent",
-  "updated": "sonnet-medium L2.I10",
-  "why": "The 6:42 death came from a goal prompt that made the bot evade all game and starved chests; the pick prompt also scattered levels. Revert to the proven plain chest-first with a narrower boss rule and add catalyst-focused picks."
+  "updated": "sonnet-medium L3.I3",
+  "why": "Plain chest-first is the base that lived 17:20 and 18:36 on Nightmare 1. It passed 3 of 3 fresh seeds in L3.I2 (7-9 chests, early evolutions), where the crowd exception (6:42) and the 200-unit boss exception (0 chests on 2 of 3 seeds) starved chests. The late-game boss problem is tested separately with the tight boss-100 text before any exception ships."
 }

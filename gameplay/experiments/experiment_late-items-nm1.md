@@ -112,3 +112,43 @@ L2.I4: the nine-item defensive set B passed 20:00 in 2 of 2 games, while damage 
 - Kills 27392, by weapon: mash-avalanche 8336, pressure-cooker 5501, mandoline-fury 5155, gratin-arc 4064, tater-minigun 3563, boom-spud 639, harvest-moon 121, grok-bot 12.
 - Bosses killed 2, elites killed 6, boss chests 6, crates bought 0, shrines used 0, items bought 0, revives used 0; gold earned 4780, spent 0.
 - Made: no evolution, union or evolved item.
+
+### L2.I7.G1: full gym items A plus armor and dodge, A
+
+- Start: gym nm1-min16-full (Nightmare 1 at 16:40), seed 1JV4MGC, build swapped for pressure-cooker 1, gratin-arc 1, mash-avalanche 1, tater-minigun 1, mandoline-fury 1, harvest-moon 8, butter-pat 5, root-network 5, hot-sauce 5, masher-grip 5, gravy-heart 5, aged-russet 5, starch-sock x4, hot-pepper x3, salt-crystal x1, boom-spud x1, lucky-peel x1, pickle-jar x1, baked-buckler x2, ghost-skin x2; 240s; plays the playbook.
+- Outcome: alive after 240s (game clock 20:40), health 192/192; damage taken 555 (boss:ketchup-kraken 290.7, enemy:ice-imp 110, enemy:grease-fiend 69.9, boss:compost-titan 62.7); 25059 kills; level 57 to 68; planner asked 73 times, action model 340, in lockstep; ended with pressure-cooker 1, gratin-arc 1, mash-avalanche 1, tater-minigun 1, mandoline-fury 1, harvest-moon 8, butter-pat 5, root-network 5, hot-sauce 5, masher-grip 5, gravy-heart 5, aged-russet 5.
+- Damage taken 555, by source: boss:ketchup-kraken 290.7, enemy:ice-imp 110, enemy:grease-fiend 69.9, boss:compost-titan 62.7, Hot oil 14.7, Brambles 6.9.
+- Damage dealt 21688658, by weapon: mash-avalanche 4719367.2, mandoline-fury 4695744.2, pressure-cooker 4242760.9, gratin-arc 3702512.3, tater-minigun 3253801.4, boom-spud 897645, harvest-moon 139419, grok-bot 34090.1.
+- Kills 25059, by weapon: mash-avalanche 5724, pressure-cooker 5401, mandoline-fury 5212, gratin-arc 4246, tater-minigun 3690, boom-spud 567, harvest-moon 133, grok-bot 83.
+- Bosses killed 3, elites killed 6, boss chests 11, crates bought 3, shrines used 0, items bought 0, revives used 0; gold earned 5377, spent 217.
+- Made: no evolution, union or evolved item.
+
+### L2.I7.G2: full gym items A plus armor and dodge, B
+
+- Start: gym nm1-min16-full (Nightmare 1 at 16:40), seed 1JV4MGC, build swapped for pressure-cooker 1, gratin-arc 1, mash-avalanche 1, tater-minigun 1, mandoline-fury 1, harvest-moon 8, butter-pat 5, root-network 5, hot-sauce 5, masher-grip 5, gravy-heart 5, aged-russet 5, starch-sock x4, hot-pepper x3, salt-crystal x1, boom-spud x1, lucky-peel x1, pickle-jar x1, baked-buckler x2, ghost-skin x2; 240s; plays the playbook.
+- Outcome: died after 93.4s (game clock 18:13); damage taken 264 (enemy:ice-imp 165.5, boss:ketchup-kraken 96.9, Brambles 1.7); 9570 kills; level 57 to 61; planner asked 27 times, action model 134, in lockstep; ended with pressure-cooker 1, gratin-arc 1, mash-avalanche 1, tater-minigun 1, mandoline-fury 1, harvest-moon 8, butter-pat 5, root-network 5, hot-sauce 5, masher-grip 5, gravy-heart 5, aged-russet 5.
+- Damage taken 264, by source: enemy:ice-imp 165.5, boss:ketchup-kraken 96.9, Brambles 1.7; the killing blow: enemy:ice-imp.
+- Damage dealt 6350389, by weapon: mandoline-fury 1309393.5, gratin-arc 1208361, mash-avalanche 1202909.7, pressure-cooker 1173541.5, tater-minigun 1100791.5, boom-spud 306544.7, harvest-moon 38153.7, porcupine-spud 9957.5.
+- Kills 9570, by weapon: pressure-cooker 1985, mandoline-fury 1939, mash-avalanche 1877, gratin-arc 1811, tater-minigun 1629, boom-spud 276, harvest-moon 37, porcupine-spud 16.
+- Bosses killed 1, elites killed 4, boss chests 6, crates bought 1, shrines used 0, items bought 0, revives used 0; gold earned 2512, spent 30.
+- Made: no evolution, union or evolved item.
+
+### L2.I7.G3: full gym items A plus max hp and sustain, A
+
+- Start: gym nm1-min16-full (Nightmare 1 at 16:40), seed 1JV4MGC, build swapped for pressure-cooker 1, gratin-arc 1, mash-avalanche 1, tater-minigun 1, mandoline-fury 1, harvest-moon 8, butter-pat 5, root-network 5, hot-sauce 5, masher-grip 5, gravy-heart 5, aged-russet 5, starch-sock x4, hot-pepper x3, salt-crystal x1, boom-spud x1, lucky-peel x1, pickle-jar x1, spud-muffin x2, vampire-tot x2, thorny-jacket x1; 240s; plays the playbook.
+- Outcome: alive after 240.1s (game clock 20:40), health 230/230; damage taken 1230 (boss:ketchup-kraken 524.8, enemy:grease-fiend 286.5, enemy:ice-imp 228.6, boss:compost-titan 104.2); 25336 kills; level 57 to 69; planner asked 73 times, action model 449, in lockstep; ended with pressure-cooker 1, gratin-arc 1, mash-avalanche 1, tater-minigun 1, mandoline-fury 1, harvest-moon 8, butter-pat 5, root-network 5, hot-sauce 5, masher-grip 5, gravy-heart 5, aged-russet 5.
+- Damage taken 1230, by source: boss:ketchup-kraken 524.8, enemy:grease-fiend 286.5, enemy:ice-imp 228.6, boss:compost-titan 104.2, Hot oil 50.2, enemy:blight-spore 20.1, Spore vent 16.
+- Damage dealt 22161260, by weapon: mash-avalanche 5234834.3, mandoline-fury 3956529.1, pressure-cooker 3565990.7, gratin-arc 3401462.6, tater-minigun 3220942.9, static-tot 1133399.1, boom-spud 856309.2, storm-tot 604311.1.
+- Kills 25336, by weapon: mash-avalanche 6061, pressure-cooker 4930, mandoline-fury 4928, gratin-arc 3944, tater-minigun 3763, static-tot 786, boom-spud 492, storm-tot 226.
+- Bosses killed 3, elites killed 4, boss chests 9, crates bought 5, shrines used 0, items bought 0, revives used 0; gold earned 5638, spent 581.
+- Made: storm-tot at 20:37.
+
+### L2.I7.G4: full gym items A plus max hp and sustain, B
+
+- Start: gym nm1-min16-full (Nightmare 1 at 16:40), seed 1JV4MGC, build swapped for pressure-cooker 1, gratin-arc 1, mash-avalanche 1, tater-minigun 1, mandoline-fury 1, harvest-moon 8, butter-pat 5, root-network 5, hot-sauce 5, masher-grip 5, gravy-heart 5, aged-russet 5, starch-sock x4, hot-pepper x3, salt-crystal x1, boom-spud x1, lucky-peel x1, pickle-jar x1, spud-muffin x2, vampire-tot x2, thorny-jacket x1; 240s; plays the playbook.
+- Outcome: died after 238.3s (game clock 20:38); damage taken 571 (boss:harvester 268.1, enemy:grease-fiend 137.4, boss:compost-titan 69.4, enemy:ice-imp 60.7); 22015 kills; level 57 to 69; planner asked 60 times, action model 391, in lockstep; ended with pressure-cooker 1, gratin-arc 1, mash-avalanche 1, tater-minigun 1, mandoline-fury 1, harvest-moon 8, butter-pat 5, root-network 5, hot-sauce 5, masher-grip 5, gravy-heart 5, aged-russet 5.
+- Damage taken 571, by source: boss:harvester 268.1, enemy:grease-fiend 137.4, boss:compost-titan 69.4, enemy:ice-imp 60.7, Hot oil 26.2, Brambles 9.4; the killing blow: boss:harvester.
+- Damage dealt 19916659, by weapon: mash-avalanche 4366687.6, mandoline-fury 3988112.7, pressure-cooker 3895821.2, gratin-arc 3605000.2, tater-minigun 3186035.4, boom-spud 761531.9, harvest-moon 106861.5, grok-bot 3477.1.
+- Kills 22015, by weapon: mash-avalanche 5240, pressure-cooker 4687, mandoline-fury 4320, gratin-arc 3830, tater-minigun 3316, boom-spud 490, harvest-moon 124, grok-bot 6.
+- Bosses killed 2, elites killed 4, boss chests 7, crates bought 6, shrines used 0, items bought 0, revives used 0; gold earned 4931, spent 838.
+- Made: no evolution, union or evolved item.
