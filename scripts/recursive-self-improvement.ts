@@ -208,7 +208,7 @@ function outcome(r: GameResult): string {
   if (t === undefined) return "no result";
   const taken = Object.values(t.damageTaken).reduce((a, b) => a + b, 0);
   const top = Object.entries(t.damageTaken).slice(0, 4).map(([k, v]) => `${k} ${v}`).join(", ");
-  return `${t.died ? `died after ${t.survived}s (game clock ${clock(t.end)})` : `alive after ${t.survived}s (game clock ${clock(t.end)}), health ${t.hp.end}/${t.hp.max}`}; damage taken ${Math.round(taken)}${top === "" ? "" : ` (${top})`}; ${t.kills} kills; level ${t.level.start} to ${t.level.end}${t.plannerCalls === undefined ? "" : `; planner asked ${t.plannerCalls} times, action model ${t.actionCalls ?? 0}, ${t.live ? "live" : "in lockstep"}`}; ended with ${[...t.weapons, ...t.passives].join(", ") || "nothing"}${r.savedGym === undefined ? "" : `; saved as gym ${r.spec.saveGym?.name}`}`;
+  return `${t.died ? `died after ${t.survived}s (game clock ${clock(t.end)})` : `alive after ${t.survived}s (game clock ${clock(t.end)}), health ${t.hp.end}/${t.hp.max}`}; damage taken ${Math.round(taken)}${top === "" ? "" : ` (${top})`}; ${t.kills} kills; level ${t.level.start} to ${t.level.end}${t.plannerCalls === undefined ? "" : `; planner asked ${t.plannerCalls} times, action model ${t.actionCalls ?? 0}`}; ended with ${[...t.weapons, ...t.passives].join(", ") || "nothing"}${r.savedGym === undefined ? "" : `; saved as gym ${r.spec.saveGym?.name}`}`;
 }
 
 function gameEntry(r: GameResult, gyms: Gym[], full: boolean): string {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type BeliefRow, checkEdits, merge, promptLoss, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type Experiment, notesName, notesTemplates, parseCsv, parseExperiment, renderExperiment, renderNotes, type RunSetup, withReview, totalsBetween, totalsLines } from "./gameplay";
+import { type BeliefRow, checkEdits, merge, promptLoss, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type Experiment, notesName, notesTemplates, parseCsv, parseExperiment, renderExperiment, renderNotes, type RunSetup, withReview, totalsBetween, totalsLines, LOCKSTEP_CRUTCH } from "./gameplay";
 
 const setup: RunSetup = { started: new Date(2026, 10, 7, 15, 4, 9), difficulty: "nightmare", mode: "daily", surface: "headless", seed: "S1", planner: "jev", action: "jev", coach: "grok", bot: "abc1234" };
 
@@ -78,4 +78,9 @@ test("a training game's stats count only what happened during it", () => {
   const t = totalsBetween(end, base);
   expect(t).toMatchObject({ kills: 30, damageTaken: { "boss:amusing": 30, "enemy:aphid": 7.5 }, damageDealt: { peeler: 300, "spud-lob": 250 }, killsBy: { peeler: 15, "spud-lob": 15 }, goldEarned: 30, elitesKilled: 1, made: [{ id: "peel-storm", at: 95.5 }], killer: "boss:amusing" });
   expect(totalsLines(t)[0]).toBe("Damage taken 38, by source: boss:amusing 30, enemy:aphid 7.5; the killing blow: boss:amusing.");
+});
+
+test("lockstep cannot be turned on: it is a crutch", () => {
+  expect(checkTemplates({ knobs: { lockstep: 1 } }, DEFAULT_TEMPLATES)).toEqual({ errors: [LOCKSTEP_CRUTCH] });
+  expect(LOCKSTEP_CRUTCH).toContain("crutch and is not to be enabled");
 });

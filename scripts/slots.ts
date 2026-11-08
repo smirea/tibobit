@@ -30,7 +30,6 @@ export type TrialResult = {
   plannerCalls?: number;
   actionCalls?: number;
   avgDecisionMs: number;
-  live: boolean;
   log?: string;
 };
 

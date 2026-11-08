@@ -54,7 +54,8 @@ let difficulty = DIFFICULTY;
 // "current" plays the mode the game is on (its open mode screen, or the run in play or just ended), else the Daily.
 const MODE_ARG = option("mode", "daily");
 if (MODE_ARG !== "daily" && MODE_ARG !== "openWorld" && MODE_ARG !== "current") throw new Error(`--mode must be daily, openWorld or current; got ${MODE_ARG}`);
-const SPEED = Number(option("speed", "4"));
+const CRUTCH = "lockstep is a crutch: it pauses the game while the models think, which no player can do. Every game plays live, as a person plays it. Do not enable it.";
+if (args.includes("--lockstep") || args.includes("--speed")) throw new Error(CRUTCH);
 // Notes are for full runs only: --notes writes one to gameplay/notes when the run ends, under
 // --coach-label, with --intent as its plan. Templates come from --templates (a JSON file with any of
 // planner, action and knobs over the defaults), else the playbook a coach updated last.
@@ -74,7 +75,7 @@ const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.rep
  * sent only to a bot the panel started.
  */
 type Snap = Snapshot & { connected: boolean; ageMs: number; pace?: PilotPace; incognito?: boolean };
-/** Seconds between planner calls while a goal is under way, and between steps (game time in lockstep, wall time live). */
+/** Seconds between planner calls while a goal is under way, and between steps. */
 let pace: PilotPace = { planEvery: PLAN_EVERY, actEvery: STEP };
 /** Whether the panel started this bot, which someone is watching. */
 let piloted = false;
@@ -131,13 +132,10 @@ async function send(c: unknown) {
   return timed("command", api<{ id: number }>("/command", c));
 }
 
-// Live play runs the game in real time and never pauses it: each move is held until the next
-// decision replaces it. A level-up or chest still stops the game, as it does for a person.
-// `--lockstep` instead runs the game a step at a time and pauses it while the models think, so the
-// same model on the same Daily replays the same game.
-// The coach's lockstep knob can switch a run to lockstep too, unless someone watches it in the panel.
-let LIVE = !args.includes("--lockstep");
-/** Whether this run's game has been set to play live or in lockstep; a new run starts unset. */
+// The bot plays live, as a person does: the game runs in real time and never pauses for the models,
+// and each move is held until the next decision replaces it. A level-up or chest still stops the
+// game, as it does for a person.
+/** Whether this run's game has been set to play live; a new run starts paused at tick 0. */
 let modeSet = false;
 
 // Live, a move lands a while after the snapshot it was chosen from: the forecast was made up to 12
@@ -152,21 +150,21 @@ let modelSteered = false;
 let lagSent = -1;
 
 function lagNow(ageMs: number): number {
-  return LIVE ? Math.min(1, Math.max(0, ageMs / 1000 + decideSeconds + FORECAST_REFRESH_LAG)) : 0;
+  return Math.min(1, Math.max(0, ageMs / 1000 + decideSeconds + FORECAST_REFRESH_LAG));
 }
 
 async function tellLag(ageMs: number) {
   const lag = Math.round(lagNow(ageMs) * 100) / 100;
   if (Math.abs(lag - lagSent) < 0.03) return;
   lagSent = lag;
-  await send({ type: "forecast", live: LIVE, lag });
+  await send({ type: "forecast", live: true, lag });
 }
 
 async function setMode() {
-  await command({ type: "speed", factor: LIVE ? 1 : SPEED });
+  await command({ type: "speed", factor: 1 });
   lagSent = lagNow(30);
-  await command({ type: "forecast", live: LIVE, lag: lagSent });
-  await command({ type: LIVE ? "resume" : "pause" });
+  await command({ type: "forecast", live: true, lag: lagSent });
+  await command({ type: "resume" });
   modeSet = true;
 }
 
@@ -464,8 +462,8 @@ let templates: Templates = DEFAULT_TEMPLATES;
 const knobs = (): Knobs => templates.knobs;
 const { PLAN_RANGE, GIVE_UP_SECONDS } = loop;
 const ON_CHEST = 14;
-// A lockstep goal step ends by timing out, and food collected on touch ends as "gone" before the
-// goto counts it as reached; the next step's look at the target tells which it was.
+// A goto that runs out its time, and food collected on touch ("gone" before the goto counts it as
+// reached), end without saying how the goal went; the next step's look at the target tells.
 const STEP_OVER = new Set(["timeout", "the target is gone"]);
 
 let pursuit: Pursuit | undefined;
@@ -768,19 +766,11 @@ async function pursue(s: Snap, r: RunView, log: RunLog, planner: Planner) {
 
 async function walkOn(p: Pursuit, r: RunView, aim: Aim, status: CommandStatus | undefined, log: RunLog) {
   const order = aim.to !== undefined ? { type: "goto", to: aim.to, stay: "done" } : { type: "move", dir: aim.heading };
-  if (LIVE) {
-    // Live, one command steers until the goal changes; it is only sent again if it changes or ends.
-    const key = JSON.stringify(order);
-    if (p.sent === key && (status === undefined || status.state === "running")) return;
-    p.commandId = (await send(order.type === "goto" ? { ...order, timeout: Math.max(1, p.deadline - r.time) } : order)).id;
-    p.sent = key;
-    return;
-  }
-  // Lockstep walks a step at a time, so the forecast is checked between steps.
-  const result = await command(order.type === "goto" ? { ...order, timeout: pace.actEvery, pause: true } : { ...order, seconds: pace.actEvery, pause: true });
-  p.commandId = result.id;
-  const ended = ending(p, r, aim, result);
-  if (ended !== undefined) finish(r, log, ended.done, ended.success ? "done" : "failed");
+  // One command steers until the goal changes; it is only sent again if it changes or ends.
+  const key = JSON.stringify(order);
+  if (p.sent === key && (status === undefined || status.state === "running")) return;
+  p.commandId = (await send(order.type === "goto" ? { ...order, timeout: Math.max(1, p.deadline - r.time) } : order)).id;
+  p.sent = key;
 }
 
 // ---- Action model --------------------------------------------------------------------------
@@ -1011,8 +1001,7 @@ async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog, why: string)
     ms,
   });
   if (dash) await command({ type: "dash", dir });
-  if (LIVE) return dir === undefined ? command({ type: "stop" }) : send({ type: "move", dir });
-  return command(dir === undefined ? { type: "goto", to: { dx: 0, dy: 0 }, stay: pace.actEvery, pause: true } : { type: "move", dir, seconds: pace.actEvery, pause: true });
+  return dir === undefined ? command({ type: "stop" }) : send({ type: "move", dir });
 }
 
 // ---- Planner -------------------------------------------------------------------------------
@@ -1345,8 +1334,7 @@ async function startRun(weapon = ""): Promise<void> {
     if (started.state !== "done") throw new Error(`could not start a run: ${started.detail ?? started.state}`);
   }
   difficulty = started.detail ?? DIFFICULTY;
-  await command({ type: "speed", factor: SPEED });
-  // A new run waits paused at tick 0 at lockstep speed, so the next step sets the mode again.
+  // A new run waits paused at tick 0, so the next step sets it going live.
   modeSet = false;
 }
 
@@ -1365,7 +1353,7 @@ async function main() {
   let last: RunView | undefined;
   // The previous run's notes wait for its share link, which appears while the next run starts.
   let awaitingLink: { notes: RunNotes; known: string | undefined } | undefined;
-  console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, speed x${SPEED}, planner ${PLAN_MODEL}, templates from ${BASE.source}, run logs in ${LOG_DIR}`);
+  console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, planner ${PLAN_MODEL}, templates from ${BASE.source}, run logs in ${LOG_DIR}`);
   // A run the bot is stopped in the middle of leaves no notes: it ended neither in the game nor in a bug.
   const stop = async () => {
     process.exit(0);
@@ -1381,7 +1369,6 @@ async function main() {
   recordCrash = async (e) => {
     if (notes !== undefined) await cutShort(notes, `the bot crashed (${e instanceof Error ? e.message : String(e)})`);
   };
-  await command({ type: "speed", factor: SPEED });
   const now = await api<Snap>("/state");
   // Every run the bot starts begins fresh, so a Daily always begins at tick 0 on its fixed seed.
   let adopted = TAKEOVER && now.run !== undefined && now.screen !== "over" && now.screen !== "title";
@@ -1408,7 +1395,6 @@ async function main() {
       plannerCalls: planner?.calls ?? 0,
       actionCalls: latency.length - (planner?.calls ?? 0),
       avgDecisionMs: Math.round(latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length)),
-      live: LIVE,
       log: runLog?.file,
     };
     if (died === undefined) {
@@ -1516,7 +1502,6 @@ async function main() {
       const skip = !NOTES ? "no --notes" : adopted ? "taken over mid-run" : incognito ? "incognito" : undefined;
       const prompts = "see the coach's log";
       templates = plan.templates;
-      LIVE = !args.includes("--lockstep") && (piloted || templates.knobs.lockstep < 0.5);
       notes = new RunNotes(setup, plan, prompts, skip === undefined);
       const first = r.loadout.weapons[0]?.id ?? "none";
       notes.started = startNote === "chosen" ? `${first} (chosen by the coach)` : `${first} (${startNote})`;
@@ -1548,13 +1533,13 @@ async function main() {
     }
     if (!modeSet) await setMode();
     // Live, the bot never pauses the game itself, so a pause is the player's: the models wait for it.
-    if (LIVE && s.screen === "paused") {
+    if (s.screen === "paused") {
       await Bun.sleep(250);
       continue;
     }
     const stepStarted = performance.now();
     modelSteered = false;
-    if (LIVE) await tellLag(s.ageMs);
+    await tellLag(s.ageMs);
     if (s.screen === "choice") await choose(r, planner, runLog);
     else {
       const why = pursuit === undefined ? undefined : planner.due(r);
@@ -1563,7 +1548,7 @@ async function main() {
     }
     // A move the action model chose was decided from a state already a few hundred ms old, so the
     // next one starts as soon as it lands; the page walks the cheap steps on its own anyway.
-    if (LIVE && !modelSteered) await Bun.sleep(Math.max(0, pace.actEvery * 1000 - (performance.now() - stepStarted)));
+    if (!modelSteered) await Bun.sleep(Math.max(0, pace.actEvery * 1000 - (performance.now() - stepStarted)));
   }
 }
 
