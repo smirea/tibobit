@@ -169,7 +169,8 @@ export const BLOCKS = {
   enemies: "enemies around, how many within 60 units, and the most and least crowded directions within 150",
   current_goal: "the goal under way and since when",
   recent_goals: "the last 6 goals and how each ended",
-  state: "every block above except difficulty and mode, one per line: the whole state",
+  weapon_damage: "damage dealt so far by each weapon held, most first, with its rate a minute, e.g. 'Damage dealt so far by weapon: Steam Vent 4012 (1783 a minute), Hash Hawk 2210 (982 a minute).' (not part of {{state}})",
+  state: "every block above except difficulty, mode and weapon_damage, one per line: the whole state",
 } as const;
 export type BlockName = keyof typeof BLOCKS;
 

@@ -1063,6 +1063,12 @@ function blocks(r: RunView, b: Book): Record<BlockName, () => string> {
     },
     current_goal: () => `Current goal: ${pursuit === undefined ? "none" : `${pursuit.title}, since ${clock(pursuit.since)}`}.`,
     recent_goals: () => `Recent goals: ${outcomes.slice(-6).map((o) => `${clock(o.time)} ${o.title}: ${o.outcome}`).join("; ") || "none yet"}.`,
+    weapon_damage: () => {
+      const dealt = r.totals.damageDealt;
+      const minutes = Math.max(r.time, 1) / 60;
+      const held = [...r.loadout.weapons].sort((a, z) => (dealt[z.id] ?? 0) - (dealt[a.id] ?? 0));
+      return `Damage dealt so far by weapon: ${held.map((w) => `${w.name} ${Math.round(dealt[w.id] ?? 0)} (${Math.round((dealt[w.id] ?? 0) / minutes)} a minute)`).join(", ") || "no weapon"}.`;
+    },
   };
   const state = () =>
     [
