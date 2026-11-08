@@ -73,6 +73,9 @@ export function directionOf(dx: number, dy: number): Direction {
 
 const round = (n: number) => Math.round(n * 10) / 10;
 
+/** The content kind an event's `id` names, for its English name. */
+const EVENT_NAMES: Record<string, string> = { bossSpawn: "boss", bossDefeated: "boss", biome: "biome", grokBotHelp: "botHelp", dogJoined: "dog" };
+
 function totals(run: GameState["run"]): RunTotals {
   return {
     kills: run.kills,
@@ -524,15 +527,15 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
 
   const events: EventView[] = link.events.map((e) => {
     const view = toJson(e) as EventView;
-    if ((e.type === "bossSpawn" || e.type === "bossDefeated") && typeof e.id === "string") return { ...view, name: msg("boss", e.id) };
+    const named = EVENT_NAMES[e.type];
+    if (named !== undefined && typeof e.id === "string") return { ...view, name: msg(named, e.id) };
     const said = e.announcement as { kind?: string; event?: string } | undefined;
     if (e.type === "announce" && said?.kind === "event" && said.event !== undefined)
       return { ...view, name: msg("event", said.event), ...(link.message(`content.event.${said.event}.announce`) === undefined ? {} : { text: link.message(`content.event.${said.event}.announce`) }) };
     return view;
   });
-  const minute = Math.floor(s.runClock / 60);
   const schedule = s.waves.rows
-    .filter((w) => w.minute >= minute && (w.boss !== undefined || w.elite === true || (w.events?.length ?? 0) > 0))
+    .filter((w) => w.minute * 60 > s.runClock && (w.boss !== undefined || w.elite === true || (w.events?.length ?? 0) > 0))
     .map((w) => ({
       minute: w.minute,
       ...(w.boss === undefined ? {} : { boss: { id: w.boss, name: msg("boss", w.boss) } }),

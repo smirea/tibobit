@@ -160,8 +160,8 @@ export type BuffView = { id: "goldRush" | "frenzy" | "fryRush" | "picnic"; endsI
 /**
  * Something the game showed or recorded, newest last: a boss spawning or defeated, a banner
  * (`announce`, whose `announcement.kind` says what, such as "event" with the event's id), a chest,
- * an evolution, a level-up, a dog joining. `time` is the run clock. `name` and `text` are the
- * game's English for a boss or event.
+ * an evolution, a level-up, a dog joining. `time` is the run clock. `name` is the game's English
+ * for the boss, biome, Grok Bot, dog or event the event is about, and `text` an event's banner.
  */
 export type EventView = { time: number; type: string; name?: string; text?: string } & Record<string, unknown>;
 
@@ -221,7 +221,7 @@ export type RunView = {
   stats: Record<string, number>;
   buffs: BuffView[];
   totals: RunTotals;
-  /** The minutes still to come that bring a boss, an elite or an event, in order; this minute first. */
+  /** The minutes still to come that bring a boss, an elite or an event, in order. */
   schedule: { minute: number; boss?: { id: string; name: string }; elite: boolean; events: { id: string; name: string }[] }[];
   events: EventView[];
   /** Recipes using something held. */
