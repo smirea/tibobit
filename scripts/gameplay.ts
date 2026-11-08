@@ -715,6 +715,7 @@ const goalKind = (id: string) => (id.startsWith("C") ? "chest" : id.startsWith("
 /** A Markdown summary of a run from its CSV log. */
 export function runStats(csv: string): string {
   const [header = [], ...cells] = parseCsv(csv);
+  if (header[0] !== "time") return `(no stats: the log is damaged, its first line is not the header but ${JSON.stringify((header.join(",")).slice(0, 80))})`;
   const rows = cells.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])) as Record<string, string>);
   const live = rows.filter((r) => r.seconds !== "");
   if (live.length === 0) return "(no log rows)";
@@ -798,6 +799,7 @@ export function coverage(rows: ExperimentRow[]): string {
  */
 export function keyNumbers(csv: string): string {
   const [header = [], ...cells] = parseCsv(csv);
+  if (header[0] !== "time") return "(no numbers: the log is damaged)";
   const rows = cells.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])) as Record<string, string>);
   const at = (r: Record<string, string>) => Number(r.seconds) || 0;
   const listed = rows.find((r) => (r.chests ?? "") !== "")?.time ?? "never";

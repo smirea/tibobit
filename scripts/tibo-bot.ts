@@ -6,7 +6,7 @@
 // only options the game itself rules out: cards Tibo cannot take, and moves the game's own
 // simulation says cost clearly more health over the next second than the cheapest one.
 import path from "node:path";
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ChatLine, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 import { checkHarness, defaultModel, runCoach } from "./coach";
@@ -281,8 +281,11 @@ class RunNotes {
     public prompts: string,
     public saved: boolean,
   ) {
+    // Ids have one-second steps, and two bots can start a run in the same second; a later one moves on.
+    const logFor = () => path.join(LOG_DIR, `${loop.runId(setup.started)}_${setup.difficulty}_${setup.mode}_${setup.surface}.csv`);
+    while (existsSync(logFor())) setup.started = new Date(setup.started.getTime() + 1000);
     this.id = loop.runId(setup.started);
-    this.log = path.join(LOG_DIR, `${this.id}_${setup.difficulty}_${setup.mode}_${setup.surface}.csv`);
+    this.log = logFor();
   }
 
   /** The run is over, so its notes get their name, which says how long Tibo lived. */
@@ -370,7 +373,8 @@ class RunLog {
   private held: Map<string, string> | undefined;
   constructor(readonly file: string) {
     mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, `${LOG_COLUMNS.join(",")}\n`);
+    // Never over another run's log: two runs with one id would truncate each other's.
+    writeFileSync(file, `${LOG_COLUMNS.join(",")}\n`, { flag: "wx" });
   }
 
   write(r: RunView | undefined, row: LogRow) {
