@@ -24,7 +24,6 @@ const root = path.resolve(import.meta.dir, "..");
 const userscript = Bun.file(path.join(root, "dist", "tibo-helper.user.js"));
 if (!(await userscript.exists())) throw new Error("dist/tibo-helper.user.js is missing; run bun run build");
 
-const seedHook = `(() => { const want = sessionStorage.getItem("tibobit.seed"); if (!want) return; const n = parseInt(want, 36); const real = crypto.getRandomValues.bind(crypto); window.__seedCalls = []; crypto.getRandomValues = (a) => { window.__seedCalls.push(a.constructor.name + a.length + "@" + Math.round(performance.now())); if (a instanceof Uint32Array && a.length === 1) { a[0] = n; return a; } return real(a); }; })();`;
 const shim = `window.GM_xmlhttpRequest = (d) => {
   const ctrl = new AbortController();
   fetch(d.url, { method: d.method, body: d.data, headers: d.headers, signal: ctrl.signal })
@@ -64,7 +63,7 @@ const context =
     ? await (await chromium.launch(launch)).newContext(contextOptions)
     : await chromium.launchPersistentContext(path.resolve(profile), { ...launch, ...contextOptions });
 const target = bridge === "" ? "" : `window.__tiboBridgeOrigin = "http://127.0.0.1:${Number(bridge)}";`;
-await context.addInitScript({ content: `${seedHook}\n${target}\n${shim}\n${await userscript.text()}` });
+await context.addInitScript({ content: `${target}\n${shim}\n${await userscript.text()}` });
 const page = context.pages()[0] ?? (await context.newPage());
 // tibo.dog polls /version.json and reloads itself onto a new build, which drops the run in
 // progress. Keep answering with the build this page loaded; /reload picks up a new one.
