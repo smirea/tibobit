@@ -67,7 +67,7 @@ type Snap = Snapshot & { connected: boolean; ageMs: number; pace?: PilotPace; in
 let pace: PilotPace = { planEvery: PLAN_EVERY, actEvery: STEP };
 /** Whether the panel started this bot, which someone is watching. */
 let piloted = false;
-const PICK_SHOW_MS = 4000;
+const PICK_SHOW_MS = 2000;
 
 const COACH_NAME = `${COACH} ${COACH_MODEL ?? "(its default model)"}`;
 let chatQueue = Promise.resolve();

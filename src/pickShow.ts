@@ -3,10 +3,10 @@ import type { CardOption, ChatMessage } from "./agent/protocol";
 import { choiceCards } from "./agent/snapshot";
 import { moveIcon } from "./icons";
 
-// The bot waits 4 seconds before taking the card; the pick glows a little before that.
-const SHOW_MS = 3400;
+// The bot waits 2 seconds (PICK_SHOW_MS in tibo-bot.ts) before taking the card; the pick glows a little before that.
+const SHOW_MS = 1500;
 // The arrow glides in from the first card's edge to the pick, then bobs there.
-const ARRIVE_MS = 1100;
+const ARRIVE_MS = 700;
 // A pick message older than this belongs to an earlier choice. Its age counts from when the server
 // stamped it (same machine), since a reconnecting tab gets the server's whole chat replayed.
 const FRESH_MS = 8000;

@@ -2587,8 +2587,8 @@
   }
 
   // src/pickShow.ts
-  var SHOW_MS = 3400;
-  var ARRIVE_MS = 1100;
+  var SHOW_MS = 1500;
+  var ARRIVE_MS = 700;
   var FRESH_MS = 8000;
   function el(className, text = "") {
     const d = document.createElement("div");
