@@ -438,12 +438,14 @@ class RunLog {
    */
   loadoutChange(r: RunView): string | undefined {
     const now = new Map([...r.loadout.weapons, ...r.loadout.passives].map((x) => [x.name, `${x.level}/${x.max}`] as [string, string]));
+    // A new item carries the game's description, so a review can tell what it should have changed.
+    const itemSaid = new Map(r.loadout.items.map((i) => [i.name, said(book ?? new Map(), "item", i.id).replace(/^: /, " (") + (said(book ?? new Map(), "item", i.id) === "" ? "" : ")")] as [string, string]));
     for (const i of r.loadout.items) now.set(i.name, `x${i.count}`);
     const before = this.held;
     this.held = now;
     if (before === undefined) return undefined;
     const changes = [
-      ...[...now].filter(([k, v]) => before.get(k) !== v).map(([k, v]) => (before.has(k) ? `${k} ${before.get(k)} to ${v}` : `${k} ${v} new`)),
+      ...[...now].filter(([k, v]) => before.get(k) !== v).map(([k, v]) => (before.has(k) ? `${k} ${before.get(k)} to ${v}` : `${k} ${v} new${itemSaid.get(k) ?? ""}`)),
       ...[...before.keys()].filter((k) => !now.has(k)).map((k) => `${k} gone`),
     ];
     return changes.length === 0 ? undefined : changes.join(", ");
@@ -1606,7 +1608,7 @@ class Planner {
 const loadoutLines = (r: RunView) => [
   `Weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
   `Passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
-  `Items: ${r.loadout.items.map((i) => `${i.name} x${i.count}`).join(", ") || "none"}.`,
+  `Items: ${r.loadout.items.map((i) => `${i.name} x${i.count}${said(book ?? new Map(), "item", i.id)}`).join("; ") || "none"}.`,
 ];
 
 // ---- Picks ---------------------------------------------------------------------------------
