@@ -177,6 +177,8 @@
     return Number.isInteger(port) && port >= 1 && port <= 65535;
   }
   var DIRECTIONS = ["right", "down-right", "down", "down-left", "left", "up-left", "up", "up-right"];
+  var CHECKPOINT_NAME = /^[\w.@-]{1,100}$/;
+  var SEED = /^[0-9A-Z]{1,7}$/;
   function fail(message) {
     throw new Error(message);
   }
@@ -201,6 +203,30 @@
     if ("x" in t || "y" in t)
       return { x: num(t.x, "to.x"), y: num(t.y, "to.y") };
     return fail("to must be {x,y}, {dx,dy}, {poi} or {pickup}");
+  }
+  function leveled(v, what, field) {
+    if (v === undefined)
+      return [];
+    if (!Array.isArray(v))
+      return fail(`${what} must be a list of {id, ${field}}`);
+    return v.map((x, i) => {
+      if (typeof x?.id !== "string")
+        fail(`${what}[${i}].id must be an id`);
+      const n = x[field] === undefined ? 1 : num(x[field], `${what}[${i}].${field}`);
+      if (!Number.isInteger(n) || n < 1)
+        fail(`${what}[${i}].${field} must be a whole number from 1`);
+      return { id: x.id, level: n };
+    });
+  }
+  function parseLoadout(c) {
+    const hp = c.hp === undefined || c.hp === "full" ? c.hp : num(c.hp, "hp");
+    return {
+      weapons: leveled(c.weapons, "weapons", "level"),
+      passives: leveled(c.passives, "passives", "level"),
+      items: leveled(c.items, "items", "count").map(({ id, level }) => ({ id, count: level })),
+      ...c.gold === undefined ? {} : { gold: num(c.gold, "gold") },
+      ...hp === undefined ? {} : { hp }
+    };
   }
   function parseCommand(input) {
     const c = input ?? {};
@@ -237,7 +263,9 @@
       case "forecast":
         if (typeof c.live !== "boolean")
           fail("live must be true or false");
-        return { type: "forecast", live: c.live };
+        if (c.lag !== undefined && (num(c.lag, "lag") < 0 || num(c.lag, "lag") > 1))
+          fail("lag must be from 0 to 1 seconds");
+        return { type: "forecast", live: c.live, ...c.lag === undefined ? {} : { lag: num(c.lag, "lag") } };
       case "dash":
         return c.dir === undefined ? { type: "dash" } : { type: "dash", dir: heading(c.dir, "dir") };
       case "start": {
@@ -257,8 +285,23 @@
       case "resume":
       case "summary":
         return { type: c.type };
+      case "seed": {
+        const seed = typeof c.seed === "string" ? c.seed.toUpperCase() : "";
+        if (!SEED.test(seed) || parseInt(seed, 36) > 4294967295)
+          fail("seed must be a run seed such as 1SXG9XB");
+        return { type: "seed", seed };
+      }
+      case "checkpoint": {
+        if (c.op !== "save" && c.op !== "load" && c.op !== "drop")
+          fail("op must be save, load or drop");
+        if (typeof c.name !== "string" || !CHECKPOINT_NAME.test(c.name))
+          fail("name must be letters, digits, _ . @ or -");
+        return { type: "checkpoint", op: c.op, name: c.name };
+      }
+      case "loadout":
+        return { type: "loadout", ...parseLoadout(c) };
       default:
-        return fail("type must be move, goto, stop, choose, dash, pause, resume, speed, forecast, start or summary");
+        return fail("type must be move, goto, stop, choose, dash, pause, resume, speed, forecast, start, summary, seed, checkpoint or loadout");
     }
   }
   var DEFAULT_PACE = { planEvery: 5, actEvery: 0.3 };
@@ -540,7 +583,7 @@
     if (cached !== undefined && (cached.tick === s.tick || !s.paused && s.tick > cached.tick && s.tick - cached.tick < LIVE_FORECAST_TICKS))
       return cached.outlook;
     const inputs = [...DIRECTIONS.map((_, i) => ({ x: Math.cos(i * Math.PI / 4), y: Math.sin(i * Math.PI / 4) })), { x: 0, y: 0 }];
-    const outlook = link.forecast(game, inputs, SIM_FORECAST_TICKS).map((f) => ({
+    const outlook = link.forecast(game, inputs, SIM_FORECAST_TICKS, s.paused ? 0 : link.forecastLagTicks).map((f) => ({
       seconds: SIM_FORECAST_TICKS / 60,
       damage: round(f.damage),
       dead: f.dead,
@@ -937,6 +980,7 @@
       capturedAt: Date.now(),
       headless: navigator.webdriver,
       ladderCleared: ladderCleared(),
+      ...link.simBuild === undefined ? {} : { gameBuild: link.simBuild },
       commands,
       ...link.error === undefined ? {} : { error: link.error },
       ...link.runLink === undefined ? {} : { lastRunLink: link.runLink },
@@ -980,6 +1024,7 @@
     return globalThis.__tiboBridgeOrigin ?? bridgeOrigin(savedPort() ?? BRIDGE_PORT);
   }
   var RUN_INTERVAL_MS = 33;
+  var CHECKPOINT_TIMEOUT_MS = 120000;
   var IDLE_INTERVAL_MS = 500;
   var RECONNECT_MS = 3000;
   var MAX_IN_FLIGHT = 4;
@@ -993,6 +1038,23 @@
       onload: (r) => resolve(r.status < 300),
       onerror: () => resolve(false),
       ontimeout: () => resolve(false)
+    }));
+  }
+  function gmCall(method, url, body) {
+    return new Promise((resolve, reject) => GM_xmlhttpRequest({
+      method,
+      url,
+      ...body === undefined ? {} : { data: body, headers: { "content-type": "application/json" } },
+      timeout: CHECKPOINT_TIMEOUT_MS,
+      onload: (r) => {
+        const text = r.responseText ?? String(r.response ?? "");
+        if (r.status < 300)
+          resolve(text);
+        else
+          reject(new Error(`${method} ${url}: ${r.status} ${text.slice(0, 300)}`));
+      },
+      onerror: () => reject(new Error(`${method} ${url} failed`)),
+      ontimeout: () => reject(new Error(`${method} ${url} timed out`))
     }));
   }
   var NOT_GRANTED = typeof GM_xmlhttpRequest === "function" ? undefined : "Tampermonkey did not grant GM_xmlhttpRequest. Add @grant GM_xmlhttpRequest and @connect 127.0.0.1 to the installed script's header.";
@@ -1013,6 +1075,12 @@
     let inFlight = 0;
     let lastPush = 0;
     let sentEncyclopedia = false;
+    controller.store = {
+      put: async (file) => {
+        await gmCall("POST", `${origin}/bridge/checkpoint`, JSON.stringify(file));
+      },
+      get: async (name) => JSON.parse(await gmCall("GET", `${origin}/bridge/checkpoint?name=${encodeURIComponent(name)}`))
+    };
     const reconnect = (from) => {
       if (from !== session)
         return;
@@ -1173,8 +1241,389 @@
     };
   }
 
-  // src/agent/control.ts
+  // src/agent/training.ts
+  var SEED_KEY = "tibobit.seed";
+  function installSeedHook() {
+    let want = null;
+    try {
+      want = sessionStorage.getItem(SEED_KEY);
+      sessionStorage.removeItem(SEED_KEY);
+    } catch {}
+    if (want === null)
+      return;
+    const n = parseInt(want, 36);
+    const page = typeof unsafeWindow === "undefined" ? window : unsafeWindow;
+    const real = page.crypto.getRandomValues.bind(page.crypto);
+    page.crypto.getRandomValues = (a) => {
+      if (a !== null && a.constructor.name === "Uint32Array" && a.length === 1) {
+        a[0] = n;
+        return a;
+      }
+      return real(a);
+    };
+  }
+  var isRuleModule = (v) => typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).length > 0 && Object.values(v).every((x) => typeof x === "function");
+  var b64 = (u8) => {
+    let s = "";
+    for (let i = 0;i < u8.length; i += 32768)
+      s += String.fromCharCode(...u8.subarray(i, i + 32768));
+    return btoa(s);
+  };
+  var unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  function classKey(proto) {
+    const name = proto.constructor?.name ?? "?";
+    return `${name}(${Object.getOwnPropertyNames(proto).sort().join(",")})`;
+  }
   var TICKS_PER_SECOND2 = 60;
+  var WARM_UP_TICKS = 3 * TICKS_PER_SECOND2;
+  var WEAPON_SLOTS = 6;
+  var MAX_CACHED = 3;
+
+  class Training {
+    link;
+    shared;
+    classes = new Map;
+    warmed = false;
+    cache = new Map;
+    constructor(link) {
+      this.link = link;
+    }
+    sim() {
+      const { copyState, simulator } = this.link;
+      if (copyState === undefined || simulator === undefined)
+        throw new Error("the game's sim is not hooked yet");
+      return { copyState, simulator };
+    }
+    sharedObjects(state) {
+      if (this.shared === undefined) {
+        const byObject = new Map;
+        const queue = [[this.link.table, "t"]];
+        for (const [k, v] of Object.entries(state))
+          if (isRuleModule(v))
+            queue.push([v, `r.${k}`]);
+        for (let i = 0;i < queue.length; i++) {
+          const [v, p] = queue[i];
+          if (typeof v !== "object" && typeof v !== "function" || v === null || byObject.has(v) || ArrayBuffer.isView(v))
+            continue;
+          byObject.set(v, p);
+          if (v instanceof Map) {
+            let n = 0;
+            for (const [k, x] of v) {
+              queue.push([k, `${p}.k${n}`], [x, `${p}.v${n}`]);
+              n++;
+            }
+          } else if (v instanceof Set) {
+            let n = 0;
+            for (const x of v)
+              queue.push([x, `${p}.s${n++}`]);
+          } else if (typeof v === "object")
+            for (const k of Object.keys(v))
+              queue.push([v[k], `${p}.${k}`]);
+        }
+        this.shared = { byObject, byPath: new Map([...byObject].map(([o, p]) => [p, o])) };
+      }
+      return this.shared;
+    }
+    encode(state) {
+      const { byObject } = this.sharedObjects(state);
+      const ids = new Map;
+      const nodes = [];
+      const functions = new Set;
+      const enc = (v) => {
+        if (v === undefined)
+          return { u: 1 };
+        if (typeof v === "number")
+          return Number.isFinite(v) ? v : { n: String(v) };
+        if (typeof v === "bigint")
+          return { b: String(v) };
+        if (typeof v === "string" || typeof v === "boolean")
+          return v;
+        if (v === null)
+          return null;
+        if (typeof v !== "object" && typeof v !== "function")
+          throw new Error(`cannot save a ${typeof v}`);
+        const path = byObject.get(v);
+        if (path !== undefined)
+          return { s: path };
+        if (typeof v === "function") {
+          functions.add(v.name || "anonymous");
+          return { u: 1 };
+        }
+        const known = ids.get(v);
+        if (known !== undefined)
+          return { r: known };
+        const id = nodes.length;
+        ids.set(v, id);
+        nodes.push({ A: [] });
+        let node;
+        if (ArrayBuffer.isView(v))
+          node = { T: v.constructor.name, d: b64(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)) };
+        else if (Array.isArray(v))
+          node = { A: v.map(enc) };
+        else if (v instanceof Map)
+          node = { M: [...v].map(([k, x]) => [enc(k), enc(x)]) };
+        else if (v instanceof Set)
+          node = { S: [...v].map(enc) };
+        else {
+          const proto = Object.getPrototypeOf(v);
+          const O = {};
+          for (const k of Object.keys(v))
+            O[k] = enc(v[k]);
+          node = proto === null ? { O, z: 1 } : proto === Object.prototype ? { O } : { O, P: classKey(proto) };
+        }
+        nodes[id] = node;
+        return { r: id };
+      };
+      const root = enc(state);
+      if (functions.size > 0)
+        throw new Error(`the state holds functions (${[...functions].join(", ")}), which cannot be saved`);
+      return { root, nodes };
+    }
+    learnClasses(root) {
+      const seen = new Set;
+      const stack = [root];
+      while (stack.length > 0) {
+        const v = stack.pop();
+        if (typeof v !== "object" || v === null || seen.has(v) || ArrayBuffer.isView(v))
+          continue;
+        seen.add(v);
+        const proto = Object.getPrototypeOf(v);
+        if (proto !== null && proto !== Object.prototype && !(v instanceof Map) && !(v instanceof Set) && !Array.isArray(v)) {
+          const key = classKey(proto);
+          const had = this.classes.get(key);
+          if (had === undefined)
+            this.classes.set(key, proto);
+          else if (had !== proto)
+            this.classes.set(key, "ambiguous");
+        }
+        if (v instanceof Map)
+          for (const [k, x] of v)
+            stack.push(k, x);
+        else if (v instanceof Set)
+          for (const x of v)
+            stack.push(x);
+        else
+          for (const k of Object.keys(v))
+            stack.push(v[k]);
+      }
+    }
+    warmUp(game) {
+      if (this.warmed)
+        return;
+      const content = this.link.content();
+      if (content === undefined)
+        throw new Error("the game's content is not loaded yet");
+      const { copyState, simulator } = this.sim();
+      const ids = content.allWeapons.map((w) => w.id);
+      for (let at = 0;at < ids.length; at += WEAPON_SLOTS) {
+        const { sim, step } = simulator(game, copyState(game.state));
+        sim.state.loadout.weapons.length = 0;
+        sim.state.choiceQueue.length = 0;
+        for (const id of ids.slice(at, at + WEAPON_SLOTS))
+          pick(sim, { type: "weapon", id, level: 1, isNew: true });
+        for (let i = 0;i < WARM_UP_TICKS && !sim.state.over; i++) {
+          sim.state.choiceQueue.length = 0;
+          step();
+        }
+        this.learnClasses(sim.state);
+      }
+      this.warmed = true;
+    }
+    decode(data, game) {
+      const { byPath } = this.sharedObjects(game.state);
+      this.learnClasses(game.state);
+      const needed = new Set(data.nodes.flatMap((n) => ("P" in n) && n.P !== undefined ? [n.P] : []));
+      if ([...needed].some((k) => !this.classes.has(k)))
+        this.warmUp(game);
+      const missing = [...needed].filter((k) => !this.classes.has(k));
+      const ambiguous = [...needed].filter((k) => this.classes.get(k) === "ambiguous");
+      if (missing.length > 0 || ambiguous.length > 0)
+        throw new Error(`this page cannot rebuild classes ${[...missing, ...ambiguous.map((k) => `${k} (two classes share this name)`)].join(", ")}`);
+      const made = new Array(data.nodes.length);
+      const dec = (x) => {
+        if (x === null || typeof x !== "object")
+          return x;
+        if ("u" in x)
+          return;
+        if ("n" in x)
+          return Number(x.n);
+        if ("b" in x)
+          return BigInt(x.b);
+        if ("s" in x) {
+          const o = byPath.get(x.s);
+          if (o === undefined)
+            throw new Error(`the page has no shared object at ${x.s}; the checkpoint is from another build`);
+          return o;
+        }
+        return node(x.r);
+      };
+      const node = (id) => {
+        if (made[id] !== undefined)
+          return made[id];
+        const n = data.nodes[id];
+        if (n === undefined)
+          throw new Error(`the checkpoint has no node ${id}`);
+        if ("T" in n) {
+          const bytes = unb64(n.d);
+          const View = globalThis[n.T];
+          if (View === undefined)
+            throw new Error(`no typed array ${n.T}`);
+          return made[id] = new View(bytes.buffer);
+        }
+        if ("A" in n) {
+          const a = [];
+          made[id] = a;
+          for (const x of n.A)
+            a.push(dec(x));
+          return a;
+        }
+        if ("M" in n) {
+          const m = new Map;
+          made[id] = m;
+          for (const [k, x] of n.M)
+            m.set(dec(k), dec(x));
+          return m;
+        }
+        if ("S" in n) {
+          const s = new Set;
+          made[id] = s;
+          for (const x of n.S)
+            s.add(dec(x));
+          return s;
+        }
+        const proto = n.z === 1 ? null : n.P === undefined ? Object.prototype : this.classes.get(n.P);
+        const o = Object.create(proto);
+        made[id] = o;
+        for (const [k, x] of Object.entries(n.O))
+          o[k] = dec(x);
+        return o;
+      };
+      return dec(data.root);
+    }
+    save(game, name) {
+      const s = game.state;
+      const { copyState } = this.sim();
+      this.remember(name, copyState(s));
+      const meta = {
+        name,
+        build: this.link.simBuild ?? "unknown",
+        seed: s.run.seed,
+        mode: s.mode,
+        difficulty: s.difficulty,
+        time: Math.round(s.runClock * 10) / 10,
+        level: s.loadout.level,
+        hp: Math.round(s.player.hp[s.me] ?? 0),
+        weapons: s.loadout.weapons.map((w) => `${w.def.id} ${w.level}`),
+        passives: s.loadout.passives.map((p) => `${p.def.id} ${p.level}`),
+        items: [...s.loadout.items].map(([id, count]) => count > 1 ? `${id} x${count}` : id),
+        savedAt: new Date().toISOString()
+      };
+      return { meta, state: this.encode(s) };
+    }
+    remember(name, state) {
+      this.cache.delete(name);
+      this.cache.set(name, state);
+      for (const key of this.cache.keys()) {
+        if (this.cache.size <= MAX_CACHED)
+          break;
+        this.cache.delete(key);
+      }
+    }
+    has(name) {
+      return this.cache.has(name);
+    }
+    drop(name) {
+      this.cache.delete(name);
+    }
+    load(game, name, file) {
+      if (file !== undefined) {
+        if (file.meta.build !== this.link.simBuild)
+          throw new Error(`checkpoint ${name} was saved on game build ${file.meta.build}; this page runs ${this.link.simBuild ?? "an unknown build"}`);
+        this.remember(name, this.decode(file.state, game));
+      }
+      const saved = this.cache.get(name);
+      if (saved === undefined)
+        throw new Error(`checkpoint ${name} is not loaded in this page`);
+      const { copyState } = this.sim();
+      game.state = copyState(saved);
+      this.link.events = [];
+      taint(game);
+      game.setPaused(true);
+    }
+    loadout(game, spec) {
+      const content = this.link.content();
+      if (content === undefined)
+        throw new Error("the game's content is not loaded yet");
+      const weaponDefs = new Map(content.allWeapons.map((w) => [w.id, w]));
+      const passiveDefs = new Map(content.passives.map((p) => [p.id, p]));
+      const itemIds = new Set(content.allItems.map((i) => i.id));
+      const problems = [];
+      const weaponMax = (id) => {
+        const w = weaponDefs.get(id);
+        return w === undefined ? 0 : w.tier === "base" ? Math.min(8, (w.levels?.length ?? 0) + 1) : 1;
+      };
+      for (const { id, level } of spec.weapons) {
+        if (!weaponDefs.has(id))
+          problems.push(`no weapon ${id}`);
+        else if (level < 1 || level > weaponMax(id))
+          problems.push(`weapon ${id} levels 1 to ${weaponMax(id)}, not ${level}`);
+      }
+      for (const { id, level } of spec.passives) {
+        const p = passiveDefs.get(id);
+        if (p === undefined)
+          problems.push(`no passive ${id}`);
+        else if (level < 1 || level > p.maxLevel)
+          problems.push(`passive ${id} levels 1 to ${p.maxLevel}, not ${level}`);
+      }
+      for (const { id } of spec.items)
+        if (!itemIds.has(id))
+          problems.push(`no item ${id}`);
+      if (spec.weapons.length === 0)
+        problems.push("a loadout needs a weapon");
+      if (spec.weapons.length > WEAPON_SLOTS)
+        problems.push(`at most ${WEAPON_SLOTS} weapons`);
+      if (spec.passives.length > WEAPON_SLOTS)
+        problems.push(`at most ${WEAPON_SLOTS} passives`);
+      if (problems.length > 0)
+        throw new Error(problems.join("; "));
+      const s = game.state;
+      if (s.choiceQueue.length > 0)
+        throw new Error("a choice is open; pick it first");
+      const L = s.loadout;
+      L.weapons.length = 0;
+      L.passives.length = 0;
+      L.items.clear();
+      for (const { id, count } of spec.items)
+        L.items.set(id, (L.items.get(id) ?? 0) + count);
+      for (const { id, level } of spec.weapons)
+        for (let n = 1;n <= level; n++)
+          pick(game, { type: "weapon", id, level: n, isNew: n === 1 });
+      for (const { id, level } of spec.passives)
+        for (let n = 1;n <= level; n++)
+          pick(game, { type: "passive", id, level: n, isNew: n === 1 });
+      if (spec.gold !== undefined)
+        L.gold = spec.gold;
+      const maxHp = L.stats.maxHp;
+      if (spec.hp !== undefined)
+        s.player.hp[s.me] = spec.hp === "full" ? maxHp : Math.min(maxHp, spec.hp);
+      taint(game);
+      const got = L.weapons.map((w) => `${w.def.id} ${w.level}`).join(", ");
+      const want = spec.weapons.map((w) => `${w.id} ${w.level}`).join(", ");
+      if (got !== want)
+        throw new Error(`the game kept weapons ${got || "none"}, not ${want}`);
+    }
+  }
+  function pick(game, offer) {
+    const s = game.state;
+    s.choiceQueue.push({ kind: "levelUp", offers: [offer], level: s.loadout.level });
+    game.choose({ type: "pick", index: 0 });
+  }
+  function taint(game) {
+    game.taint();
+  }
+
+  // src/agent/control.ts
+  var TICKS_PER_SECOND3 = 60;
   var STUCK_TICKS = 90;
   var KEEP_STATUSES = 10;
   function vector(dir) {
@@ -1247,9 +1696,12 @@
     link;
     statuses = [];
     active;
+    training;
+    store;
     constructor(link) {
       this.link = link;
       link.steer = (game) => this.steer(game);
+      this.training = new Training(link);
     }
     handle({ id, command }) {
       const status = { id, command, state: "running", at: Date.now() };
@@ -1267,6 +1719,7 @@
         this.finish(this.active.status, "replaced");
       this.link.speed = 1;
       this.link.liveForecast = false;
+      this.link.forecastLagTicks = 0;
       if (inRun(this.link))
         this.link.game?.setPaused(false);
     }
@@ -1340,6 +1793,8 @@
           return;
         case "forecast":
           this.link.liveForecast = command.live;
+          if (command.lag !== undefined)
+            this.link.forecastLagTicks = Math.round(command.lag * 60);
           this.finish(status, "done");
           return;
         case "start":
@@ -1348,7 +1803,42 @@
         case "summary":
           this.summary(status).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
           return;
+        case "seed":
+          sessionStorage.setItem(SEED_KEY, command.seed);
+          this.finish(status, "done");
+          setTimeout(() => location.reload(), 1500);
+          return;
+        case "checkpoint":
+          this.checkpoint(status, command).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+          return;
+        case "loadout": {
+          const game = this.game();
+          this.training.loadout(game, command);
+          const L = game.state.loadout;
+          this.finish(status, "done", [...L.weapons.map((w) => `${w.def.id} ${w.level}`), ...L.passives.map((p) => `${p.def.id} ${p.level}`), ...[...L.items.keys()]].join(", "));
+          return;
+        }
       }
+    }
+    async checkpoint(status, { op, name }) {
+      if (op === "drop") {
+        this.training.drop(name);
+        return this.finish(status, "done");
+      }
+      const store = this.store;
+      if (store === undefined)
+        throw new Error("no agent server to keep checkpoints");
+      const game = this.game();
+      if (op === "save") {
+        const file = this.training.save(game, name);
+        await store.put(file);
+        return this.finish(status, "done", `${file.meta.time}s, ${file.state.nodes.length} objects`);
+      }
+      const file = this.training.has(name) ? undefined : await store.get(name);
+      if (this.active !== undefined)
+        this.finish(this.active.status, "replaced");
+      this.training.load(game, name, file);
+      this.finish(status, "done", `${Math.round(game.state.runClock * 10) / 10}s`);
     }
     async summary(status) {
       if (inRun(this.link))
@@ -1429,13 +1919,13 @@
       const elapsed = s.tick - active.startTick;
       const { command, status } = active;
       if (command.type === "move") {
-        if (command.seconds !== undefined && elapsed >= command.seconds * TICKS_PER_SECOND2) {
+        if (command.seconds !== undefined && elapsed >= command.seconds * TICKS_PER_SECOND3) {
           this.finish(status, "done");
           return STILL;
         }
         return vector(command.dir);
       }
-      if (elapsed >= (command.timeout ?? 60) * TICKS_PER_SECOND2) {
+      if (elapsed >= (command.timeout ?? 60) * TICKS_PER_SECOND3) {
         this.finish(status, "failed", "timeout");
         return STILL;
       }
@@ -1463,7 +1953,7 @@
       active.arrivedTick ??= s.tick;
       active.best = undefined;
       const stay = command.stay;
-      if (stay === undefined || stay === 0 || typeof stay === "number" && s.tick - active.arrivedTick >= stay * TICKS_PER_SECOND2) {
+      if (stay === undefined || stay === 0 || typeof stay === "number" && s.tick - active.arrivedTick >= stay * TICKS_PER_SECOND3) {
         this.finish(status, "done");
       }
       return STILL;
@@ -1609,7 +2099,7 @@
           stack.push(x);
     }
   }
-  var isRuleModule = (v) => typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).length > 0 && Object.values(v).every((x) => typeof x === "function");
+  var isRuleModule2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).length > 0 && Object.values(v).every((x) => typeof x === "function");
   var SIM_CHUNK = /\/assets\/sim-[\w-]+\.js$/;
   var BOOT_CHUNK = /\/assets\/boot-[\w-]+\.js$/;
   var ENGLISH_CHUNK = /\/assets\/i18n-en-[\w.-]+\.js$/;
@@ -1691,6 +2181,10 @@
     liveForecast = false;
     pauseAtStart = false;
     forecast;
+    forecastLagTicks = 0;
+    copyState;
+    simulator;
+    simBuild;
     runLink;
     events = [];
     noteRunLink() {
@@ -1756,6 +2250,7 @@
     async attachSim(url) {
       const ns = await import(url);
       const Game = findGameClass(ns);
+      this.simBuild = url.split("/").at(-1);
       const link = this;
       const { step, setInput, drainEvents } = Game.prototype;
       Game.prototype.drainEvents = function() {
@@ -1793,17 +2288,35 @@
         return setInput.call(this, override?.x ?? x, override?.y ?? y);
       };
       let shared;
-      this.forecast = (game, inputs, ticks) => {
+      const copyState = (state) => {
         if (shared === undefined) {
           shared = new WeakSet;
           reachable(link.table, shared);
         }
-        for (const v of Object.values(game.state))
-          if (isRuleModule(v))
+        for (const v of Object.values(state))
+          if (isRuleModule2(v))
             shared.add(v);
+        return cloneState(state, shared);
+      };
+      const simulator = (game, state) => {
+        const sim = Object.assign(Object.create(Object.getPrototypeOf(game)), game, { recorder: NO_RECORDER });
+        sim.state = state;
+        sim.state.paused = false;
+        return { sim, step: () => step.call(sim) };
+      };
+      this.copyState = copyState;
+      this.simulator = simulator;
+      this.forecast = (game, inputs, ticks, lagTicks = 0) => {
+        let start = game.state;
+        if (lagTicks > 0) {
+          const { sim, step: tick } = simulator(game, copyState(game.state));
+          for (let i = 0;i < lagTicks && !sim.state.over && sim.state.choiceQueue.length === 0; i++)
+            tick();
+          start = sim.state;
+        }
         return inputs.map(({ x, y }) => {
           const sim = Object.assign(Object.create(Object.getPrototypeOf(game)), game, { recorder: NO_RECORDER });
-          sim.state = cloneState(game.state, shared ?? new WeakSet);
+          sim.state = copyState(start);
           sim.state.paused = false;
           setInput.call(sim, x, y);
           const before = new Map(sim.state.run.damageTakenBySource);
@@ -2864,6 +3377,7 @@
   }
 
   // src/main.ts
+  installSeedHook();
   var link = new GameLink;
   var discovery = new Discovery;
   var controller = new Controller(link);

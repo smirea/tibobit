@@ -8,9 +8,10 @@
 import path from "node:path";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type GameMode, type Inspect, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type CheckpointMeta, type ChatLine, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type GameMode, type Inspect, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 import { checkHarness, defaultModel, jsonObject, runCoach } from "./coach";
 import * as loop from "./gameplay";
+import { type Scenario, TRAINING_CONTRACT, checkTraining, checkpointList, readScenarios, scenarioSummary, writeScenario } from "./scenarios";
 import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "./gameplay";
 
 const args = process.argv.slice(2);
@@ -19,6 +20,20 @@ const option = (name: string, fallback: string) => {
   return i >= 0 ? (args[i + 1] ?? fallback) : fallback;
 };
 const MODEL = option("model", "h2o-lightning-4b@q8_0");
+// A trial (scripts/training.ts) plays the run in progress, usually a loaded checkpoint, for this many
+// seconds of game time with the templates in --templates, then writes what happened to --result and
+// exits: no plan, notes, review or commit.
+const TRIAL = args.includes("--trial") ? Number(option("trial", "")) : undefined;
+if (TRIAL !== undefined && !(TRIAL > 0)) throw new Error(`--trial takes the seconds of game time to play; got ${option("trial", "nothing")}`);
+const TRIAL_RESULT = option("result", "");
+if (TRIAL !== undefined && TRIAL_RESULT === "") throw new Error("--trial needs --result <file> for what happened");
+const TRIAL_TEMPLATES = TRIAL === undefined ? undefined : await (async () => {
+  const file = option("templates", "");
+  if (file === "") throw new Error("--trial needs --templates <file>, a JSON object with planner, action and knobs");
+  const checked = loop.checkTemplates(await Bun.file(file).json(), DEFAULT_TEMPLATES);
+  if ("errors" in checked) throw new Error(`${file}: ${checked.errors.join("; ")}`);
+  return checked.value;
+})();
 // The decision model's planner persona, which picks cards and goals; the same model unless named.
 const PLAN_MODEL = option("plan-model", MODEL);
 const SERVER = option("server", process.env.TIBO_SERVER ?? DEFAULT_ORIGIN);
@@ -40,16 +55,16 @@ if (MODE_ARG !== "daily" && MODE_ARG !== "openWorld" && MODE_ARG !== "current") 
 const SPEED = Number(option("speed", "4"));
 // The coach (grok) only works between runs: it plans the next one and reviews the last.
 // `--coach` names the harness (see scripts/coach.ts) or "none"; `--coach-model` defaults per harness.
-const COACH_ARG = option("coach", "grok");
+const COACH_ARG = TRIAL === undefined ? option("coach", "grok") : "none";
 const COACH = COACH_ARG === "none" ? "none" : checkHarness(COACH_ARG);
 const COACH_MODEL = args.includes("--coach-model") ? option("coach-model", "") || undefined : COACH === "none" ? undefined : defaultModel(COACH);
 // For "Grok take the wheel": play the run already in progress instead of starting a fresh one.
-const TAKEOVER = args.includes("--takeover");
+const TAKEOVER = TRIAL !== undefined || args.includes("--takeover");
 // Incognito runs just play: no notes file, no review, and they do not count toward experiments.
-const INCOGNITO = args.includes("--incognito");
+const INCOGNITO = TRIAL !== undefined || args.includes("--incognito");
 // After each review the bot commits and pushes gameplay/, so every edit the coach makes to its own
 // files can be read back and undone.
-const COMMIT = !args.includes("--no-commit");
+const COMMIT = TRIAL === undefined && !args.includes("--no-commit");
 // Every this many runs a coach plays, the run replays the champion's templates unplanned: a real shot
 // at 20:00 and a replicate of the best run, between runs that each try something new. 0 turns it off.
 const EXPLOIT_EVERY = Number(option("exploit-every", "3"));
@@ -142,9 +157,32 @@ let LIVE = !args.includes("--lockstep");
 /** Whether this run's game has been set to play live or in lockstep; a new run starts unset. */
 let modeSet = false;
 
+// Live, a move lands a while after the snapshot it was chosen from: the forecast was made up to 12
+// ticks before the snapshot (100ms on average), the snapshot is some ms old, and the action model
+// takes its time. Tibo keeps its current move meanwhile, so the page's forecast plays that first.
+// Measured over 10,640 live steps, a move forecast as free lost health 14.5% of the time when it
+// turned Tibo and 1.4% when it kept the direction: the turn was planned from where Tibo no longer was.
+const FORECAST_REFRESH_LAG = 0.1;
+let decideSeconds = 0.18;
+/** This step asked the action model, so the next one does not wait out the step time. */
+let modelSteered = false;
+let lagSent = -1;
+
+function lagNow(ageMs: number): number {
+  return LIVE ? Math.min(1, Math.max(0, ageMs / 1000 + decideSeconds + FORECAST_REFRESH_LAG)) : 0;
+}
+
+async function tellLag(ageMs: number) {
+  const lag = Math.round(lagNow(ageMs) * 100) / 100;
+  if (Math.abs(lag - lagSent) < 0.03) return;
+  lagSent = lag;
+  await send({ type: "forecast", live: LIVE, lag });
+}
+
 async function setMode() {
   await command({ type: "speed", factor: LIVE ? 1 : SPEED });
-  await command({ type: "forecast", live: LIVE });
+  lagSent = lagNow(30);
+  await command({ type: "forecast", live: LIVE, lag: lagSent });
   await command({ type: LIVE ? "resume" : "pause" });
   modeSet = true;
 }
@@ -186,6 +224,8 @@ const REVIEW_TIMEOUT_MS = 900_000;
 const LATEST_NOTES = 3;
 const MODE: GameMode = MODE_ARG === "current" ? ((await api<Snap>("/state")).mode ?? "daily") : MODE_ARG;
 const MODE_NAME = MODE === "daily" ? "daily" : "world";
+/** Seconds of game time between the checkpoints a run saves for the training ground, from 0:00. */
+const CHECKPOINT_EVERY = 120;
 const WIN_SECONDS = 1200;
 // Read once at startup: the code this process runs, whatever is committed while it plays.
 const BOT_CODE = (() => {
@@ -525,6 +565,7 @@ const REVIEW_CONTRACT = [
   '"notes": the review in Markdown with the sections coach-retrospective.md asks for, under ## headings. The bot puts it into the notes file between the plan and the picks.',
   'For each experiment this run tested, update its row in "experiments" (status, outcome, result, learnings); the bot adds this run to its runs column.',
   loop.EDITS_CONTRACT,
+  TRAINING_CONTRACT,
 ].join("\n");
 
 type PlanReply = { intent: string; testing: string[]; templates: Templates; edits: loop.LoopEdits; weapon: string };
@@ -552,14 +593,41 @@ function checkPlan(raw: Record<string, unknown>, base: Templates, before: loop.T
   return { value: { intent: String(raw.intent), testing: testing ?? [], templates: templates.value, edits: edits.value, weapon: String(weapon) } };
 }
 
-function checkReview(raw: Record<string, unknown>, before: loop.Tables): loop.Checked<{ notes: string; edits: loop.LoopEdits }> {
+function checkReview(raw: Record<string, unknown>, before: loop.Tables, training: (raw: unknown) => loop.Checked<Scenario[]>): loop.Checked<{ notes: string; edits: loop.LoopEdits; training: Scenario[] }> {
   const errors: string[] = [];
   const edits = loop.checkEdits(raw, before);
   if ("errors" in edits) errors.push(...edits.errors);
+  const scenarios = training(raw.training);
+  if ("errors" in scenarios) errors.push(...scenarios.errors);
   if (!loop.isText(raw.notes)) errors.push("notes must be the review in Markdown");
   else if (/<!--|^## (Outcome|Stats|Plan|Picks|Prompts)\s*$/m.test(raw.notes)) errors.push("notes must not hold HTML comments or the headings Outcome, Stats, Plan, Picks or Prompts, which the bot writes");
-  if (errors.length > 0 || !("value" in edits)) return { errors };
-  return { value: { notes: String(raw.notes), edits: edits.value } };
+  if (errors.length > 0 || !("value" in edits) || !("value" in scenarios)) return { errors };
+  return { value: { notes: String(raw.notes), edits: edits.value, training: scenarios.value } };
+}
+
+const TRAINING_ABOUT = [
+  "Besides whole runs, the loop can settle a question in a controlled setting. Every run with notes saves a checkpoint, the whole game as it was, at 0:00 and every 2:00 after. A scenario loads one checkpoint for every trial, optionally replaces Tibo's whole build there, and lets the bot play it for a fixed time with each arm's templates. The game's own dice then roll the same in every trial, so the arms differ only in what the models chose: a few minutes of trials can compare two knob values or prompts at the moment that matters (a boss, the 16:00 surge, an opening) without waiting for a run to get there.",
+  "A trial plays like a run (the planner picks cards and goals, the action model steps), stops after its seconds or at death, and gets no notes or review. Scenarios you ask for in a review play before the next run, and their results show up here, in your next plan and review.",
+].join("\n\n");
+
+/** The training ground as the coach sees it: the checkpoints it can start from, and this coach's results. */
+async function trainingFacts(): Promise<{ text: string; checkpoints: string[] }> {
+  const state = await api<Snap>("/state").catch(() => undefined);
+  const metas = state === undefined ? [] : await api<CheckpointMeta[]>("/checkpoints").catch(() => []);
+  const build = state?.gameBuild;
+  const mine = (await readScenarios()).filter((x) => x.coach === COACH).slice(-6).reverse();
+  return {
+    // Before its first run the page has not loaded the sim, so it cannot name its build yet.
+    checkpoints: metas.filter((c) => build === undefined || c.build === build).map((c) => c.name),
+    text: [
+      "## The training ground",
+      TRAINING_ABOUT,
+      "### Checkpoints on this game build",
+      state === undefined ? "(no game is connected, so no checkpoint can be loaded now)" : checkpointList(metas, build),
+      "### Your latest training scenarios, newest first",
+      mine.map(scenarioSummary).join("\n\n") || "(none yet)",
+    ].join("\n\n"),
+  };
 }
 
 const loopFiles = async () => [
@@ -618,6 +686,7 @@ async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ pla
     ...(champion === undefined || champion.from === base.from
       ? []
       : [`## The champion templates, from ${champion.from} (Nightmare ${champion.record.level}, coach ${champion.record.coach}): the templates whose runs have the longest median life, ${champion.lives.map(clock).join(", ")}`, "Your latest templates may be an experiment that failed. These have played best so far; build on whichever serves this run.", JSON.stringify(champion.templates, null, 2)]),
+    (await trainingFacts()).text,
     "## The game's encyclopedia",
     await encyclopediaText(),
     "# Reply",
@@ -651,6 +720,8 @@ async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ pla
 async function reviewRun(text: string, name: string): Promise<{ review: string; prompts: string } | undefined> {
   if (COACH === "none") return undefined;
   const instructions = await Bun.file(loop.COACH_RETROSPECTIVE).text();
+  const training = await trainingFacts();
+  const played = loop.notesTemplates(text);
   const prompt = [
     loop.editableFiles("review"),
     instructions,
@@ -669,6 +740,7 @@ async function reviewRun(text: string, name: string): Promise<{ review: string; 
     loop.coverage(await loop.readExperiments()),
     "## The campaign",
     await loop.campaign(),
+    training.text,
     "## gameplay/coach-plan.md, which plans the next run",
     await Bun.file(loop.COACH_PLAN).text(),
     "# Reply",
@@ -677,9 +749,17 @@ async function reviewRun(text: string, name: string): Promise<{ review: string; 
   ].join("\n\n");
   const bubble = new CoachBubble("Reviewing the run…");
   const before = await loop.readTables();
-  const reply = await consult(prompt, REVIEW_TIMEOUT_MS, bubble, (raw) => checkReview(raw, before));
+  const run = name.slice(0, 19);
+  const checkScenarios = (raw: unknown): loop.Checked<Scenario[]> => {
+    if (raw === undefined) return { value: [] };
+    if (!("value" in played)) return { errors: [`this run's notes hold no usable templates (${played.errors.join("; ")}), so it cannot ask for training`] };
+    return checkTraining(raw, played.value, training.checkpoints, { coach: COACH, run });
+  };
+  const reply = await consult(prompt, REVIEW_TIMEOUT_MS, bubble, (raw) => checkReview(raw, before, checkScenarios));
   if (reply === undefined) return undefined;
-  const { done: changed } = await loop.applyEdits(reply.edits, name.slice(0, 19), before);
+  for (const scenario of reply.training) await writeScenario(scenario);
+  if (reply.training.length > 0) console.log(`review asked for training ${reply.training.map((x) => x.id).join(", ")}`);
+  const { done: changed } = await loop.applyEdits(reply.edits, run, before);
   await loop.touchExperiments(loop.notesTesting(text), (row) => {
     const runs = row.runs.split(/;\s*/).filter(Boolean);
     if (!runs.includes(name)) row.runs = [...runs, name].join("; ");
@@ -1306,6 +1386,8 @@ async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog, why: string)
   const started = performance.now();
   const answers = await decide(state, questions);
   const ms = Math.round(performance.now() - started);
+  decideSeconds = 0.8 * decideSeconds + 0.2 * (ms / 1000);
+  modelSteered = true;
   const risk = (k: string) => answers[k]?.noul ?? 1;
   const safest = Math.min(...Object.keys(moves).map(risk));
   const safe = Object.keys(moves).filter((k) => risk(k) <= safest + knobs().safeMargin && (risk(k) < SAFE_ENOUGH || risk(k) === safest));
@@ -1734,6 +1816,43 @@ async function main() {
   const now = await api<Snap>("/state");
   // Every run the bot starts begins fresh, so a Daily always begins at tick 0 on its fixed seed.
   let adopted = TAKEOVER && now.run !== undefined && now.screen !== "over" && now.screen !== "title";
+  if (TRIAL !== undefined && !adopted) throw new Error("--trial plays the run in progress, and there is none; start a run and load a checkpoint first");
+  let trialStart: RunView | undefined;
+  let lastCheckpoint = -1;
+  const endTrial = async (end: RunView | undefined, died: { time: number; level: number; kills: number; damageTaken: Record<string, number> } | undefined) => {
+    const start = trialStart;
+    if (start === undefined || end === undefined) throw new Error("the trial ended before its first step");
+    const taken = died?.damageTaken ?? end.totals.damageTaken;
+    const damageTaken = Object.fromEntries(
+      Object.entries(taken)
+        .map(([k, v]) => [k, Math.round((v - (start.totals.damageTaken[k] ?? 0)) * 10) / 10] as const)
+        .filter(([, v]) => v > 0)
+        .sort((a, b) => b[1] - a[1]),
+    );
+    const endTime = died?.time ?? end.time;
+    const result = {
+      survived: Math.round((endTime - start.time) * 10) / 10,
+      died: died !== undefined,
+      start: start.time,
+      end: endTime,
+      hp: { start: Math.round(start.player.hp), end: died === undefined ? Math.round(end.player.hp) : 0, max: Math.round(end.player.maxHp) },
+      level: { start: start.player.level, end: died?.level ?? end.player.level },
+      kills: (died?.kills ?? end.totals.kills) - start.totals.kills,
+      damageTaken,
+      weapons: end.loadout.weapons.map((w) => `${w.id} ${w.level}`),
+      passives: end.loadout.passives.map((p) => `${p.id} ${p.level}`),
+      steps,
+      avgDecisionMs: Math.round(latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length)),
+      live: LIVE,
+      log: runLog?.file,
+    };
+    if (died === undefined) {
+      await command({ type: "stop" });
+      await command({ type: "pause" });
+    }
+    await Bun.write(TRIAL_RESULT, `${JSON.stringify(result, null, 2)}\n`);
+    console.log(`trial: ${died === undefined ? "alive" : "died"} after ${result.survived}s, hp ${result.hp.start} -> ${result.hp.end}, ${result.kills} kills`);
+  };
   say({
     role: "system",
     tag: adopted ? "Take over" : "Start",
@@ -1774,6 +1893,7 @@ async function main() {
     if (!s.connected) throw new Error("the game tab is not connected to the agent server");
     await fillLink(s);
     if (s.screen === "title" || s.screen === "over") {
+      if (TRIAL !== undefined) return endTrial(last, s.lastRun ?? { time: last?.time ?? 0, level: last?.player.level ?? 0, kills: last?.totals.kills ?? 0, damageTaken: last?.totals.damageTaken ?? {} });
       if (s.screen === "over" && s.lastRun !== undefined && runs > 0 && notes !== undefined && planner !== undefined && runLog !== undefined) {
         const avg = latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length);
         console.log(`run ${runs} ended at ${s.lastRun.time}s, level ${s.lastRun.level}, ${s.lastRun.kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
@@ -1847,14 +1967,14 @@ async function main() {
       const ready =
         prepared ??
         (await (async () => {
-          const setup: RunSetup = { started: new Date(), difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: "", planner: PLAN_MODEL, action: MODEL, coach: COACH === "none" ? "none" : COACH_NAME, bot: BOT_CODE };
+          const setup: RunSetup = { started: new Date(), difficulty: r.difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: "", planner: PLAN_MODEL, action: MODEL, coach: COACH === "none" ? "none" : COACH_NAME, bot: BOT_CODE };
           return { setup, ...(await planRun(setup, "taken over mid-run")), saved: false };
         })());
       prepared = undefined;
       const { setup, plan, prompts } = ready;
       const skip = ready.saved && !incognito ? undefined : adopted ? "taken over mid-run" : "incognito";
       setup.seed = r.seed;
-      templates = plan.templates;
+      templates = TRIAL_TEMPLATES ?? plan.templates;
       LIVE = !args.includes("--lockstep") && (piloted || templates.knobs.lockstep < 0.5);
       notes = new RunNotes(setup, plan, prompts, skip === undefined);
       const first = r.loadout.weapons[0]?.id ?? "none";
@@ -1862,10 +1982,21 @@ async function main() {
       adopted = false;
       runLog = new RunLog(notes.log);
       planner = new Planner(notes, runLog);
+      lastCheckpoint = -1;
       resetGoals();
       console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}, ${skip === undefined ? "notes at the end" : `no notes (${skip})`}, templates from ${plan.source}, log ${notes.log}`);
     }
     last = r;
+    trialStart ??= r;
+    if (TRIAL !== undefined && r.time - trialStart.time >= TRIAL) return endTrial(r, undefined);
+    if (TRIAL === undefined && notes?.saved === true && Math.floor(r.time / CHECKPOINT_EVERY) > lastCheckpoint) {
+      lastCheckpoint = Math.floor(r.time / CHECKPOINT_EVERY);
+      const name = `${notes.id}@${loop.clock(lastCheckpoint * CHECKPOINT_EVERY, "-")}`;
+      // Not awaited: live, the step must not wait on the upload.
+      void command({ type: "checkpoint", op: "save", name }).then((c) => {
+        if (c.state !== "done") console.log(`checkpoint ${name} not saved: ${c.detail ?? c.state}`);
+      });
+    }
     if (Math.floor(r.time / 30) !== lastReport) {
       lastReport = Math.floor(r.time / 30);
       const per = (ms: number) => Math.round(ms / Math.max(1, timings.steps));
@@ -1890,13 +2021,17 @@ async function main() {
       continue;
     }
     const stepStarted = performance.now();
+    modelSteered = false;
+    if (LIVE) await tellLag(s.ageMs);
     if (s.screen === "choice") await choose(r, planner, runLog);
     else {
       const why = pursuit === undefined ? undefined : planner.due(r);
       if (why !== undefined) await planner.plan(r, why);
       await pursue(s, r, runLog, planner);
     }
-    if (LIVE) await Bun.sleep(Math.max(0, pace.actEvery * 1000 - (performance.now() - stepStarted)));
+    // A move the action model chose was decided from a state already a few hundred ms old, so the
+    // next one starts as soon as it lands; the page walks the cheap steps on its own anyway.
+    if (LIVE && !modelSteered) await Bun.sleep(Math.max(0, pace.actEvery * 1000 - (performance.now() - stepStarted)));
   }
 }
 

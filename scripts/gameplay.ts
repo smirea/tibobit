@@ -15,7 +15,7 @@ export const INFRA_CSV = path.join(GAMEPLAY, "infrastructure_feedback.csv");
 
 export type Checked<T> = { value: T } | { errors: string[] };
 
-const clock = (seconds: number, sep = ":") => `${String(Math.floor(seconds / 60)).padStart(2, "0")}${sep}${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+export const clock = (seconds: number, sep = ":") => `${String(Math.floor(seconds / 60)).padStart(2, "0")}${sep}${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 export const hash = (text: string) => createHash("sha1").update(text).digest("hex").slice(0, 8);
 export const isText = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
 
@@ -747,6 +747,9 @@ export function editableFiles(phase: "plan" | "review"): string {
     `- **beliefs.csv** (\`beliefs\`): what the loop holds true about the game and the in-game models. You send only the rows you add or change; rows are never deleted, only disproved.`,
     `- **experiments.csv** (\`experiments\`): the questions the loop asks. You send only the rows you add or change; rows are never deleted, only retired.`,
     "- **infrastructure_feedback.csv** (`infra`): requests for changes to the bot's code. You can only add rows; whoever works on the code closes them.",
+    phase === "review"
+      ? "- **training/** (`training`): scenarios for the training ground, which replay a moment of a past run from its checkpoint with two or more variants of the templates, and play before the next run. See The training ground below."
+      : "- **training/**: in a review, not here, you can ask for training-ground scenarios. Their results are under The training ground below.",
     `- **coach-plan.md** (\`coachPlan\`) and **coach-retrospective.md** (\`coachRetrospective\`): your own prompts, before and after each run. This one is ${own}. Rewrite one only when the way the loop plans or reviews should change.`,
     "",
     "You cannot change which models play (the coach, the planner and the action model), the bot's code, or the parts of a notes file the bot writes: its header, outcome, plan, picks and prompts. When the code stands in the way, file an infrastructure request. After the review, the bot commits gameplay/, so every change you make is in the history.",

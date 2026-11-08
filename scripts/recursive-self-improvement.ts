@@ -3,7 +3,8 @@
 // bot playing Open World on the hardest difficulty the game allows, run after run, with the coach
 // planning and reviewing each one and committing gameplay/ after every review. The headless profile
 // lives in .runs/headless-profile, so the game's own unlocks, such as higher Nightmare levels,
-// carry over from one session to the next.
+// carry over from one session to the next. Between runs it plays the training scenarios the
+// coach's reviews asked for (scripts/training.ts).
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { checkHarness, defaultModel, HARNESSES } from "./coach";
@@ -151,6 +152,12 @@ for (let round = 1; round <= rounds; ) {
   if (code === 0) {
     round++;
     crashes = 0;
+    // The review may have asked for training scenarios; they play now, so the next plan sees them.
+    const training = spawn("training", "training.ts", ["--pending", "--coach", harness, "--server", server, "--reload", `http://127.0.0.1:${gamePort}/reload`], false);
+    const trained = await training.exited;
+    children.splice(children.indexOf(training), 1);
+    if (stopping) break;
+    if (trained !== 0) console.error(`some training scenarios failed (exit ${trained}); their files in gameplay/training say why`);
     continue;
   }
   crashes = Date.now() - started < CRASH_WINDOW_MS ? crashes + 1 : 1;

@@ -113,6 +113,8 @@ export type GameState = {
   time: number;
   runClock: number;
   difficulty: string;
+  /** "standard" for Open World. */
+  mode: string;
   currentBiome: string;
   currentLandmark: { biome: { id: string }; event?: string } | null;
   /** The schedule by minute: the boss that comes, whether an elite does, and the events. */
@@ -157,6 +159,9 @@ export type Game = {
   setInput(x: number, y: number): void;
   setPaused(paused: boolean): void;
   dash(x: number, y: number): void;
+  choose(action: { type: "pick"; index: number }): void;
+  /** Marks the run as not replayable from its inputs, so the game neither posts it nor counts it. */
+  taint(): void;
 };
 
 /** Enum tables the game exports from its boot chunk, found by shape rather than by minified name. */
@@ -324,8 +329,20 @@ export class GameLink {
   liveForecast = false;
   /** Pause the next new run before its first tick, so agents start every run from tick 0. */
   pauseAtStart = false;
-  /** Runs a copy of the game forward once per input, each held for `ticks`; the real game is untouched. */
-  forecast: ((game: Game, inputs: { x: number; y: number }[], ticks: number) => Forecast[]) | undefined;
+  /**
+   * Runs a copy of the game forward once per input, each held for `ticks`; the real game is untouched.
+   * With `lagTicks`, the copy first keeps the input the game holds now for that long, as the real
+   * game does while an agent decides, and counts damage only from when the input changes.
+   */
+  forecast: ((game: Game, inputs: { x: number; y: number }[], ticks: number, lagTicks?: number) => Forecast[]) | undefined;
+  /** Ticks an agent takes to act on a forecast; the `forecast` command sets it. */
+  forecastLagTicks = 0;
+  /** A deep copy of a game state that shares content definitions and rule modules with it, as the sim needs. */
+  copyState: ((state: GameState) => GameState) | undefined;
+  /** A copy of the game that steps without recording, rendering or being taken for the live game. */
+  simulator: ((game: Game, state: GameState) => { sim: Game; step(): void }) | undefined;
+  /** The sim chunk's file name, which changes with every game build. */
+  simBuild: string | undefined;
   /** The share link of the last finished run. The game puts it in the address bar (run=...&stats=...) on its summary. */
   runLink: string | undefined;
   /** The latest events of the current game, oldest first, each stamped with the game time it was drained at. */
@@ -397,6 +414,7 @@ export class GameLink {
   private async attachSim(url: string) {
     const ns = (await import(url)) as Record<string, unknown>;
     const Game = findGameClass(ns);
+    this.simBuild = url.split("/").at(-1);
     const link = this;
     const { step, setInput, drainEvents } = Game.prototype;
     // The renderer drains the game's events every frame to show banners and effects, so this sees
@@ -434,15 +452,33 @@ export class GameLink {
       return setInput.call(this, override?.x ?? x, override?.y ?? y);
     };
     let shared: WeakSet<object> | undefined;
-    this.forecast = (game, inputs, ticks) => {
+    const copyState = (state: GameState): GameState => {
       if (shared === undefined) {
         shared = new WeakSet();
         reachable(link.table, shared);
       }
-      for (const v of Object.values(game.state)) if (isRuleModule(v)) shared.add(v as object);
+      for (const v of Object.values(state)) if (isRuleModule(v)) shared.add(v as object);
+      return cloneState(state, shared);
+    };
+    const simulator = (game: Game, state: GameState) => {
+      const sim = Object.assign(Object.create(Object.getPrototypeOf(game) as object) as Game, game, { recorder: NO_RECORDER });
+      sim.state = state;
+      sim.state.paused = false;
+      return { sim, step: () => step.call(sim) };
+    };
+    this.copyState = copyState;
+    this.simulator = simulator;
+    this.forecast = (game, inputs, ticks, lagTicks = 0) => {
+      // The lag is the same for every input, so it runs once and each input starts from its end.
+      let start = game.state;
+      if (lagTicks > 0) {
+        const { sim, step: tick } = simulator(game, copyState(game.state));
+        for (let i = 0; i < lagTicks && !sim.state.over && sim.state.choiceQueue.length === 0; i++) tick();
+        start = sim.state;
+      }
       return inputs.map(({ x, y }) => {
         const sim = Object.assign(Object.create(Object.getPrototypeOf(game) as object) as Game, game, { recorder: NO_RECORDER });
-        sim.state = cloneState(game.state, shared ?? new WeakSet());
+        sim.state = copyState(start);
         sim.state.paused = false;
         setInput.call(sim, x, y);
         const before = new Map(sim.state.run.damageTakenBySource);

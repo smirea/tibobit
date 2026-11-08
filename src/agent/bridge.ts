@@ -1,6 +1,7 @@
 import type { Discovery } from "../discovery";
 import type { GameLink } from "../game";
 import type { Controller } from "./control";
+import type { CheckpointFile } from "./training";
 import { encyclopedia } from "./encyclopedia";
 import { BRIDGE_PORT, type ChatMessage, type PageLine, type PilotState, bridgeOrigin, DEFAULT_SETTINGS, parseCommand, parsePilotChange, type PilotChange, type PilotSettings, trimChat, validPort } from "./protocol";
 import { inRun, snapshot } from "./snapshot";
@@ -67,6 +68,7 @@ declare function GM_xmlhttpRequest(details: {
 }): { abort(): void };
 
 const RUN_INTERVAL_MS = 33;
+const CHECKPOINT_TIMEOUT_MS = 120_000;
 const IDLE_INTERVAL_MS = 500;
 const RECONNECT_MS = 3000;
 const MAX_IN_FLIGHT = 4;
@@ -82,6 +84,24 @@ function post(origin: string, path: string, body: unknown): Promise<boolean> {
       onload: (r) => resolve(r.status < 300),
       onerror: () => resolve(false),
       ontimeout: () => resolve(false),
+    }),
+  );
+}
+
+function gmCall(method: "GET" | "POST", url: string, body?: string): Promise<string> {
+  return new Promise((resolve, reject) =>
+    GM_xmlhttpRequest({
+      method,
+      url,
+      ...(body === undefined ? {} : { data: body, headers: { "content-type": "application/json" } }),
+      timeout: CHECKPOINT_TIMEOUT_MS,
+      onload: (r) => {
+        const text = r.responseText ?? String(r.response ?? "");
+        if (r.status < 300) resolve(text);
+        else reject(new Error(`${method} ${url}: ${r.status} ${text.slice(0, 300)}`));
+      },
+      onerror: () => reject(new Error(`${method} ${url} failed`)),
+      ontimeout: () => reject(new Error(`${method} ${url} timed out`)),
     }),
   );
 }
@@ -114,6 +134,12 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
   let inFlight = 0;
   let lastPush = 0;
   let sentEncyclopedia = false;
+  controller.store = {
+    put: async (file) => {
+      await gmCall("POST", `${origin}/bridge/checkpoint`, JSON.stringify(file));
+    },
+    get: async (name) => JSON.parse(await gmCall("GET", `${origin}/bridge/checkpoint?name=${encodeURIComponent(name)}`)) as CheckpointFile,
+  };
 
   const reconnect = (from: number) => {
     if (from !== session) return;

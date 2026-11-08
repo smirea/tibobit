@@ -270,7 +270,8 @@ function simForecast(link: GameLink, game: Game): ForecastView[] | undefined {
   const cached = forecastCache?.game === game ? forecastCache : undefined;
   if (cached !== undefined && (cached.tick === s.tick || (!s.paused && s.tick > cached.tick && s.tick - cached.tick < LIVE_FORECAST_TICKS))) return cached.outlook;
   const inputs = [...DIRECTIONS.map((_, i) => ({ x: Math.cos((i * Math.PI) / 4), y: Math.sin((i * Math.PI) / 4) })), { x: 0, y: 0 }];
-  const outlook = link.forecast(game, inputs, SIM_FORECAST_TICKS).map((f) => ({
+  // A paused game waits for the agent, so the move lands on this very tick; a running one keeps going meanwhile.
+  const outlook = link.forecast(game, inputs, SIM_FORECAST_TICKS, s.paused ? 0 : link.forecastLagTicks).map((f) => ({
     seconds: SIM_FORECAST_TICKS / 60,
     damage: round(f.damage),
     dead: f.dead,
@@ -698,6 +699,7 @@ export function snapshot(link: GameLink, discovery: Discovery, commands: Command
     capturedAt: Date.now(),
     headless: navigator.webdriver,
     ladderCleared: ladderCleared(),
+    ...(link.simBuild === undefined ? {} : { gameBuild: link.simBuild }),
     commands,
     ...(link.error === undefined ? {} : { error: link.error }),
     ...(link.runLink === undefined ? {} : { lastRunLink: link.runLink }),

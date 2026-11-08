@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
+import { mkdir, readdir, rename } from "node:fs/promises";
 import path from "node:path";
 import type { ServerWebSocket, Subprocess } from "bun";
-import { BRIDGE_PORT, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, DEFAULT_SETTINGS, type PilotChange, type PilotSettings, parseChatLine, parseCommand, parsePilotChange, trimChat } from "../src/agent/protocol";
+import { BRIDGE_PORT, CHECKPOINT_NAME, type CheckpointMeta, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, DEFAULT_SETTINGS, type PilotChange, type PilotSettings, parseChatLine, parseCommand, parsePilotChange, trimChat } from "../src/agent/protocol";
 
 const KEEPALIVE_MS = 5_000;
 const option = (name: string, fallback: string) => {
@@ -10,6 +11,17 @@ const option = (name: string, fallback: string) => {
 };
 const PORT = Number(option("port", String(BRIDGE_PORT)));
 const WAIT_LIMIT_MS = 120_000;
+const CHECKPOINTS = path.resolve(option("checkpoints", path.join(import.meta.dir, "..", ".runs", "checkpoints")));
+const checkpointFile = (name: string) => {
+  if (!CHECKPOINT_NAME.test(name)) throw new Error("a checkpoint name is letters, digits, _ . @ or -");
+  return { state: path.join(CHECKPOINTS, `${name}.json.gz`), meta: path.join(CHECKPOINTS, `${name}.meta.json`) };
+};
+
+async function checkpoints(): Promise<CheckpointMeta[]> {
+  const names = (await readdir(CHECKPOINTS).catch(() => [])).filter((f) => f.endsWith(".meta.json"));
+  const metas = await Promise.all(names.map(async (f) => (await Bun.file(path.join(CHECKPOINTS, f)).json()) as CheckpointMeta));
+  return metas.sort((a, b) => a.savedAt.localeCompare(b.savedAt));
+}
 // The bot "Grok take the wheel" runs: Jev moves and picks, grok plans. Override with
 // --pilot "<tibo-bot.ts flags>", such as --pilot "--model laya@q8_0" for LM Studio.
 const PILOT_ARGS = option("pilot", "--decider openrouter --model typesafe/jev-1.14-20261014 --mode current --difficulty nightmare").split(/\s+/).filter(Boolean);
@@ -155,6 +167,7 @@ WS   /ws             pushes every snapshot; send a JSON command to run it
 POST /pilot          {"on": true} starts the bot for the tab ("Grok take the wheel"), {"on": false} stops it;
                      {"planEvery": 5, "actEvery": 0.3} sets how often, in seconds, it plans and takes a step;
                      {"incognito": true} has it just play: no notes, no review
+GET  /checkpoints    the saved checkpoints' summaries, oldest first (see the checkpoint command)
 POST /pilot/say      the bot's chat line for the panel: {"role": "planner" | "action" | "system", "text", "detail"?, "model"?, "time"?}
 `;
 
@@ -237,6 +250,26 @@ const server = Bun.serve({
             return errorResponse(e);
           }
           return new Response(null, { status: 204 });
+        case "POST /bridge/checkpoint": {
+          const text = await req.text();
+          const { meta } = JSON.parse(text) as { meta: CheckpointMeta };
+          const file = checkpointFile(meta.name);
+          await mkdir(CHECKPOINTS, { recursive: true });
+          // Written aside and renamed, so a load never reads half a file.
+          await Bun.write(`${file.state}.tmp`, Bun.gzipSync(new TextEncoder().encode(text)));
+          await rename(`${file.state}.tmp`, file.state);
+          await Bun.write(file.meta, JSON.stringify(meta, null, 2));
+          console.log(`checkpoint ${meta.name}: ${meta.time}s, ${(text.length / 1e6).toFixed(1)} MB`);
+          return new Response(null, { status: 204 });
+        }
+        case "GET /bridge/checkpoint": {
+          const name = url.searchParams.get("name") ?? "";
+          const file = Bun.file(checkpointFile(name).state);
+          if (!(await file.exists())) return errorResponse(`no checkpoint ${name}; saved: ${(await checkpoints()).map((c) => c.name).join(", ") || "none"}`, 404);
+          return new Response(Bun.gunzipSync(new Uint8Array(await file.arrayBuffer())), { headers: { "content-type": "application/json" } });
+        }
+        case "GET /checkpoints":
+          return Response.json(await checkpoints());
         case "GET /encyclopedia":
           return book === undefined ? errorResponse("no encyclopedia yet; is the tibo.dog tab open?", 503) : Response.json(book);
         case "POST /command": {

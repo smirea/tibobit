@@ -27,6 +27,7 @@ The campaign is to win Nightmare 10 in Open World: survive 20:00 there. Each win
 - One run is one sample. Today's Daily repeats its seed, so runs on the same day can be compared closely; across days they cannot. A single-run result is a lead until a second run agrees.
 - Prefer questions whose answer would change how we play. A lead in the beliefs table is cheap to firm up and often worth a run.
 - When you think of a question you will not test now, add it to the table as proposed so it is not lost.
+- Read the training ground's results (below) before choosing. A scenario that settled a knob or prompt at the moment it matters is evidence to build the templates on; a run then tests whether it holds over a whole game. A question that hinges on one moment is cheaper to settle there than in a run: ask for a scenario in the review.
 - If the hypothesis needs a named source to appear (hot oil, a pest, a boss), write in the intent that the run is inconclusive when the outcome never lists it. A total of zero is a success only when the log shows that source was there and was left.
 - If the question can be scored only after a state the rest of the plan has not already produced (a listed chest, a weapon past halfway, a named enemy), the run answers whether that state shows up. It does not answer what you wanted to do once it did. Use a policy that has produced that state, or write the hypothesis as the question of getting there.
 

@@ -2,6 +2,10 @@ import type { Game, GameLink, GameState } from "../game";
 import { type Command, type CommandStatus, type GameMode, DIRECTIONS, type Envelope, type Heading, type Target } from "./protocol";
 import { button, modeScreen } from "./menu";
 import { choiceCards, inRun } from "./snapshot";
+import { type CheckpointFile, SEED_KEY, Training } from "./training";
+
+/** Where checkpoints live: the agent server's disk, reached through the bridge. */
+export type CheckpointStore = { put(file: CheckpointFile): Promise<void>; get(name: string): Promise<CheckpointFile> };
 
 const TICKS_PER_SECOND = 60;
 const STUCK_TICKS = 90;
@@ -95,9 +99,12 @@ async function until(check: () => boolean, ms: number): Promise<boolean> {
 export class Controller {
   readonly statuses: CommandStatus[] = [];
   private active: Active | undefined;
+  private training: Training;
+  store: CheckpointStore | undefined;
 
   constructor(private link: GameLink) {
     link.steer = (game) => this.steer(game);
+    this.training = new Training(link);
   }
 
   handle({ id, command }: Envelope) {
@@ -116,6 +123,7 @@ export class Controller {
     if (this.active !== undefined) this.finish(this.active.status, "replaced");
     this.link.speed = 1;
     this.link.liveForecast = false;
+    this.link.forecastLagTicks = 0;
     if (inRun(this.link)) this.link.game?.setPaused(false);
   }
 
@@ -183,6 +191,7 @@ export class Controller {
         return;
       case "forecast":
         this.link.liveForecast = command.live;
+        if (command.lag !== undefined) this.link.forecastLagTicks = Math.round(command.lag * 60);
         this.finish(status, "done");
         return;
       case "start":
@@ -191,7 +200,43 @@ export class Controller {
       case "summary":
         this.summary(status).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
         return;
+      case "seed":
+        sessionStorage.setItem(SEED_KEY, command.seed);
+        this.finish(status, "done");
+        // The title screen reports twice a second, so the server hears "done" before the reload.
+        setTimeout(() => location.reload(), 1500);
+        return;
+      case "checkpoint":
+        this.checkpoint(status, command).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+        return;
+      case "loadout": {
+        const game = this.game();
+        this.training.loadout(game, command);
+        const L = game.state.loadout;
+        this.finish(status, "done", [...L.weapons.map((w) => `${w.def.id} ${w.level}`), ...L.passives.map((p) => `${p.def.id} ${p.level}`), ...[...L.items.keys()]].join(", "));
+        return;
+      }
     }
+  }
+
+  private async checkpoint(status: CommandStatus, { op, name }: Extract<Command, { type: "checkpoint" }>) {
+    if (op === "drop") {
+      this.training.drop(name);
+      return this.finish(status, "done");
+    }
+    const store = this.store;
+    if (store === undefined) throw new Error("no agent server to keep checkpoints");
+    const game = this.game();
+    if (op === "save") {
+      const file = this.training.save(game, name);
+      await store.put(file);
+      return this.finish(status, "done", `${file.meta.time}s, ${file.state.nodes.length} objects`);
+    }
+    const file = this.training.has(name) ? undefined : await store.get(name);
+    // The movement under way aimed at things of the state being replaced.
+    if (this.active !== undefined) this.finish(this.active.status, "replaced");
+    this.training.load(game, name, file);
+    this.finish(status, "done", `${Math.round(game.state.runClock * 10) / 10}s`);
   }
 
   // Only forward buttons: the summary sits right after the death screens, and anything else

@@ -4,6 +4,9 @@ import { Discovery } from "./discovery";
 import { GameLink } from "./game";
 import { guardPanelKeys, startHelper } from "./helper";
 import { startPickShow } from "./pickShow";
+import { installSeedHook } from "./agent/training";
+
+installSeedHook();
 
 const link = new GameLink();
 const discovery = new Discovery();

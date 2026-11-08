@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import {
   BRIDGE_ORIGIN as DEFAULT_ORIGIN,
+  type CheckpointMeta,
   type CommandStatus,
   type EventView,
   type PickupView,
@@ -29,6 +30,15 @@ const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
   start [easy|normal|hard|nightmare|highest] [daily]   daily plays today's fixed-seed Daily; highest
                                   takes the hardest unlocked, up through the Nightmare levels
   summary                         after a death, step to the run summary and record its share link
+
+training ground:
+  seed <seed>                     reload the page so its next Open World run plays this seed (a run's \`seed\`)
+  checkpoint save <name>          save the run as it is now (kept in .runs/checkpoints)
+  checkpoint load <name>          put a saved run in place of the run in progress; it waits paused
+  checkpoint drop <name>          forget the page's copy, so the next load reads the file again
+  checkpoints                     list saved checkpoints
+  loadout w:<id>:<level>... [p:<id>:<level>...] [i:<id>[:<count>]...] [gold:<n>] [hp:<n>|full]
+                                  replace every weapon, passive and item of the run in progress
 
 Commands wait until they finish (except move without seconds); add --no-wait to return at once.
 The agent server defaults to $TIBO_SERVER, then ${DEFAULT_ORIGIN}; --port picks another one on 127.0.0.1.`;
@@ -261,6 +271,23 @@ function parseArgs(args: string[]): unknown {
     case "resume":
     case "summary":
       return { type: verb };
+    case "seed":
+      return { type: "seed", seed: rest[0] };
+    case "checkpoint":
+      return { type: "checkpoint", op: rest[0], name: rest[1] };
+    case "loadout": {
+      const spec: { weapons: unknown[]; passives: unknown[]; items: unknown[]; gold?: number; hp?: number | "full" } = { weapons: [], passives: [], items: [] };
+      for (const word of rest) {
+        const [kind, id = "", n] = word.split(":");
+        if (kind === "w") spec.weapons.push({ id, level: num(n ?? "1", `${word} level`) });
+        else if (kind === "p") spec.passives.push({ id, level: num(n ?? "1", `${word} level`) });
+        else if (kind === "i") spec.items.push({ id, count: num(n ?? "1", `${word} count`) });
+        else if (kind === "gold") spec.gold = num(id, "gold");
+        else if (kind === "hp") spec.hp = id === "full" ? "full" : num(id, "hp");
+        else throw new Error(`${word}: loadout words are w:<id>:<level>, p:<id>:<level>, i:<id>:<count>, gold:<n> or hp:<n>|full\n\n${USAGE}`);
+      }
+      return { type: "loadout", ...spec };
+    }
   }
   throw new Error(USAGE);
 }
@@ -290,6 +317,10 @@ async function main(argv: string[]) {
         process.stdout.write(`\x1b[2J\x1b[H${s instanceof Error ? s.message : summarize(s)}\n`);
         await Bun.sleep(250);
       }
+    case "checkpoints":
+      for (const c of await api<CheckpointMeta[]>("/checkpoints"))
+        console.log(`${c.name}  ${clock(c.time)} lv ${c.level} hp ${c.hp}  ${c.difficulty} seed ${c.seed}  ${c.weapons.join(", ")}  (${c.savedAt}, ${c.build})`);
+      return;
     case "encyclopedia": {
       const book = await api<Record<string, unknown>>("/encyclopedia");
       console.log(JSON.stringify(words[1] === undefined ? book : book[words[1]], null, 2));
