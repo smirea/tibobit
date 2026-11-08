@@ -133,7 +133,9 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
   const chat: ChatMessage[] = [];
   let inFlight = 0;
   let lastPush = 0;
-  let sentEncyclopedia = false;
+  // The English text loads only when a run starts, after the content tables, so the encyclopedia
+  // goes up again each time more of it has arrived: -1 means not sent to this server yet.
+  let sentWithMessages = -1;
   controller.store = {
     put: async (file) => {
       await gmCall("POST", `${origin}/bridge/checkpoint`, JSON.stringify(file));
@@ -208,7 +210,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
           if ("hello" in envelope) {
             connected = true;
             error = undefined;
-            sentEncyclopedia = false;
+            sentWithMessages = -1;
             // The server replays its chat backlog after the hello.
             chat.length = 0;
             // This browser's settings win over whatever the server kept, so they survive its restarts.
@@ -237,12 +239,13 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
     const now = performance.now();
     if (now - lastPush < (inRun(link) ? RUN_INTERVAL_MS : IDLE_INTERVAL_MS)) return;
     lastPush = now;
-    if (!sentEncyclopedia) {
+    const messages = Object.keys(link.messages).length;
+    if (sentWithMessages !== messages) {
       const book = encyclopedia(link);
       if (book !== undefined) {
-        sentEncyclopedia = true;
+        sentWithMessages = messages;
         void post(origin, "/bridge/encyclopedia", book).then((ok) => {
-          if (!ok) sentEncyclopedia = false;
+          if (!ok) sentWithMessages = -1;
         });
       }
     }

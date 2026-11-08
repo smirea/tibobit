@@ -3,6 +3,7 @@ import {
   BRIDGE_ORIGIN as DEFAULT_ORIGIN,
   type CheckpointMeta,
   type CommandStatus,
+  type PairingView,
   type Rel,
   type RunView,
   type Snapshot,
@@ -87,8 +88,37 @@ function clock(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
+/** The game's own description of each weapon, passive and item, by key such as "weapon:spud-cannon". */
+type Descriptions = Map<string, string>;
+let described: Descriptions | undefined;
+
+/** The encyclopedia only has English text once a run has started in the tab, so an empty one is not kept. */
+async function descriptions(): Promise<Descriptions | string> {
+  if (described !== undefined) return described;
+  try {
+    const book = await api<Record<"weapons" | "passives" | "items", { id: string; description?: string }[]>>("/encyclopedia");
+    const map: Descriptions = new Map();
+    for (const [type, list] of [["weapon", book.weapons], ["passive", book.passives], ["item", book.items]] as const)
+      for (const d of list) if (d.description) map.set(`${type}:${d.id}`, d.description);
+    if (map.size === 0) return "the encyclopedia has no English text yet";
+    described = map;
+    return map;
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
+
+// What a recipe still needs once this card is taken: a part not held, or one below the level it needs.
+function needs(c: PairingView): string {
+  const missing = c.parts
+    .filter((x) => x.state !== "done")
+    .map((x) => (x.state === "leveling" ? `${x.name} Lv${x.max} (at ${x.have})` : `${x.name}${x.key === c.partner.key && c.partnerBanished ? " (banished)" : ""}`));
+  return missing.length === 0 ? `completes ${c.name}` : `${c.name} needs ${missing.join(" + ")}`;
+}
+
 // Only what a decision model acts on: what can hurt Tibo, what he can take, and the open choice.
-function summarizeRun(r: RunView, screen: string): string[] {
+function summarizeRun(r: RunView, screen: string, about: Descriptions | string): string[] {
+  const describe = (key: string) => (typeof about === "string" ? undefined : about.get(key));
   const p = r.player;
   const lines: string[] = [];
   const add = (label: string, value: string) => value !== "" && lines.push(`${label}: ${value}`);
@@ -112,7 +142,7 @@ function summarizeRun(r: RunView, screen: string): string[] {
   add("buffs", r.buffs.map((b) => `${b.id} ${Math.round(b.endsIn)}s`).join(", "));
   add("weapons", r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", "));
   add("passives", r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", "));
-  add("items", r.loadout.items.map((i) => `${i.name}${i.count > 1 ? ` x${i.count}` : ""}`).join(", "));
+  add("items", r.loadout.items.map((i) => `${i.name}${i.count > 1 ? ` x${i.count}` : ""}${describe(`item:${i.id}`) === undefined ? "" : ` (${describe(`item:${i.id}`)})`}`).join(", "));
   add("ready to evolve from a chest", r.combos.filter((c) => c.ready).map((c) => c.name).join(", "));
   if (r.choice !== undefined) {
     lines.push(`choice (${r.choice.kind}; rerolls ${p.rerolls}, skips ${p.skips}, banishes ${p.banishes}):`);
@@ -123,8 +153,11 @@ function summarizeRun(r: RunView, screen: string): string[] {
         .split(" | ")
         .filter((part) => !noise.has(part) && !/^LV \d+$/.test(part))
         .join(" | ");
-      const pairs = o.combos.filter((c) => c.partnerHeld).map((c) => `${c.ready ? "completes" : "pairs toward"} ${c.name}`);
-      lines.push(`  [${o.index}] ${o.name}${o.level === undefined ? "" : ` Lv${o.level}`}${o.available ? "" : " (unavailable)"}${label === "" ? "" : `: ${label}`}${pairs.length > 0 ? ` (${pairs.join(", ")})` : ""}`);
+      // A new card's text is its description; an upgrade's is only what the level adds.
+      const description = describe(`${o.type}:${o.id}`);
+      const text = [description !== undefined && !label.includes(description.slice(0, 30)) ? description : "", label].filter(Boolean).join(" | ");
+      lines.push(`  [${o.index}] ${o.name}${o.level === undefined ? "" : ` Lv${o.level}`}${o.available ? "" : " (unavailable)"}${text === "" ? "" : `: ${text}`}`);
+      if (o.combos.length > 0) lines.push(`      evolves: ${o.combos.slice(0, 4).map(needs).join("; ")}`);
     }
   }
   const boss = r.schedule.find((w) => w.boss !== undefined);
@@ -144,10 +177,14 @@ function summarizeRun(r: RunView, screen: string): string[] {
   add("pickups", loot.slice(0, 5).map((q) => `${q.kind} #${q.uid} ${at(q)}`).join(", "));
   if (r.pois.length > 0) {
     lines.push("spots:");
+    const told = new Set<string>();
     for (const q of [...r.pois].sort((a, b) => a.dist - b.dist).slice(0, 8)) {
       const charge = q.charge > 0 ? ` charged ${q.charge}/${q.chargeNeeded}s` : "";
       const price = q.price === undefined ? "" : ` costs ${q.price}`;
-      lines.push(`  #${q.uid} ${q.name} ${q.inside ? "INSIDE" : at(q)}${charge}${price}`);
+      const kind = q.variant ?? q.kind;
+      const what = told.has(kind) || q.description === "" ? "" : `: ${q.description}`;
+      told.add(kind);
+      lines.push(`  #${q.uid} ${q.name} ${q.inside ? "INSIDE" : at(q)}${charge}${price}${what}`);
     }
   }
   add("grok bots", r.helpers.filter((h) => h.mode === "wander" || h.mode === "hop").map((h) => `${h.name} ${at(h)}`).join(", "));
@@ -155,8 +192,10 @@ function summarizeRun(r: RunView, screen: string): string[] {
   return lines;
 }
 
-function summarize(s: Snap): string {
-  const lines = s.run === undefined ? [s.screen] : summarizeRun(s.run, s.screen === "run" ? "" : s.screen);
+async function summarize(s: Snap): Promise<string> {
+  const about = s.run === undefined ? new Map() : await descriptions();
+  const lines = s.run === undefined ? [s.screen] : summarizeRun(s.run, s.screen === "run" ? "" : s.screen, about);
+  if (typeof about === "string") lines.push(`descriptions unavailable: ${about}`);
   if (!s.connected) lines.unshift("the tibo.dog tab is not connected");
   if (s.error) lines.push(`error: ${s.error}`);
   if (s.lastRun !== undefined) lines.push(`last run: ${clock(s.lastRun.time)} lv ${s.lastRun.level}${s.lastRun.won ? ", won" : ""}${s.lastRun.killer === undefined ? "" : `, killed by ${s.lastRun.killer}`}`);
@@ -244,13 +283,13 @@ async function main(argv: string[]) {
       const format = inline?.slice("--format=".length) ?? (words.includes("--format") ? (flag(words, "--format") ?? "") : "text");
       if (format !== "text" && format !== "json") throw new Error(`--format must be text or json, got ${format}`);
       const s = await api<Snap>("/state");
-      console.log(format === "json" ? JSON.stringify(s) : summarize(s));
+      console.log(format === "json" ? JSON.stringify(s) : await summarize(s));
       return;
     }
     case "watch":
       for (;;) {
         const s = await api<Snap>("/state").catch((e: Error) => e);
-        process.stdout.write(`\x1b[2J\x1b[H${s instanceof Error ? s.message : summarize(s)}\n`);
+        process.stdout.write(`\x1b[2J\x1b[H${s instanceof Error ? s.message : await summarize(s)}\n`);
         await Bun.sleep(250);
       }
     case "checkpoints":

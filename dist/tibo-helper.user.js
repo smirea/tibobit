@@ -1074,7 +1074,7 @@
     const chat = [];
     let inFlight = 0;
     let lastPush = 0;
-    let sentEncyclopedia = false;
+    let sentWithMessages = -1;
     controller.store = {
       put: async (file) => {
         await gmCall("POST", `${origin}/bridge/checkpoint`, JSON.stringify(file));
@@ -1151,7 +1151,7 @@
             if ("hello" in envelope) {
               connected = true;
               error = undefined;
-              sentEncyclopedia = false;
+              sentWithMessages = -1;
               chat.length = 0;
               post(origin, "/pilot", asChange(settings));
               notify();
@@ -1181,13 +1181,14 @@
       if (now - lastPush < (inRun(link) ? RUN_INTERVAL_MS : IDLE_INTERVAL_MS))
         return;
       lastPush = now;
-      if (!sentEncyclopedia) {
+      const messages = Object.keys(link.messages).length;
+      if (sentWithMessages !== messages) {
         const book = encyclopedia(link);
         if (book !== undefined) {
-          sentEncyclopedia = true;
+          sentWithMessages = messages;
           post(origin, "/bridge/encyclopedia", book).then((ok) => {
             if (!ok)
-              sentEncyclopedia = false;
+              sentWithMessages = -1;
           });
         }
       }
