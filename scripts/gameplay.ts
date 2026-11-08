@@ -181,7 +181,7 @@ export const SLOTS = {
   "action.state": { about: "the action model's state, sent once per step it is asked about", vars: { goal: "the goal in words with its progress, e.g. 'open the chest, 80 away to the left'" }, required: [] },
   "action.hurt": { about: "asked once per move offered, answered on the scale: takes no damage, gets scratched, gets badly hurt, gets very badly hurt, dies", vars: { move: "one move in words: the game's own forecast for the next second first, then a boss or hazard that way, enemies close, and how it bears on the goal", goal: "as in action.state" }, required: ["move"] },
   "action.useful": { about: "asked once per move offered as a yes/no question (noul); among the moves rated about as safe as the safest, the most useful wins", vars: { move: "as in action.hurt", goal: "as in action.state" }, required: ["move"] },
-  "action.dash": { about: "asked as a yes/no question when Tibo has a dash charge and an enemy or bullet is close; above 0.5 Tibo dashes the chosen way. Empty: never dash", vars: { goal: "as in action.state" }, required: [] },
+  "action.dash": { about: "asked as a yes/no question when Tibo has a dash charge and an enemy or bullet is close; above dashThreshold (bossDashThreshold near a boss) Tibo dashes the chosen way. Empty: never dash", vars: { goal: "as in action.state" }, required: [] },
 } as const;
 export type Slot = keyof typeof SLOTS;
 
@@ -601,7 +601,15 @@ export function runStats(csv: string): string {
     .map((r) => ({ time: r.time, parts: (r.action ?? "").split(", ").filter((p) => / new$| gone$/.test(p) || /\d\/\d to \d/.test(p) && Number(p.match(/to (\d+)/)?.[1]) - Number(p.match(/ (\d+)\/\d+ to/)?.[1]) >= 3) }))
     .filter((g) => g.parts.length > 0)
     .map((g) => `${g.time} ${g.parts.join(", ")}`);
-  const dashes = rows.filter((r) => r.event === "move" && (r.action ?? "").startsWith("dash")).map((r) => r.time);
+  // A dash the action model chose on its own step says "dashed" in the detail; one taken while the
+  // page walked to the goal is its own "dash <dir>" row.
+  const dashes = rows
+    .filter((r) => r.event === "move" && ((r.action ?? "").startsWith("dash") || /, dashed$/.test(r.detail ?? "")))
+    .map((r) => {
+      const score = (r.detail ?? "").match(/(\d+)%, dashed/)?.[1];
+      const boss = Math.min(...[...(r.bosses ?? "").matchAll(/\) (\d+) /g)].map((m) => Number(m[1])));
+      return `${r.time} (dash score ${score ?? "?"}%, health ${Math.round((100 * num(r.hp)) / Math.max(1, num(r.max_hp)))}%, ${num(r.enemies_near)} enemies within 60, ${Number.isFinite(boss) ? `a boss ${boss} away` : "no boss"})`;
+    });
   const calls = (e: string) => rows.filter((r) => r.event === e);
   const meanMs = (rs: Record<string, string>[]) => Math.round(rs.reduce((a, r) => a + num(r.ms), 0) / Math.max(1, rs.length));
   const low = live.find((r) => num(r.hp) > 0 && num(r.hp) / Math.max(1, num(r.max_hp)) < 0.25)?.time;
@@ -611,7 +619,7 @@ export function runStats(csv: string): string {
     `- Bosses first seen: ${[...seenBoss].map(([k, t]) => `${k} at ${t}`).join("; ") || "none"}.`,
     `- First chest listed: ${firstChest ?? "never"}. First time under 25% health: ${low ?? "never"}.`,
     `- Goals by kind (done / gave up / dropped): ${[...goals].map(([k, g]) => `${k} ${g.done}/${g.failed}/${g.dropped}`).join("; ") || "none"}.`,
-    `- Dashes: ${dashes.length}${dashes.length === 0 ? "" : ` (${dashes.slice(0, 12).join(", ")}${dashes.length > 12 ? ", …" : ""})`}.`,
+    `- Dashes: ${dashes.length}${dashes.length === 0 ? "" : `: ${dashes.slice(0, 12).join("; ")}${dashes.length > 12 ? "; …" : ""}`}.`,
     `- Model calls: ${calls("plan").length} plans, ${calls("pick").length} picks, ${calls("move").length} moves (mean ${meanMs(calls("move"))}ms); the page walked through ${calls("walk").length} hits on its own.`,
     `- New cards, evolutions and jumps of 3 or more levels (chests give those): ${gained.length === 0 ? "nothing logged" : gained.join("; ")}.`,
   ].join("\n");
