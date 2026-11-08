@@ -27,6 +27,7 @@ The campaign is to win Nightmare 10 in Open World: survive 20:00 there. Each win
 - Prefer questions whose answer would change how we play. A lead in the beliefs table is cheap to firm up and often worth a run.
 - When you think of a question you will not test now, add it to the table as proposed so it is not lost.
 - If the hypothesis needs a named source to appear (hot oil, a pest, a boss), write in the intent that the run is inconclusive when the outcome never lists it. A total of zero is a success only when the log shows that source was there and was left.
+- If the question can be scored only after a state the rest of the plan has not already produced (a listed chest, a weapon past halfway, a named enemy), the run answers whether that state shows up. It does not answer what you wanted to do once it did. Use a policy that has produced that state, or write the hypothesis as the question of getting there.
 
 ## Writing the templates
 
