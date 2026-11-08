@@ -4,6 +4,7 @@
 | --- | --- |
 | Replay | https://tibo.dog/r/?run=pjvxq2meww266&stats=A43lAwLz-AM_ok8AhoIKJACKLgsAJOsAs5bxBQCptwDE8NoFAD-ZAPb5rgQAH_EIz9jDAQAttwid_zQASmYA0u4ZAET_ALGwAgAZYgCV2QEAPEIA4LgBAMvnAOB-AoVWBjecBXU_BetHBTh_BVsyBfugBQl6ReUhnLYJ24-nKE9RIow64_fLAgEThgSEAxEaAAEBAAAXAQAF0gYEAAI3AREICgIGDAgGBgYECgIOCgIICqoBygOmCfAPhhXKHPIixCiyKeQxzkLSTdpW1Gu0fLqAAZSBAQMPCYgBgAHeAZEBbwcPU7wBBBgLrccBqY4BmF-CJdAJqQXKBIsBlwe6AkIFHgUAhoJ0AWiiWAB9n0sAr9ghAgpTcG9yZSB2ZW50HAYTBAAk680BAD-ZogEASmZyAKm3SgcHAQUBAgUFBQkIA82zlRKGBAAKAvRBEQEDFgEBIBIAEGAnnHMF7jIxDB2binTuEQA |
 | Ending | died at 17:14, level 63, 64627 kills |
+| Opening | first chest listed 1:46; 3 chests opened by 2:30; first evolution 3:25; level 10 at 3:00 |
 | Testing | E24 |
 | Seed | 1SXG9XB |
 | Planner | typesafe/jev-1.14-20261014 |

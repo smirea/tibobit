@@ -295,8 +295,10 @@ class RunNotes {
   async write() {
     if (!this.saved || this.file === undefined || this.end === undefined) return;
     const log = Bun.file(this.log);
-    const stats = (await log.exists()) ? loop.runStats(await log.text()) : "(no log)";
-    await Bun.write(this.file, loop.renderNotes({ setup: this.setup, plan: this.plan, end: this.end, link: this.link, log: this.log, prompts: this.prompts, picks: this.picks, review: this.review, started: this.started, stats }));
+    const csv = (await log.exists()) ? await log.text() : "";
+    const stats = csv === "" ? "(no log)" : loop.runStats(csv);
+    const key = csv === "" ? "(no log)" : loop.keyNumbers(csv);
+    await Bun.write(this.file, loop.renderNotes({ setup: this.setup, plan: this.plan, end: this.end, link: this.link, log: this.log, prompts: this.prompts, picks: this.picks, review: this.review, started: this.started, stats, key }));
   }
 }
 

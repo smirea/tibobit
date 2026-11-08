@@ -4,6 +4,7 @@
 | --- | --- |
 | Replay | https://tibo.dog/r/?run=8yf5wf6d0x8v8&stats=A-7FAwC8_wEy5CkAjlgJIACUNw0AuMcA_fzkBADRQADiuLEBABn5AL6IlAEAeJwIppsPAG7SCLKRCwARcAD8pggCrdcFAC_GCLLJBQB54gDUuAQACVUAwdUDADxCAPy8AQAD1gDHOQAk6wC2LgY4fwX90AV1PwVIfQU3nAU8hQUKekWMOihPQ4-PpwnbnLZRIuP35SEBE74N8ws1GAABAAAAFgMAAcMDBAACMgEQCAgCBggCCAQMBggIBgIIBIABxgPgCMAN4A_kD7wcuiC-JLoqgCy2NdQ6kDK2LewyAw0KVSQ3CkGuAWoPoQMGBBsN5KAB8yKMFuYB5wGPEvQBgQHrAq4DqgP7AkoFGAUAVi3pBACTfd0BAf7VjAEAhoJyAI5YawYYBQARcKoBACTrswEBuMcIANFAxAEAGfl5BwcBBQECBQUFCQgD3-XiB74NAAoCrCURAQMWAQEgEgAQYCeccwXuMjEMjvZj0N86AA |
 | Ending | died at 16:08, level 50, 32700 kills |
+| Opening | first chest listed 1:43; 3 chests opened by 2:30; first evolution 2:50; level 9 at 3:00 |
 | Testing | E44 |
 | Seed | XZIVVU |
 | Starting weapon | tater-pup (random) |

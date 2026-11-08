@@ -455,7 +455,7 @@ export type RunSetup = { started: Date; difficulty: string; mode: "daily" | "wor
 export type RunPlan = { source: string; intent: string; testing: string[]; templates: Templates; weapon: string };
 export type RunEnd = { lived: number; level?: number; kills?: number; ending: string; outcome: string[] };
 /** `started` is what Tibo actually started with, which says whether the coach's choice was offered. */
-export type NotesContent = { setup: RunSetup; plan: RunPlan; end: RunEnd; link: string; log: string; prompts: string; picks: string[]; review: string; started: string; stats: string };
+export type NotesContent = { setup: RunSetup; plan: RunPlan; end: RunEnd; link: string; log: string; prompts: string; picks: string[]; review: string; started: string; stats: string; key: string };
 
 const pad = (n: number) => String(n).padStart(2, "0");
 /** The run's id: local start time, the start of its notes and log file names. */
@@ -481,6 +481,7 @@ export function renderNotes(n: NotesContent): string {
     "| --- | --- |",
     `| Replay | ${n.link} |`,
     `| Ending | ${end.ending} |`,
+    `| Opening | ${n.key} |`,
     `| Testing | ${plan.testing.join(", ") || "nothing named"} |`,
     `| Seed | ${setup.seed} |`,
     `| Starting weapon | ${n.started} |`,
@@ -626,7 +627,7 @@ export async function runHistory(limit = 60): Promise<string> {
   const lines: string[] = [];
   for (const name of (await notesFiles()).slice(0, limit)) {
     const text = await Bun.file(path.join(NOTES_DIR, name)).text();
-    lines.push(`- ${name}: ${notesField(text, "Ending") ?? "?"}; testing ${notesField(text, "Testing") ?? "?"}; coach ${notesField(text, "Coach") ?? "?"}`);
+    lines.push(`- ${name}: ${notesField(text, "Ending") ?? "?"}; opening: ${notesField(text, "Opening") ?? "not recorded"}; testing ${notesField(text, "Testing") ?? "?"}; coach ${notesField(text, "Coach") ?? "?"}`);
   }
   return lines.join("\n") || "(no runs yet)";
 }
@@ -781,4 +782,20 @@ export function coverage(rows: ExperimentRow[]): string {
       return `| ${area} | ${about} | ${rs.filter((r) => r.status === "done").length} | ${rs.filter((r) => ["proposed", "running", "recheck"].includes(r.status)).length} | ${lastRun(rs)} |`;
     }),
   ].join("\n");
+}
+
+/**
+ * A run's opening in one line, for comparing runs: when the first chest was listed, how many
+ * chests were open by 2:30, when the first evolution came, and the level at 3:00. Across the first
+ * nine Open World runs, the three that passed 15:00 had opened three or four chests by 2:15.
+ */
+export function keyNumbers(csv: string): string {
+  const [header = [], ...cells] = parseCsv(csv);
+  const rows = cells.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])) as Record<string, string>);
+  const at = (r: Record<string, string>) => Number(r.seconds) || 0;
+  const listed = rows.find((r) => (r.chests ?? "") !== "")?.time ?? "never";
+  const opened = rows.filter((r) => r.event === "goal" && (r.goal ?? "").startsWith("C") && r.action === "done" && at(r) <= 150).length;
+  const evolution = rows.find((r) => r.event === "loadout" && / 1\/1 new/.test(r.action ?? ""))?.time ?? "none";
+  const level = [...rows].reverse().find((r) => r.seconds !== "" && at(r) <= 180)?.level ?? "?";
+  return `first chest listed ${listed}; ${opened} chests opened by 2:30; first evolution ${evolution}; level ${level} at 3:00`;
 }

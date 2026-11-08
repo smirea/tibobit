@@ -4,6 +4,7 @@
 | --- | --- |
 | Replay | https://tibo.dog/r/?run=et3mewt0jhfde&stats=A5tBAJUCCe0BAPlNAAUAvQYFAPITAJomAsoPAB91AuYGABedAYQGAJCmAKcCAjh_ArreAgZ6RY-nCdvj9yhPjDoBEHkAAQYAAQAAAAEBAABjAAACBwECCApavAIDBwYSBhMVHC8EBwXKAR4TDQ0FHgUAYjYsAHvqCgDofwoAYAgJAgpTcG9yZSB2ZW50CAYGAQCQposBBwIAAAkFA_VEeQAKAqAHEQEDFgEBIBIAEGAnnHMF7jIxDB2binTuEQA |
 | Ending | died at 2:19, level 9, 277 kills |
+| Opening | first chest listed 1:32; 4 chests opened by 2:30; first evolution none; level 9 at 3:00 |
 | Testing | E21 |
 | Seed | 1Q4CI77 |
 | Planner | typesafe/jev-1.14-20261014 |
