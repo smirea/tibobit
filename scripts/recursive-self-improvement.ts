@@ -16,6 +16,8 @@ const USAGE = `usage: scripts/recursive-self-improvement.ts [--model <harness>[:
                .map(([h]) => `${h} ${defaultModel(h as keyof typeof HARNESSES) ?? "its own default"}`)
                .join(", ")}.
   --rounds   how many runs to play, each planned, reviewed and committed (default: until stopped)
+  --exploit-every  every this many runs, replay the champion templates (the best run so far) unplanned
+             instead of a new experiment: a real attempt at 20:00 and a replicate (default 3; 0 turns it off)
 
 The planner and the action model are TypeSafe's Jev through OpenRouter (OPENROUTER_API_KEY in
 .env.local). Ctrl-C stops the bot, the game and the server.`;
@@ -37,7 +39,7 @@ const extra = split < 0 ? [] : argv.slice(split + 1);
 const flags: Record<string, string> = {};
 for (let i = 0; i < own.length; i += 2) {
   const [name, value] = [own[i] ?? "", own[i + 1]];
-  if (name !== "--model" && name !== "--rounds") throw new Error(`unexpected argument ${name}\n\n${USAGE}`);
+  if (name !== "--model" && name !== "--rounds" && name !== "--exploit-every") throw new Error(`unexpected argument ${name}\n\n${USAGE}`);
   if (value === undefined || value.startsWith("--")) throw new Error(`${name} needs a value\n\n${USAGE}`);
   flags[name.slice(2)] = value;
 }
@@ -127,6 +129,7 @@ const botArgs = [
   "--mode", "openWorld",
   "--difficulty", "highest",
   "--runs", "1",
+  "--exploit-every", flags["exploit-every"] ?? "3",
   "--coach", harness,
   ...(model === undefined ? [] : ["--coach-model", model]),
   ...extra,

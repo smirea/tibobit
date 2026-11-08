@@ -602,6 +602,9 @@ export async function latestTemplates(coach?: string): Promise<{ templates: Temp
   return undefined;
 }
 
+/** The weapon a run started with, by id, from its notes; undefined for runs from before the field. */
+export const startedWith = (text: string) => notesField(text, "Starting weapon")?.split(" ")[0];
+
 /** The templates of the best Open World Nightmare run by any coach: the highest level, then the longest life. */
 export async function championTemplates(): Promise<{ templates: Templates; from: string; record: RunRecord } | undefined> {
   const best = (await runRecords()).filter((r) => r.mode === "world" && r.level > 0).sort((a, b) => b.level - a.level || b.lived - a.lived);

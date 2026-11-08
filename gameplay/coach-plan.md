@@ -13,6 +13,7 @@ The campaign is to win Nightmare 10 in Open World: survive 20:00 there. Each win
 - **This run** should teach one thing and, unless that thing is the opening itself, still give Tibo its best shot at 20:00. Build on the champion templates (the best run anyone has had) when your own latest templates were a failed experiment. A test of one change on top of the best known play is worth more than a test on top of a broken baseline.
 - **The next ten runs** should leave no part of the game unknown. The coverage table shows which areas have never been tested. Those are where the surprises are, and a ladder this long needs every mechanic: items, economy, curses, hazards, bosses and enemies, not only how Tibo moves.
 - Say in the intent how the run serves the campaign, not only what it tests.
+- Every third run of yours is an exploit run that the bot plays without asking you: the champion templates, unchanged, with the champion's starting weapon. So the ladder gets a real attempt and the champion gets replicated on its own, and the runs you plan can spend themselves on learning. The run list shows which runs were exploit runs.
 
 ## Choosing what this run tests
 

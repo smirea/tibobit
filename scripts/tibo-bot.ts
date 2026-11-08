@@ -48,6 +48,10 @@ const INCOGNITO = args.includes("--incognito");
 // After each review the bot commits and pushes gameplay/, so every edit the coach makes to its own
 // files can be read back and undone.
 const COMMIT = !args.includes("--no-commit");
+// Every this many runs a coach plays, the run replays the champion's templates unplanned: a real shot
+// at 20:00 and a replicate of the best run, between runs that each try something new. 0 turns it off.
+const EXPLOIT_EVERY = Number(option("exploit-every", "3"));
+if (!Number.isInteger(EXPLOIT_EVERY) || EXPLOIT_EVERY < 0) throw new Error(`--exploit-every must be a whole number, 0 to turn it off; got ${option("exploit-every", "3")}`);
 if (COMMIT && Bun.which("gai") === null) throw new Error("committing gameplay/ after each review needs gai on PATH; pass --no-commit to skip it");
 const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
@@ -572,6 +576,15 @@ async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ pla
   const reuse = (why: string) => ({ plan: { source: `${base.from} (${why})`, intent: "", testing: [], templates: base.templates, weapon: "" }, prompts: "none" });
   if (skip !== undefined) return reuse(skip);
   if (COACH === "none") return reuse("no coach");
+  const played = (await loop.runRecords()).filter((r) => r.coach === COACH && r.mode === setup.mode).length;
+  // Only Open World has a champion: it is the best Open World Nightmare run.
+  if (EXPLOIT_EVERY > 0 && setup.mode === "world" && champion !== undefined && (played + 1) % EXPLOIT_EVERY === 0) {
+    const weapon = loop.startedWith(champion.record.text) ?? "";
+    const intent = `Exploit run (every ${EXPLOIT_EVERY}th run of this coach): the champion templates from ${champion.from} (Nightmare ${champion.record.level}, lived ${clock(champion.record.lived)}), unchanged, starting with ${weapon === "" ? "a random weapon" : weapon}. It tests nothing new: it is a real attempt at 20:00 and a second sample of the best play so far, so the review can tell how much of that run was luck.`;
+    console.log(`plan: ${intent}`);
+    say({ role: "planner", model: COACH_NAME, time: 0, text: intent });
+    return { plan: { source: `${champion.from} (exploit run)`, intent, testing: [], templates: champion.templates, weapon }, prompts: "none (exploit run)" };
+  }
   const instructions = await Bun.file(loop.COACH_PLAN).text();
   const prompt = [
     loop.editableFiles("plan"),
