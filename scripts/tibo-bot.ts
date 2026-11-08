@@ -8,7 +8,7 @@
 import path from "node:path";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type GameMode, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type GameMode, type Inspect, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 import { checkHarness, defaultModel, jsonObject, runCoach } from "./coach";
 import * as loop from "./gameplay";
 import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "./gameplay";
@@ -784,6 +784,8 @@ type Pursuit = {
   title: string;
   /** What it is, for the icon on the panel's action tiles. */
   tag: ActionTag;
+  /** The planner's decision that chose it, shown when its tiles are hovered. */
+  decision: Inspect;
   since: number;
   deadline: number;
   /** The least work left so far (distance, plus seconds of charging as distance) and when. */
@@ -916,23 +918,38 @@ function goalTitle(g: Goal, r: RunView): string {
 }
 
 
-const SPOT_TAGS: [RegExp, ActionTag][] = [
-  [/cart|crate|slots|microwave|vendor|shop/i, "Shop"],
-  [/shrine|whetstone/i, "Shrine"],
-  [/magnet/i, "Magnet"],
-  [/dog|pup/i, "Pet"],
-  [/nest/i, "Fight"],
-  [/lantern/i, "Light"],
-  [/patch|crop/i, "Farm"],
-];
+// By the game's own point-of-interest kind; one the game adds later shows as a plain Spot.
+const SPOT_TAGS: Record<string, ActionTag> = {
+  dog: "Pet",
+  dogKennel: "Kennel",
+  paidChest: "Crate",
+  chargeShrine: "Shrine",
+  curseShrine: "Curse",
+  goldenShrine: "Golden",
+  crops: "Farm",
+  vendor: "Shop",
+  microwave: "Microwave",
+  eliteNest: "Nest",
+  bossLair: "Lair",
+  botDock: "Bot",
+  whetstone: "Whetstone",
+  dinnerBell: "Bell",
+  taterSlots: "Slots",
+  seedVault: "Vault",
+  taterMagnet: "Magnet",
+  rootTunnel: "Tunnel",
+  taterLantern: "Light",
+  spudFreezer: "Freezer",
+  frenzyFryer: "Fryer",
+};
 
 function goalTag(g: Goal, r: RunView): ActionTag {
   switch (g.kind) {
     case "chest":
       return "Loot";
     case "poi": {
-      const name = r.pois.find((p) => p.uid === g.uid)?.name ?? "Spot";
-      return SPOT_TAGS.find(([re]) => re.test(name))?.[1] ?? "Spot";
+      const kind = r.pois.find((p) => p.uid === g.uid)?.kind;
+      return (kind === undefined ? undefined : SPOT_TAGS[kind]) ?? "Spot";
     }
     case "food":
       return "Eat";
@@ -989,13 +1006,14 @@ function aimAt(p: Pursuit, r: RunView): Aim | Ended {
   }
 }
 
-function begin(goal: Goal, r: RunView, log: RunLog) {
+function begin(goal: Goal, r: RunView, log: RunLog, decision: Inspect) {
   const title = goalTitle(goal, r);
   const p: Pursuit = {
     goal,
     id: goalId(goal),
     title,
     tag: goalTag(goal, r),
+    decision,
     since: r.time,
     deadline: r.time,
     best: { left: Number.POSITIVE_INFINITY, time: r.time },
@@ -1010,7 +1028,7 @@ function begin(goal: Goal, r: RunView, log: RunLog) {
   p.deadline = r.time + seconds + GOAL_SLACK;
   pursuit = p;
   log.write(r, { event: "goal", goal: p.id, action: "start", detail: title });
-  say({ role: "action", model: "goal", time: r.time, text: title, tag: p.tag, detail: "done" in aim ? aim.done : aim.progress });
+  say({ role: "action", model: "goal", time: r.time, text: title, tag: p.tag, detail: "done" in aim ? aim.done : aim.progress, inspect: decision });
 }
 
 const RESULT_WORDS: Record<GoalResult, string> = { done: "done", failed: "gave up", dropped: "dropped" };
@@ -1023,14 +1041,14 @@ function finish(r: RunView, log: RunLog, outcome: string, result: GoalResult) {
   if (outcomes.length > 30) outcomes.shift();
   if (result === "failed" && "uid" in p.goal) giveUps.set(p.id, r.time + GIVE_UP_SECONDS);
   log.write(r, { event: "goal", goal: p.id, action: result, detail: outcome });
-  say({ role: "action", model: "goal", time: r.time, text: `${p.title}: ${RESULT_WORDS[result]}`, tag: p.tag, result, detail: `${outcome} · ${Math.round(r.time - p.since)}s` });
+  say({ role: "action", model: "goal", time: r.time, text: `${p.title}: ${RESULT_WORDS[result]}`, tag: p.tag, result, detail: `${outcome} · ${Math.round(r.time - p.since)}s`, inspect: p.decision });
 }
 
 /** The planner's goal takes over, unless it is the one already under way. */
-function setGoal(goal: Goal, r: RunView, log: RunLog) {
+function setGoal(goal: Goal, r: RunView, log: RunLog, decision: Inspect) {
   if (pursuit?.id === goalId(goal)) return;
   if (pursuit !== undefined) finish(r, log, "the planner chose another goal", "dropped");
-  begin(goal, r, log);
+  begin(goal, r, log, decision);
 }
 
 /** Why the current goal ends now, if it does. */
@@ -1545,7 +1563,13 @@ class Planner {
             return { card: cardName(o), notes: k.slice(k.indexOf(": ") + 2), ...(probability === undefined ? {} : { probability }), chosen: o === pick, index: o.index };
           });
     const weighed: CardOption[] = goals.map((g, i) => ({ card: goalTitle(g.goal, r), notes: g.text, probability: score(i), chosen: i === best }));
-    setGoal(goal, r, this.log);
+    const decision: Inspect = {
+      kind: "plan",
+      prompt: [state, ...(options === undefined ? [] : [question]), `For each goal: ${goalQuestion("…")}`].join("\n\n"),
+      ...(cards === undefined ? {} : { choices: cards }),
+      goals: weighed,
+    };
+    setGoal(goal, r, this.log, decision);
 
     const title = goalTitle(goal, r);
     say({
@@ -1554,12 +1578,7 @@ class Planner {
       time: r.time,
       text: [pick === undefined ? "" : `Take ${cardName(pick)}.`, `Goal: ${title} (${Math.round(score(best) * 100)}%).`].filter(Boolean).join(" "),
       detail: `Asked because ${why}.`,
-      inspect: {
-        kind: "plan",
-        prompt: [state, ...(options === undefined ? [] : [question]), `For each goal: ${goalQuestion("…")}`].join("\n\n"),
-        ...(cards === undefined ? {} : { choices: cards }),
-        goals: weighed,
-      },
+      inspect: decision,
     });
     // The log names where each target is, so a review can tell a near spot refused from a far one.
     const placed = weighed.map((w, i) => {

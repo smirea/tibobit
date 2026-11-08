@@ -369,7 +369,11 @@ export type Inspect =
  * What a non-step action is, which picks its tile's icon in the panel (src/icons.ts). A new tag
  * needs an icon there before it type-checks.
  */
-export const ACTION_TAGS = ["Loot", "Wander", "Run", "Gems", "Eat", "Hunt", "Spot", "Shop", "Shrine", "Magnet", "Pet", "Fight", "Light", "Farm", "Dash", "Start", "Take over", "Over", "Stopped", "Incognito"] as const;
+export const ACTION_TAGS = [
+  ...["Loot", "Wander", "Run", "Gems", "Eat", "Hunt", "Spot"],
+  ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
+  ...["Dash", "Start", "Take over", "Over", "Stopped", "Incognito"],
+] as const;
 export type ActionTag = (typeof ACTION_TAGS)[number];
 /** How a goal ended; `dropped` means the planner chose another goal first. */
 export const GOAL_RESULTS = ["done", "failed", "dropped"] as const;
