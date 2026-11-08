@@ -607,14 +607,32 @@ export async function latestTemplates(coach?: string): Promise<{ templates: Temp
 /** The weapon a run started with, by id, from its notes; undefined for runs from before the field. */
 export const startedWith = (text: string) => notesField(text, "Starting weapon")?.split(" ")[0];
 
-/** The templates of the best Open World Nightmare run by any coach: the highest level, then the longest life. */
-export async function championTemplates(): Promise<{ templates: Templates; from: string; record: RunRecord } | undefined> {
-  const best = (await runRecords()).filter((r) => r.mode === "world" && r.level > 0).sort((a, b) => b.level - a.level || b.lived - a.lived);
-  for (const r of best) {
+/**
+ * The champion: of every set of templates played in Open World Nightmare (by any coach, at the
+ * highest level reached), the one whose runs have the longest median life. One lucky run makes a
+ * set champion until exploit runs replay it; if they die early its median falls and the title moves
+ * on, so exploit runs do not keep chasing an outlier. `record` is the set's longest run, `lives`
+ * every life it has had.
+ */
+export async function championTemplates(): Promise<{ templates: Templates; from: string; record: RunRecord; lives: number[] } | undefined> {
+  const sets = new Map<string, { templates: Templates; runs: RunRecord[] }>();
+  for (const r of (await runRecords()).filter((x) => x.mode === "world" && x.level > 0)) {
     const t = notesTemplates(r.text);
-    if ("value" in t) return { templates: t.value, from: r.name, record: r };
+    if (!("value" in t)) continue;
+    const key = `${r.level}|${JSON.stringify(t.value)}`;
+    const set = sets.get(key) ?? { templates: t.value, runs: [] };
+    set.runs.push(r);
+    sets.set(key, set);
   }
-  return undefined;
+  const median = (xs: number[]) => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s.length % 2 === 1 ? (s[(s.length - 1) / 2] ?? 0) : ((s[s.length / 2 - 1] ?? 0) + (s[s.length / 2] ?? 0)) / 2;
+  };
+  const ranked = [...sets.values()].sort((a, b) => (b.runs[0]?.level ?? 0) - (a.runs[0]?.level ?? 0) || median(b.runs.map((r) => r.lived)) - median(a.runs.map((r) => r.lived)));
+  const best = ranked[0];
+  if (best === undefined) return undefined;
+  const record = [...best.runs].sort((a, b) => b.lived - a.lived)[0] as RunRecord;
+  return { templates: best.templates, from: record.name, record, lives: best.runs.map((r) => r.lived) };
 }
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
