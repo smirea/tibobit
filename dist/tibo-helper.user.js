@@ -2188,7 +2188,15 @@
 .tbh-pick-on { border-color: #ffd36b; box-shadow: 0 0 14px rgba(255,211,107,.7); }
 .tbh-pick-final { border-color: #ffd36b; box-shadow: 0 0 26px 4px rgba(255,211,107,.9); animation: tbh-pick-pulse .7s ease-in-out infinite alternate; }
 @keyframes tbh-pick-pulse { to { box-shadow: 0 0 10px 1px rgba(255,211,107,.5); } }
-@media (prefers-reduced-motion: reduce) { .tbh-pick-final { animation: none; } }
+/* Positioned by its tip end: above a card pointing down, or left of it pointing right. */
+.tbh-pick-arrow { position: fixed; width: 48px; height: 48px; transform: translate(-100%, -50%); color: #ffd36b; filter: drop-shadow(0 0 6px rgba(255,211,107,.8)) drop-shadow(0 2px 2px rgba(0,0,0,.8)); }
+.tbh-pick-arrow.tbh-pick-arrow-down { transform: translate(-50%, -100%); }
+.tbh-pick-arrow-icon { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.tbh-pick-arrived .tbh-pick-arrow-icon { animation: tbh-pick-bob-x .45s ease-in-out infinite alternate; }
+.tbh-pick-arrived.tbh-pick-arrow-down .tbh-pick-arrow-icon { animation-name: tbh-pick-bob-y; }
+@keyframes tbh-pick-bob-x { to { transform: translateX(-8px); } }
+@keyframes tbh-pick-bob-y { to { transform: translateY(-8px); } }
+@media (prefers-reduced-motion: reduce) { .tbh-pick-final, .tbh-pick-arrived .tbh-pick-arrow-icon { animation: none; } }
 .tbh-insp { position: fixed; z-index: 2147483002; box-sizing: border-box; overflow: auto; padding: 8px 10px 10px; background: rgba(17,14,10,.97); color: #f3e6c4; border: 1px solid #6b5631; border-radius: 6px;
   box-shadow: 0 6px 24px rgba(0,0,0,.6); font: 11.5px/1.4 ui-monospace, Menlo, Consolas, monospace; user-select: text; overscroll-behavior: contain; }
 .tbh-insp[hidden] { display: none; }
@@ -2580,16 +2588,8 @@
 
   // src/pickShow.ts
   var SHOW_MS = 3400;
-  var FIRST_HOP_MS = 70;
-  var SLOWDOWN = 1.16;
+  var ARRIVE_MS = 1100;
   var FRESH_MS = 8000;
-  function hopsTo(indexes, chosen) {
-    const times = [];
-    for (let t = 0, gap = FIRST_HOP_MS;t < SHOW_MS; t += gap, gap *= SLOWDOWN)
-      times.push(t);
-    const last = indexes.indexOf(chosen);
-    return times.map((at, k) => ({ at, index: indexes[((last - (times.length - 1 - k)) % indexes.length + indexes.length) % indexes.length] ?? chosen }));
-  }
   function el(className, text = "") {
     const d = document.createElement("div");
     d.className = className;
@@ -2599,7 +2599,9 @@
   function startPickShow(bridge) {
     const layer = el("tbh-pick-layer");
     const banner = el("tbh-pick-banner");
-    layer.append(banner);
+    const arrows = { down: moveIcon("down", "tbh-pick-arrow-icon"), right: moveIcon("right", "tbh-pick-arrow-icon") };
+    const arrow = el("tbh-pick-arrow");
+    layer.append(banner, arrow);
     document.body.append(layer);
     let show;
     const bars = new Map;
@@ -2620,7 +2622,7 @@
       const chosen = options.find((c) => c.chosen)?.index;
       if (chosen === undefined)
         return;
-      show = { id: m.id, seen: performance.now(), text: m.text, options, hops: hopsTo(options.map((c) => c.index ?? 0), chosen) };
+      show = { id: m.id, seen: performance.now() - Math.max(0, Date.now() - m.at), text: m.text, options, chosen };
       for (const { bar, frame } of bars.values()) {
         bar.remove();
         frame.remove();
@@ -2644,12 +2646,13 @@
       requestAnimationFrame(frame);
       const cards = choiceCards();
       const age = show === undefined ? Number.POSITIVE_INFINITY : performance.now() - show.seen;
-      const visible = show !== undefined && bridge.pilot().state !== "off" && cards.length > 0 && age < FRESH_MS;
+      const choosing = document.querySelector(".ui-card") !== null;
+      const visible = show !== undefined && bridge.pilot().state !== "off" && choosing && cards.length > 0 && age < FRESH_MS;
       layer.hidden = !visible;
       if (!visible || show === undefined)
         return;
       const done = age >= SHOW_MS;
-      const lit = done ? show.hops.at(-1)?.index : [...show.hops].reverse().find((hop) => hop.at <= age)?.index;
+      const arrived = age >= ARRIVE_MS;
       let top = Number.POSITIVE_INFINITY;
       let left = Number.POSITIVE_INFINITY;
       let right = 0;
@@ -2664,12 +2667,26 @@
         right = Math.max(right, rect.right);
         Object.assign(parts.bar.style, { left: `${rect.left}px`, top: `${rect.top - 22}px`, width: `${rect.width}px` });
         Object.assign(parts.frame.style, { left: `${rect.left - 3}px`, top: `${rect.top - 3}px`, width: `${rect.width + 6}px`, height: `${rect.height + 6}px` });
-        parts.frame.classList.toggle("tbh-pick-on", index === lit);
-        parts.frame.classList.toggle("tbh-pick-final", done && index === lit);
-        parts.bar.classList.toggle("tbh-pick-dim", done && index !== lit);
+        parts.frame.classList.toggle("tbh-pick-on", arrived && index === show.chosen);
+        parts.frame.classList.toggle("tbh-pick-final", done && index === show.chosen);
+        parts.bar.classList.toggle("tbh-pick-dim", done && index !== show.chosen);
+      }
+      const pick = cards[show.chosen]?.getBoundingClientRect();
+      arrow.hidden = pick === undefined || pick.width === 0;
+      if (pick !== undefined && pick.width > 0) {
+        const sideBySide = right - left > pick.width * 1.5;
+        const icon = sideBySide ? arrows.down : arrows.right;
+        if (arrow.firstChild !== icon)
+          arrow.replaceChildren(icon);
+        const t = Math.min(1, age / ARRIVE_MS);
+        const eased = 1 - (1 - t) ** 3;
+        const [fromX, fromY, toX, toY] = sideBySide ? [left, pick.top - 14, pick.left + pick.width / 2, pick.top - 14] : [left - 2, top, pick.left + 2, pick.top + pick.height / 2];
+        Object.assign(arrow.style, { left: `${fromX + (toX - fromX) * eased}px`, top: `${fromY + (toY - fromY) * eased}px` });
+        arrow.classList.toggle("tbh-pick-arrow-down", sideBySide);
+        arrow.classList.toggle("tbh-pick-arrived", arrived);
       }
       if (Number.isFinite(top))
-        Object.assign(banner.style, { left: `${(left + right) / 2}px`, top: `${top - 30}px`, maxWidth: `${Math.max(240, right - left)}px` });
+        Object.assign(banner.style, { left: `${(left + right) / 2}px`, top: `${top - 66}px`, maxWidth: `${Math.max(240, right - left)}px` });
     };
     requestAnimationFrame(frame);
   }
