@@ -116,8 +116,8 @@ export type Snapshot = {
   run?: RunView;
   /** The share link of the last finished run, once the game has shown its summary (https://tibo.dog/r/?...). */
   lastRunLink?: string;
-  /** How the most recent run went; set once a run has ended. `damageTaken` is by source, largest first. */
-  lastRun?: { time: number; level: number; kills: number; damageTaken: Record<string, number> };
+  /** How the most recent run went; set once a run has ended. */
+  lastRun?: { time: number; level: number } & RunTotals;
   /** Whether the page runs under automation (navigator.webdriver), as in scripts/headless.ts. */
   headless?: boolean;
   /** The highest Open World Nightmare level this browser has won (survived 20:00 on); the next one up is the hardest it can start. */
@@ -126,14 +126,64 @@ export type Snapshot = {
   error?: string;
 };
 
-export type EnemyView = Rel & { uid: number; id: string; name: string; hp: number; radius: number; speed: number; elite: boolean };
+export type EnemyView = Rel & { uid: number; id: string; name: string; hp: number; maxHp: number; damage: number; radius: number; speed: number; elite: boolean };
+
+/**
+ * What the game counts over the whole run. Sources are a weapon id for damage dealt and kills, and
+ * "enemy:<id>", "boss:<id>" or a ground name such as "burn" for damage taken; each map is largest first.
+ */
+export type RunTotals = {
+  kills: number;
+  damageTaken: Record<string, number>;
+  damageDealt: Record<string, number>;
+  killsBy: Record<string, number>;
+  goldEarned: number;
+  goldSpent: number;
+  bossesKilled: number;
+  elitesKilled: number;
+  bossChests: number;
+  cratesBought: number;
+  shrinesUsed: number;
+  itemsBought: number;
+  /** Every evolution, union and evolved item made this run, by id. */
+  made: string[];
+  revivesUsed: number;
+  /** Survived to `winAt`. The run goes on after a win until Tibo dies. */
+  won: boolean;
+  /** The source of the killing blow, once Tibo is dead. */
+  killer?: string;
+};
+
+/** A timed boost; `endsIn` is game seconds left, `mult` the gold or fire-rate multiplier. */
+export type BuffView = { id: "goldRush" | "frenzy" | "fryRush" | "picnic"; endsIn: number; mult?: number };
+
+/**
+ * Something the game showed or recorded, newest last: a boss spawning or defeated, a banner
+ * (`announce`, whose `announcement.kind` says what, such as "event" with the event's id), a chest,
+ * an evolution, a level-up, a dog joining. `time` is the run clock. `name` and `text` are the
+ * game's English for a boss or event.
+ */
+export type EventView = { time: number; type: string; name?: string; text?: string } & Record<string, unknown>;
 
 export type RunView = {
   /** The run's seed and whether it is today's Daily; the same Daily seed means the same map and spawns. */
   seed: string;
   daily: boolean;
+  /** Such as "normal" or "nightmare-3", as the HUD shows it. */
+  difficulty: string;
   tick: number;
   time: number;
+  /** The run clock at which the run counts as won. */
+  winAt: number;
+  /** The score on the HUD. */
+  score?: number;
+  biome: { id: string; name: string };
+  /** A Daily's weather, which changes the rules for the whole run. */
+  weather?: { id: string; name: string; description: string };
+  /** The gear a Daily starts Tibo in; its stat lines are already in `stats`. Empty outside a Daily. */
+  gear: { slot: string; id: string; name: string; description: string; lines: { affix: string; roll: number }[] }[];
+  /** The landmark Tibo is in, such as the Coin Laundromat, and the event it holds. */
+  landmark?: { id: string; name: string; event?: { id: string; name: string } };
   player: {
     x: number;
     y: number;
@@ -144,17 +194,41 @@ export type RunView = {
     xpNext: number;
     gold: number;
     dashCharges: number;
+    dashMax: number;
+    /** Seconds until the next dash charge comes back; 0 when every charge is ready. */
+    dashReadyIn: number;
     invulnerable: boolean;
+    /** Seconds left of each; Tibo cannot move while stunned or frozen. */
+    stunned: number;
+    frozen: number;
+    slowed: number;
+    revivesLeft: number;
+    rerolls: number;
+    skips: number;
+    banishes: number;
+    /** Curses held: those the difficulty starts with plus each Moldy Shrine taken. Each brings more elites and bosses. */
+    curses: number;
     /** Damage taken in the last 3 game seconds by source, such as "enemy:aphid", "boss:..." or "burn". */
     hurtBy: Record<string, number>;
   };
   /** `banished` lists the ids banished this run, which the game never offers again. */
   loadout: { weapons: Owned[]; passives: Owned[]; items: { id: string; name: string; count: number }[]; banished: string[] };
+  /**
+   * The effective stats after passives, items, shrines and dogs, by the game's own names:
+   * multipliers such as damageMult, areaMult, cooldownMult, moveSpeedMult and growthMult (1 is
+   * base), and flat values such as maxHp, armor, recovery, magnetRadius, luck, curse, critChance and evasion.
+   */
+  stats: Record<string, number>;
+  buffs: BuffView[];
+  totals: RunTotals;
+  /** The minutes still to come that bring a boss, an elite or an event, in order; this minute first. */
+  schedule: { minute: number; boss?: { id: string; name: string }; elite: boolean; events: { id: string; name: string }[] }[];
+  events: EventView[];
   /** Recipes using something held. */
   combos: ComboView[];
   unpaired: UnpairedView[];
   choice?: { kind: string; options: OptionView[]; raw?: unknown };
-  bosses: (Rel & { id: string; name: string; hp: number; maxHp: number; radius: number })[];
+  bosses: (Rel & { id: string; name: string; hp: number; maxHp: number; damage: number; speed: number; radius: number })[];
   /** `elites` is every elite alive, nearest first, wherever it is; `uid` follows one enemy across snapshots. */
   enemies: { total: number; nearest: EnemyView[]; elites: EnemyView[] };
   /** Counts by kind, every chest, and the nearest pickups that are not xp gems. */
@@ -162,7 +236,8 @@ export type RunView = {
   /** The 15 nearest unused points of interest. Standing inside one's circle charges it; `charge` and `chargeNeeded` are seconds. */
   /** `description` is the game's own line for it, such as "An elite waits here. It drops a chest." */
   /** `price` is the gold a Potato Crate takes now (each one bought raises the next); `prices` a vendor's by item rarity. */
-  pois: (Rel & { uid: number; kind: string; name: string; description: string; radius: number; inside: boolean; charge: number; chargeNeeded: number; used: boolean; price?: number; prices?: number[] })[];
+  /** `variant` names what a "bigUpdate" spot is, such as "chiliBottle" or "spudForge"; a variety place such as the chili bottle has `chargeNeeded` 0 because the game does not export its charge time. */
+  pois: (Rel & { uid: number; kind: string; variant?: string; name: string; description: string; radius: number; inside: boolean; charge: number; chargeNeeded: number; used: boolean; price?: number; prices?: number[] })[];
   /**
    * Terrain patches and enemy attack zones. Positions are the zone's nearest point to the player.
    * A "line" zone (a boss sweep or charge) is a band `radius` wide each side of a segment, so
@@ -171,6 +246,18 @@ export type RunView = {
   hazards: (Rel & { kind: string; source: "terrain" | "attack"; shape: string; radius: number; inside: boolean; landsIn?: number })[];
   /** Enemy bullets; `vx`/`vy` are units per second. */
   bullets: { total: number; nearest: (Rel & { radius: number; vx: number; vy: number })[] };
+  /** Enemy bullet patterns about to fire, nearest first: `firesIn` seconds, then `bursts` volleys of `count` bullets. */
+  volleys: (Rel & { firesIn: number; count: number; bursts: number; speed: number; damage: number })[];
+  /** Tibo's dogs. */
+  pets: (Rel & { id: string; name: string; level: number })[];
+  /**
+   * Grok Bots on the map, each with one kind of `help`, such as a shield or coins. In `mode` wander
+   * one hops over once Tibo comes near, helps when it reaches him, then cheers; beam means it is
+   * leaving, and swarm is a Bot Dock's swarm. `leavesIn` is seconds until its current mode ends.
+   */
+  helpers: (Rel & { help: string; name: string; description: string; mode: string; leavesIn: number })[];
+  /** Poteto, Andrew or Samir while one is walking in; each comes once a run with a gift. */
+  visitors: (Rel & { who: "poteto" | "andrew" | "samir" })[];
   /** Enemy bullets that would hit the player within 0.6 seconds if it stands still. */
   standingBulletHits: number;
   /** Enemies that would reach the player within 0.6 seconds if it stands still, chasing at their base speed. */

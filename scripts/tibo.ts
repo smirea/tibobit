@@ -12,8 +12,8 @@ import {
 
 const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
 
-  state [--json]                  one-screen summary of the game, or the full snapshot as JSON
-  watch                           live summary, refreshed 4 times a second
+  state                           the full snapshot as JSON (types in src/agent/protocol.ts)
+  watch                           live one-screen summary, refreshed 4 times a second
   encyclopedia [section]          JSON of weapons, passives, items, recipes, enemies, bosses, pois, biomes
   move <dir|degrees> [seconds]    dir: up, down, left, right, up-left, up-right, down-left, down-right
   goto <x> <y>                    walk to a world position
@@ -170,9 +170,8 @@ function parseArgs(args: string[]): unknown {
 async function main(argv: string[]) {
   const args = [...argv];
   server = serverFrom(args);
-  const json = args.includes("--json");
   const noWait = args.includes("--no-wait");
-  const words = args.filter((a) => a !== "--json" && a !== "--no-wait");
+  const words = args.filter((a) => a !== "--no-wait");
   switch (words[0]) {
     case undefined:
     case "help":
@@ -181,7 +180,7 @@ async function main(argv: string[]) {
       return;
     case "state": {
       const s = await api<Snap>("/state");
-      console.log(json ? JSON.stringify(s, null, 2) : summarize(s));
+      console.log(JSON.stringify(s, null, 2));
       return;
     }
     case "watch":

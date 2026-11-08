@@ -343,7 +343,6 @@
   var SECTOR_RANGE = 300;
   var PATH_AHEAD = 60;
   var HURT_WINDOW_TICKS = 180;
-  var PLAYER_SPEED = 62;
   var FORECAST_SECONDS = 0.6;
   var SIM_FORECAST_TICKS = 60;
   var XP_RANGE = 120;
@@ -372,6 +371,56 @@
     return DIRECTIONS[(octant + 8) % 8] ?? "right";
   }
   var round = (n) => Math.round(n * 10) / 10;
+  function totals(run) {
+    return {
+      kills: run.kills,
+      damageTaken: byDamage(run.damageTakenBySource),
+      damageDealt: byDamage(run.damageBySource),
+      killsBy: byDamage(run.killsBySource),
+      goldEarned: Math.floor(run.goldEarned),
+      goldSpent: Math.floor(run.goldSpent),
+      bossesKilled: run.bossesKilled,
+      elitesKilled: run.elitesKilled,
+      bossChests: run.bossChests,
+      cratesBought: run.paidChests,
+      shrinesUsed: run.shrinesUsed,
+      itemsBought: run.itemsBought,
+      made: [...run.evolutions, ...run.unions, ...run.itemEvolutions],
+      revivesUsed: run.revivesUsed,
+      won: run.won,
+      ...run.killer === "" ? {} : { killer: run.killer }
+    };
+  }
+  function statValues(stats) {
+    const out = {};
+    for (const key of Object.getOwnPropertyNames(Object.getPrototypeOf(stats))) {
+      const value = stats[key];
+      if (typeof value === "number")
+        out[key] = Math.round(value * 1000) / 1000;
+    }
+    return out;
+  }
+  function buffs(s) {
+    const left = (until) => round(until - s.time);
+    const out = [];
+    if (s.goldRushUntil > s.time)
+      out.push({ id: "goldRush", endsIn: left(s.goldRushUntil), mult: s.goldRushMult });
+    if (s.frenzyUntil > s.time)
+      out.push({ id: "frenzy", endsIn: left(s.frenzyUntil) });
+    const more = s.moreVariety;
+    if (more !== undefined && more.fryRushUntil > s.time)
+      out.push({ id: "fryRush", endsIn: left(more.fryRushUntil), mult: more.fireRate });
+    if (more !== undefined && more.picnicUntil > s.time)
+      out.push({ id: "picnic", endsIn: left(more.picnicUntil) });
+    return out;
+  }
+  function hudScore() {
+    const text = document.querySelector(".hud-score-value")?.textContent?.replace(/[^\d]/g, "");
+    return text === undefined || text === "" ? undefined : Number(text);
+  }
+  function difficultyOf(s) {
+    return s.difficulty === "nightmare" ? `nightmare-${s.cfg.ladder.level}` : s.difficulty;
+  }
   function relTo(state, x, y) {
     const me = state.me;
     const dx = x - (state.player.x[me] ?? 0);
@@ -521,6 +570,8 @@
         id,
         name: msg("enemy", id),
         hp: round(s.enemies.hp[i] ?? 0),
+        maxHp: round(s.enemies.maxHp[i] ?? 0),
+        damage: round(s.enemies.damage[i] ?? 0),
         radius: s.enemies.radius[i] ?? 0,
         speed: def?.speed ?? 0,
         elite: (flags & (enums.enemyFlags.Elite ?? 0)) !== 0
@@ -535,6 +586,8 @@
         name: msg("boss", id),
         hp: round(s.bosses.hp[i] ?? 0),
         maxHp: round(s.bosses.maxHp[i] ?? 0),
+        damage: round(s.bosses.damage[i] ?? 0),
+        speed: round(s.bosses.speed[i] ?? 0),
         radius: s.bosses.radius[i] ?? 0
       });
     }
@@ -565,18 +618,24 @@
     const economy = s.cfg.economy;
     const bought = s.paidChestsBought ?? 0;
     const cratePrice = economy === undefined ? undefined : Math.round(Math.round(economy.chestPriceBase + economy.chestPriceLinear * bought + economy.chestPriceQuad * bought * bought + economy.chestPriceCubic * Math.max(0, bought - economy.chestPriceKnee) ** 3) * (s.loadout.stats.chestPriceMult ?? 1));
+    const spot = (p) => {
+      const variant = p.varietyPlace ?? p.variant?.kind;
+      if (p.kind !== "bigUpdate" || variant === undefined)
+        return { name: msg("poi", p.kind), description: link.message(`content.poi.${p.kind}.desc`) ?? "" };
+      const key = variant.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+      return { variant, name: msg("varietyPlace", key), description: link.message(`content.varietyPlace.${key}.desc`) ?? "" };
+    };
     const pois = s.world.activePois.filter((p) => !p.state.used && p.state.goneAt < 0).map((p) => {
       const rel = relTo(s, p.x, p.y);
       return {
         ...rel,
         uid: p.state.uid,
         kind: p.kind,
-        name: msg("poi", p.kind),
-        description: link.message(`content.poi.${p.kind}.desc`) ?? "",
+        ...spot(p),
         radius: p.radius,
         inside: rel.dist <= p.radius,
         charge: round(p.state.charge / TICKS_PER_SECOND),
-        chargeNeeded: activation[p.kind] ?? 0,
+        chargeNeeded: p.kind === "bigUpdate" ? p.varietyPlace === undefined ? 1.5 : 0 : activation[p.kind] ?? 0,
         used: p.state.used,
         ...p.kind === "paidChest" && cratePrice !== undefined ? { price: cratePrice } : {},
         ...p.kind === "vendor" && economy?.vendorPrice !== undefined ? { prices: economy.vendorPrice } : {}
@@ -640,7 +699,7 @@
     const bullets = [];
     for (const i of alive(s.bullets))
       bullets.push({ ...relTo(s, s.bullets.x[i] ?? 0, s.bullets.y[i] ?? 0), radius: s.bullets.radius[i] ?? 0, vx: round(s.bullets.vx[i] ?? 0), vy: round(s.bullets.vy[i] ?? 0) });
-    const speed = PLAYER_SPEED * (s.loadout.stats.moveSpeed > 0 ? s.loadout.stats.moveSpeed : 1);
+    const speed = s.cfg.player.baseSpeed * s.loadout.stats.moveSpeedMult;
     const playerRadius = s.player.radius[me] ?? 6;
     const hitsWalking = (ux, uy) => {
       let hits = 0;
@@ -678,6 +737,63 @@
       }
       return touches;
     };
+    const volleys = [];
+    for (const i of alive(s.emitters)) {
+      const rel = relTo(s, s.emitters.x[i] ?? 0, s.emitters.y[i] ?? 0);
+      if (rel.dist > HAZARD_RANGE)
+        continue;
+      volleys.push({
+        ...rel,
+        firesIn: round(s.emitters.telegraph[i] ?? 0),
+        count: s.emitters.count[i] ?? 0,
+        bursts: s.emitters.burstsLeft[i] ?? 0,
+        speed: round(s.emitters.speed[i] ?? 0),
+        damage: round(s.emitters.damage[i] ?? 0)
+      });
+    }
+    const pets = [];
+    for (const i of alive(s.pets)) {
+      const id = table.dogAt(s.pets.breed[i] ?? 0).id;
+      pets.push({ ...relTo(s, s.pets.x[i] ?? 0, s.pets.y[i] ?? 0), id, name: msg("dog", id), level: s.pets.level[i] ?? 1 });
+    }
+    const botMode = Object.fromEntries(Object.entries(enums.botModes).map(([k, v]) => [v, k]));
+    const helpers = [];
+    for (const i of alive(s.grokBots)) {
+      const help = table.botHelpAt(s.grokBots.help[i] ?? 0).id;
+      helpers.push({
+        ...relTo(s, s.grokBots.x[i] ?? 0, s.grokBots.y[i] ?? 0),
+        help,
+        name: msg("botHelp", help),
+        description: link.message(`content.botHelp.${help}.desc`) ?? "",
+        mode: botMode[s.grokBots.mode[i] ?? 0] ?? "unknown",
+        leavesIn: round(s.grokBots.timer[i] ?? 0)
+      });
+    }
+    const visitors = [];
+    for (const [who, pool] of [["poteto", s.visitor], ["andrew", s.andrew], ["samir", s.samir]])
+      for (const i of alive(pool))
+        visitors.push({ ...relTo(s, pool.x[i] ?? 0, pool.y[i] ?? 0), who });
+    const events = link.events.map((e) => {
+      const view = toJson(e);
+      if ((e.type === "bossSpawn" || e.type === "bossDefeated") && typeof e.id === "string")
+        return { ...view, name: msg("boss", e.id) };
+      const said = e.announcement;
+      if (e.type === "announce" && said?.kind === "event" && said.event !== undefined)
+        return { ...view, name: msg("event", said.event), ...link.message(`content.event.${said.event}.announce`) === undefined ? {} : { text: link.message(`content.event.${said.event}.announce`) } };
+      return view;
+    });
+    const minute = Math.floor(s.runClock / 60);
+    const schedule = s.waves.rows.filter((w) => w.minute >= minute && (w.boss !== undefined || w.elite === true || (w.events?.length ?? 0) > 0)).map((w) => ({
+      minute: w.minute,
+      ...w.boss === undefined ? {} : { boss: { id: w.boss, name: msg("boss", w.boss) } },
+      elite: w.elite === true,
+      events: (w.events ?? []).map((id) => ({ id, name: msg("event", id) }))
+    }));
+    const stats = s.loadout.stats;
+    const dashMax = s.cfg.dash.charges + stats.dashCharges;
+    const dashCharges = s.player.dashCharges[me] ?? 0;
+    const landmark = s.currentLandmark;
+    const score = hudScore();
     const outlook = simForecast(link, game);
     const choice = s.choiceQueue[0];
     const sectors = DIRECTIONS.map((dir, i) => {
@@ -713,8 +829,27 @@
     return {
       seed: String(s.run.seed),
       daily: s.daily !== undefined,
+      difficulty: difficultyOf(s),
       tick: s.tick,
       time: round(s.runClock),
+      winAt: s.cfg.win.timeSec,
+      ...score === undefined ? {} : { score },
+      ...s.daily === undefined ? {} : { weather: { id: s.daily.weather, name: msg("dailyWeather", s.daily.weather), description: link.message(`content.dailyWeather.${s.daily.weather}.desc`) ?? "" } },
+      gear: Object.entries(s.daily?.kit ?? {}).map(([slot, g]) => ({
+        slot,
+        id: g.gear,
+        name: msg("gear", g.gear),
+        description: link.message(`content.gear.${g.gear}.desc`) ?? "",
+        lines: g.lines.map((l) => ({ affix: l.affix, roll: l.roll }))
+      })),
+      biome: { id: s.currentBiome, name: msg("biome", s.currentBiome) },
+      ...landmark === null ? {} : {
+        landmark: {
+          id: landmark.biome.id,
+          name: msg("biome", landmark.biome.id),
+          ...landmark.event === undefined ? {} : { event: { id: landmark.event, name: msg("event", landmark.event) } }
+        }
+      },
       player: {
         x: round(s.player.x[me] ?? 0),
         y: round(s.player.y[me] ?? 0),
@@ -724,8 +859,18 @@
         xp: round(s.loadout.xp),
         xpNext: round(s.loadout.xpNext),
         gold: Math.floor(s.loadout.gold),
-        dashCharges: s.player.dashCharges[me] ?? 0,
+        dashCharges,
+        dashMax,
+        dashReadyIn: dashCharges >= dashMax ? 0 : round((s.player.dashCd[me] ?? 0) / TICKS_PER_SECOND),
         invulnerable: (s.player.invuln[me] ?? 0) > 0,
+        stunned: round((s.player.stunTicks[me] ?? 0) / TICKS_PER_SECOND),
+        frozen: round((s.player.freezeTicks[me] ?? 0) / TICKS_PER_SECOND),
+        slowed: round(s.player.slowT[me] ?? 0),
+        revivesLeft: Math.max(0, Math.floor(stats.revivals) - s.loadout.revivesUsed),
+        rerolls: s.loadout.rerolls,
+        skips: s.loadout.skips,
+        banishes: s.loadout.banishes,
+        curses: s.loadout.cursesTaken,
         hurtBy: recentHurt(s)
       },
       loadout: {
@@ -734,6 +879,11 @@
         items: [...s.loadout.items].filter(([, n]) => n > 0).map(([id, count]) => ({ id, name: nameOf(d.catalog, `item:${id}`), count })),
         banished: [...s.loadout.banished]
       },
+      stats: statValues(stats),
+      buffs: buffs(s),
+      totals: totals(s.run),
+      schedule,
+      events,
       combos: relevantCombos(d.combos, loadout).map((c) => comboView(d, discovery, c, loadout)),
       unpaired: unpaired(d.combos, loadout).map((u) => ({
         key: u.held,
@@ -754,6 +904,10 @@
       pois,
       hazards: nearest(hazards, 20),
       bullets: { total: bullets.length, nearest: nearest(bullets) },
+      volleys: nearest(volleys),
+      pets,
+      helpers,
+      visitors,
       standingBulletHits: hitsWalking(0, 0),
       standingEnemyTouches: touchesWalking(0, 0),
       ...outlook === undefined ? {} : { standingForecast: outlook[DIRECTIONS.length] },
@@ -787,7 +941,7 @@
       ...link.runLink === undefined ? {} : { lastRunLink: link.runLink },
       ...mode === undefined ? {} : { mode }
     };
-    const ended = game?.state.over ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, kills: game.state.run.kills, damageTaken: byDamage(game.state.run.damageTakenBySource) } } : {};
+    const ended = game?.state.over ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, ...totals(game.state.run) } } : {};
     if (!playing)
       return { ...base, ...ended, screen: game?.state.over ? "over" : "title" };
     const d = liveData(link);
@@ -1462,8 +1616,10 @@
     if (typeof value !== "function")
       return false;
     const proto = value.prototype;
-    return typeof proto?.step === "function" && typeof proto.setInput === "function" && typeof proto.choose === "function";
+    return typeof proto?.step === "function" && typeof proto.setInput === "function" && typeof proto.choose === "function" && typeof proto.drainEvents === "function";
   }
+  var KEEP_EVENTS = 40;
+  var NOISY_EVENTS = new Set(["playerHit", "hitStop", "dodge", "dashed", "block", "throttle", "reelStop", "dogAbility", "bossLanding"]);
   function findGameClass(ns) {
     for (const value of Object.values(ns)) {
       if (value === null || typeof value !== "object")
@@ -1509,7 +1665,10 @@
       throw new Error("could not find the zone shapes table");
     if (enemyFlags === undefined)
       throw new Error("could not find the enemy flags table");
-    return { pickupKinds, zoneKinds, zoneShapes, enemyFlags };
+    const botModes = values.find((v) => isRecord(v) && v.wander === 0 && typeof v.hop === "number" && typeof v.beam === "number");
+    if (botModes === undefined)
+      throw new Error("could not find the grok bot modes table");
+    return { pickupKinds, zoneKinds, zoneShapes, enemyFlags, botModes };
   }
   function assertContent(value) {
     const c = value;
@@ -1532,6 +1691,7 @@
     pauseAtStart = false;
     forecast;
     runLink;
+    events = [];
     noteRunLink() {
       if (!new URLSearchParams(location.search).has("run"))
         return;
@@ -1596,10 +1756,21 @@
       const ns = await import(url);
       const Game = findGameClass(ns);
       const link = this;
-      const { step, setInput } = Game.prototype;
+      const { step, setInput, drainEvents } = Game.prototype;
+      Game.prototype.drainEvents = function() {
+        const events = drainEvents.call(this);
+        if (this === link.game) {
+          for (const e of events)
+            if (!NOISY_EVENTS.has(e.type))
+              link.events.push({ ...e, time: Math.round(this.state.runClock * 10) / 10 });
+          link.events.splice(0, link.events.length - KEEP_EVENTS);
+        }
+        return events;
+      };
       Game.prototype.step = function() {
         if (link.game !== this) {
           link.game = this;
+          link.events = [];
           link.changed();
           if (link.pauseAtStart) {
             link.pauseAtStart = false;

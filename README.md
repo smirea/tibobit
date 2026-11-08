@@ -42,7 +42,7 @@ The same userscript lets a program play the game. A local server exposes the gam
 ```sh
 ./scripts/agent-server.ts     # listens on http://127.0.0.1:7357
 bun run agent-server          # the same, restarting whenever its code changes
-./scripts/tibo.ts state       # one-screen summary; --json for the full snapshot
+./scripts/tibo.ts state       # the full snapshot as JSON; ./scripts/tibo.ts watch for a live one-screen summary
 ```
 
 Keep one tibo.dog tab open with the userscript installed. It connects within a few seconds of the server starting and reconnects on its own, including to a run already in progress.
@@ -51,7 +51,7 @@ To use a server on another port, type the port into **Agent port** and press **C
 
 | Endpoint | What it does |
 | --- | --- |
-| `GET /state` | Latest snapshot: screen, the mode the game is on (`mode`: the open mode screen, else the current or last run), player, loadout, reachable combos, the panel's unpaired rows (`unpaired`), the open choice with every pairing of every option, bosses, nearest enemies, pickups, points of interest, hazards and enemy bullets. |
+| `GET /state` | Latest snapshot: screen, the mode the game is on (`mode`: the open mode screen, else the current or last run), difficulty, score, biome and landmark, a Daily's weather and gear, player (with dash cooldown, stun, freeze, slow, revives, rerolls, skips, banishes and curses), loadout, effective stats, active buffs, run totals (damage dealt and taken and kills by source, gold, chests, evolutions), the schedule of bosses, elites and events by minute, the latest game events (boss spawns and kills, banners, chests, evolutions, level-ups), reachable combos, the panel's unpaired rows (`unpaired`), the open choice with every pairing of every option, bosses, nearest enemies, pickups, points of interest, hazards, enemy bullets and the volleys about to fire, dogs, Grok Bots and visitors. |
 | `GET /encyclopedia` | Every weapon, passive, item, recipe, enemy, boss, point of interest and biome, with English names, descriptions and the game's own stats. |
 | `POST /command` | Runs one JSON command. Add `?wait=1` to block until it finishes. |
 | `WS /ws` | Pushes every snapshot as it arrives. Send a JSON command to run it. |

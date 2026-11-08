@@ -30,6 +30,8 @@ export type Content = {
 export type Table = Content & {
   enemyAt(index: number): EnemyDef;
   bossIdAt(index: number): string;
+  dogAt(index: number): { id: string };
+  botHelpAt(index: number): { id: string };
   biomes: { id: string }[];
   pois: { id?: string; kind?: string }[];
 };
@@ -48,6 +50,9 @@ export type Poi = {
   y: number;
   radius: number;
   state: { uid: number; used: boolean; charge: number; armed: boolean; goneAt: number };
+  /** A "bigUpdate" spot is either a variety place, by id, or a variant such as the Spud Forge. */
+  varietyPlace?: string;
+  variant?: { kind: string };
 };
 export type Hazard = { kind: string; x: number; y: number; radius: number; strength: number; poolShape: number; turn: number };
 
@@ -65,18 +70,35 @@ export type GameState = {
     items: Map<string, number>;
     /** Ids the player banished this run; the game never offers them again. */
     banished: Set<string>;
-    stats: { maxHp: number; moveSpeed: number };
+    rerolls: number;
+    skips: number;
+    banishes: number;
+    cursesTaken: number;
+    revivesUsed: number;
+    /** A class whose getters are the effective stats: maxHp, moveSpeedMult, armor, luck and so on. */
+    stats: { maxHp: number; moveSpeedMult: number; revivals: number; dashCharges: number; dashCooldownMult: number };
   };
-  player: Pool<"x" | "y" | "fx" | "fy" | "hp" | "invuln" | "dashCharges" | "dashCd" | "moving" | "radius">;
+  player: Pool<"x" | "y" | "fx" | "fy" | "hp" | "invuln" | "dashCharges" | "dashCd" | "moving" | "radius" | "stunTicks" | "freezeTicks" | "slowT" | "slowF" | "terrainSlow">;
   me: number;
   enemies: Pool<"x" | "y" | "hp" | "maxHp" | "radius" | "def" | "flags" | "damage">;
-  bosses: Pool<"x" | "y" | "hp" | "maxHp" | "radius" | "def">;
+  bosses: Pool<"x" | "y" | "hp" | "maxHp" | "radius" | "def" | "damage" | "speed">;
+  emitters: Pool<"x" | "y" | "count" | "speed" | "damage" | "burstsLeft" | "telegraph">;
+  pets: Pool<"x" | "y" | "breed" | "level">;
+  grokBots: Pool<"x" | "y" | "help" | "mode" | "timer">;
+  /** Poteto, Andrew and Samir walk in once a run; each is a pool of one. */
+  visitor: Pool<"x" | "y" | "phase">;
+  andrew: Pool<"x" | "y" | "phase">;
+  samir: Pool<"x" | "y" | "phase">;
   pickups: Pool<"x" | "y" | "kind" | "source" | "value" | "charge">;
   zones: Pool<"x" | "y" | "radius" | "kind" | "hostile" | "shape" | "life" | "maxLife" | "damage" | "delay" | "angle" | "length" | "poolShape" | "turn">;
   bullets: Pool<"x" | "y" | "radius" | "vx" | "vy" | "damage">;
   world: { activePois: Poi[]; activeHazards: Hazard[] };
   view: { width: number; height: number };
   cfg: {
+    player: { baseSpeed: number };
+    dash: { charges: number; cooldownSec: number; minCooldownSec: number };
+    win: { timeSec: number };
+    ladder: { level: number };
     activation: { seconds: Record<string, number>; pickupRadius: Record<string, number> };
     /** The Potato Crate's price grows with each one bought; vendors price items by rarity. */
     economy?: { chestPriceBase: number; chestPriceLinear: number; chestPriceQuad: number; chestPriceCubic: number; chestPriceKnee: number; vendorPrice?: number[] };
@@ -87,13 +109,51 @@ export type GameState = {
   over: boolean;
   paused: boolean;
   tick: number;
+  /** Game seconds, the clock every `...Until` field counts in; `runClock` is the run's own clock on the HUD. */
+  time: number;
   runClock: number;
-  run: { timeSec: number; level: number; kills: number; seed: string; damageTakenBySource: Map<string, number> };
-  daily: unknown;
+  difficulty: string;
+  currentBiome: string;
+  currentLandmark: { biome: { id: string }; event?: string } | null;
+  /** The schedule by minute: the boss that comes, whether an elite does, and the events. */
+  waves: { rows: { minute: number; boss?: string; elite?: boolean; events?: string[] }[] };
+  goldRushUntil: number;
+  goldRushMult: number;
+  frenzyUntil: number;
+  moreVariety?: { fryRushUntil: number; fireRate: number; picnicUntil: number };
+  run: {
+    timeSec: number;
+    level: number;
+    kills: number;
+    seed: string;
+    damageTakenBySource: Map<string, number>;
+    damageBySource: Map<string, number>;
+    killsBySource: Map<string, number>;
+    evolutions: string[];
+    unions: string[];
+    itemEvolutions: string[];
+    killer: string;
+    won: boolean;
+    goldEarned: number;
+    goldSpent: number;
+    bossesKilled: number;
+    elitesKilled: number;
+    bossChests: number;
+    paidChests: number;
+    shrinesUsed: number;
+    itemsBought: number;
+    revivesUsed: number;
+  };
+  /** Only on a Daily: its weather, and the gear kit Tibo wears, by slot. */
+  daily?: { weather: string; kit: Record<string, { gear: string; lines: { affix: string; roll: number }[] }> };
 };
+
+/** What the game records for its renderer each tick, such as `{type: "bossSpawn", id}` or `{type: "announce", announcement}`. */
+export type GameEvent = { type: string } & Record<string, unknown>;
 
 export type Game = {
   state: GameState;
+  drainEvents(): GameEvent[];
   setInput(x: number, y: number): void;
   setPaused(paused: boolean): void;
   dash(x: number, y: number): void;
@@ -105,6 +165,7 @@ export type Enums = {
   zoneKinds: Record<string, number>;
   zoneShapes: Record<string, number>;
   enemyFlags: Record<string, number>;
+  botModes: Record<string, number>;
 };
 
 export type Messages = Record<string, string[]>;
@@ -180,13 +241,18 @@ const SIM_CHUNK = /\/assets\/sim-[\w-]+\.js$/;
 const BOOT_CHUNK = /\/assets\/boot-[\w-]+\.js$/;
 const ENGLISH_CHUNK = /\/assets\/i18n-en-[\w.-]+\.js$/;
 
-type GamePrototype = { step(): unknown; setInput(x: number, y: number): unknown; choose: unknown };
+type GamePrototype = { step(): unknown; setInput(x: number, y: number): unknown; choose: unknown; drainEvents(): GameEvent[] };
 
 function isGameClass(value: unknown): value is { prototype: GamePrototype } {
   if (typeof value !== "function") return false;
   const proto = value.prototype as Partial<GamePrototype> | undefined;
-  return typeof proto?.step === "function" && typeof proto.setInput === "function" && typeof proto.choose === "function";
+  return typeof proto?.step === "function" && typeof proto.setInput === "function" && typeof proto.choose === "function" && typeof proto.drainEvents === "function";
 }
+
+const KEEP_EVENTS = 40;
+// Every few seconds or faster, and they would push the rare events out; the snapshot already says
+// what they do (hurtBy, dash charges, the boss's position).
+const NOISY_EVENTS = new Set(["playerHit", "hitStop", "dodge", "dashed", "block", "throttle", "reelStop", "dogAbility", "bossLanding"]);
 
 function findGameClass(ns: Record<string, unknown>) {
   for (const value of Object.values(ns)) {
@@ -232,7 +298,9 @@ function findEnums(module: Record<string, unknown>): Enums {
   const zoneShapes = values.find((v): v is Record<string, number> => isRecord(v) && v.circle === 0 && typeof v.line === "number" && typeof v.cone === "number");
   if (zoneShapes === undefined) throw new Error("could not find the zone shapes table");
   if (enemyFlags === undefined) throw new Error("could not find the enemy flags table");
-  return { pickupKinds, zoneKinds, zoneShapes, enemyFlags };
+  const botModes = values.find((v): v is Record<string, number> => isRecord(v) && v.wander === 0 && typeof v.hop === "number" && typeof v.beam === "number");
+  if (botModes === undefined) throw new Error("could not find the grok bot modes table");
+  return { pickupKinds, zoneKinds, zoneShapes, enemyFlags, botModes };
 }
 
 function assertContent(value: unknown): asserts value is Content {
@@ -260,6 +328,8 @@ export class GameLink {
   forecast: ((game: Game, inputs: { x: number; y: number }[], ticks: number) => Forecast[]) | undefined;
   /** The share link of the last finished run. The game puts it in the address bar (run=...&stats=...) on its summary. */
   runLink: string | undefined;
+  /** The latest events of the current game, oldest first, each stamped with the game time it was drained at. */
+  events: (GameEvent & { time: number })[] = [];
 
   noteRunLink() {
     if (!new URLSearchParams(location.search).has("run")) return;
@@ -328,10 +398,21 @@ export class GameLink {
     const ns = (await import(url)) as Record<string, unknown>;
     const Game = findGameClass(ns);
     const link = this;
-    const { step, setInput } = Game.prototype;
+    const { step, setInput, drainEvents } = Game.prototype;
+    // The renderer drains the game's events every frame to show banners and effects, so this sees
+    // every event once, after the ticks of that frame.
+    Game.prototype.drainEvents = function (this: Game) {
+      const events = drainEvents.call(this);
+      if (this === link.game) {
+        for (const e of events) if (!NOISY_EVENTS.has(e.type)) link.events.push({ ...e, time: Math.round(this.state.runClock * 10) / 10 });
+        link.events.splice(0, link.events.length - KEEP_EVENTS);
+      }
+      return events;
+    };
     Game.prototype.step = function (this: Game) {
       if (link.game !== this) {
         link.game = this;
+        link.events = [];
         link.changed();
         if (link.pauseAtStart) {
           link.pauseAtStart = false;
