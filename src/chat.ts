@@ -1,4 +1,5 @@
 import type { Bridge } from "./agent/bridge";
+import { ACTION_ICONS, moveIcon, NOTE_ICON, RESULT_ICONS, svgIcon } from "./icons";
 import { type CardOption, type ChatMessage, type Inspect, PACE_LIMITS, type PilotPace, type PilotRole } from "./agent/protocol";
 
 const ROLE_LABELS: Record<PilotRole, string> = { planner: "Plan", action: "Action", system: "Bot" };
@@ -229,25 +230,26 @@ function inspector(panel: () => HTMLElement, messages: () => readonly ChatMessag
   };
 }
 
-// More than ten lines of tiles ever hold; the box clips the rest.
-const FLOW_TILES = 160;
+// More tiles than the box ever holds; it clips the rest.
+const FLOW_TILES = 60;
 
 /** A step the action model chose, as the move it took; undefined for anything else. */
 function step(m: ChatMessage): { move: string; hurt: boolean; dash: boolean } | undefined {
   if (m.role !== "action" || m.inspect?.kind !== "moves") return undefined;
   const chosen = m.inspect.moves.find((x) => x.outcome === "chosen");
-  return { move: chosen?.move ?? "stand still", hurt: chosen?.forecast !== undefined && chosen.forecast !== "no damage", dash: m.text.startsWith("Dash") };
+  return { move: chosen?.move ?? "stand still", hurt: chosen?.forecast !== undefined && chosen.forecast !== "no damage", dash: m.tag === "Dash" };
 }
 
 /**
- * One action as a tile: a step is its arrow (red when the game forecast it hurts), anything else
- * its short name, such as "Run", "Shop" or "Loot ✓".
+ * One action as a square tile: a step is its arrow (red when the game forecast it hurts, with a
+ * bolt when it dashes), anything else its tag's icon, badged with how a goal ended.
  */
 function actionTile(m: ChatMessage): HTMLElement {
   const s = step(m);
-  const arrow = s !== undefined && !s.dash;
-  const label = arrow ? (ARROWS[s.move] ?? "?") : s?.dash ? `Dash ${ARROWS[s.move] ?? ""}` : (m.tag ?? arrowed(m.text).split(/[ :,]/)[0] ?? "");
-  const el = h("span", `tbh-tile ${arrow ? "tbh-tile-arrow" : "tbh-tile-word"} tbh-tile-${m.role}${s?.hurt ? " tbh-tile-hurt" : ""}${m.inspect === undefined ? "" : " tbh-tile-inspectable"}`, label);
+  const icon = s !== undefined ? moveIcon(s.move, "tbh-tile-icon") : svgIcon(m.tag === undefined ? NOTE_ICON : ACTION_ICONS[m.tag], "tbh-tile-icon");
+  const badge = s?.dash ? [svgIcon(ACTION_ICONS.Dash, "tbh-tile-badge tbh-badge-dash")] : m.result === undefined ? [] : [svgIcon(RESULT_ICONS[m.result], `tbh-tile-badge tbh-result-${m.result}`)];
+  const el = h("span", `tbh-tile tbh-tile-${m.role}${s?.hurt ? " tbh-tile-hurt" : ""}${m.inspect === undefined ? "" : " tbh-tile-inspectable"}`, icon, ...badge);
+  el.setAttribute("aria-label", arrowed(m.text));
   el.dataset.id = String(m.id);
   return el;
 }
@@ -317,8 +319,8 @@ export function chatBox(bridge: Bridge): HTMLElement {
       plan.classList.toggle("tbh-row-inspectable", latest !== undefined);
     }
 
-    // Newest first: the newest action is a 2x2 tile in the corner and the rest flow around it, as
-    // many as the box holds. The tiles hold still while the pointer is over them, or a new step
+    // Newest first: the newest action is a 3x3 tile in the corner, the one before it 2x2, and the
+    // rest flow around them, as many as the box holds. The tiles hold still while the pointer is over them, or a new step
     // every few tenths of a second would slide the one being read out from under it.
     if (list.matches(":hover")) return insp.refresh((target) => (target.kind === "plan" ? plan : rows.get(target.id)?.el));
     const actions: ChatMessage[] = [];
@@ -333,6 +335,7 @@ export function chatBox(bridge: Bridge): HTMLElement {
       const el = before?.message === message ? before.el : actionTile(message);
       rows.set(message.id, { el, message });
       el.classList.toggle("tbh-tile-main", i === 0);
+      el.classList.toggle("tbh-tile-prev", i === 1);
       return el;
     });
     if (els.length !== list.children.length || els.some((el, i) => list.children[i] !== el)) list.replaceChildren(...els);

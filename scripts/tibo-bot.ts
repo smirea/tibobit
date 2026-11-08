@@ -8,7 +8,7 @@
 import path from "node:path";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ChatLine, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 import { checkHarness, defaultModel, jsonObject, runCoach } from "./coach";
 import * as loop from "./gameplay";
 import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "./gameplay";
@@ -779,8 +779,8 @@ type Pursuit = {
   goal: Goal;
   id: string;
   title: string;
-  /** Its one-word name for the panel's action tiles. */
-  tag: string;
+  /** What it is, for the icon on the panel's action tiles. */
+  tag: ActionTag;
   since: number;
   deadline: number;
   /** The least work left so far (distance, plus seconds of charging as distance) and when. */
@@ -913,7 +913,7 @@ function goalTitle(g: Goal, r: RunView): string {
 }
 
 
-const SPOT_TAGS: [RegExp, string][] = [
+const SPOT_TAGS: [RegExp, ActionTag][] = [
   [/cart|crate|slots|microwave|vendor|shop/i, "Shop"],
   [/shrine|whetstone/i, "Shrine"],
   [/magnet/i, "Magnet"],
@@ -923,14 +923,13 @@ const SPOT_TAGS: [RegExp, string][] = [
   [/patch|crop/i, "Farm"],
 ];
 
-/** A goal's one-word name for the panel's action tiles. */
-function goalTag(g: Goal, r: RunView): string {
+function goalTag(g: Goal, r: RunView): ActionTag {
   switch (g.kind) {
     case "chest":
       return "Loot";
     case "poi": {
       const name = r.pois.find((p) => p.uid === g.uid)?.name ?? "Spot";
-      return SPOT_TAGS.find(([re]) => re.test(name))?.[1] ?? name.split(" ")[0] ?? "Spot";
+      return SPOT_TAGS.find(([re]) => re.test(name))?.[1] ?? "Spot";
     }
     case "food":
       return "Eat";
@@ -1011,12 +1010,9 @@ function begin(goal: Goal, r: RunView, log: RunLog) {
   say({ role: "action", model: "goal", time: r.time, text: title, tag: p.tag, detail: "done" in aim ? aim.done : aim.progress });
 }
 
-/** `dropped`: the planner chose another goal before this one ended. */
-type Result = "done" | "failed" | "dropped";
-const RESULT_WORDS: Record<Result, string> = { done: "done", failed: "gave up", dropped: "dropped" };
-const RESULT_MARKS: Record<Result, string> = { done: "✓", failed: "✗", dropped: "–" };
+const RESULT_WORDS: Record<GoalResult, string> = { done: "done", failed: "gave up", dropped: "dropped" };
 
-function finish(r: RunView, log: RunLog, outcome: string, result: Result) {
+function finish(r: RunView, log: RunLog, outcome: string, result: GoalResult) {
   const p = pursuit;
   if (p === undefined) return;
   pursuit = undefined;
@@ -1024,7 +1020,7 @@ function finish(r: RunView, log: RunLog, outcome: string, result: Result) {
   if (outcomes.length > 30) outcomes.shift();
   if (result === "failed" && "uid" in p.goal) giveUps.set(p.id, r.time + GIVE_UP_SECONDS);
   log.write(r, { event: "goal", goal: p.id, action: result, detail: outcome });
-  say({ role: "action", model: "goal", time: r.time, text: `${p.title}: ${RESULT_WORDS[result]}`, tag: `${p.tag} ${RESULT_MARKS[result]}`, detail: `${outcome} · ${Math.round(r.time - p.since)}s` });
+  say({ role: "action", model: "goal", time: r.time, text: `${p.title}: ${RESULT_WORDS[result]}`, tag: p.tag, result, detail: `${outcome} · ${Math.round(r.time - p.since)}s` });
 }
 
 /** The planner's goal takes over, unless it is the one already under way. */

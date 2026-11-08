@@ -361,8 +361,16 @@ export type Inspect =
  * earlier message with that key, which is how a planner message streams: `stream` holds its
  * reasoning so far until the final text replaces it.
  */
-/** `tag` is the action's short name in the panel ("Run", "Shop", "Loot ✓"). */
-export type ChatLine = { role: PilotRole; text: string; tag?: string; detail?: string; model?: string; time?: number; key?: string; stream?: string; inspect?: Inspect };
+/**
+ * What a non-step action is, which picks its tile's icon in the panel (src/icons.ts). A new tag
+ * needs an icon there before it type-checks.
+ */
+export const ACTION_TAGS = ["Loot", "Wander", "Run", "Gems", "Eat", "Hunt", "Spot", "Shop", "Shrine", "Magnet", "Pet", "Fight", "Light", "Farm", "Dash", "Start", "Take over", "Over", "Stopped", "Incognito"] as const;
+export type ActionTag = (typeof ACTION_TAGS)[number];
+/** How a goal ended; `dropped` means the planner chose another goal first. */
+export const GOAL_RESULTS = ["done", "failed", "dropped"] as const;
+export type GoalResult = (typeof GOAL_RESULTS)[number];
+export type ChatLine = { role: PilotRole; text: string; tag?: ActionTag; result?: GoalResult; detail?: string; model?: string; time?: number; key?: string; stream?: string; inspect?: Inspect };
 export type ChatMessage = ChatLine & { id: number; at: number };
 
 const KEEP_PLANS = 500;
@@ -395,7 +403,8 @@ export function parseChatLine(input: unknown): ChatLine {
   const model = optionalString(c.model, "model");
   const key = optionalString(c.key, "key");
   const stream = optionalString(c.stream, "stream");
-  const tag = optionalString(c.tag, "tag");
+  const tag = c.tag === undefined ? undefined : (ACTION_TAGS as readonly unknown[]).includes(c.tag) ? (c.tag as ActionTag) : fail(`tag must be one of ${ACTION_TAGS.join(", ")}`);
+  const result = c.result === undefined ? undefined : (GOAL_RESULTS as readonly unknown[]).includes(c.result) ? (c.result as GoalResult) : fail(`result must be one of ${GOAL_RESULTS.join(", ")}`);
   const inspect = c.inspect as Inspect | undefined;
   if (inspect !== undefined && !["prompt", "plan", "moves", "cards"].includes((inspect as { kind?: unknown } | null)?.kind as string)) fail("inspect.kind must be prompt, plan, moves or cards");
   return {
@@ -407,6 +416,7 @@ export function parseChatLine(input: unknown): ChatLine {
     ...(key === undefined ? {} : { key }),
     ...(stream === undefined ? {} : { stream }),
     ...(tag === undefined ? {} : { tag }),
+    ...(result === undefined ? {} : { result }),
     ...(inspect === undefined ? {} : { inspect }),
   };
 }
