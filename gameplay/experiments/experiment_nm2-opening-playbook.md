@@ -2,12 +2,12 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | recheck |
 | Area | meta |
 | Result | - |
 | Coach | sonnet-high |
 | Created | sonnet-high L2.I10 |
-| Updated | sonnet-high L3.I2 |
+| Updated | sonnet-high L3.I10 |
 
 ## Hypothesis
 
@@ -19,7 +19,7 @@ L3.I1: fresh NM2 steam-vent seeds 3131 and 3232, 300s, plus the pending gyms nm2
 
 ## Findings
 
-L3.I1: fresh seeds 3131 and 3232 lived at 5:00 with 25 and 42 damage, the NM2 5:00 gym lived to 10:00 with 14 damage and the 10:00 gym to 15:00 with 22. No early NM2 death yet. L3.I2 adds a seed 3333 baseline.
+L3.I1-I9 lockstep results (5 of 5 alive at 5:00) do not hold live: the live rehearsal lived 1 of 5 and the full run died 2:15.
 
 ## Games
 

@@ -49,7 +49,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 0,
         "bossOfferRange": 0
       }
     }
@@ -109,7 +108,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 0,
         "bossOfferRange": 0
       }
     }
@@ -149,7 +147,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 0,
         "bossOfferRange": 0
       }
     }
@@ -189,7 +186,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 0,
         "bossOfferRange": 0
       }
     }
@@ -244,7 +240,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 0,
         "bossOfferRange": 0
       }
     }
@@ -284,7 +279,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 0,
         "bossOfferRange": 0
       }
     }
@@ -345,7 +339,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 0,
         "bossOfferRange": 0
       }
     }
@@ -432,7 +425,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -527,7 +519,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -625,7 +616,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -722,7 +712,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -817,7 +806,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -856,7 +844,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -920,7 +907,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -987,7 +973,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -1051,7 +1036,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -1118,7 +1102,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -1186,7 +1169,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -1252,7 +1234,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -1317,7 +1298,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -1388,7 +1368,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -1428,7 +1407,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -1520,7 +1498,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -1612,7 +1589,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -1727,7 +1703,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -1842,7 +1817,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -1914,7 +1888,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -2058,7 +2031,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -2188,7 +2160,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -2314,7 +2285,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -2375,7 +2345,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -2414,7 +2383,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -2462,7 +2430,7 @@
   },
   {
     "name": "nm1-min15-natural-c",
-    "status": "ready",
+    "status": "retired",
     "purpose": "A second natural chest-first steam-vent build at 15:00 on a different map, to check that late item, gold and pick findings hold beyond the nm1-min15-natural-b-gold map.",
     "coach": "sonnet-high",
     "created": "sonnet-high L2.I8",
@@ -2534,7 +2502,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -2573,7 +2540,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -2659,7 +2625,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -2726,7 +2691,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -2799,7 +2763,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -2866,7 +2829,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -2933,14 +2895,13 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
   },
   {
     "name": "nm2-min15-natural-b",
-    "status": "ready",
+    "status": "retired",
     "purpose": "A second natural NM2 15:00 build on a different map, to check that 15:00-20:00 findings (Grater Golem at 16:00, Kraken at 18:00) hold beyond nm2-min15-natural.",
     "coach": "sonnet-high",
     "created": "sonnet-high L3.I3",
@@ -3006,7 +2967,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -3072,7 +3032,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -3142,14 +3101,13 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
   },
   {
     "name": "nm2-min15-gold",
-    "status": "ready",
+    "status": "retired",
     "purpose": "Nightmare 2 at 15:00 from a natural build that spent gold from 10:00 under the strong spend rule, to test 15:00-20:00 with the items it bought.",
     "coach": "sonnet-high",
     "created": "sonnet-high L3.I4",
@@ -3181,7 +3139,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -3280,7 +3237,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -3341,7 +3297,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -3408,7 +3363,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -3475,14 +3429,13 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
   },
   {
     "name": "nm2-min15-natural-c",
-    "status": "ready",
+    "status": "retired",
     "purpose": "A third natural NM2 15:00 build on a new map from a plain playbook start, to check that 15:00-20:00 findings (Grater Golem 16:00, Kraken 18:00) and the hp build hold beyond nm2-min15-natural and natural-b.",
     "coach": "sonnet-high",
     "created": "sonnet-high L3.I6",
@@ -3555,7 +3508,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     }
@@ -3594,7 +3546,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -3660,7 +3611,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -3736,7 +3686,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -3776,7 +3725,7 @@
   },
   {
     "name": "nm2-min5-hp-a",
-    "status": "ready",
+    "status": "retired",
     "purpose": "Nightmare 2 at 5:00 from a fresh steam-vent game played with the hp-first pick prompt, to continue 5:00-10:00 and compare max hp and evolutions against nm2-min5-fresh.",
     "coach": "sonnet-high",
     "created": "sonnet-high L3.I7",
@@ -3808,7 +3757,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -3838,7 +3786,7 @@
   },
   {
     "name": "nm2-min5-hp-b",
-    "status": "ready",
+    "status": "retired",
     "purpose": "Nightmare 2 at 5:00 from a second fresh hp-pick game (seed 3434), a second map to continue 5:00-10:00 with the hp-first picks.",
     "coach": "sonnet-high",
     "created": "sonnet-high L3.I7",
@@ -3870,7 +3818,6 @@
         "distrustBossRange": 0,
         "planEvery": 5,
         "eliteSeconds": 20,
-        "lockstep": 1,
         "bossOfferRange": 0
       }
     },
@@ -3905,14 +3852,85 @@
   },
   {
     "name": "nm1-min3-weak",
-    "status": "pending",
+    "status": "ready",
     "purpose": "weak early state at 3:00 on a fresh seed to test pick and elite-goal fixes where starvation happens",
     "coach": "sonnet-medium",
     "created": "sonnet-medium L4.I10",
     "difficulty": 1,
     "at": 180,
     "weapon": "steam-vent",
+    "seed": "VVRMAT",
+    "source": "built from a fresh game to 03:00",
+    "checkpoint": {
+      "name": "gym-nm1-min3-weak",
+      "build": "sim-BC9884jU.js",
+      "seed": "VVRMAT",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 180.1,
+      "level": 13,
+      "hp": 180,
+      "weapons": [
+        "pressure-cooker 1",
+        "seed-potato 1",
+        "tot-toss 1"
+      ],
+      "passives": [
+        "gravy-heart 3",
+        "root-network 4"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T13:35:11.451Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "If Tibo's next goal is to {{goal}}: is that the best thing now? Rank in this order. If health is under 25%, food or evading comes first. Otherwise: opening a chest first (free pick, and it evolves weapons), fighting an elite next (it drops a chest), then collecting nearby xp gems, then exploring for new chests. Exception: only when the game time {{time}} is between 10:00 and 15:45, gold is 300 or more, and no boss is within 300, buying a Potato Crate, visiting a Fry Cart, Spud Whetstone or a shrine rates as high as a chest. After 15:45 ignore shops and shrines. Do not evade just because many pests or a boss are around; the weapons handle them.",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest? Commit to one evolution line: level the weapon that has its catalyst passive held or on offer (Steam Vent with Root Network, Locked Gatling with Masher Grip) and take the catalyst when offered. Never take Reroll when a useful card is shown. Take Gravy Heart for max hp early. Keep damage passives (Butter Pat, Hot Sauce) next, and prefer armor and dodge items when offered."
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "nm2-live-pre-mascot",
+    "status": "pending",
+    "purpose": "Live NM2 state just before the 2:00 Festival Mascot, built with the plain playbook, to compare boss-adjacent evade text, boss-slam dash prompts and elite-fight rules on the exact wall that killed the full run",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L3.I10",
+    "difficulty": 2,
+    "at": 110,
+    "weapon": "steam-vent",
     "seed": "",
-    "source": "built from a fresh game to 03:00"
+    "source": "built from a fresh game to 01:50"
+  },
+  {
+    "name": "nm2-live-min5",
+    "status": "pending",
+    "purpose": "Live NM2 state at 5:00 built with the plain playbook, to test 5:00-10:00 live and pick commitment past the 4:00 Masher and Beetle Queen",
+    "coach": "sonnet-high",
+    "created": "sonnet-high L3.I10",
+    "difficulty": 2,
+    "at": 300,
+    "weapon": "steam-vent",
+    "seed": "",
+    "source": "built from a fresh game to 05:00"
   }
 ]

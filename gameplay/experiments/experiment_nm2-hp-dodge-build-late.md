@@ -7,7 +7,7 @@
 | Result | - |
 | Coach | sonnet-high |
 | Created | sonnet-high L3.I6 |
-| Updated | sonnet-high L3.I8 |
+| Updated | sonnet-high L3.I9 |
 
 ## Hypothesis
 
@@ -19,7 +19,7 @@ From nm2-min15-natural (4 baselines: 2 alive, 2 dead), 300s: three games with a 
 
 ## Findings
 
-L3.I6 and I7: hp+dodge lived 4 of 5 on two maps (natural 3 of 3, natural-b 1 of 2). L3.I8 replicates on a third map, nm2-min15-natural-c, with 2 games of an hp+armor+dodge loadout (Gravy Heart 5, Stuffed Skin 5, Starch Plating 5, 2 Ghost Skin; Thick Skin left out to avoid evolving Wildfire Roast) against 1 unchanged control.
+L3.I8 natural-c: hp+armor+dodge 2 of 2 alive with 64 and 94 damage; unchanged control died 18:23. Across three maps hp builds live 6 of 7, unchanged about 4 of 10. The open question is whether natural play can reach such a build, which nm2-hp-picks-early tests.
 
 ## Games
 
@@ -91,4 +91,34 @@ L3.I6 and I7: hp+dodge lived 4 of 5 on two maps (natural 3 of 3, natural-b 1 of 
 - Damage dealt 14712356, by weapon: mashquake 5821998.4, stand-mixer 3676466.8, pressure-cooker 2724599.3, hash-harrier 1419143.1, gravy-pack 574663.1, factory-reset 260377.7, coal-baked-spud 209764.5, grok-bot 23043.9.
 - Kills 31007, by weapon: mashquake 10054, pressure-cooker 8224, stand-mixer 8085, hash-harrier 2564, gravy-pack 1113, factory-reset 500, coal-baked-spud 397, grok-bot 69.
 - Bosses killed 12, elites killed 9, boss chests 17, crates bought 2, shrines used 1, items bought 0, revives used 0; gold earned 8860, spent 578.
+- Made: no evolution, union or evolved item.
+
+### L3.I8.G1: natural-c hp+armor+dodge A
+
+- Start: gym nm2-min15-natural-c (Nightmare 2 at 15:00), seed 1SIX6LD, build swapped for pressure-cooker 1, mash-avalanche 1, factory-reset 1, cold-frame 1, root-current 1, hot-streak 8, root-network 5, masher-grip 5, four-eyed-spud 5, gravy-heart 5, stuffed-skin 5, starch-plating 5, meteor-russet x1, spicy-croquette x1, salt-crystal x2, cursed-crown x1, ghost-skin x2; 300s; plays the playbook.
+- Outcome: alive after 300.1s (game clock 20:00), health 269/269; damage taken 64 (Hot oil 57.8, Spore vent 5.7); 42094 kills; level 52 to 71; planner asked 90 times, action model 193, in lockstep; ended with pressure-cooker 1, mash-avalanche 1, factory-reset 1, cold-frame 1, root-current 1, hot-streak 8, root-network 5, masher-grip 5, four-eyed-spud 5, gravy-heart 5, stuffed-skin 5, starch-plating 5.
+- Damage taken 64, by source: Hot oil 57.8, Spore vent 5.7.
+- Damage dealt 30588856, by weapon: spicy-croquette 8617264.2, meteor-russet 8363625.4, root-current 4459684.2, cold-frame 4291364.7, mash-avalanche 2420126.9, pressure-cooker 1042806, factory-reset 725108.4, hot-streak 557393.3.
+- Kills 42094, by weapon: meteor-russet 9904, spicy-croquette 9700, root-current 8591, cold-frame 8259, mash-avalanche 3462, factory-reset 902, pressure-cooker 654, hot-streak 476.
+- Bosses killed 15, elites killed 9, boss chests 24, crates bought 7, shrines used 0, items bought 0, revives used 0; gold earned 14680, spent 17137.
+- Made: no evolution, union or evolved item.
+
+### L3.I8.G2: natural-c hp+armor+dodge B
+
+- Start: gym nm2-min15-natural-c (Nightmare 2 at 15:00), seed 1SIX6LD, build swapped for pressure-cooker 1, mash-avalanche 1, factory-reset 1, cold-frame 1, root-current 1, hot-streak 8, root-network 5, masher-grip 5, four-eyed-spud 5, gravy-heart 5, stuffed-skin 5, starch-plating 5, meteor-russet x1, spicy-croquette x1, salt-crystal x2, cursed-crown x1, ghost-skin x2; 300s; plays the playbook.
+- Outcome: alive after 300.3s (game clock 20:00), health 269/269; damage taken 94 (enemy:ice-imp 55.3, Hot oil 28.7, enemy:blight-spore 10.1); 38961 kills; level 52 to 70; planner asked 95 times, action model 203, in lockstep; ended with pressure-cooker 1, mash-avalanche 1, factory-reset 1, cold-frame 1, root-current 1, hot-streak 8, root-network 5, masher-grip 5, four-eyed-spud 5, gravy-heart 5, stuffed-skin 5, starch-plating 5.
+- Damage taken 94, by source: enemy:ice-imp 55.3, Hot oil 28.7, enemy:blight-spore 10.1.
+- Damage dealt 29546961, by weapon: meteor-russet 8322583.5, spicy-croquette 8163922.2, root-current 4911973.5, cold-frame 3737357.6, mash-avalanche 2068520.9, pressure-cooker 973205.7, factory-reset 871895.3, hot-streak 402026.4.
+- Kills 38961, by weapon: meteor-russet 9861, spicy-croquette 8764, root-current 8357, cold-frame 6892, mash-avalanche 2864, factory-reset 1012, pressure-cooker 760, hot-streak 314.
+- Bosses killed 9, elites killed 18, boss chests 27, crates bought 7, shrines used 0, items bought 0, revives used 0; gold earned 13049, spent 17137.
+- Made: no evolution, union or evolved item.
+
+### L3.I8.G3: natural-c unchanged control
+
+- Start: gym nm2-min15-natural-c (Nightmare 2 at 15:00), seed 1SIX6LD; 300s; plays the playbook.
+- Outcome: died after 203.1s (game clock 18:23); damage taken 341 (boss:ketchup-kraken 305.2, boss:compost-titan 32.9, Hot oil 3.3); 39760 kills; level 52 to 68; planner asked 65 times, action model 132, in lockstep; ended with pressure-cooker 1, fry-by 1, potato-rain 8, spicy-hot-potato 1, stand-mixer 1, hot-streak 8, butter-pat 5, root-network 5, hot-start 5, hot-sauce 5, big-bowl 5, sour-cream 5.
+- Damage taken 341, by source: boss:ketchup-kraken 305.2, boss:compost-titan 32.9, Hot oil 3.3; the killing blow: boss:ketchup-kraken.
+- Damage dealt 20069579, by weapon: stand-mixer 6797540.2, spicy-hot-potato 5266961.8, pressure-cooker 3834839.3, hot-streak 1954041.5, fry-by 1296501.6, wandering-eyes 540671.9, potato-rain 373920.2, spark-spud 3899.6.
+- Kills 39760, by weapon: stand-mixer 11138, spicy-hot-potato 10624, pressure-cooker 9156, hot-streak 4330, fry-by 2410, wandering-eyes 1286, potato-rain 804, grok-bot 6.
+- Bosses killed 6, elites killed 12, boss chests 18, crates bought 3, shrines used 0, items bought 0, revives used 0; gold earned 10417, spent 4711.
 - Made: no evolution, union or evolved item.

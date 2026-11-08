@@ -3,7 +3,7 @@
     "planner": {
       "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
       "goal": "If Tibo's next goal is to {{goal}}: is that the best thing now? Rank in this order. If health is under 25%, food or evading comes first. Otherwise: opening a chest first (free pick, and it evolves weapons), fighting an elite next (it drops a chest), then collecting nearby xp gems, then exploring for new chests. Exception: only when the game time {{time}} is between 10:00 and 15:45, gold is 300 or more, and no boss is within 300, buying a Potato Crate, visiting a Fry Cart, Spud Whetstone or a shrine rates as high as a chest. After 15:45 ignore shops and shrines. Do not evade just because many pests or a boss are around; the weapons handle them.",
-      "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest? Commit to one evolution line: level the weapon that has its catalyst passive held or on offer (Steam Vent with Root Network, Locked Gatling with Masher Grip) and take the catalyst when offered. Never take Reroll when a useful card is shown. Take Gravy Heart for max hp early. Keep damage passives (Butter Pat, Hot Sauce) next, and prefer armor and dodge items when offered."
+      "pick": "Tibo is at a {{choice}}. Commit to the starting weapon's evolution: level Steam Vent every time it is offered and take its catalyst Root Network as soon as it is shown. Never take Masher Grip, Gravy Splash, Sprouting Eyes, Mash Landing or other dash weapons early. Prefer Gravy Heart, Butter Pat, Hot Sauce and Starch Plating over fillers. Never take Reroll or Skip when a useful card is shown. Once Steam Vent has evolved, pick damage and max hp passives."
     },
     "action": {
       "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
@@ -22,11 +22,10 @@
       "distrustBossRange": 0,
       "planEvery": 5,
       "eliteSeconds": 20,
-      "lockstep": 1,
       "bossOfferRange": 0
     }
   },
   "weapon": "steam-vent",
-  "updated": "sonnet-medium L4.I10",
-  "why": "No change: the L4.I10 failure was early starvation and no variant has been tested yet; shipping untested text would repeat the L3 mistake."
+  "updated": "sonnet-medium L5.I3",
+  "why": "The catalyst-committed pick prompt lived 8 of 8 on fresh seeds, including 1919, 2020 and 2121, where plain chest-first died or starved. The goal text stays plain chest-first plus the gated gold rule, since the early-elite text starved 2020 again. This iteration tests it on 5 more seeds before the full run."
 }

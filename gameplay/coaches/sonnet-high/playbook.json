@@ -22,7 +22,6 @@
       "distrustBossRange": 0,
       "planEvery": 5,
       "eliteSeconds": 20,
-      "lockstep": 1,
       "bossOfferRange": 0
     }
   },
