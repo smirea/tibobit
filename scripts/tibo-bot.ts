@@ -580,7 +580,7 @@ async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ pla
   // Only Open World has a champion: it is the best Open World Nightmare run.
   if (EXPLOIT_EVERY > 0 && setup.mode === "world" && champion !== undefined && (played + 1) % EXPLOIT_EVERY === 0) {
     const weapon = loop.startedWith(champion.record.text) ?? "";
-    const intent = `Exploit run (every ${EXPLOIT_EVERY}th run of this coach): the champion templates from ${champion.from} (Nightmare ${champion.record.level}, lived ${clock(champion.record.lived)}), unchanged, starting with ${weapon === "" ? "a random weapon" : weapon}. It tests nothing new: it is a real attempt at 20:00 and a second sample of the best play so far, so the review can tell how much of that run was luck.`;
+    const intent = `Exploit run (one run in ${EXPLOIT_EVERY} of this coach): the champion templates from ${champion.from} (Nightmare ${champion.record.level}, lived ${clock(champion.record.lived)}), unchanged, starting with ${weapon === "" ? "a random weapon" : weapon}. It tests nothing new: it is a real attempt at 20:00 and a second sample of the best play so far, so the review can tell how much of that run was luck.`;
     console.log(`plan: ${intent}`);
     say({ role: "planner", model: COACH_NAME, time: 0, text: intent });
     return { plan: { source: `${champion.from} (exploit run)`, intent, testing: [], templates: champion.templates, weapon }, prompts: "none (exploit run)" };
