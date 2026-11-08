@@ -196,7 +196,11 @@ const STREAM_TAIL = 900;
  * Runs the coach once and returns the JSON object in its reply, or undefined. Its reasoning and
  * reply stream into `bubble` as they arrive, and hovering the bubble shows the prompt.
  */
-async function askCoach(prompt: string, timeoutMs: number, bubble: CoachBubble): Promise<Record<string, unknown> | undefined> {
+/**
+ * The coach's reply, `{ unusable }` when it answered with text that holds no JSON object (Composer
+ * once replied only "Gathering details from the log…"), or undefined when the harness failed.
+ */
+async function askCoach(prompt: string, timeoutMs: number, bubble: CoachBubble): Promise<Record<string, unknown> | { unusable: string } | undefined> {
   if (COACH === "none") return undefined;
   const started = performance.now();
   bubble.set({ inspect: { kind: "prompt", prompt } });
@@ -216,7 +220,7 @@ async function askCoach(prompt: string, timeoutMs: number, bubble: CoachBubble):
     const why = said.error || said.text.trim() || said.stderr || "(empty output)";
     console.error(`coach gave no JSON after ${seconds}s${late}: ${why.slice(0, 600)}`);
     finish({ text: `No answer after ${seconds}s${late}: ${why.slice(0, 300)}` });
-    return undefined;
+    return said.text.trim() === "" || said.timedOut ? undefined : { unusable: "your reply held no JSON object, only text. You cannot read files or run tools here: everything you need is in the prompt" };
   }
   try {
     const reply = JSON.parse(json) as Record<string, unknown>;
@@ -225,7 +229,7 @@ async function askCoach(prompt: string, timeoutMs: number, bubble: CoachBubble):
   } catch (e) {
     console.error(`coach reply unreadable after ${seconds}s:`, e instanceof Error ? e.message : e);
     finish({ text: `Unreadable answer after ${seconds}s.` });
-    return undefined;
+    return { unusable: `your reply's JSON did not parse: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
 
@@ -247,7 +251,7 @@ async function consult<T>(prompt: string, timeoutMs: number, bubble: CoachBubble
       continue;
     }
     if (reply === undefined) return undefined;
-    const checked = check(reply);
+    const checked: loop.Checked<T> = "unusable" in reply && typeof reply.unusable === "string" && Object.keys(reply).length === 1 ? { errors: [reply.unusable] } : check(reply as Record<string, unknown>);
     if ("value" in checked) return checked.value;
     console.error(`coach reply rejected:\n- ${checked.errors.join("\n- ")}`);
     bubble.set({ text: `Reply rejected${attempt === 0 ? ", asking again" : ""}: ${checked.errors.join("; ")}` });
@@ -656,23 +660,25 @@ async function reviewRun(text: string, name: string): Promise<{ review: string; 
 const summaryOf = (review: string) => (review.match(/^## Summary\s*\n+([^\n]+(?:\n[^\n#]+)*)/m)?.[1] ?? review.slice(0, 600)).trim();
 
 /** Commits gameplay/ with the reviewed run's notes and pushes it; a failure is reported, never fatal. */
-async function commitGameplay(name: string, review: string, testing: string[]) {
+/** `review` is undefined when the coach gave none; the run is committed all the same. */
+async function commitGameplay(name: string, review: string | undefined, testing: string[]) {
   if (!COMMIT) return;
   const run = (cmd: string[], env?: Record<string, string>) => {
     const p = Bun.spawnSync(cmd, { cwd: loop.GAMEPLAY, stdout: "pipe", stderr: "pipe", env: { ...process.env, ...env } });
     return { ok: p.exitCode === 0, out: `${p.stdout.toString()}${p.stderr.toString()}`.trim() };
   };
   const lived = name.match(/lived-(\d+)-(\d+)/);
-  const title = `docs(gameplay): ${COACH} reviews the ${name.slice(0, 16).replace("_", " ").replace(/-(\d\d)$/, ":$1")} run, lived ${lived === null ? "?" : `${Number(lived[1])}:${lived[2]}`}${testing.length === 0 ? "" : `, testing ${testing.join(", ")}`}`;
+  const title = `docs(gameplay): ${review === undefined ? `the ${COACH} loop records, unreviewed,` : `${COACH} reviews`} the ${name.slice(0, 16).replace("_", " ").replace(/-(\d\d)$/, ":$1")} run, lived ${lived === null ? "?" : `${Number(lived[1])}:${lived[2]}`}${testing.length === 0 ? "" : `, testing ${testing.join(", ")}`}`;
   // Under the gameplay lock, so a commit never catches another loop's file half written. --only
   // commits gameplay/ alone, whatever else someone has staged; a busy index is tried again.
   const commit = await loop.locked(async () => {
     run(["git", "add", "-A", "--", "."]);
     if (run(["git", "diff", "--cached", "--quiet", "--", "."]).ok) return undefined;
-    let tried = run(["gai", "-m", `${title}\n\n${summaryOf(review)}`, "--only", "--", "."], { AI_COMITTER_NAME: COACH_MODEL ?? COACH });
+    const body = review === undefined ? `The coach gave no usable review; rerun it with ./scripts/tibo-bot.ts --review gameplay/notes/${name}` : summaryOf(review);
+    let tried = run(["gai", "-m", `${title}\n\n${body}`, "--only", "--", "."], { AI_COMITTER_NAME: COACH_MODEL ?? COACH });
     for (let attempt = 1; !tried.ok && tried.out.includes("index.lock") && attempt < 5; attempt++) {
       await Bun.sleep(2000);
-      tried = run(["gai", "-m", `${title}\n\n${summaryOf(review)}`, "--only", "--", "."], { AI_COMITTER_NAME: COACH_MODEL ?? COACH });
+      tried = run(["gai", "-m", `${title}\n\n${body}`, "--only", "--", "."], { AI_COMITTER_NAME: COACH_MODEL ?? COACH });
     }
     return tried;
   });
@@ -1533,7 +1539,8 @@ class Planner {
     this.notes.review = done?.review ?? `(no review: the coach gave none. Rerun it with ./scripts/tibo-bot.ts --review ${file})`;
     if (done !== undefined) this.notes.prompts = done.prompts;
     await this.notes.write();
-    if (done !== undefined) await commitGameplay(path.basename(file), done.review, this.notes.plan.testing);
+    // Committed reviewed or not, so a run whose review failed is not left out of the history.
+    await commitGameplay(path.basename(file), done?.review, this.notes.plan.testing);
   }
 }
 
