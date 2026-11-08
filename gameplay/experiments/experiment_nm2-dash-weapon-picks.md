@@ -2,12 +2,12 @@
 
 | Field | Value |
 | --- | --- |
-| Status | proposed |
+| Status | running |
 | Area | models |
 | Result | - |
 | Coach | sonnet-high |
 | Created | sonnet-high L2.I10 |
-| Updated | sonnet-high L2.I10 |
+| Updated | sonnet-high L3.I2 |
 
 ## Hypothesis
 
@@ -19,7 +19,7 @@ From nm2-min5-fresh and nm2-min10-natural, 300s each: default picks vs the avoid
 
 ## Findings
 
-(none yet)
+L3.I1.G1 (seed 3131 baseline) took Mash Landing to 7/8 by 5:00 and dashed 0 times. L3.I2 tests an avoid-on-dash prompt on seeds 3131 and 3333, one game each, with a baseline on 3333.
 
 ## Games
 

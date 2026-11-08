@@ -297,3 +297,23 @@ L3.I8 ran exploreDistance 600 alone. It survived seeds 1818, 1616 and 2222 (10, 
 - L3.I9.G3 plain seed 2525 (plain-chest-first-fresh-nm1): alive after 300.3s (game clock 05:00), health 88/192; damage taken 243 (boss:amusing 45.5, enemy:sprout-mite 26.9, enemy:ketchup-drop 17.4, enemy:aphid 17); 2189 kills; level 1 to 17; planner asked 108 times, action model 645, in lockstep; ended with steam-vent 3, big-fry 1, hot-streak 6, fertilizer 4, gravy-heart 5, thick-skin 1
 - L3.I9.G4 plain seed 2626 (plain-chest-first-fresh-nm1): alive after 300.1s (game clock 05:00), health 120/120; damage taken 74 (enemy:snow-mold 46.2, enemy:frost-flea 18.5, enemy:compost-maggot 3.9, enemy:aphid 2.3); 4070 kills; level 1 to 20; planner asked 106 times, action model 315, in lockstep; ended with pressure-cooker 1, hot-streak 7, root-cellar 1, potato-battery 1, salt-line 1, root-network 5, big-bowl 5, thick-skin 1, aged-russet 1, slow-cooker 1
 - L3.I9.G5 plain seed 2727 (plain-chest-first-fresh-nm1): alive after 300.1s (game clock 05:00), health 173/177; damage taken 148 (boss:amusing 58.8, enemy:spittlebug 37.5, enemy:snow-mold 19.1, enemy:little-grey 8.5); 2690 kills; level 1 to 18; planner asked 109 times, action model 409, in lockstep; ended with pressure-cooker 1, mash-landing 8, hot-streak 3, stuffed-skin 4, thick-skin 3, root-network 5, gravy-heart 1, bacon-bits 1
+
+## L3.I10: rehearsal (2026-11-08 10:45)
+
+The playbook, unchanged, on 5 fresh Nightmare 1 games of 300s: 5 lived.
+
+- L3.I10.R1: alive after 300.2s (game clock 05:00), health 163/163; damage taken 36 (boss:the-masher 11.2, enemy:fry-fly 8.8, enemy:sprout-mite 4.7, enemy:aphid 3.5); 2600 kills; level 1 to 19; planner asked 109 times, action model 255, in lockstep; ended with pressure-cooker 1, mandoline-fury 1, potato-battery 1, fertilizer 3, root-network 4, gravy-heart 3
+- L3.I10.R2: alive after 300.1s (game clock 05:00), health 17/120; damage taken 255 (enemy:tomato-leech 62.3, boss:the-masher 33.6, enemy:beetle-brood 26.8, boss:amusing 24.4); 968 kills; level 1 to 13; planner asked 101 times, action model 774, in lockstep; ended with steam-vent 4, tot-toss 6, chives 2, tater-trot 1, root-network 2
+- L3.I10.R3: alive after 300s (game clock 05:00), health 120/120; damage taken 23 (enemy:snow-mold 7, boss:amusing 6.7, enemy:aphid 5.8, enemy:frost-flea 2.3); 3207 kills; level 1 to 19; planner asked 111 times, action model 337, in lockstep; ended with pressure-cooker 1, cold-storage 1, sprout-satellites 1, lean-lunch 3, big-bowl 1, root-network 4, slow-cooker 3, peel-out 2
+- L3.I10.R4: alive after 300.3s (game clock 05:00), health 120/120; damage taken 52 (boss:the-masher 11.2, enemy:sand-crab 7.3, enemy:oil-drip 6.8, enemy:crumb-ant 6); 2467 kills; level 1 to 17; planner asked 108 times, action model 278, in lockstep; ended with pressure-cooker 1, hot-streak 8, peeler 1, lean-lunch 4, root-network 4, thick-skin 2
+- L3.I10.R5: alive after 300.3s (game clock 05:00), health 120/120; damage taken 34 (enemy:cave-grub 14, enemy:potato-beetle 7, enemy:aphid 3.8, enemy:ketchup-drop 3.5); 3181 kills; level 1 to 18; planner asked 107 times, action model 223, in lockstep; ended with pressure-cooker 1, hot-streak 1, potato-battery 4, butter-pat 5, hearty-helping 2, root-network 5, starch-plating 4, aged-russet 2, couch-potato 1
+
+## L3.I10: full run (2026-11-08 10:45)
+
+Iteration 10 rehearsal: the unchanged playbook (steam-vent, lockstep 1, plain chest-first goal text, planEvery 5, explore 300) lived 300s on 5 of 5 fresh Nightmare 1 seeds (PQ8K6M, 1UQZGNT, OHH9DA, 1RRLRKY, 1B9023T). Four built pressure-cooker (or equivalent) by 1:16-2:33 with 23-52 damage; seed 1UQZGNT was weak (0 bosses killed, 2 chests, no evolution, 17/120 hp) but alive. Across L3 the plain base survived about 13 of 17 fresh seeds, and every variant (evade exceptions, planEvery 10, explore 600, catalyst picks) was worse or unproven. The full run therefore ships the unchanged plain chest-first base.
+
+## L3.I10: reflection (2026-11-08 11:04)
+
+The plain chest-first base again lived about 17:30; the 24:47 win needed the gold-spend rule that I left out. Next loop: test the gold rule on fresh seeds, hp/armor/dodge-first picks, and avoid dash passives with 0 dashes; ship only what passes on 2+ seeds.
+
+Rewrote experiments.md, full-run.md, reflect.md.

@@ -8,7 +8,7 @@ Survive 20:00. A win moves the Nightmare ladder up one level.
 
 ## Choosing the playbook
 
-Use only what was tested on at least two seeds. The 17:20 and 18:36 runs used steam-vent, lockstep, plain chest-first (no exception). The exception text lived 6:42. Default to the plain chest-first base unless a narrower exception beat it in fresh-seed games. Keep the pick prompt focused on completing one evolution (weapon at max plus its catalyst) and early max hp.
+Use only what was tested on at least two seeds. Base: steam-vent, lockstep 1, plain chest-first (no evade exception). Add the 10:00 gold rule (rate crates, Fry Cart, whetstone and shrines like chests while gold is high and no boss is within 300) only if it passed in this loop's games on 2+ seeds; it is what won 24:47. Add hp-first picks only if tested.
 
 ## Generalizing
 

@@ -27,6 +27,6 @@
     }
   },
   "weapon": "steam-vent",
-  "updated": "sonnet-medium L3.I3",
-  "why": "Plain chest-first is the base that lived 17:20 and 18:36 on Nightmare 1. It passed 3 of 3 fresh seeds in L3.I2 (7-9 chests, early evolutions), where the crowd exception (6:42) and the 200-unit boss exception (0 chests on 2 of 3 seeds) starved chests. The late-game boss problem is tested separately with the tight boss-100 text before any exception ships."
+  "updated": "sonnet-medium L3.I10",
+  "why": "No change yet: the gold rule and hp picks need testing on 2+ seeds before shipping."
 }

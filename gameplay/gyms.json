@@ -2597,35 +2597,227 @@
   },
   {
     "name": "nm2-min5-fresh",
-    "status": "pending",
+    "status": "ready",
     "purpose": "Nightmare 2 at 5:00 from a natural playbook start, to test 5:00-10:00 survival and evolution commitment on the next ladder level",
     "coach": "sonnet-high",
     "created": "sonnet-high L2.I10",
     "difficulty": 2,
     "at": 300,
     "weapon": "steam-vent",
-    "seed": "",
-    "source": "built from a fresh game to 05:00"
+    "seed": "1GBSKDN",
+    "source": "built from a fresh game to 05:00",
+    "checkpoint": {
+      "name": "gym-nm2-min5-fresh",
+      "build": "sim-BYbipzJm.js",
+      "seed": "1GBSKDN",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 300.1,
+      "level": 18,
+      "hp": 120,
+      "weapons": [
+        "skipping-cannonball 1",
+        "grease-fire 1",
+        "reset-button 1",
+        "spud-lob 2",
+        "bottomless-sack 1",
+        "starch-chain 1"
+      ],
+      "passives": [
+        "root-network 5",
+        "thick-skin 1",
+        "sprouting-eyes 2"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T10:47:49.431Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "Tibo could next: {{goal}}. {{health}} {{evolutions}} Time {{time}}, {{gold}}. Chests are the best source of power: each gives a free pick and evolves a ready recipe, and elites and bosses drop them. While health is above half, rate opening a known chest or fighting an elite highest, then exploring for a chest, then gems; avoid evading unless enemies crowd Tibo. From 10:00 on, with 500 gold or more and no boss within 300 units, rate a Potato Crate, Fry Cart, Whetstone or shrine as high as a chest: items bought with gold carry the late bosses. If health is low, rate food and evading highest. Is this the best goal now?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    }
   },
   {
     "name": "nm2-min10-natural",
-    "status": "pending",
+    "status": "ready",
     "purpose": "Nightmare 2 at 10:00 from a natural playbook start, to test the gold rule, hp passive picks and the 10:00-15:00 bosses on the next ladder level",
     "coach": "sonnet-high",
     "created": "sonnet-high L2.I10",
     "difficulty": 2,
     "at": 600,
     "weapon": "steam-vent",
-    "seed": "",
-    "source": "built from a fresh game to 10:00"
+    "seed": "11X8043",
+    "source": "built from a fresh game to 10:00",
+    "checkpoint": {
+      "name": "gym-nm2-min10-natural",
+      "build": "sim-BYbipzJm.js",
+      "seed": "11X8043",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 600.2,
+      "level": 41,
+      "hp": 120,
+      "weapons": [
+        "grease-fire 1",
+        "potato-rain 8",
+        "baked-alaska 1",
+        "reset-button 8",
+        "spud-fence 8",
+        "mash-golem 8"
+      ],
+      "passives": [
+        "hot-sauce 5",
+        "butter-pat 5",
+        "mash-finisher 5",
+        "thick-skin 5",
+        "root-network 5",
+        "masher-grip 5"
+      ],
+      "items": [],
+      "savedAt": "2026-11-08T10:50:26.284Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "Tibo could next: {{goal}}. {{health}} {{evolutions}} Time {{time}}, {{gold}}. Chests are the best source of power: each gives a free pick and evolves a ready recipe, and elites and bosses drop them. While health is above half, rate opening a known chest or fighting an elite highest, then exploring for a chest, then gems; avoid evading unless enemies crowd Tibo. From 10:00 on, with 500 gold or more and no boss within 300 units, rate a Potato Crate, Fry Cart, Whetstone or shrine as high as a chest: items bought with gold carry the late bosses. If health is low, rate food and evading highest. Is this the best goal now?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    }
   },
   {
     "name": "nm2-min15-natural",
-    "status": "pending",
+    "status": "ready",
     "purpose": "Nightmare 2 at 15:00 from a natural playbook start, to test the 15:00-20:00 crowd and the Titan, Kraken and Harvester windows on the next ladder level",
     "coach": "sonnet-high",
     "created": "sonnet-high L2.I10",
     "difficulty": 2,
+    "at": 900,
+    "weapon": "steam-vent",
+    "seed": "LFNRB3",
+    "source": "built from a fresh game to 15:00",
+    "checkpoint": {
+      "name": "gym-nm2-min15-natural",
+      "build": "sim-BYbipzJm.js",
+      "seed": "LFNRB3",
+      "mode": "standard",
+      "difficulty": "nightmare",
+      "time": 900.2,
+      "level": 50,
+      "hp": 257,
+      "weapons": [
+        "pressure-cooker 1",
+        "hash-harrier 1",
+        "spicy-hot-potato 1",
+        "hashnado 1",
+        "mandoline-fury 1",
+        "waffle-cut 1"
+      ],
+      "passives": [
+        "root-network 5",
+        "hot-sauce 5",
+        "bacon-bits 5",
+        "gravy-heart 5",
+        "sour-cream 5",
+        "butter-socks 5"
+      ],
+      "items": [
+        "spud-muffin",
+        "bonfire-spud",
+        "second-helping",
+        "spark-spud",
+        "lucky-peel"
+      ],
+      "savedAt": "2026-11-08T10:58:19.671Z"
+    },
+    "templates": {
+      "planner": {
+        "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+        "goal": "Tibo could next: {{goal}}. {{health}} {{evolutions}} Time {{time}}, {{gold}}. Chests are the best source of power: each gives a free pick and evolves a ready recipe, and elites and bosses drop them. While health is above half, rate opening a known chest or fighting an elite highest, then exploring for a chest, then gems; avoid evading unless enemies crowd Tibo. From 10:00 on, with 500 gold or more and no boss within 300 units, rate a Potato Crate, Fry Cart, Whetstone or shrine as high as a chest: items bought with gold carry the late bosses. If health is low, rate food and evading highest. Is this the best goal now?",
+        "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+      },
+      "action": {
+        "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+        "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+        "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+        "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+      },
+      "knobs": {
+        "exploreDistance": 300,
+        "evadeSeconds": 8,
+        "gemsSeconds": 12,
+        "stuckSeconds": 6,
+        "extraDamage": 0.02,
+        "safeMargin": 0.1,
+        "distrustSeconds": 0,
+        "distrustBossRange": 0,
+        "planEvery": 5,
+        "eliteSeconds": 20,
+        "lockstep": 1,
+        "bossOfferRange": 0
+      }
+    }
+  },
+  {
+    "name": "nm1-min10-plain-f",
+    "status": "pending",
+    "purpose": "natural plain 10:00 gym to test the gold rule and hp picks over 10:00-15:00",
+    "coach": "sonnet-medium",
+    "created": "sonnet-medium L3.I10",
+    "difficulty": 1,
+    "at": 600,
+    "weapon": "steam-vent",
+    "seed": "",
+    "source": "built from a fresh game to 10:00"
+  },
+  {
+    "name": "nm1-min15-plain-f",
+    "status": "pending",
+    "purpose": "natural plain 15:00 gym to test late picks and gold rule through 20:00",
+    "coach": "sonnet-medium",
+    "created": "sonnet-medium L3.I10",
+    "difficulty": 1,
     "at": 900,
     "weapon": "steam-vent",
     "seed": "",
