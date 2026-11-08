@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type BeliefRow, checkEdits, merge, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type ExperimentRow, notesName, notesTemplates, notesTesting, parseCsv, readExperiments, renderNotes, type RunSetup, withReview } from "./gameplay";
+import { type BeliefRow, checkEdits, merge, promptLoss, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type ExperimentRow, notesName, notesTemplates, notesTesting, parseCsv, readExperiments, renderNotes, type RunSetup, withReview } from "./gameplay";
 
 const setup: RunSetup = { started: new Date(2026, 10, 7, 15, 4, 9), difficulty: "nightmare", mode: "daily", surface: "headless", seed: "S1", planner: "jev", action: "jev", coach: "grok", bot: "abc1234" };
 
@@ -47,6 +47,12 @@ test("a coach's table keeps rows another coach added meanwhile, and its new id m
   const renamed = new Map<string, string>();
   expect(merge([row("E1", "edited"), row("E2", "mine")], now, before, renamed)).toEqual([row("E1", "edited"), row("E2", "the other coach's"), row("E3", "mine")]);
   expect(renamed).toEqual(new Map([["E2", "E3"]]));
+});
+
+test("a coach may rewrite its prompt's sections but not drop one or most of the text", () => {
+  const now = "# Coach\n\n## The long game\n\nPlay for the ladder.\n\n## Writing templates\n\nShort sentences.\n";
+  expect(promptLoss(now, "# Coach\n\n## Seed class\n\nOnly this.\n", "coach-plan.md")).toBe("coach-plan.md must keep every ## section of the current one; it drops ## The long game, ## Writing templates. Rewrite a section's text instead, or leave the file out");
+  expect(promptLoss(now, `${now}\n## Exploit runs\n\nNew section.\n`, "coach-plan.md")).toBeUndefined();
 });
 
 test("csv fields keep their commas and quotes", () => {

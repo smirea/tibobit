@@ -131,8 +131,25 @@ export const BELIEFS: Table<typeof BELIEF_COLUMNS> = {
 export const readExperiments = () => readTable(EXPERIMENTS_CSV, EXPERIMENT_COLUMNS);
 export const readBeliefs = () => readTable(BELIEFS_CSV, BELIEF_COLUMNS);
 export const readInfra = () => readTable(INFRA_CSV, INFRA_COLUMNS);
-export type Tables = { experiments: ExperimentRow[]; beliefs: BeliefRow[] };
-export const readTables = async (): Promise<Tables> => ({ experiments: await readExperiments(), beliefs: await readBeliefs() });
+/** What the coach was shown, which its edits are checked against; `prompts` are the coach prompts as they stood. */
+export type Tables = { experiments: ExperimentRow[]; beliefs: BeliefRow[]; prompts?: { coachPlan: string; coachRetrospective: string } };
+export const readTables = async (): Promise<Tables> => ({
+  experiments: await readExperiments(),
+  beliefs: await readBeliefs(),
+  prompts: { coachPlan: await Bun.file(COACH_PLAN).text(), coachRetrospective: await Bun.file(COACH_RETROSPECTIVE).text() },
+});
+
+/**
+ * Why a new coach prompt would lose what the current one holds, if it would. Composer once replaced
+ * the whole plan prompt with a note about one experiment; a section can be rewritten but not dropped.
+ */
+export function promptLoss(now: string, next: string, file: string): string | undefined {
+  const headings = (t: string) => [...t.matchAll(/^## .+$/gm)].map((m) => m[0].trim());
+  const dropped = headings(now).filter((h) => !headings(next).includes(h));
+  if (dropped.length > 0) return `${file} must keep every ## section of the current one; it drops ${dropped.join(", ")}. Rewrite a section's text instead, or leave the file out`;
+  if (next.length < now.length / 2) return `${file} would shrink from ${now.length} to ${next.length} characters; it must keep at least half of what is there`;
+  return undefined;
+}
 
 /** Fails at startup, not after a run, when a loop file is missing or the coach left one unreadable. */
 export async function checkLoopFiles() {
@@ -337,7 +354,11 @@ export function checkEdits(raw: Record<string, unknown>, before: Tables): Checke
     const v = raw[key];
     if (v === undefined) continue;
     if (!isText(v) || v.length > PROMPT_LIMIT) errors.push(`${key} must be the whole new ${file}, under ${PROMPT_LIMIT} characters`);
-    else edits[key] = v;
+    else {
+      const loss = before.prompts === undefined ? undefined : promptLoss(before.prompts[key], v, file);
+      if (loss !== undefined) errors.push(loss);
+      else edits[key] = v;
+    }
   }
   return errors.length > 0 ? { errors } : { value: edits };
 }
