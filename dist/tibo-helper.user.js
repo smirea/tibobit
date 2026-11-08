@@ -247,7 +247,10 @@
         const m = c.mode;
         if (m !== undefined && m !== "openWorld" && m !== "daily")
           fail("mode must be openWorld or daily");
-        return { type: "start", ...m === undefined ? {} : { mode: m }, ...d === undefined ? {} : { difficulty: d } };
+        const w = c.weapon;
+        if (w !== undefined && (typeof w !== "string" || !/^[a-z0-9-]+$/.test(w)))
+          fail("weapon must be a weapon id such as deep-fryer");
+        return { type: "start", ...m === undefined ? {} : { mode: m }, ...d === undefined ? {} : { difficulty: d }, ...w === undefined ? {} : { weapon: w } };
       }
       case "stop":
       case "pause":
@@ -1043,6 +1046,21 @@
     const level = chosen === "nightmare" ? byTestId("nightmare-level")?.textContent?.match(/\d+/)?.[0] : undefined;
     return level === undefined ? chosen : `${chosen}-${level}`;
   }
+  async function pickWeapon(id) {
+    byTestId("start-pick-row")?.click();
+    await wait(400);
+    const option = document.querySelector(`[data-testid="start-pick-option-${id}"]`);
+    if (option === null) {
+      const offered = [...document.querySelectorAll('[data-testid^="start-pick-option-"]')].map((o) => o.dataset.testid?.slice("start-pick-option-".length)).filter((x) => x !== "random");
+      byTestId("start-pick-close")?.click();
+      throw new Error(`starting weapon ${id} is not offered; offered: ${offered.join(", ")}`);
+    }
+    option.click();
+    await wait(300);
+    const now = byTestId("start-pick-row")?.dataset.picked;
+    if (now !== id)
+      throw new Error(`picked starting weapon ${id}, but the start screen shows ${now ?? "nothing"}`);
+  }
   async function until(check, ms) {
     const end = performance.now() + ms;
     while (performance.now() < end) {
@@ -1153,7 +1171,7 @@
           this.finish(status, "done");
           return;
         case "start":
-          this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy").catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+          this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy", command.weapon).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
           return;
         case "summary":
           this.summary(status).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
@@ -1175,7 +1193,7 @@
       }
       throw new Error("the run summary did not show a share link");
     }
-    async start(status, mode, difficulty) {
+    async start(status, mode, difficulty, weapon) {
       const entry = mode === "daily" ? /^Daily/ : "Open World";
       if (inRun(this.link)) {
         this.link.game?.setPaused(false);
@@ -1217,6 +1235,8 @@
           throw new Error(`the ${mode} screen did not open`);
       }
       const picked = await pickDifficulty(difficulty);
+      if (weapon !== undefined)
+        await pickWeapon(weapon);
       const before = this.link.game;
       this.link.pauseAtStart = true;
       button("Start")?.click();

@@ -81,6 +81,22 @@ async function pickDifficulty(difficulty: string): Promise<string> {
   return level === undefined ? chosen : `${chosen}-${level}`;
 }
 
+/** Picks the starting weapon on the mode screen, or fails naming the ones the game offers. */
+async function pickWeapon(id: string) {
+  byTestId("start-pick-row")?.click();
+  await wait(400);
+  const option = document.querySelector<HTMLElement>(`[data-testid="start-pick-option-${id}"]`);
+  if (option === null) {
+    const offered = [...document.querySelectorAll<HTMLElement>('[data-testid^="start-pick-option-"]')].map((o) => o.dataset.testid?.slice("start-pick-option-".length)).filter((x) => x !== "random");
+    byTestId("start-pick-close")?.click();
+    throw new Error(`starting weapon ${id} is not offered; offered: ${offered.join(", ")}`);
+  }
+  option.click();
+  await wait(300);
+  const now = byTestId("start-pick-row")?.dataset.picked;
+  if (now !== id) throw new Error(`picked starting weapon ${id}, but the start screen shows ${now ?? "nothing"}`);
+}
+
 async function until(check: () => boolean, ms: number): Promise<boolean> {
   const end = performance.now() + ms;
   while (performance.now() < end) {
@@ -184,7 +200,7 @@ export class Controller {
         this.finish(status, "done");
         return;
       case "start":
-        this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy").catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+        this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy", command.weapon).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
         return;
       case "summary":
         this.summary(status).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
@@ -207,7 +223,7 @@ export class Controller {
     throw new Error("the run summary did not show a share link");
   }
 
-  private async start(status: CommandStatus, mode: "openWorld" | "daily", difficulty: string) {
+  private async start(status: CommandStatus, mode: "openWorld" | "daily", difficulty: string, weapon: string | undefined) {
     const entry = mode === "daily" ? /^Daily/ : "Open World";
     if (inRun(this.link)) {
       // Leave the current run through the pause menu: Main menu, then confirm. An agent's lockstep
@@ -249,6 +265,7 @@ export class Controller {
       if (!(await until(() => button("Start") !== undefined, 5000))) throw new Error(`the ${mode} screen did not open`);
     }
     const picked = await pickDifficulty(difficulty);
+    if (weapon !== undefined) await pickWeapon(weapon);
     const before = this.link.game;
     this.link.pauseAtStart = true;
     button("Start")?.click();

@@ -5,7 +5,7 @@ const setup: RunSetup = { started: new Date(2026, 10, 7, 15, 4, 9), difficulty: 
 
 test("a notes file names the run and gives back the templates it played with", () => {
   const templates = { ...DEFAULT_TEMPLATES, planner: { ...DEFAULT_TEMPLATES.planner, state: "Rule one.\n\n{{state}}\n" }, action: { ...DEFAULT_TEMPLATES.action, dash: "" }, knobs: { ...DEFAULT_TEMPLATES.knobs, exploreDistance: 650 } };
-  const text = renderNotes({ setup, plan: { source: "coach-plan.md", intent: "Test E2.", testing: ["E2", "E5"], templates }, end: { lived: 754, ending: "died at 12:34", outcome: [] }, link: "none", log: "/tmp/x.csv", prompts: "coach-plan.md abc", picks: [], review: "(not reviewed yet)" });
+  const text = renderNotes({ setup, plan: { source: "coach-plan.md", intent: "Test E2.", testing: ["E2", "E5"], templates, weapon: "" }, end: { lived: 754, ending: "died at 12:34", outcome: [] }, link: "none", log: "/tmp/x.csv", prompts: "coach-plan.md abc", picks: [], review: "(not reviewed yet)", started: "frozen-fries (random)", stats: "(no log rows)" });
   expect(notesName(setup, 754)).toBe("2026-11-07_15-04-09_lived-12-34_nightmare_daily_headless.md");
   expect(notesTemplates(text)).toEqual({ value: templates });
   expect(notesTesting(text)).toEqual(["E2", "E5"]);
@@ -27,7 +27,7 @@ test("templates may only use the values their slot has, and must use the require
 });
 
 test("the coach may retire an experiment but not delete it", () => {
-  const row: ExperimentRow = { id: "E1", created: "2026-11-07", status: "proposed", hypothesis: "h", test: "t", runs: "", outcome: "", result: "", learnings: "" };
+  const row: ExperimentRow = { id: "E1", created: "2026-11-07", status: "proposed", area: "movement", hypothesis: "h", test: "t", runs: "", outcome: "", result: "", learnings: "" };
   expect(checkEdits({ experiments: [{ ...row, id: "E2" }] }, { experiments: [row], beliefs: [] })).toEqual({ errors: ["experiments E1 is missing: rows are never deleted, set status retired instead"] });
   expect(checkEdits({ experiments: [{ ...row, status: "retired" }] }, { experiments: [row], beliefs: [] })).toEqual({ value: { experiments: [{ ...row, status: "retired" }] } });
 });

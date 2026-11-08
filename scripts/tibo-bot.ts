@@ -262,6 +262,8 @@ class RunNotes {
   /** The run's CSV log, one row per model call; outside the repo, see LOG_DIR. */
   readonly log: string;
   link = "none yet: written once the game shows the run summary";
+  /** The weapon Tibo started with, and whether the coach chose it. */
+  started = "unknown";
   picks: string[] = [];
   review = "(not reviewed yet)";
   file?: string;
@@ -288,7 +290,9 @@ class RunNotes {
 
   async write() {
     if (!this.saved || this.file === undefined || this.end === undefined) return;
-    await Bun.write(this.file, loop.renderNotes({ setup: this.setup, plan: this.plan, end: this.end, link: this.link, log: this.log, prompts: this.prompts, picks: this.picks, review: this.review }));
+    const log = Bun.file(this.log);
+    const stats = (await log.exists()) ? loop.runStats(await log.text()) : "(no log)";
+    await Bun.write(this.file, loop.renderNotes({ setup: this.setup, plan: this.plan, end: this.end, link: this.link, log: this.log, prompts: this.prompts, picks: this.picks, review: this.review, started: this.started, stats }));
   }
 }
 
@@ -459,16 +463,25 @@ async function logForReview(file: string): Promise<string> {
 const REVIEW_LOG_CHARS = 400_000;
 
 /** The game's encyclopedia as compact JSON: every weapon, passive, item, recipe, enemy, boss and biome with the game's stats. */
-async function encyclopediaText(): Promise<string> {
+async function encyclopedia(): Promise<Encyclopedia | string> {
   try {
     const res = await fetch(`${SERVER}/encyclopedia`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const { capturedAt: _, ...rest } = (await res.json()) as Encyclopedia;
-    return JSON.stringify(rest);
+    return (await res.json()) as Encyclopedia;
   } catch (e) {
     return `(not available: ${e instanceof Error ? e.message : String(e)})`;
   }
 }
+
+async function encyclopediaText(): Promise<string> {
+  const e = await encyclopedia();
+  if (typeof e === "string") return e;
+  const { capturedAt: _, ...rest } = e;
+  return JSON.stringify(rest);
+}
+
+/** The base weapons a run can start with, by id; the profile may not have unlocked them all. */
+const baseWeapons = (e: Encyclopedia | string) => (typeof e === "string" ? [] : (e.weapons as { id?: string; tier?: string }[]).filter((w) => w.tier === "base" && w.id !== undefined).map((w) => w.id as string));
 
 const NO_TOOLS = "Answer from these facts alone; do not browse, search or use tools. Reply with only one JSON object with these keys:";
 
@@ -477,6 +490,7 @@ const PLAN_CONTRACT = [
   '"testing": the ids of the experiments.csv rows this run tests; the bot marks them running. An empty array only when the run tests nothing. A row still running whose runs column lacks a later run was cut short: plan it again or reset it.',
   '"planner": {"state", "goal", "pick"} and "action": {"state", "hurt", "useful", "dash"}: the templates for this run. One left out keeps the template above.',
   '"knobs": the knobs to change; one left out keeps its value above.',
+  '"startWeapon": the base weapon id Tibo starts with (a weapon from the encyclopedia whose tier is base), or "random" for the game\'s own pick. The profile may not offer every one yet; a weapon it does not offer starts the run on Random, and the notes say so.',
   loop.EDITS_CONTRACT,
 ].join("\n");
 
@@ -486,9 +500,10 @@ const REVIEW_CONTRACT = [
   loop.EDITS_CONTRACT,
 ].join("\n");
 
-type PlanReply = { intent: string; testing: string[]; templates: Templates; edits: loop.LoopEdits };
+type PlanReply = { intent: string; testing: string[]; templates: Templates; edits: loop.LoopEdits; weapon: string };
 
-function checkPlan(raw: Record<string, unknown>, base: Templates, before: loop.Tables): loop.Checked<PlanReply> {
+/** `recent` holds the areas each of this coach's last two runs tested, newest first. */
+function checkPlan(raw: Record<string, unknown>, base: Templates, before: loop.Tables, weapons: string[], recent: string[][]): loop.Checked<PlanReply> {
   const errors: string[] = [];
   const templates = loop.checkTemplates(raw as { planner?: unknown; action?: unknown; knobs?: unknown }, base);
   const edits = loop.checkEdits(raw, before);
@@ -499,8 +514,15 @@ function checkPlan(raw: Record<string, unknown>, base: Templates, before: loop.T
   if (testing === undefined) errors.push("testing must be an array of experiment ids");
   const rows = ("value" in edits ? edits.value.experiments : undefined) ?? before.experiments;
   for (const id of testing ?? []) if (!rows.some((r) => r.id === id)) errors.push(`testing names ${id}, which is not a row of the experiments table`);
+  const areas = [...new Set((testing ?? []).map((id) => rows.find((r) => r.id === id)?.area ?? ""))].filter(Boolean);
+  const [last = [], before2 = []] = recent;
+  const stale = areas.filter((a) => last.includes(a) && before2.includes(a));
+  if (areas.length > 0 && stale.length === areas.length)
+    errors.push(`your last two runs both tested ${stale.join(" and ")}; this run must test another area as well (see the coverage table), so curiosity does not narrow onto one mechanic`);
+  const weapon = raw.startWeapon === undefined || raw.startWeapon === "random" ? "" : raw.startWeapon;
+  if (typeof weapon !== "string" || (weapon !== "" && weapons.length > 0 && !weapons.includes(weapon))) errors.push(`startWeapon must be "random" or a base weapon id: ${weapons.join(", ")}`);
   if (errors.length > 0 || !("value" in templates) || !("value" in edits)) return { errors };
-  return { value: { intent: String(raw.intent), testing: testing ?? [], templates: templates.value, edits: edits.value } };
+  return { value: { intent: String(raw.intent), testing: testing ?? [], templates: templates.value, edits: edits.value, weapon: String(weapon) } };
 }
 
 function checkReview(raw: Record<string, unknown>, before: loop.Tables): loop.Checked<{ notes: string; edits: loop.LoopEdits }> {
@@ -508,7 +530,7 @@ function checkReview(raw: Record<string, unknown>, before: loop.Tables): loop.Ch
   const edits = loop.checkEdits(raw, before);
   if ("errors" in edits) errors.push(...edits.errors);
   if (!loop.isText(raw.notes)) errors.push("notes must be the review in Markdown");
-  else if (/<!--|^## (Outcome|Plan|Picks|Prompts)\s*$/m.test(raw.notes)) errors.push("notes must not hold HTML comments or the headings Outcome, Plan, Picks or Prompts, which the bot writes");
+  else if (/<!--|^## (Outcome|Stats|Plan|Picks|Prompts)\s*$/m.test(raw.notes)) errors.push("notes must not hold HTML comments or the headings Outcome, Stats, Plan, Picks or Prompts, which the bot writes");
   if (errors.length > 0 || !("value" in edits)) return { errors };
   return { value: { notes: String(raw.notes), edits: edits.value } };
 }
@@ -529,9 +551,10 @@ const loopFiles = async () => [
  * play it. Without a usable answer the run plays the latest run's templates.
  */
 async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ plan: RunPlan; prompts: string }> {
-  const latest = await loop.latestTemplates();
+  const latest = await loop.latestTemplates(COACH);
   const base = latest ?? { templates: DEFAULT_TEMPLATES, from: "the built-in defaults" };
-  const reuse = (why: string) => ({ plan: { source: `${base.from} (${why})`, intent: "", testing: [], templates: base.templates }, prompts: "none" });
+  const champion = await loop.championTemplates();
+  const reuse = (why: string) => ({ plan: { source: `${base.from} (${why})`, intent: "", testing: [], templates: base.templates, weapon: "" }, prompts: "none" });
   if (skip !== undefined) return reuse(skip);
   if (COACH === "none") return reuse("no coach");
   const instructions = await Bun.file(loop.COACH_PLAN).text();
@@ -545,11 +568,20 @@ async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ pla
     loop.catalog(),
     "## This run",
     `${setup.difficulty} ${setup.mode === "daily" ? "Daily (the same seed for everyone today)" : "Open World"}, in a ${setup.surface === "headless" ? "headless browser nobody watches" : "browser someone may be watching"}, starting ${setup.started.toString()}. You are ${setup.coach}. Other coaches may run their own loops at the same time on these same files, each on its own Nightmare ladder: their rows and notes are theirs, and the coach of each run is in the run list.`,
+    "## The campaign",
+    "The long-term goal: win Nightmare 10 in Open World, which means surviving 20:00 there. A win at a level unlocks the next, so every level from 1 to 9 has to be won first, and only a run that survives 20:00 moves the ladder. Each coach climbs its own ladder:",
+    await loop.campaign(),
     ...(await loopFiles()),
+    "## Coverage: experiments by area",
+    "Every experiment names its area. A run may not test only areas that both of your last two runs tested.",
+    loop.coverage(await loop.readExperiments()),
     `## The latest ${LATEST_NOTES} notes`,
     await loop.latestNotes(LATEST_NOTES),
-    `## The templates to build on, from ${base.from}`,
+    `## Your latest templates, from ${base.from}`,
     JSON.stringify(base.templates, null, 2),
+    ...(champion === undefined || champion.from === base.from
+      ? []
+      : [`## The champion templates, from ${champion.from}, the best Open World Nightmare run so far (Nightmare ${champion.record.level}, lived ${clock(champion.record.lived)}, coach ${champion.record.coach})`, "Your latest templates may be an experiment that failed. These played the best run anyone has had; build on whichever serves this run.", JSON.stringify(champion.templates, null, 2)]),
     "## The game's encyclopedia",
     await encyclopediaText(),
     "# Reply",
@@ -558,7 +590,12 @@ async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ pla
   ].join("\n\n");
   const bubble = new CoachBubble("Planning the run…", 0);
   const before = await loop.readTables();
-  const reply = await consult(prompt, PLAN_TIMEOUT_MS, bubble, (raw) => checkPlan(raw, base.templates, before));
+  const weapons = baseWeapons(await encyclopedia());
+  const recent = (await loop.runRecords())
+    .filter((r) => r.coach === COACH)
+    .slice(0, 2)
+    .map((r) => loop.notesTesting(r.text).map((id) => before.experiments.find((e) => e.id === id)?.area ?? ""));
+  const reply = await consult(prompt, PLAN_TIMEOUT_MS, bubble, (raw) => checkPlan(raw, base.templates, before, weapons, recent));
   if (reply === undefined) return reuse("the coach gave no usable plan");
   const { done: changed, renamed } = await loop.applyEdits(reply.edits, loop.runId(setup.started), before);
   const testing = reply.testing.map((id) => renamed.get(id) ?? id);
@@ -568,7 +605,7 @@ async function planRun(setup: RunSetup, skip: string | undefined): Promise<{ pla
   const detail = `Testing ${testing.join(", ") || "nothing named"}.${changed.length === 0 ? "" : ` Updated ${changed.join(", ")}.`}`;
   console.log(`plan: ${reply.intent}\n  ${detail}`);
   bubble.set({ text: reply.intent, detail });
-  return { plan: { source: "coach-plan.md", intent: reply.intent, testing, templates: reply.templates }, prompts: `coach-plan.md ${loop.hash(instructions)}` };
+  return { plan: { source: "coach-plan.md", intent: reply.intent, testing, templates: reply.templates, weapon: reply.weapon }, prompts: `coach-plan.md ${loop.hash(instructions)}` };
 }
 
 /**
@@ -592,10 +629,12 @@ async function reviewRun(text: string, name: string): Promise<{ review: string; 
     "One row per model call (plan: the planner chose the next goal; pick: the planner took a level-up, chest or shrine option; move: the action model chose a step because the way to the goal was costly), with the odds it gave each option, and one row per goal that started or ended, with the player's state at that moment. hp_lost is health lost since the row before.",
     await logForReview(loop.notesField(text, "Log") ?? ""),
     ...(await loopFiles()),
+    "## Coverage: experiments by area",
+    loop.coverage(await loop.readExperiments()),
+    "## The campaign",
+    await loop.campaign(),
     "## gameplay/coach-plan.md, which plans the next run",
     await Bun.file(loop.COACH_PLAN).text(),
-    "## The game's encyclopedia",
-    await encyclopediaText(),
     "# Reply",
     NO_TOOLS,
     REVIEW_CONTRACT,
@@ -1447,6 +1486,12 @@ class Planner {
         goals: weighed,
       },
     });
+    // The log names where each target is, so a review can tell a near spot refused from a far one.
+    const placed = weighed.map((w, i) => {
+      const g = goals[i]?.goal;
+      const t = g !== undefined && "uid" in g ? locate(r, g) : undefined;
+      return t === undefined ? w : { ...w, card: `${w.card} (${Math.round(t.dist)} ${t.dir})` };
+    });
     const odds = (xs: CardOption[]) => xs.map((x) => `${x.card} ${x.probability === undefined ? "?" : Math.round(x.probability * 100)}%`).join("; ");
     this.log.write(r, {
       event: pick === undefined ? "plan" : "pick",
@@ -1454,7 +1499,7 @@ class Planner {
       reason: why,
       goal: goalId(goal),
       action: pick === undefined ? title : cardName(pick),
-      options: cards === undefined ? odds(weighed) : `${odds(cards)} | goals: ${odds(weighed)}`,
+      options: cards === undefined ? odds(placed) : `${odds(cards)} | goals: ${odds(placed)}`,
       ms,
     });
     if (pick !== undefined) {
@@ -1527,15 +1572,25 @@ async function choose(r: RunView, planner: Planner, log: RunLog) {
 
 let rescuedLink: string | undefined;
 
-async function start(): Promise<void> {
-  let started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY }, 120);
+/** What the last start asked for and got: the starting weapon, or why the game's Random was used instead. */
+let startNote = "random";
+
+async function start(weapon = ""): Promise<void> {
+  startNote = weapon === "" ? "random" : "chosen";
+  let started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY, ...(weapon === "" ? {} : { weapon }) }, 120);
+  if (started.state !== "done" && /is not offered/.test(started.detail ?? "")) {
+    // A weapon this profile has not unlocked; the run still happens, on Random, and the notes say so.
+    startNote = `random, because ${started.detail}`;
+    console.log(`start: ${started.detail}; starting on Random`);
+    started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY }, 120);
+  }
   if (started.state !== "done") {
     // The page has already shown the finished run's link by now; a reload would lose it.
     rescuedLink = (await api<Snap>("/state")).lastRunLink ?? rescuedLink;
     console.log(`start failed (${started.detail ?? started.state}); reloading the game page`);
     if (RELOAD !== "") await fetch(RELOAD).catch(() => undefined);
     await Bun.sleep(8000);
-    started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY }, 120);
+    started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY, ...(startNote === "chosen" ? { weapon } : {}) }, 120);
     if (started.state !== "done") throw new Error(`could not start a run: ${started.detail ?? started.state}`);
   }
   difficulty = started.detail ?? DIFFICULTY;
@@ -1591,7 +1646,22 @@ async function main() {
     text: `${adopted ? `Taking over the run at ${clock(now.run?.time ?? 0)}` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}`}${(now.incognito ?? INCOGNITO) ? ", incognito: no notes, no review" : ""}.`,
     detail: `Planner ${PLAN_MODEL}, action model ${MODEL}, run plan and review by ${COACH === "none" ? "nobody" : COACH_NAME}. Run logs: ${LOG_DIR}`,
   });
-  if (!adopted) await start();
+  /**
+   * The coach plans a run before it starts, since the plan picks the starting weapon. The difficulty
+   * it plans for is the one "highest" will pick: the level after the highest the ladder has won.
+   */
+  let prepared: { setup: RunSetup; plan: RunPlan; prompts: string; saved: boolean } | undefined;
+  const prepareAndStart = async () => {
+    const s = await api<Snap>("/state");
+    const skip = (s.incognito ?? INCOGNITO) ? "incognito" : undefined;
+    const expected = DIFFICULTY === "highest" && MODE !== "daily" ? `nightmare-${(s.ladderCleared ?? 0) + 1}` : DIFFICULTY;
+    const setup: RunSetup = { started: new Date(), difficulty: expected, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: "", planner: PLAN_MODEL, action: MODEL, coach: COACH === "none" ? "none" : COACH_NAME, bot: BOT_CODE };
+    const { plan, prompts } = await planRun(setup, skip);
+    await start(plan.weapon);
+    setup.difficulty = difficulty;
+    prepared = { setup, plan, prompts, saved: skip === undefined };
+  };
+  if (!adopted) await prepareAndStart();
   runs = 1;
 
   const fillLink = async (s: Snap) => {
@@ -1661,7 +1731,7 @@ async function main() {
         planner = undefined;
         runLog = undefined;
       }
-      await start();
+      await prepareAndStart();
       runs++;
       steps = 0;
       resetGoals();
@@ -1678,12 +1748,21 @@ async function main() {
     piloted = s.pace !== undefined;
     const incognito = s.incognito ?? INCOGNITO;
     if (notes === undefined || planner === undefined || runLog === undefined) {
-      // A run in progress is played with the latest templates: planning would stall it.
-      const skip = adopted ? "taken over mid-run" : incognito ? "incognito" : undefined;
-      const setup: RunSetup = { started: new Date(), difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: r.seed, planner: PLAN_MODEL, action: MODEL, coach: COACH === "none" ? "none" : COACH_NAME, bot: BOT_CODE };
-      const { plan, prompts } = await planRun(setup, skip);
+      // A run taken over in progress is played with the latest templates: planning would stall it.
+      const ready =
+        prepared ??
+        (await (async () => {
+          const setup: RunSetup = { started: new Date(), difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: "", planner: PLAN_MODEL, action: MODEL, coach: COACH === "none" ? "none" : COACH_NAME, bot: BOT_CODE };
+          return { setup, ...(await planRun(setup, "taken over mid-run")), saved: false };
+        })());
+      prepared = undefined;
+      const { setup, plan, prompts } = ready;
+      const skip = ready.saved && !incognito ? undefined : adopted ? "taken over mid-run" : "incognito";
+      setup.seed = r.seed;
       templates = plan.templates;
       notes = new RunNotes(setup, plan, prompts, skip === undefined);
+      const first = r.loadout.weapons[0]?.id ?? "none";
+      notes.started = startNote === "chosen" ? `${first} (chosen by the coach)` : `${first} (${startNote})`;
       adopted = false;
       runLog = new RunLog(notes.log);
       planner = new Planner(notes, runLog);

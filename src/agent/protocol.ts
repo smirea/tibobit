@@ -54,8 +54,10 @@ export type Command =
    * new run waits paused at tick 0; use `resume` or a `move`/`goto` with `pause` to play it.
    * `difficulty` "highest" picks the hardest the game allows, up through the unlocked Nightmare
    * levels. The finished command's `detail` names what was picked, such as "nightmare-3".
+   * `weapon` picks the starting weapon by id (Random when left out); a weapon the game does not
+   * offer fails the command with the ids it does offer.
    */
-  | { type: "start"; mode?: "openWorld" | "daily"; difficulty?: "easy" | "normal" | "hard" | "nightmare" | "highest" }
+  | { type: "start"; mode?: "openWorld" | "daily"; difficulty?: "easy" | "normal" | "hard" | "nightmare" | "highest"; weapon?: string }
   /** After a run ends, step forward through the end screens to the run summary, which puts the run's share link in `lastRunLink`. */
   | { type: "summary" };
 
@@ -277,7 +279,9 @@ export function parseCommand(input: unknown): Command {
       if (d !== undefined && d !== "easy" && d !== "normal" && d !== "hard" && d !== "nightmare" && d !== "highest") fail("difficulty must be easy, normal, hard, nightmare or highest");
       const m = c.mode;
       if (m !== undefined && m !== "openWorld" && m !== "daily") fail("mode must be openWorld or daily");
-      return { type: "start", ...(m === undefined ? {} : { mode: m }), ...(d === undefined ? {} : { difficulty: d }) };
+      const w = c.weapon;
+      if (w !== undefined && (typeof w !== "string" || !/^[a-z0-9-]+$/.test(w))) fail("weapon must be a weapon id such as deep-fryer");
+      return { type: "start", ...(m === undefined ? {} : { mode: m }), ...(d === undefined ? {} : { difficulty: d }), ...(w === undefined ? {} : { weapon: w }) };
     }
     case "stop":
     case "pause":

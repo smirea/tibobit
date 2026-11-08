@@ -84,14 +84,31 @@ type Table<C extends readonly string[]> = {
   stamps: C[number][];
 };
 
-const EXPERIMENT_COLUMNS = ["id", "created", "status", "hypothesis", "test", "runs", "outcome", "result", "learnings"] as const;
+const EXPERIMENT_COLUMNS = ["id", "created", "status", "area", "hypothesis", "test", "runs", "outcome", "result", "learnings"] as const;
+/**
+ * The part of the game an experiment is about. The coverage table counts them, and a coach may not
+ * test the same area three runs in a row, so its curiosity cannot narrow onto one mechanic.
+ */
+export const AREAS = {
+  build: "weapons, passives, level-up picks, recipes and evolutions, reroll, skip and banish",
+  items: "items and what they do",
+  spots: "chests, shrines and every spot that charges",
+  enemies: "pests: which hurt, how, and how to handle them",
+  bosses: "bosses: when they come, how they hit, how to beat or avoid them",
+  hazards: "ground hazards and the biomes that make them",
+  movement: "walking, dodging, dashing and evading",
+  economy: "gold, shops, carts and what to spend on",
+  map: "exploring and where things are",
+  meta: "the ladder, curses, gear and anything across runs",
+  models: "how the planner and the action model read their prompts",
+} as const;
 export type ExperimentRow = Record<(typeof EXPERIMENT_COLUMNS)[number], string>;
 export const EXPERIMENTS: Table<typeof EXPERIMENT_COLUMNS> = {
   name: "experiments",
   file: EXPERIMENTS_CSV,
   columns: EXPERIMENT_COLUMNS,
   required: ["id", "hypothesis"],
-  enums: { status: ["proposed", "running", "done", "recheck", "retired"], result: ["", "confirmed", "refuted", "inconclusive"] },
+  enums: { status: ["proposed", "running", "done", "recheck", "retired"], area: Object.keys(AREAS), result: ["", "confirmed", "refuted", "inconclusive"] },
   retire: "status retired",
   stamps: [],
 };
@@ -434,9 +451,11 @@ export async function touchExperiments(ids: string[], change: (row: ExperimentRo
 export type Surface = "headless" | "browser";
 /** `bot` is the commit of the bot code that played, so a review can tell whether a fix had landed. */
 export type RunSetup = { started: Date; difficulty: string; mode: "daily" | "world"; surface: Surface; seed: string; planner: string; action: string; coach: string; bot: string };
-export type RunPlan = { source: string; intent: string; testing: string[]; templates: Templates };
+/** `weapon` is the starting weapon the coach chose by id, or "" for the game's Random. */
+export type RunPlan = { source: string; intent: string; testing: string[]; templates: Templates; weapon: string };
 export type RunEnd = { lived: number; level?: number; kills?: number; ending: string; outcome: string[] };
-export type NotesContent = { setup: RunSetup; plan: RunPlan; end: RunEnd; link: string; log: string; prompts: string; picks: string[]; review: string };
+/** `started` is what Tibo actually started with, which says whether the coach's choice was offered. */
+export type NotesContent = { setup: RunSetup; plan: RunPlan; end: RunEnd; link: string; log: string; prompts: string; picks: string[]; review: string; started: string; stats: string };
 
 const pad = (n: number) => String(n).padStart(2, "0");
 /** The run's id: local start time, the start of its notes and log file names. */
@@ -464,6 +483,7 @@ export function renderNotes(n: NotesContent): string {
     `| Ending | ${end.ending} |`,
     `| Testing | ${plan.testing.join(", ") || "nothing named"} |`,
     `| Seed | ${setup.seed} |`,
+    `| Starting weapon | ${n.started} |`,
     `| Planner | ${setup.planner} |`,
     `| Action model | ${setup.action} |`,
     `| Coach | ${setup.coach} |`,
@@ -475,6 +495,12 @@ export function renderNotes(n: NotesContent): string {
     "## Outcome",
     "",
     ...end.outcome.map((l) => `- ${l}`),
+    "",
+    "## Stats",
+    "",
+    "Worked out by the bot from the run's log.",
+    "",
+    n.stats,
     "",
     "## Plan",
     "",
@@ -543,13 +569,56 @@ export async function notesFiles(): Promise<string[]> {
   return names.sort().reverse();
 }
 
-/** The templates of the latest run that recorded them, for the coach to build on. */
-export async function latestTemplates(): Promise<{ templates: Templates; from: string } | undefined> {
+/** A finished run as the ladder sees it, read from its notes file name and header. */
+export type RunRecord = { name: string; coach: string; difficulty: string; level: number; mode: string; lived: number; won: boolean; text: string };
+
+export async function runRecords(): Promise<RunRecord[]> {
+  const out: RunRecord[] = [];
   for (const name of await notesFiles()) {
-    const t = notesTemplates(await Bun.file(path.join(NOTES_DIR, name)).text());
-    if ("value" in t) return { templates: t.value, from: name };
+    const m = name.match(/_lived-(\d+)-(\d+)_(.+)_(daily|world)_(headless|browser)\.md$/);
+    if (m === null) continue;
+    const text = await Bun.file(path.join(NOTES_DIR, name)).text();
+    const difficulty = m[3] ?? "";
+    out.push({ name, coach: (notesField(text, "Coach") ?? "?").split(" ")[0] ?? "?", difficulty, level: Number(difficulty.match(/^nightmare-(\d+)$/)?.[1] ?? 0), mode: m[4] ?? "", lived: Number(m[1]) * 60 + Number(m[2]), won: (notesField(text, "Ending") ?? "").startsWith("won"), text });
+  }
+  return out;
+}
+
+/** The templates of the latest run that recorded them, by this coach when it has any, for the coach to build on. */
+export async function latestTemplates(coach?: string): Promise<{ templates: Templates; from: string } | undefined> {
+  const records = await runRecords();
+  for (const r of [...records.filter((x) => x.coach === coach), ...records]) {
+    const t = notesTemplates(r.text);
+    if ("value" in t) return { templates: t.value, from: r.name };
   }
   return undefined;
+}
+
+/** The templates of the best Open World Nightmare run by any coach: the highest level, then the longest life. */
+export async function championTemplates(): Promise<{ templates: Templates; from: string; record: RunRecord } | undefined> {
+  const best = (await runRecords()).filter((r) => r.mode === "world" && r.level > 0).sort((a, b) => b.level - a.level || b.lived - a.lived);
+  for (const r of best) {
+    const t = notesTemplates(r.text);
+    if ("value" in t) return { templates: t.value, from: r.name, record: r };
+  }
+  return undefined;
+}
+
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+/** Each coach's climb up the Open World Nightmare ladder, level by level. */
+export async function campaign(): Promise<string> {
+  const records = (await runRecords()).filter((r) => r.mode === "world" && r.level > 0);
+  if (records.length === 0) return "No Open World Nightmare run yet.";
+  const lines = ["| Coach | Level | Runs | Wins | Best | Median | Last 5 lived |", "| --- | --- | --- | --- | --- | --- | --- |"];
+  const keys = [...new Set(records.map((r) => `${r.coach}|${r.level}`))].sort();
+  for (const key of keys) {
+    const [coach = "", level = ""] = key.split("|");
+    const rs = records.filter((r) => r.coach === coach && String(r.level) === level);
+    const lived = rs.map((r) => r.lived).sort((a, b) => a - b);
+    lines.push(`| ${coach} | Nightmare ${level} | ${rs.length} | ${rs.filter((r) => r.won).length} | ${mmss(Math.max(...lived))} | ${mmss(lived[Math.floor(lived.length / 2)] ?? 0)} | ${rs.slice(0, 5).map((r) => mmss(r.lived)).join(", ")} |`);
+  }
+  return lines.join("\n");
 }
 
 /** One line per finished run, newest first. */
@@ -626,5 +695,90 @@ export function editableFiles(phase: "plan" | "review"): string {
     `- **coach-plan.md** (\`coachPlan\`) and **coach-retrospective.md** (\`coachRetrospective\`): your own prompts, before and after each run. This one is ${own}. Rewrite one only when the way the loop plans or reviews should change.`,
     "",
     "You cannot change which models play (the coach, the planner and the action model), the bot's code, or the parts of a notes file the bot writes: its header, outcome, plan, picks and prompts. When the code stands in the way, file an infrastructure request. After the review, the bot commits gameplay/, so every change you make is in the history.",
+  ].join("\n");
+}
+
+// ---- Run stats -----------------------------------------------------------------------------
+// The numbers every review used to work out from the raw log by hand: health by minute and what
+// took it, when bosses and the first chest came, how goals ended, what Tibo gained, and dashes.
+
+const goalKind = (id: string) => (id.startsWith("C") ? "chest" : id.startsWith("P") ? "spot" : id.startsWith("F") ? "food" : id.split(" ")[0] || "?");
+
+/** A Markdown summary of a run from its CSV log. */
+export function runStats(csv: string): string {
+  const [header = [], ...cells] = parseCsv(csv);
+  const rows = cells.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])) as Record<string, string>);
+  const live = rows.filter((r) => r.seconds !== "");
+  if (live.length === 0) return "(no log rows)";
+  const num = (v: string | undefined) => Number(v) || 0;
+  const minutes = new Map<number, Record<string, string>[]>();
+  for (const r of live) {
+    const m = Math.floor(num(r.seconds) / 60);
+    minutes.set(m, [...(minutes.get(m) ?? []), r]);
+  }
+  const sources = (rs: Record<string, string>[]) => {
+    const tally = new Map<string, number>();
+    for (const r of rs)
+      for (const part of (r.hurt_by ?? "").split("; ").filter(Boolean)) {
+        const name = part.replace(/\s+[\d.]+$/, "");
+        tally.set(name, (tally.get(name) ?? 0) + num(part.match(/([\d.]+)$/)?.[1]));
+      }
+    return [...tally].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => k).join(", ") || "-";
+  };
+  const table = [
+    "| Minute | Health at the end | Lost | Gained | Level | Enemies | Hurt most by |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
+    ...[...minutes].map(([m, rs]) => {
+      const last = rs.at(-1) ?? {};
+      const lost = rs.reduce((a, r) => a + num(r.hp_lost), 0);
+      const gained = rs.reduce((a, r) => a + num(r.hp_gained), 0);
+      return `| ${m}:00 | ${last.hp}/${last.max_hp} | ${lost} | ${gained} | ${last.level} | ${last.enemies} | ${sources(rs.filter((r) => num(r.hp_lost) > 0))} |`;
+    }),
+  ];
+  const seenBoss = new Map<string, string>();
+  for (const r of live) for (const b of (r.bosses ?? "").split("; ").filter(Boolean)) {
+    const name = b.replace(/\s+\d+\s+\S+\s+\d+%$/, "");
+    if (!seenBoss.has(name)) seenBoss.set(name, r.time ?? "?");
+  }
+  const firstChest = live.find((r) => (r.chests ?? "") !== "")?.time;
+  const goals = new Map<string, { done: number; failed: number; dropped: number }>();
+  for (const r of rows.filter((x) => x.event === "goal" && x.action !== "start")) {
+    const k = goalKind(r.goal ?? "");
+    const g = goals.get(k) ?? { done: 0, failed: 0, dropped: 0 };
+    if (r.action === "done" || r.action === "failed" || r.action === "dropped") g[r.action]++;
+    goals.set(k, g);
+  }
+  // New cards and evolutions (a weapon gone the moment its evolution appears); level-ups are in the log.
+  const gained = rows
+    .filter((r) => r.event === "loadout")
+    .map((r) => ({ time: r.time, parts: (r.action ?? "").split(", ").filter((p) => / new$| gone$/.test(p) || /\d\/\d to \d/.test(p) && Number(p.match(/to (\d+)/)?.[1]) - Number(p.match(/ (\d+)\/\d+ to/)?.[1]) >= 3) }))
+    .filter((g) => g.parts.length > 0)
+    .map((g) => `${g.time} ${g.parts.join(", ")}`);
+  const dashes = rows.filter((r) => r.event === "move" && (r.action ?? "").startsWith("dash")).map((r) => r.time);
+  const calls = (e: string) => rows.filter((r) => r.event === e);
+  const meanMs = (rs: Record<string, string>[]) => Math.round(rs.reduce((a, r) => a + num(r.ms), 0) / Math.max(1, rs.length));
+  const low = live.find((r) => num(r.hp) > 0 && num(r.hp) / Math.max(1, num(r.max_hp)) < 0.25)?.time;
+  return [
+    ...table,
+    "",
+    `- Bosses first seen: ${[...seenBoss].map(([k, t]) => `${k} at ${t}`).join("; ") || "none"}.`,
+    `- First chest listed: ${firstChest ?? "never"}. First time under 25% health: ${low ?? "never"}.`,
+    `- Goals by kind (done / gave up / dropped): ${[...goals].map(([k, g]) => `${k} ${g.done}/${g.failed}/${g.dropped}`).join("; ") || "none"}.`,
+    `- Dashes: ${dashes.length}${dashes.length === 0 ? "" : ` (${dashes.slice(0, 12).join(", ")}${dashes.length > 12 ? ", …" : ""})`}.`,
+    `- Model calls: ${calls("plan").length} plans, ${calls("pick").length} picks, ${calls("move").length} moves (mean ${meanMs(calls("move"))}ms); the page walked through ${calls("walk").length} hits on its own.`,
+    `- New cards, evolutions and jumps of 3 or more levels (chests give those): ${gained.length === 0 ? "nothing logged" : gained.join("; ")}.`,
+  ].join("\n");
+}
+
+/** Per area: how many experiments are done, open and retired, and which run tested it last. */
+export function coverage(rows: ExperimentRow[]): string {
+  const lastRun = (rs: ExperimentRow[]) => rs.flatMap((r) => r.runs.split(/;\s*/).filter(Boolean)).sort().at(-1)?.slice(0, 16).replace("_", " ") ?? "never";
+  return [
+    "| Area | What it covers | Done | Open | Last tested |",
+    "| --- | --- | --- | --- | --- |",
+    ...(Object.entries(AREAS) as [keyof typeof AREAS, string][]).map(([area, about]) => {
+      const rs = rows.filter((r) => r.area === area);
+      return `| ${area} | ${about} | ${rs.filter((r) => r.status === "done").length} | ${rs.filter((r) => ["proposed", "running", "recheck"].includes(r.status)).length} | ${lastRun(rs)} |`;
+    }),
   ].join("\n");
 }
