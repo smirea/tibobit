@@ -26,6 +26,7 @@ The campaign is to win Nightmare 10 in Open World: survive 20:00 there. Each win
 - One run is one sample. Today's Daily repeats its seed, so runs on the same day can be compared closely; across days they cannot. A single-run result is a lead until a second run agrees.
 - Prefer questions whose answer would change how we play. A lead in the beliefs table is cheap to firm up and often worth a run.
 - When you think of a question you will not test now, add it to the table as proposed so it is not lost.
+- If the hypothesis needs a named source to appear (hot oil, a pest, a boss), write in the intent that the run is inconclusive when the outcome never lists it. A total of zero is a success only when the log shows that source was there and was left.
 
 ## Writing the templates
 
@@ -33,6 +34,7 @@ The campaign is to win Nightmare 10 in Open World: survive 20:00 there. Each win
 - Put the game knowledge the planner needs into planner.state: the held game beliefs that matter now, most important first, each with its reason in a few words. A disproved belief has no place there. Keep it under about 60 lines.
 - To test a strategy, write it into planner.state as a plain directive near the top. A directive the planner never sees in the state cannot change its picks.
 - A directive that fires only when something is listed (a chest, food) does nothing until it is listed. Chests on the open world may not be listed before about 1:30. Write the default goal for the time before that, and for low health (for example evade under 40%), into the directive, and say in the intent what the planner will do meanwhile.
+- In the intent, name that default goal in the directive's own words. A line that only limits a goal ("evade only when", "never charge X") does not select one. If Tibo should evade until a chest is listed, the directive has to say to evade. Do not describe a low-health rule the directive does not contain.
 - Every state block costs the models attention. Include what this run's question needs, and leave out blocks it does not need.
 - The beliefs about the planner and the action model say how these decision models read a prompt. Follow them, and when a run shows one is wrong, that is a finding.
 - Knobs change how goals and moves work. Move one only when it is what the run tests.
