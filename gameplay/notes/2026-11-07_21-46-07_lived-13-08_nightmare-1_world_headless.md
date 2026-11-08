@@ -12,7 +12,7 @@
 | Action model | typesafe/jev-1.14-20261014 |
 | Coach | cursor composer-2.5 |
 | Bot code | 0d29d16 docs(gameplay): cursor reviews the 2026-11-07 21:39 run, lived 2:46, testing E123 |
-| Coach prompts | coach-plan.md 71e16386 |
+| Coach prompts | coach-plan.md 71e16386; coach-retrospective.md 29ea3ff1 |
 | Templates from | coach-plan.md |
 | Log | /tmp/tibobit/2026-11-07_21-46-07_nightmare-1_world_headless.csv |
 
@@ -60,7 +60,71 @@ This run tests E124 for the Nightmare 1 ladder: whether E81 planner.goal alone (
 
 <!-- review: written by the coach from coach-retrospective.md -->
 
-(no review: the coach gave none. Rerun it with ./scripts/tibo-bot.ts --review /Users/stefan/code/tibobit/gameplay/notes/2026-11-07_21-46-07_lived-13-08_nightmare-1_world_headless.md)
+## Summary
+
+E124 ran on seed TZ4L67 with only the E81 `planner.goal` chest-yes / gems-no / explore-no lines added to the champion exploit stack. The bot played the test: first chest listed **1:32**, **9** opens by **2:30**, **37** chest goals done (3 dropped), first evolution **1:51**, and the run lived **13:08** (level 47). That refutes the NJRNZQ-class failure mode (listed **1:07**, open scored ~80%, replan to explore at **1:12**, **0** opens, died **4:11**) on this chest-friendly seed—not a replay of NJRNZQ itself, but the policy under test clearly held. Late death is the familiar evolved-board ice-imp wall (**495.5** of **875**), not chest starvation.
+
+## Findings
+
+- **E124 hypothesis confirmed on TZ4L67 (likely).** With generic `planner.goal` plus E81 chest sentences only, Open the chest won replans while `chests` was non-empty (e.g. **1:32** Open **90%** vs Fight Fry Fly **24%**, immediate open through **1:33**; **1:45**–**1:56** chain of opens with Open **86–90%** while multiple chests listed). Outcome: **37/0/3** chest goals vs NJRNZQ exploit **0** opens. One seed; NJRNZQ repro still a separate sample.
+- **The test was executed, not a template miss (confirmed).** Plan knobs and picks matched the 17:41 champion except goal lines; **8** evolutions/unions on the timeline, six passives maxed, six evolved weapons at death—build loop worked.
+- **Chest drops still happen but are not the main story (likely).** Stats: **3** chest goals dropped. Example: **1:40** dropped open goal for explore right at **39** hp during a level-up (chest **87** right still listed)—a local replan loss, not a minute-2 wipe.
+- **Late game matches B87 ice-imp dominance (likely).** Minute **11** lost **155** (hurt most ice-imp, blight-spore); minute **12** lost **281** (ice-imp, mandoline); health **142→46** then partial recovery; died **13:08** at **54/192** on gems inside Bot Dock with ice-imp in last 3s.
+- **Opening minute still costly before first list (lead).** Minute **0** lost **40**, first under **25%** at **1:48**; hot oil and pests—not a chest-policy problem on this seed.
+- **Food directive finally used (confirmed).** **12:58** Eat food at **67/192** (evade finished, then food); **13:06** evade after eating; too late to matter for the death **13:08**.
+
+## Went well
+
+- **1:32–2:30** chest chain after first list (**1:51** Gravy Pack evolution, passives and weapons ramping)—exactly what E124 was meant to unlock.
+- **E81 goal lines** overrode gems during chest windows (many plans with gems **8–21%** vs Open **80–92%** when chests stacked, e.g. **3:13** drop gems for **C65935** Open **92%**).
+- **Dash policy** helped in tight spots (**1:24**, **1:44**, **12:03**, **12:40** dashes in log) without derailing charges (several chests completed while standing on tile).
+- **Evolution cadence**: Gravy Pack **1:51**, Hashnado **2:09**, Stand Mixer **4:21**, Hash Carousel / Fry Brigade / Eclipse Scythe / unions by **8:46**—champion-scale power by **10:00**.
+
+## Went poorly
+
+- **11:00–12:00** health churn: minute **11** net **−50** hp despite **+105** gained—ice-imp and blight in **292–346** enemy counts.
+- **12:11–12:13** spike: **142→46/192** (minute **12** lost **281**); mandoline appearance **12:00** plus ice-imp crowd.
+- **Gems goals late** when chests were listed nearby (**12:00** replan chose gems over chest with mandoline up; **12:40** Skip pick at **161/192** then gems)—planner still sometimes prefers gems when not forbidden by E81 (no chest in that row vs explore winning).
+- **12:58–13:08** died on gems into Bot Dock (**788s**) with **346** enemies—no distrust or boss-range knob; forecast trusted walk into lethal stack.
+
+## Moments
+
+- **0:00–1:31** explore/gems/beetle nests only—right call before any chest listed.
+- **1:32** Elite fight dropped for **Open the chest 90%**—E124 policy visible. Better: right call.
+- **1:33** First open at **47/120**, Tater Pup **8/8** on chest reward. Right call.
+- **1:40** Open dropped for explore at **39** hp during pick—should have stayed on chest **C65591**.
+- **1:51** Gravy Pack evolution on chest—turning point for damage.
+- **2:00** amusing listed; nest/chest goals continued—no NJRNZQ-style explore hijack.
+- **4:21** Stand Mixer evolution—mid-game power spike.
+- **8:46** Hash Carousel union—six-evolution board largely complete.
+- **11:32** **142/192** before minute-12 collapse. Warning missed: food/chest over gems.
+- **12:03** Dash during mandoline window—right call, insufficient alone.
+- **12:58** Food eaten at **67/192**—directive worked; should have happened near **12:11**.
+- **13:08** Dash down-right into Bot Dock on gems—action chose lethal useful move; should have been evade or food-first.
+
+## Questions
+
+- Does **E81** still let explore beat open when a chest is listed but Tibo is on a level-up pause (1:40 pattern)?
+- On **13m+** boards, does **`distrustSeconds 8`** cut ice-imp page-walk damage without starving chests (E98/E89 on this stack)?
+- Will **NJRNZQ** with the same E81 lines keep Open through **1:12** replans (direct E123/E124 repro)?
+- Should **food under 70%** in `planner.goal` (not only state) fire before **12:00** gem grinds when chests are absent?
+
+## Next
+
+1. **Retest E124 on NJRNZQ** (same templates): confirms the fix on the seed that originally failed; moves campaign opener reliability.
+2. **E98 or E89 on E91+E81 champion stack** after **8:00**: tests whether ice-imp **495** is a knob/template problem vs raw power ceiling.
+3. **E126** (E91 pick + E113-style goals) on a chest-friendly seed: separates evolution pacing from **13:08** survival vs **7:14** WEWS93 death shape.
+
+## Beliefs changed
+
+- **B86** — evidence adds TZ4L67 E124: Open **90%** at **1:32**, **37** chest goals done; strengthens confirmed near-chest behavior beyond SBBOHY.
+- **B123** — status stays **held**, evidence adds E124 **13:08** with E81 lines only (not full NJRNZQ repro).
+- **B124** — recheck: listing-before-open seeds can still produce long runs when opens happen (**13:08** vs NJRNZQ **0** opens); seed and policy both matter.
+- **New B132 (lead)** — On a chest-friendly Nightmare-1 seed, champion exploit templates plus E81 `planner.goal` chest lines alone restore the chest→evolution loop to **12m+** without E91 pick text (TZ4L67 **13:08**, **1:51** first evolution).
+
+## Process changes
+
+(none)
 
 <!-- /review -->
 
