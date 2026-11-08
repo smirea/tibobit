@@ -446,7 +446,7 @@ class RunLog {
     this.held = now;
     if (before === undefined) return undefined;
     const changes = [
-      ...[...now].filter(([k, v]) => before.get(k) !== v).map(([k, v]) => (before.has(k) ? `${k} ${before.get(k)} to ${v}` : `${k} ${v} new${itemSaid.get(k) ?? ""}`)),
+      ...[...now].filter(([k, v]) => before.get(k) !== v).map(([k, v]) => (before.has(k) ? `${k} ${before.get(k)} to ${v}` : `${k} ${v} new${itemSaid.get(k) ?? ""}${recipeParts.has(k) ? ` (the recipe ${recipeParts.get(k)})` : ""}`)),
       ...[...before.keys()].filter((k) => !now.has(k)).map((k) => `${k} gone`),
     ];
     return changes.length === 0 ? undefined : changes.join(", ");
@@ -736,6 +736,9 @@ async function reviewNotesFile(file: string) {
 type Book = Map<string, string>;
 let book: Book | undefined;
 
+/** What each evolution, union or item evolution is made of, by the result's name, from the game's recipes. */
+const recipeParts = new Map<string, string>();
+
 async function readBook(): Promise<Book> {
   if (book !== undefined) return book;
   try {
@@ -747,6 +750,8 @@ async function readBook(): Promise<Book> {
       ["item", e.items],
     ] as const)
       for (const d of defs as { id?: string; description?: string }[]) if (d.id !== undefined && d.description !== undefined) out.set(`${kind}:${d.id}`, d.description);
+    for (const r of e.recipes as { name?: string; parts?: { name?: string; need?: string }[] }[])
+      if (r.name !== undefined && r.parts !== undefined) recipeParts.set(r.name, r.parts.map((x) => `${x.name}${x.need === "max" ? " at max level" : ""}`).join(" + "));
     book = out;
     return out;
   } catch (e) {
