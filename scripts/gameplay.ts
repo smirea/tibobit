@@ -600,6 +600,11 @@ export function runStats(csv: string): string {
     return m === null ? b : `${m[1]} at ${m[2]}%${m[3] === undefined ? "" : ` of ${m[3]}`}`;
   });
   const firstChest = live.find((r) => (r.chests ?? "") !== "")?.time;
+  // Only Tibo opens chests, so a chest goal that finishes is a chest opened.
+  const opened = rows.filter((r) => r.event === "goal" && r.action === "done" && goalKind(r.goal ?? "") === "chest");
+  const atTwo = live.filter((r) => num(r.seconds) <= 120).at(-1) ?? lastRow;
+  const byTwo = num(lastRow.seconds) >= 120 ? "By 2:00" : `By the end at ${lastRow.time ?? "?"}`;
+  const openedByTwo = opened.filter((r) => num(r.seconds) <= 120).length;
   const goals = new Map<string, { done: number; failed: number; dropped: number }>();
   for (const r of rows.filter((x) => x.event === "goal" && x.action !== "start")) {
     const k = goalKind(r.goal ?? "");
@@ -630,6 +635,7 @@ export function runStats(csv: string): string {
     "",
     `- Bosses first seen: ${[...seenBoss].map(([k, t]) => `${k} at ${t}`).join("; ") || "none"}.`,
     `- Bosses alive at ${lastRow.time ?? "the end"}, each a separate boss with its own health: ${bossesAtEnd.join("; ") || "none"}.`,
+    `- ${byTwo}: damage dealt ${hasDealt ? num(atTwo.dealt) : "not logged"}, elites killed ${(atTwo.elites ?? "") === "" ? "not logged" : num(atTwo.elites)}, chests opened ${openedByTwo}. Chests opened in the whole game: ${opened.length}, the first at ${opened[0]?.time ?? "never"}.`,
     `- First chest listed: ${firstChest ?? "never"}. First time under 25% health: ${low ?? "never"}.`,
     `- Goals by kind (done / gave up / dropped): ${[...goals].map(([k, g]) => `${k} ${g.done}/${g.failed}/${g.dropped}`).join("; ") || "none"}.`,
     `- Dashes: ${dashes.length}${dashes.length === 0 ? "" : `: ${dashes.slice(0, 12).join("; ")}${dashes.length > 12 ? "; …" : ""}`}.`,
