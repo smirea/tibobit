@@ -236,7 +236,7 @@ const server = Bun.serve({
         }
         case "POST /bridge/encyclopedia":
           book = (await req.json()) as Encyclopedia;
-          console.log(`encyclopedia: ${book.weapons.length} weapons, ${book.passives.length} passives, ${book.items.length} items, ${book.recipes.length} recipes`);
+          console.log(`encyclopedia: ${book.weapons.length} weapons, ${book.passives.length} passives, ${book.items.length} items, ${book.dogs.length} dogs, ${book.pois.length} pois`);
           return new Response(null, { status: 204 });
         case "GET /state": {
           const s = state();

@@ -11,131 +11,6 @@
 // @downloadURL  https://raw.githubusercontent.com/smirea/tibobit/master/dist/tibo-helper.user.js
 // ==/UserScript==
 (() => {
-  // src/catalog.ts
-  function titleCase(id) {
-    return id.replace(/(^|-)(\w)/g, (_, dash, c) => `${dash ? " " : ""}${c.toUpperCase()}`);
-  }
-  function buildCatalog(content, messages) {
-    const names = {};
-    const descriptions = {};
-    const maxLevel = {};
-    const name = (kind, id) => {
-      names[`${kind}:${id}`] = messages[`content.${kind}.${id}.name`]?.[0] ?? titleCase(id);
-      const description = messages[`content.${kind}.${id}.desc`]?.[0];
-      if (description !== undefined)
-        descriptions[`${kind}:${id}`] = description;
-    };
-    for (const w of content.allWeapons) {
-      name("weapon", w.id);
-      if (w.tier === "base")
-        maxLevel[`weapon:${w.id}`] = Math.min(8, (w.levels?.length ?? 0) + 1);
-    }
-    for (const p of content.passives) {
-      name("passive", p.id);
-      maxLevel[`passive:${p.id}`] = p.maxLevel;
-    }
-    for (const i of content.allItems)
-      name("item", i.id);
-    const passiveIds = new Set(content.passives.map((p) => p.id));
-    const recipes = [];
-    for (const e of content.evolutions) {
-      if (typeof e.from !== "string" || e.catalyst === undefined)
-        continue;
-      const catalyst = passiveIds.has(e.catalyst) ? `passive:${e.catalyst}` : `item:${e.catalyst}`;
-      recipes.push({ kind: "evolution", weapon: e.from, catalyst, result: e.id });
-    }
-    for (const u of content.unions) {
-      if (!Array.isArray(u.from) || u.from.length !== 2)
-        continue;
-      recipes.push({ kind: "union", weapons: [u.from[0] ?? "", u.from[1] ?? ""], result: u.id });
-    }
-    for (const i of content.evolvedItems) {
-      if (i.from === undefined || i.catalyst === undefined)
-        continue;
-      recipes.push({ kind: "itemEvolution", item: i.from, catalyst: i.catalyst, result: i.id });
-    }
-    return { names, descriptions, maxLevel, recipes };
-  }
-  function toCombo(r) {
-    switch (r.kind) {
-      case "evolution":
-        return {
-          recipe: r,
-          result: `weapon:${r.result}`,
-          parts: [
-            { key: `weapon:${r.weapon}`, need: "max" },
-            { key: r.catalyst, need: "own" }
-          ]
-        };
-      case "union":
-        return {
-          recipe: r,
-          result: `weapon:${r.result}`,
-          parts: [
-            { key: `weapon:${r.weapons[0]}`, need: "own" },
-            { key: `weapon:${r.weapons[1]}`, need: "own" }
-          ]
-        };
-      case "itemEvolution":
-        return {
-          recipe: r,
-          result: `item:${r.result}`,
-          parts: [
-            { key: `item:${r.item}`, need: "own" },
-            { key: `passive:${r.catalyst}`, need: "max" }
-          ]
-        };
-    }
-  }
-  function readLoadout(state) {
-    const loadout = new Map;
-    for (const w of state.loadout.weapons)
-      loadout.set(`weapon:${w.def.id}`, w.level);
-    for (const p of state.loadout.passives)
-      loadout.set(`passive:${p.def.id}`, p.level);
-    for (const [id, count] of state.loadout.items)
-      if (count > 0)
-        loadout.set(`item:${id}`, count);
-    return loadout;
-  }
-  function partState(part, loadout, catalog) {
-    const have = loadout.get(part.key);
-    if (have === undefined)
-      return "missing";
-    if (part.need === "own")
-      return "done";
-    return have >= (catalog.maxLevel[part.key] ?? 1) ? "done" : "leveling";
-  }
-  function comboProgress(combo, loadout, catalog) {
-    return combo.parts.map((p) => partState(p, loadout, catalog));
-  }
-  function combosUsing(combos, key) {
-    return combos.filter((c) => c.parts.some((p) => p.key === key));
-  }
-  function partner(combo, key) {
-    const [a, b] = combo.parts;
-    return a.key === key ? b : a;
-  }
-  function relevantCombos(combos, loadout) {
-    return combos.filter((c) => !loadout.has(c.result) && c.parts.some((p) => loadout.has(p.key)));
-  }
-  function unpaired(combos, loadout) {
-    const out = [];
-    for (const held of loadout.keys()) {
-      const options = combosUsing(combos, held).filter((c) => !loadout.has(c.result)).map((combo) => ({ partner: partner(combo, held), combo }));
-      if (options.length === 0 || options.some((o) => loadout.has(o.partner.key)))
-        continue;
-      out.push({ held, options });
-    }
-    return out;
-  }
-  function idOf(key) {
-    return key.slice(key.indexOf(":") + 1);
-  }
-  function nameOf(catalog, key) {
-    return catalog.names[key] ?? titleCase(idOf(key));
-  }
-
   // src/agent/encyclopedia.ts
   function plain(value) {
     return JSON.parse(JSON.stringify(value, (_k, v) => v instanceof Map ? Object.fromEntries(v) : v instanceof Set ? [...v] : v));
@@ -153,46 +28,28 @@
     const table = link.table;
     if (table === undefined || !link.ready)
       return;
-    const catalog = buildCatalog(table, link.messages);
     const withText = (kind, defs) => defs.map((d) => ({ ...textOf(link, kind, d.id), ...plain(d) }));
-    const maxLevel = (key) => catalog.maxLevel[key];
-    const state = link.game?.state;
-    const rules = state === undefined ? undefined : plain(state.cfg);
-    const activation = state?.cfg.activation.seconds ?? {};
     const tabled = new Set(["weapon", "passive", "item", "enemy", "boss", "dog", "poi", "biome", "event", "botHelp"]);
-    const glossary = {};
-    for (const key of Object.keys(link.messages)) {
-      const m = key.match(/^content\.([^.]+)\.([^.]+)\.[^.]+$/);
-      if (m === null || tabled.has(m[1] ?? ""))
-        continue;
-      const [, kind = "", id = ""] = m;
-      (glossary[kind] ??= {})[id] ??= textOf(link, kind, id);
+    const messages = {};
+    for (const [key, lines] of Object.entries(link.messages)) {
+      const kind = key.match(/^content\.([^.]+)\./)?.[1];
+      if (kind !== undefined && !tabled.has(kind) && lines.length > 0)
+        messages[key] = lines.join(`
+`);
     }
     return {
       capturedAt: Date.now(),
-      weapons: table.allWeapons.map((w) => ({ ...textOf(link, "weapon", w.id), maxLevel: maxLevel(`weapon:${w.id}`) ?? 1, ...plain(w) })),
+      weapons: withText("weapon", table.allWeapons),
       passives: withText("passive", table.passives),
       items: withText("item", table.allItems),
-      recipes: catalog.recipes.map(toCombo).map((c) => ({
-        kind: c.recipe.kind,
-        result: c.result,
-        name: nameOf(catalog, c.result),
-        parts: c.parts.map((p) => ({ ...p, name: nameOf(catalog, p.key) }))
-      })),
       enemies: withText("enemy", table.enemies),
       bosses: table.bossIds.map((id) => ({ id, ...textOf(link, "boss", id) })),
       dogs: withText("dog", table.dogs),
-      pois: table.pois.map((p) => ({
-        ...textOf(link, "poi", p.kind),
-        ...plain(p),
-        ...activation[p.kind] === undefined ? {} : { chargeSeconds: activation[p.kind] },
-        ...rules?.[p.kind] === undefined ? {} : { rules: rules[p.kind] }
-      })),
+      pois: table.pois.map((p) => ({ ...textOf(link, "poi", p.kind), ...plain(p) })),
       events: withText("event", table.events),
       botHelps: withText("botHelp", table.botHelps),
       biomes: withText("biome", table.biomes),
-      glossary,
-      ...state === undefined || rules === undefined ? {} : { rules, rulesFor: state.difficulty === "nightmare" ? `nightmare-${state.cfg.ladder.level}` : state.difficulty }
+      messages
     };
   }
 
@@ -374,6 +231,131 @@
     }
   }
 
+  // src/catalog.ts
+  function titleCase(id) {
+    return id.replace(/(^|-)(\w)/g, (_, dash, c) => `${dash ? " " : ""}${c.toUpperCase()}`);
+  }
+  function buildCatalog(content, messages) {
+    const names = {};
+    const descriptions = {};
+    const maxLevel = {};
+    const name = (kind, id) => {
+      names[`${kind}:${id}`] = messages[`content.${kind}.${id}.name`]?.[0] ?? titleCase(id);
+      const description = messages[`content.${kind}.${id}.desc`]?.[0];
+      if (description !== undefined)
+        descriptions[`${kind}:${id}`] = description;
+    };
+    for (const w of content.allWeapons) {
+      name("weapon", w.id);
+      if (w.tier === "base")
+        maxLevel[`weapon:${w.id}`] = Math.min(8, (w.levels?.length ?? 0) + 1);
+    }
+    for (const p of content.passives) {
+      name("passive", p.id);
+      maxLevel[`passive:${p.id}`] = p.maxLevel;
+    }
+    for (const i of content.allItems)
+      name("item", i.id);
+    const passiveIds = new Set(content.passives.map((p) => p.id));
+    const recipes = [];
+    for (const e of content.evolutions) {
+      if (typeof e.from !== "string" || e.catalyst === undefined)
+        continue;
+      const catalyst = passiveIds.has(e.catalyst) ? `passive:${e.catalyst}` : `item:${e.catalyst}`;
+      recipes.push({ kind: "evolution", weapon: e.from, catalyst, result: e.id });
+    }
+    for (const u of content.unions) {
+      if (!Array.isArray(u.from) || u.from.length !== 2)
+        continue;
+      recipes.push({ kind: "union", weapons: [u.from[0] ?? "", u.from[1] ?? ""], result: u.id });
+    }
+    for (const i of content.evolvedItems) {
+      if (i.from === undefined || i.catalyst === undefined)
+        continue;
+      recipes.push({ kind: "itemEvolution", item: i.from, catalyst: i.catalyst, result: i.id });
+    }
+    return { names, descriptions, maxLevel, recipes };
+  }
+  function toCombo(r) {
+    switch (r.kind) {
+      case "evolution":
+        return {
+          recipe: r,
+          result: `weapon:${r.result}`,
+          parts: [
+            { key: `weapon:${r.weapon}`, need: "max" },
+            { key: r.catalyst, need: "own" }
+          ]
+        };
+      case "union":
+        return {
+          recipe: r,
+          result: `weapon:${r.result}`,
+          parts: [
+            { key: `weapon:${r.weapons[0]}`, need: "own" },
+            { key: `weapon:${r.weapons[1]}`, need: "own" }
+          ]
+        };
+      case "itemEvolution":
+        return {
+          recipe: r,
+          result: `item:${r.result}`,
+          parts: [
+            { key: `item:${r.item}`, need: "own" },
+            { key: `passive:${r.catalyst}`, need: "max" }
+          ]
+        };
+    }
+  }
+  function readLoadout(state) {
+    const loadout = new Map;
+    for (const w of state.loadout.weapons)
+      loadout.set(`weapon:${w.def.id}`, w.level);
+    for (const p of state.loadout.passives)
+      loadout.set(`passive:${p.def.id}`, p.level);
+    for (const [id, count] of state.loadout.items)
+      if (count > 0)
+        loadout.set(`item:${id}`, count);
+    return loadout;
+  }
+  function partState(part, loadout, catalog) {
+    const have = loadout.get(part.key);
+    if (have === undefined)
+      return "missing";
+    if (part.need === "own")
+      return "done";
+    return have >= (catalog.maxLevel[part.key] ?? 1) ? "done" : "leveling";
+  }
+  function comboProgress(combo, loadout, catalog) {
+    return combo.parts.map((p) => partState(p, loadout, catalog));
+  }
+  function combosUsing(combos, key) {
+    return combos.filter((c) => c.parts.some((p) => p.key === key));
+  }
+  function partner(combo, key) {
+    const [a, b] = combo.parts;
+    return a.key === key ? b : a;
+  }
+  function relevantCombos(combos, loadout) {
+    return combos.filter((c) => !loadout.has(c.result) && c.parts.some((p) => loadout.has(p.key)));
+  }
+  function unpaired(combos, loadout) {
+    const out = [];
+    for (const held of loadout.keys()) {
+      const options = combosUsing(combos, held).filter((c) => !loadout.has(c.result)).map((combo) => ({ partner: partner(combo, held), combo }));
+      if (options.length === 0 || options.some((o) => loadout.has(o.partner.key)))
+        continue;
+      out.push({ held, options });
+    }
+    return out;
+  }
+  function idOf(key) {
+    return key.slice(key.indexOf(":") + 1);
+  }
+  function nameOf(catalog, key) {
+    return catalog.names[key] ?? titleCase(idOf(key));
+  }
+
   // src/data.ts
   var data;
   var dataFrom;
@@ -403,6 +385,124 @@
     if (button("Start") === undefined)
       return;
     return button("Leaderboard") === undefined ? "openWorld" : "daily";
+  }
+
+  // src/agent/reflect.ts
+  var NOT_STATE = {
+    "": ["rng", "spawnRng", "lootRng", "botRng", "hits", "hash", "buf", "scratch", "attack", "damageRing", "effects", "fx", "colors", "colorIndex", "sourceColors", "recordEvents", "events", "itemFx"],
+    world: ["chunks", "activeChunks", "temp", "moist", "height", "biomeByBand"]
+  };
+  var isPool = (v) => {
+    const p = v.pool;
+    return typeof p?.slotAt === "function" && typeof p.isAlive === "function";
+  };
+  function flagNames(flags) {
+    return (n) => Object.entries(flags).filter(([, bit]) => bit !== 0 && (n & bit) === bit).map(([name]) => name);
+  }
+  function resolvers(link, s, table) {
+    const enums = link.enums;
+    const name = (m) => {
+      const byNumber = new Map(Object.entries(m ?? {}).map(([k, v]) => [v, k]));
+      return (n) => byNumber.get(n) ?? n;
+    };
+    const sources = s.sources ?? [];
+    const source = (n) => sources[n] ?? n;
+    return {
+      enemies: { def: (n) => table.enemyAt(n)?.id ?? n, flags: enums === undefined ? (n) => n : flagNames(enums.enemyFlags) },
+      bosses: { def: (n) => table.bossIdAt(n) ?? n },
+      pets: { breed: (n) => table.dogAt(n)?.id ?? n },
+      grokBots: { help: (n) => table.botHelpAt(n)?.id ?? n, mode: name(enums?.botModes) },
+      pickups: { kind: (n) => enums?.pickupKinds[n] ?? n },
+      zones: { kind: name(enums?.zoneKinds), shape: name(enums?.zoneShapes) },
+      "*": { src: source, burnSrc: source, lastSrc: source }
+    };
+  }
+  function contentIds(table) {
+    const ids = new WeakMap;
+    const lists = [table.allWeapons, table.passives, table.allItems, table.enemies, table.dogs, table.events, table.botHelps, table.biomes];
+    for (const list of lists)
+      for (const d of list)
+        if (typeof d === "object" && d !== null && typeof d.id === "string")
+          ids.set(d, d.id);
+    return ids;
+  }
+  function reflect(link, s) {
+    const table = link.table;
+    if (table === undefined)
+      throw new Error("game content not loaded");
+    const resolve = resolvers(link, s, table);
+    const ids = contentIds(table);
+    const path = new Set;
+    const value = (v, at) => {
+      if (typeof v === "function")
+        return;
+      if (typeof v === "number")
+        return Number.isFinite(v) ? v : String(v);
+      if (typeof v !== "object" || v === null)
+        return v;
+      const id = ids.get(v);
+      if (id !== undefined)
+        return id;
+      if (ArrayBuffer.isView(v))
+        return Array.from(v);
+      if (path.has(v))
+        return "(cycle)";
+      path.add(v);
+      try {
+        if (isPool(v))
+          return rows(v, at);
+        if (v instanceof Map)
+          return Object.fromEntries([...v].map(([k, x]) => [String(k), value(x, `${at}.${String(k)}`)]));
+        if (v instanceof Set)
+          return [...v].map((x) => value(x, at));
+        if (Array.isArray(v))
+          return v.map((x) => value(x, at));
+        const skip = NOT_STATE[at] ?? [];
+        const out = {};
+        for (const k of Object.keys(v)) {
+          if (skip.includes(k))
+            continue;
+          const raw = v[k];
+          const r = resolve["*"]?.[k];
+          const x = r !== undefined && typeof raw === "number" ? r(raw) : value(raw, at === "" ? k : `${at}.${k}`);
+          if (x !== undefined)
+            out[k] = x;
+        }
+        const proto = Object.getPrototypeOf(v);
+        if (proto !== null && proto !== Object.prototype)
+          for (const [k, d] of Object.entries(Object.getOwnPropertyDescriptors(proto))) {
+            if (d.get === undefined || k in out)
+              continue;
+            try {
+              const x = value(v[k], `${at}.${k}`);
+              if (x !== undefined)
+                out[k] = x;
+            } catch {}
+          }
+        return out;
+      } finally {
+        path.delete(v);
+      }
+    };
+    const rows = (p, at) => {
+      const own = resolve[at.split(".").at(-1) ?? ""] ?? {};
+      const columns = Object.keys(p).filter((k) => k !== "pool" && ArrayBuffer.isView(p[k]));
+      const out = [];
+      for (let n = 0;n < p.pool.count; n++) {
+        const slot = p.pool.slotAt(n);
+        if (slot < 0 || !p.pool.isAlive(slot))
+          continue;
+        const row = { uid: p.pool.id(slot) };
+        for (const c of columns) {
+          const raw = p[c][slot] ?? 0;
+          const r = own[c] ?? resolve["*"]?.[c];
+          row[c] = r === undefined ? raw : r(raw);
+        }
+        out.push(row);
+      }
+      return out;
+    };
+    return value(s, "");
   }
 
   // src/agent/snapshot.ts
@@ -441,7 +541,8 @@
   }
   var round = (n) => Math.round(n * 10) / 10;
   var EVENT_NAMES = { bossSpawn: "boss", bossDefeated: "boss", biome: "biome", grokBotHelp: "botHelp", dogJoined: "dog" };
-  var numbers = (o) => Object.fromEntries(Object.entries(o).filter((e) => typeof e[1] === "number" && Number.isFinite(e[1])).map(([k, v]) => [k, round(v)]));
+  var exact = (n) => Math.round(n * 1000) / 1000;
+  var numbers = (o) => Object.fromEntries(Object.entries(o).filter((e) => typeof e[1] === "number" && Number.isFinite(e[1])).map(([k, v]) => [k, exact(v)]));
   function dogs(run, table) {
     const out = {};
     for (const dog of run.dogs)
@@ -452,7 +553,7 @@
         if (v === 0)
           continue;
         const id = table.dogAt(i).id;
-        (out[id] ??= {})[help] = round(v);
+        (out[id] ??= {})[help] = exact(v);
       }
     return out;
   }
@@ -1021,24 +1122,35 @@
     const hud = document.querySelector(".hud-weapons");
     return link.game !== undefined && !link.game.state.over && hud !== null && hud.getClientRects().length > 0;
   }
-  function ladderCleared() {
+  function gameStorage() {
+    const out = {};
     try {
-      const cleared = JSON.parse(localStorage.getItem("tibo.ladder.v1") ?? "{}").cleared;
-      return typeof cleared === "number" ? cleared : 0;
-    } catch {
-      return 0;
-    }
+      for (let i = 0;i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key === null || !key.startsWith("tibo."))
+          continue;
+        const raw = localStorage.getItem(key) ?? "";
+        try {
+          out[key] = JSON.parse(raw);
+        } catch {
+          out[key] = raw;
+        }
+      }
+    } catch {}
+    return out;
   }
   function snapshot(link, discovery, commands) {
     link.noteRunLink();
     const game = link.game;
+    const reflection = game === undefined || link.table === undefined || !link.ready ? {} : { game: reflect(link, game.state), gameEvents: link.events.map((e) => toJson(e)) };
     const playing = game !== undefined && inRun(link);
     const runMode = game === undefined ? undefined : game.state.daily === undefined ? "openWorld" : "daily";
     const mode = playing ? runMode : modeScreen() ?? runMode;
     const base = {
       capturedAt: Date.now(),
+      ...reflection,
+      storage: gameStorage(),
       headless: navigator.webdriver,
-      ladderCleared: ladderCleared(),
       ...link.simBuild === undefined ? {} : { gameBuild: link.simBuild },
       commands,
       ...link.error === undefined ? {} : { error: link.error },
@@ -1083,6 +1195,7 @@
     return globalThis.__tiboBridgeOrigin ?? bridgeOrigin(savedPort() ?? BRIDGE_PORT);
   }
   var RUN_INTERVAL_MS = 33;
+  var SNAPSHOT_SHARE = 0.1;
   var CHECKPOINT_TIMEOUT_MS = 120000;
   var IDLE_INTERVAL_MS = 500;
   var RECONNECT_MS = 3000;
@@ -1102,7 +1215,7 @@
     return new Promise((resolve) => GM_xmlhttpRequest({
       method: "POST",
       url: `${origin}${path}`,
-      data: JSON.stringify(body),
+      data: typeof body === "string" ? body : JSON.stringify(body),
       headers: { "content-type": "application/json" },
       timeout: 5000,
       onload: (r) => resolve(r.status < 300),
@@ -1144,7 +1257,8 @@
     const chat = [];
     let inFlight = 0;
     let lastPush = 0;
-    let sentWith;
+    let snapshotMs = 0;
+    let sentWithMessages = -1;
     controller.store = {
       put: async (file) => {
         await gmCall("POST", `${origin}/bridge/checkpoint`, JSON.stringify(file));
@@ -1234,7 +1348,7 @@
             if ("hello" in envelope) {
               connected = true;
               error = undefined;
-              sentWith = undefined;
+              sentWithMessages = -1;
               chat.length = 0;
               post(origin, "/pilot", asChange(settings));
               notify();
@@ -1261,26 +1375,27 @@
       if (!connected || inFlight >= MAX_IN_FLIGHT)
         return;
       const now = performance.now();
-      if (now - lastPush < (inRun(link) ? RUN_INTERVAL_MS : IDLE_INTERVAL_MS))
+      if (now - lastPush < (inRun(link) ? Math.max(RUN_INTERVAL_MS, snapshotMs / SNAPSHOT_SHARE) : IDLE_INTERVAL_MS))
         return;
       lastPush = now;
-      const sending = { messages: Object.keys(link.messages).length, rules: link.game?.state.cfg };
-      if (sentWith?.messages !== sending.messages || sentWith.rules !== sending.rules) {
+      const messages = Object.keys(link.messages).length;
+      if (sentWithMessages !== messages) {
         const book = encyclopedia(link);
         if (book !== undefined) {
-          sentWith = sending;
+          sentWithMessages = messages;
           post(origin, "/bridge/encyclopedia", book).then((ok) => {
             if (!ok)
-              sentWith = undefined;
+              sentWithMessages = -1;
           });
         }
       }
       let body;
       try {
-        body = snapshot(link, discovery, controller.statuses);
+        body = JSON.stringify(snapshot(link, discovery, controller.statuses));
       } catch (e) {
-        body = { capturedAt: Date.now(), screen: "title", commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` };
+        body = JSON.stringify({ capturedAt: Date.now(), screen: "title", commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` });
       }
+      snapshotMs = performance.now() - now;
       inFlight++;
       post(origin, "/bridge/state", body).finally(() => inFlight--);
     }, RUN_INTERVAL_MS / 2);

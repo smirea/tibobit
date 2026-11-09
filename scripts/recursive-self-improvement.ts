@@ -8,7 +8,7 @@
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { lookup } from "node:dns/promises";
-import { type LoadoutSpec, parseLoadout } from "../src/agent/protocol";
+import { type LoadoutSpec, ladderCleared, parseLoadout } from "../src/agent/protocol";
 import { type HarnessName, checkHarness, jsonObject, runCoach } from "./coach";
 import * as loop from "./gameplay";
 import { type BeliefRow, type Checked, type Experiment, type Gym, type Playbook, type PromptKey, type Templates, clock } from "./gameplay";
@@ -149,7 +149,7 @@ const BOOK = await encyclopedia();
 const idsOf = (section: string, keep: (x: Record<string, unknown>) => boolean = () => true) =>
   new Set((BOOK[section] as Record<string, unknown>[]).filter((x) => typeof x.id === "string" && keep(x)).map((x) => x.id as string));
 const IDS = { weapons: idsOf("weapons"), base: idsOf("weapons", (w) => w.tier === "base"), passives: idsOf("passives"), items: idsOf("items") };
-const ladder = async () => (await main.state()).ladderCleared ?? 0;
+const ladder = async () => ladderCleared(await main.state());
 // The start command names the weapons the profile offers when asked for one it does not.
 const OFFERED = await (async () => {
   const probe = await main.api<{ state: string; detail?: string }>("/command?wait=1&timeout=120", { type: "start", mode: "openWorld", difficulty: "nightmare", weapon: "no-such-weapon" });
@@ -297,6 +297,8 @@ async function facts(state: loop.CoachState, playbook: Playbook): Promise<string
     await Bun.file(loop.INFRA_CSV).text(),
     "## The game's encyclopedia: every id you can use",
     JSON.stringify(BOOK),
+    "## The game's cfg: the rules of the last game the full-run tab played (game.cfg in the state)",
+    JSON.stringify((await main.state()).game?.cfg ?? "no game has been played in the full-run tab yet"),
   ].join("\n\n");
 }
 

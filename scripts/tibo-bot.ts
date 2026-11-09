@@ -8,7 +8,7 @@
 import path from "node:path";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type GameMode, type Inspect, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type GameMode, type Inspect, ladderCleared, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
 import * as loop from "./gameplay";
 import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "./gameplay";
 
@@ -398,7 +398,7 @@ class RunLog {
     this.held = now;
     if (before === undefined) return undefined;
     const changes = [
-      ...[...now].filter(([k, v]) => before.get(k) !== v).map(([k, v]) => (before.has(k) ? `${k} ${before.get(k)} to ${v}` : `${k} ${v} new${itemSaid.get(k) ?? ""}${recipeParts.has(k) ? ` (the recipe ${recipeParts.get(k)})` : ""}`)),
+      ...[...now].filter(([k, v]) => before.get(k) !== v).map(([k, v]) => (before.has(k) ? `${k} ${before.get(k)} to ${v}` : `${k} ${v} new${itemSaid.get(k) ?? ""}`)),
       ...[...before.keys()].filter((k) => !now.has(k)).map((k) => `${k} gone`),
     ];
     return changes.length === 0 ? undefined : changes.join(", ");
@@ -409,11 +409,9 @@ class RunLog {
 // The planner reads the game's own description of every card it holds or is offered.
 type Book = Map<string, string>;
 let book: Book | undefined;
-/** The game's own definitions of dogs and spots, keyed "dog:<id>" and "poi:<kind>", with their English lines and, for a spot, its charge time and rules. */
+/** The game's own dog definitions, keyed "dog:<id>", with their English lines. */
 const defs = new Map<string, Record<string, unknown>>();
 
-/** What each evolution, union or item evolution is made of, by the result's name, from the game's recipes. */
-const recipeParts = new Map<string, string>();
 
 async function readBook(): Promise<Book> {
   if (book !== undefined) return book;
@@ -425,11 +423,8 @@ async function readBook(): Promise<Book> {
       ["passive", e.passives],
       ["item", e.items],
     ] as const)
-      for (const d of defs as { id?: string; description?: string }[]) if (d.id !== undefined && d.description !== undefined) out.set(`${kind}:${d.id}`, d.description);
+      for (const d of defs as { id?: string; desc?: string }[]) if (d.id !== undefined && d.desc !== undefined) out.set(`${kind}:${d.id}`, d.desc);
     for (const d of e.dogs as Record<string, unknown>[]) if (typeof d.id === "string") defs.set(`dog:${d.id}`, d);
-    for (const d of e.pois as Record<string, unknown>[]) if (typeof d.kind === "string") defs.set(`poi:${d.kind}`, d);
-    for (const r of e.recipes as { name?: string; parts?: { name?: string; need?: string }[] }[])
-      if (r.name !== undefined && r.parts !== undefined) recipeParts.set(r.name, r.parts.map((x) => `${x.name}${x.need === "max" ? " at max level" : ""}`).join(" + "));
     book = out;
     return out;
   } catch (e) {
@@ -1094,14 +1089,9 @@ function blocks(r: RunView, b: Book): Record<BlockName, () => string> {
     resources: () => `Rerolls ${p.rerolls}, skips ${p.skips}, banishes ${p.banishes}, revives left ${p.revivesLeft}, curses held ${p.curses}.`,
     spots: () => {
       if (r.pois.length === 0) return "Spots: none on the loaded map.";
-      const kinds = [...new Set(r.pois.map((x) => x.kind))];
-      const rules = kinds.flatMap((k) => {
-        const d = defs.get(`poi:${k}`)?.rules;
-        return d === undefined ? [] : [`\n  - ${k}: ${JSON.stringify(d)}`];
-      });
       return `Spots on the loaded map, nearest first:${r.pois
         .map((x) => `\n  - ${x.name} (${x.kind}) ${Math.round(x.dist)} away to the ${x.dir}${x.description === "" ? "" : `: ${x.description}`} Charged ${x.charge} of ${x.chargeNeeded} s, radius ${x.radius}${x.price === undefined ? "" : `, price ${x.price} gold`}${x.prices === undefined ? "" : `, item prices by rarity ${x.prices.join(", ")} gold`}.`)
-        .join("")}${rules.length === 0 ? "" : `\nThe game's rules for these kinds of spot:${rules.join("")}`}`;
+        .join("")}`;
     },
     dogs: () =>
       r.pets.length === 0
@@ -1148,18 +1138,6 @@ function blocks(r: RunView, b: Book): Record<BlockName, () => string> {
       v.enemies(),
       v.current_goal(),
       v.recent_goals(),
-      v.stats(),
-      v.resources(),
-      v.buffs(),
-      v.schedule(),
-      v.enemy_kinds(),
-      v.elites(),
-      v.hazards(),
-      v.pickups(),
-      v.spots(),
-      v.dogs(),
-      v.events(),
-      v.counters(),
     ].join("\n");
   return { ...v, state };
 }
@@ -1561,7 +1539,7 @@ async function main() {
         // The run is over; a stop from here on only notes the missing review.
         const ended = notes;
         notes = undefined;
-        await planner.finish(s.lastRun, last, s.ladderCleared, runLog.healed);
+        await planner.finish(s.lastRun, last, ladderCleared(s), runLog.healed);
         // The share link only exists on the run summary, and a page reload loses it, so it goes into
         // the notes now, before the review, rather than whenever the next run starts.
         const summary = await command({ type: "summary" }, 60);

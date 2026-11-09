@@ -13,10 +13,15 @@ import {
 
 const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
 
-  state [--format text|json]      the game now: text (default) is only what a decision model acts on;
-                                  json is the whole snapshot on one line (types in src/agent/protocol.ts)
-  watch                           the text state, refreshed 4 times a second
-  encyclopedia [section]          JSON of weapons, passives, items, recipes, enemies, bosses, pois, biomes
+  state [path] [--format text|json]
+                                  the snapshot: \`game\` is the game's state object under its own keys
+                                  (src/agent/reflect.ts says how it is made into JSON), plus the screen,
+                                  the game's localStorage and the commands. A path such as game.loadout
+                                  or game.enemies shows only that part. text is an indented tree, with a
+                                  list of entries as a table; json is it all on one line
+  watch [path]                    the text state, refreshed 4 times a second
+  encyclopedia [section]          JSON of the game's content: weapons, passives, items, recipes, enemies,
+                                  bosses, dogs, pois, events, botHelps, biomes, glossary, rules
   move <dir|degrees> [seconds]    dir: up, down, left, right, up-left, up-right, down-left, down-right
   goto <x> <y>                    walk to a world position
   goto rel <dx> <dy>              walk relative to where you stand
@@ -82,123 +87,50 @@ function flag(args: string[], name: string): string | undefined {
   return value;
 }
 
-const at = (r: Rel) => `${Math.round(r.dist)} ${r.dir}`;
-
 function clock(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
-/** The game's own description of each weapon, passive and item, by key such as "weapon:spud-cannon". */
-type Descriptions = Map<string, string>;
-let described: Descriptions | undefined;
+// A long list of numbers, such as a weapon's fixed-size buffer, shows its start in text; json has it all.
+const LIST_SHOWN = 32;
 
-/** The encyclopedia only has English text once a run has started in the tab, so an empty one is not kept. */
-async function descriptions(): Promise<Descriptions | string> {
-  if (described !== undefined) return described;
-  try {
-    const book = await api<Record<"weapons" | "passives" | "items", { id: string; description?: string }[]>>("/encyclopedia");
-    const map: Descriptions = new Map();
-    for (const [type, list] of [["weapon", book.weapons], ["passive", book.passives], ["item", book.items]] as const)
-      for (const d of list) if (d.description) map.set(`${type}:${d.id}`, d.description);
-    if (map.size === 0) return "the encyclopedia has no English text yet";
-    described = map;
-    return map;
-  } catch (e) {
-    return (e as Error).message;
-  }
-}
+const scalar = (v: unknown) => (typeof v === "string" ? JSON.stringify(v) : String(v));
+const isScalar = (v: unknown) => v === null || typeof v !== "object";
 
-// What a recipe still needs once this card is taken: a part not held, or one below the level it needs.
-function needs(c: PairingView): string {
-  const missing = c.parts
-    .filter((x) => x.state !== "done")
-    .map((x) => (x.state === "leveling" ? `${x.name} Lv${x.max} (at ${x.have})` : `${x.name}${x.key === c.partner.key && c.partnerBanished ? " (banished)" : ""}`));
-  return missing.length === 0 ? `completes ${c.name}` : `${c.name} needs ${missing.join(" + ")}`;
-}
-
-// Only what a decision model acts on: what can hurt Tibo, what he can take, and the open choice.
-function summarizeRun(r: RunView, screen: string, about: Descriptions | string): string[] {
-  const describe = (key: string) => (typeof about === "string" ? undefined : about.get(key));
-  const p = r.player;
-  const lines: string[] = [];
-  const add = (label: string, value: string) => value !== "" && lines.push(`${label}: ${value}`);
-  const status = [
-    p.dashReadyIn > 0 ? `dash in ${p.dashReadyIn}s` : `dash ${p.dashCharges}`,
-    p.revivesLeft > 0 ? `revives ${p.revivesLeft}` : "",
-    p.invulnerable ? "invulnerable" : "",
-    p.stunned > 0 ? `stunned ${p.stunned}s` : "",
-    p.frozen > 0 ? `frozen ${p.frozen}s` : "",
-    p.slowed > 0 ? `slowed ${p.slowed}s` : "",
-  ].filter(Boolean);
-
-  lines.push(`${clock(r.time)}${screen === "" ? "" : ` ${screen}`}  hp ${Math.round(p.hp)}/${Math.round(p.maxHp)}  lv ${p.level}  gold ${p.gold}  ${status.join("  ")}`);
-  add(
-    "hurt by",
-    Object.entries(p.hurtBy)
-      .slice(0, 3)
-      .map(([k, v]) => `${k} ${Math.round(v)}`)
-      .join(", "),
-  );
-  add("buffs", r.buffs.map((b) => `${b.id} ${Math.round(b.endsIn)}s`).join(", "));
-  add("weapons", r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", "));
-  add("passives", r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", "));
-  add("items", r.loadout.items.map((i) => `${i.name}${i.count > 1 ? ` x${i.count}` : ""}${describe(`item:${i.id}`) === undefined ? "" : ` (${describe(`item:${i.id}`)})`}`).join(", "));
-  add("ready to evolve from a chest", r.combos.filter((c) => c.ready).map((c) => c.name).join(", "));
-  if (r.choice !== undefined) {
-    lines.push(`choice (${r.choice.kind}; rerolls ${p.rerolls}, skips ${p.skips}, banishes ${p.banishes}):`);
-    for (const o of r.choice.options.filter((o) => o.available || o.type !== "other")) {
-      // The card text repeats the name and carries the badges and recipe arrows the helper draws on it.
-      const noise = new Set([o.name, "NEW", "UNSEEN", "→", ...o.combos.map((c) => c.name)]);
-      const label = o.label
-        .split(" | ")
-        .filter((part) => !noise.has(part) && !/^LV \d+$/.test(part))
-        .join(" | ");
-      // A new card's text is its description; an upgrade's is only what the level adds.
-      const description = describe(`${o.type}:${o.id}`);
-      const text = [description !== undefined && !label.includes(description.slice(0, 30)) ? description : "", label].filter(Boolean).join(" | ");
-      lines.push(`  [${o.index}] ${o.name}${o.level === undefined ? "" : ` Lv${o.level}`}${o.available ? "" : " (unavailable)"}${text === "" ? "" : `: ${text}`}`);
-      if (o.combos.length > 0) lines.push(`      evolves: ${o.combos.slice(0, 4).map(needs).join("; ")}`);
+/** The game's own keys as an indented tree; a list of entries with the same keys, such as a pool, as a table. */
+function tree(v: unknown, indent = ""): string[] {
+  if (isScalar(v)) return [`${indent}${scalar(v)}`];
+  if (Array.isArray(v)) {
+    if (v.every(isScalar)) return [`${indent}[${v.slice(0, LIST_SHOWN).map(scalar).join(", ")}${v.length > LIST_SHOWN ? `, ... ${v.length - LIST_SHOWN} more` : ""}]`];
+    const rows = v as Record<string, unknown>[];
+    const columns = [...new Set(rows.flatMap((r) => (typeof r === "object" && r !== null ? Object.keys(r) : [])))];
+    const flat = rows.every((r) => typeof r === "object" && r !== null && Object.values(r).every((x) => isScalar(x) || (Array.isArray(x) && x.every(isScalar))));
+    if (flat) {
+      const cell = (x: unknown) => (x === undefined ? "" : Array.isArray(x) ? x.map(scalar).join("|") : typeof x === "number" ? String(Math.round(x * 1000) / 1000) : scalar(x));
+      return [`${indent}${rows.length} entries`, `${indent}${columns.join("\t")}`, ...rows.map((r) => `${indent}${columns.map((c) => cell(r[c])).join("\t")}`)];
     }
+    return rows.flatMap((r, i) => [`${indent}- [${i}]`, ...tree(r, `${indent}    `)]);
   }
-  const boss = r.schedule.find((w) => w.boss !== undefined);
-  if (boss?.boss !== undefined && r.bosses.length === 0) add("next boss", `${boss.boss.name} at ${clock(boss.minute * 60)}`);
-  const news = r.events.filter((e) => r.time - e.time <= 10 && (e.text !== undefined || e.type === "bossSpawn"));
-  add("just now", news.map((e) => e.text ?? `${e.name} arrived`).join("; "));
-
-  for (const b of r.bosses) lines.push(`boss: ${b.name} ${Math.round((b.hp / b.maxHp) * 100)}% hp, ${at(b)}`);
-  const close = r.sectors.reduce((n, sec) => n + sec.enemiesNear, 0);
-  lines.push(`enemies: ${r.enemies.total}, ${close} within 60; nearest ${r.enemies.nearest.slice(0, 3).map((e) => `${e.name} ${at(e)}`).join(", ")}`);
-  add("elites", r.enemies.elites.slice(0, 3).map((e) => `${e.name} ${Math.round((e.hp / e.maxHp) * 100)}% hp ${at(e)}`).join(", "));
-  if (r.standingBulletHits + r.standingEnemyTouches > 0) lines.push(`standing still, within 0.6s: ${r.standingBulletHits} bullet hits, ${r.standingEnemyTouches} enemy touches`);
-  add("volleys", r.volleys.filter((v) => v.dist < 250).slice(0, 2).map((v) => `${v.count * Math.max(1, v.bursts)} bullets ${v.firesIn > 0 ? `in ${v.firesIn}s` : "now"} from ${at(v)}`).join(", "));
-  add("hazards", r.hazards.filter((h) => h.inside || h.dist - h.radius < 60).map((h) => `${h.kind} ${h.inside ? "UNDER TIBO" : at(h)}${h.landsIn === undefined ? "" : ` lands in ${h.landsIn}s`}`).join(", "));
-
-  const loot = [...r.pickups.chests, ...r.pickups.nearest.filter((q) => q.kind !== "gold")].sort((a, b) => a.dist - b.dist);
-  add("pickups", loot.slice(0, 5).map((q) => `${q.kind} #${q.uid} ${at(q)}`).join(", "));
-  if (r.pois.length > 0) {
-    lines.push("spots:");
-    const told = new Set<string>();
-    for (const q of [...r.pois].sort((a, b) => a.dist - b.dist).slice(0, 8)) {
-      const charge = q.charge > 0 ? ` charged ${q.charge}/${q.chargeNeeded}s` : "";
-      const price = q.price === undefined ? "" : ` costs ${q.price}`;
-      const kind = q.variant ?? q.kind;
-      const what = told.has(kind) || q.description === "" ? "" : `: ${q.description}`;
-      told.add(kind);
-      lines.push(`  #${q.uid} ${q.name} ${q.inside ? "INSIDE" : at(q)}${charge}${price}${what}`);
-    }
-  }
-  add("grok bots", r.helpers.filter((h) => h.mode === "wander" || h.mode === "hop").map((h) => `${h.name} ${at(h)}`).join(", "));
-  add("visitors", r.visitors.map((v) => `${v.who} ${at(v)}`).join(", "));
-  return lines;
+  return Object.entries(v as Record<string, unknown>).flatMap(([k, x]) => {
+    if (isScalar(x) || (Array.isArray(x) && x.every(isScalar))) return [`${indent}${k}: ${tree(x).join("")}`];
+    return [`${indent}${k}:`, ...tree(x, `${indent}  `)];
+  });
 }
 
-async function summarize(s: Snap): Promise<string> {
-  const about = s.run === undefined ? new Map() : await descriptions();
-  const lines = s.run === undefined ? [s.screen] : summarizeRun(s.run, s.screen === "run" ? "" : s.screen, about);
-  if (typeof about === "string") lines.push(`descriptions unavailable: ${about}`);
+/** The part of the snapshot a dotted path names, such as "game.loadout.weapons" or "game.enemies". */
+function pick(s: Snap, path: string | undefined): unknown {
+  if (path === undefined) return s;
+  let v: unknown = s;
+  for (const key of path.split(".")) {
+    if (typeof v !== "object" || v === null || !(key in v)) throw new Error(`the snapshot has no ${path}; its keys at that level are: ${typeof v === "object" && v !== null ? Object.keys(v).join(", ") : "none"}`);
+    v = (v as Record<string, unknown>)[key];
+  }
+  return v;
+}
+
+function render(s: Snap, path: string | undefined): string {
+  const lines = tree(pick(s, path));
   if (!s.connected) lines.unshift("the tibo.dog tab is not connected");
-  if (s.error) lines.push(`error: ${s.error}`);
-  if (s.lastRun !== undefined) lines.push(`last run: ${clock(s.lastRun.time)} lv ${s.lastRun.level}${s.lastRun.won ? ", won" : ""}${s.lastRun.killer === undefined ? "" : `, killed by ${s.lastRun.killer}`}`);
   return lines.join("\n");
 }
 
@@ -282,16 +214,19 @@ async function main(argv: string[]) {
       const inline = words.find((w) => w.startsWith("--format="));
       const format = inline?.slice("--format=".length) ?? (words.includes("--format") ? (flag(words, "--format") ?? "") : "text");
       if (format !== "text" && format !== "json") throw new Error(`--format must be text or json, got ${format}`);
+      const path = words.slice(1).find((w) => !w.startsWith("--"));
       const s = await api<Snap>("/state");
-      console.log(format === "json" ? JSON.stringify(s) : await summarize(s));
+      console.log(format === "json" ? JSON.stringify(pick(s, path)) : render(s, path));
       return;
     }
-    case "watch":
+    case "watch": {
+      const path = words[1];
       for (;;) {
         const s = await api<Snap>("/state").catch((e: Error) => e);
-        process.stdout.write(`\x1b[2J\x1b[H${s instanceof Error ? s.message : await summarize(s)}\n`);
+        process.stdout.write(`\x1b[2J\x1b[H${s instanceof Error ? s.message : render(s, path)}\n`);
         await Bun.sleep(250);
       }
+    }
     case "checkpoints":
       for (const c of await api<CheckpointMeta[]>("/checkpoints"))
         console.log(`${c.name}  ${clock(c.time)} lv ${c.level} hp ${c.hp}  ${c.difficulty} seed ${c.seed}  ${c.weapons.join(", ")}  (${c.savedAt}, ${c.build})`);

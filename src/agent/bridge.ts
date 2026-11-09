@@ -68,6 +68,9 @@ declare function GM_xmlhttpRequest(details: {
 }): { abort(): void };
 
 const RUN_INTERVAL_MS = 33;
+// A snapshot holds the whole game state, which grows with the crowd; pushes are spaced so building
+// and sending them takes at most this share of the page's time, which the game's own ticks share.
+const SNAPSHOT_SHARE = 0.1;
 const CHECKPOINT_TIMEOUT_MS = 120_000;
 const IDLE_INTERVAL_MS = 500;
 const RECONNECT_MS = 3000;
@@ -91,7 +94,7 @@ function post(origin: string, path: string, body: unknown): Promise<boolean> {
     GM_xmlhttpRequest({
       method: "POST",
       url: `${origin}${path}`,
-      data: JSON.stringify(body),
+      data: typeof body === "string" ? body : JSON.stringify(body),
       headers: { "content-type": "application/json" },
       timeout: 5000,
       onload: (r) => resolve(r.status < 300),
@@ -146,9 +149,10 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
   const chat: ChatMessage[] = [];
   let inFlight = 0;
   let lastPush = 0;
-  // The English text loads only when a run starts, after the content tables, and each run has its
-  // own rules, so the encyclopedia goes up again whenever either changed since it was last sent.
-  let sentWith: { messages: number; rules: object | undefined } | undefined;
+  let snapshotMs = 0;
+  // The English text loads only when a run starts, after the content tables, so the encyclopedia
+  // goes up again each time more of it has arrived: -1 means not sent to this server yet.
+  let sentWithMessages = -1;
   controller.store = {
     put: async (file) => {
       await gmCall("POST", `${origin}/bridge/checkpoint`, JSON.stringify(file));
@@ -236,7 +240,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
           if ("hello" in envelope) {
             connected = true;
             error = undefined;
-            sentWith = undefined;
+            sentWithMessages = -1;
             // The server replays its chat backlog after the hello.
             chat.length = 0;
             // This browser's settings win over whatever the server kept, so they survive its restarts.
@@ -263,24 +267,25 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
   setInterval(() => {
     if (!connected || inFlight >= MAX_IN_FLIGHT) return;
     const now = performance.now();
-    if (now - lastPush < (inRun(link) ? RUN_INTERVAL_MS : IDLE_INTERVAL_MS)) return;
+    if (now - lastPush < (inRun(link) ? Math.max(RUN_INTERVAL_MS, snapshotMs / SNAPSHOT_SHARE) : IDLE_INTERVAL_MS)) return;
     lastPush = now;
-    const sending = { messages: Object.keys(link.messages).length, rules: link.game?.state.cfg };
-    if (sentWith?.messages !== sending.messages || sentWith.rules !== sending.rules) {
+    const messages = Object.keys(link.messages).length;
+    if (sentWithMessages !== messages) {
       const book = encyclopedia(link);
       if (book !== undefined) {
-        sentWith = sending;
+        sentWithMessages = messages;
         void post(origin, "/bridge/encyclopedia", book).then((ok) => {
-          if (!ok) sentWith = undefined;
+          if (!ok) sentWithMessages = -1;
         });
       }
     }
     let body;
     try {
-      body = snapshot(link, discovery, controller.statuses);
+      body = JSON.stringify(snapshot(link, discovery, controller.statuses));
     } catch (e) {
-      body = { capturedAt: Date.now(), screen: "title", commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` };
+      body = JSON.stringify({ capturedAt: Date.now(), screen: "title", commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` });
     }
+    snapshotMs = performance.now() - now;
     inFlight++;
     void post(origin, "/bridge/state", body).finally(() => inFlight--);
   }, RUN_INTERVAL_MS / 2);

@@ -160,6 +160,12 @@ export type GameMode = "openWorld" | "daily";
 export type Snapshot = {
   capturedAt: number;
   screen: "title" | "run" | "choice" | "paused" | "over";
+  /** The game's state object, under the game's own keys (see src/agent/reflect.ts); present once a game exists, including one that just ended. */
+  game?: Record<string, unknown>;
+  /** What the game recorded for its renderer since the run began, newest last, as the game wrote it (the rarer kinds only; see NOISY_EVENTS in src/game.ts). */
+  gameEvents?: Record<string, unknown>[];
+  /** What the game keeps in this browser's localStorage, by the game's own keys (those starting "tibo."), parsed. */
+  storage?: Record<string, unknown>;
   /** The mode the game is on: the mode screen that is open, else the run in play or the one that just ended. Absent before any run. */
   mode?: GameMode;
   run?: RunView;
@@ -169,13 +175,17 @@ export type Snapshot = {
   lastRun?: { time: number; level: number } & RunTotals;
   /** Whether the page runs under automation (navigator.webdriver), as in scripts/headless.ts. */
   headless?: boolean;
-  /** The highest Open World Nightmare level this browser has won (survived 20:00 on); the next one up is the hardest it can start. */
-  ladderCleared?: number;
   /** The game's sim chunk; a checkpoint loads only on the build it was saved on. */
   gameBuild?: string;
   commands: CommandStatus[];
   error?: string;
 };
+
+/** The highest Open World Nightmare level this browser has won, from the game's own `tibo.ladder.v1` entry; the next one up is the hardest it can start. */
+export function ladderCleared(s: Snapshot): number {
+  const cleared = (s.storage?.["tibo.ladder.v1"] as { cleared?: unknown } | undefined)?.cleared;
+  return typeof cleared === "number" ? cleared : 0;
+}
 
 export type EnemyView = Rel & { uid: number; id: string; name: string; hp: number; maxHp: number; damage: number; radius: number; speed: number; elite: boolean };
 
@@ -365,17 +375,14 @@ export type PickupView = Rel & { uid: number; kind: string; value: number; charg
 
 /**
  * The game's content, each entry its own definition plus all its English lines (name, desc and the
- * like). `glossary` holds the English of kinds without a definition table, such as shrine stat
- * labels and rarities, by kind and id. `rules` is the game's config for the run it held when this
- * was taken (`rulesFor` names that run's difficulty): scaling, elites, bosses, economy, every spot's
- * rules and the rest.
+ * like, by the game's message field names). `messages` is the game's English for content kinds with
+ * no definition table, such as shrine stat labels and rarities, under the game's own message keys.
  */
 export type Encyclopedia = {
   capturedAt: number;
   weapons: unknown[];
   passives: unknown[];
   items: unknown[];
-  recipes: unknown[];
   enemies: unknown[];
   bosses: unknown[];
   dogs: unknown[];
@@ -383,9 +390,7 @@ export type Encyclopedia = {
   events: unknown[];
   botHelps: unknown[];
   biomes: unknown[];
-  glossary: Record<string, Record<string, Record<string, string>>>;
-  rules?: Record<string, unknown>;
-  rulesFor?: string;
+  messages: Record<string, string>;
 };
 
 function fail(message: string): never {

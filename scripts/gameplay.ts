@@ -178,11 +178,11 @@ export const BLOCKS = {
   elites: "every elite alive: name, health, contact damage, distance and direction",
   hazards: "terrain hazards and attack zones near Tibo, by the game's kind names, with shape, radius, distance and when a telegraphed attack lands",
   pickups: "pickups on the ground counted by kind, and the nearest ones that are not xp gems with their kind, value and distance",
-  spots: "every unused spot on the loaded map, nearest first, with the game's name and description, distance, direction, charge, radius and price, then the game's rules for each kind listed",
+  spots: "every unused spot on the loaded map, nearest first, with the game's name and description, distance, direction, charge, radius and price",
   dogs: "each of Tibo's dogs: name, breed, the game's description, level, the game's numbers for its ability and aura, and what it has done so far this run",
   events: "the last 10 game events (bosses, banners, chests, evolutions, dogs joining) with their times",
   counters: "every number the game has counted this run that is not zero: distance walked, hits, crits, near misses, dodges, peak enemies, gold, shrines used and the rest",
-  state: "every block above except difficulty, mode and weapon_damage, one per line: the whole state",
+  state: "a short default, one per line: time, health, level, gold, dash, weapons, passives, items, banished (when any), recipes, evolutions, standing_on, hurt_by, bosses, enemies, current_goal and recent_goals. Every other block is left out unless a template names it",
 } as const;
 export type BlockName = keyof typeof BLOCKS;
 

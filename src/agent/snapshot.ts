@@ -14,6 +14,7 @@ import {
 } from "../catalog";
 import { type Data, liveData } from "../data";
 import { modeScreen } from "./menu";
+import { reflect } from "./reflect";
 import type { Discovery } from "../discovery";
 import type { Game, GameLink, GameState, Poi, Pool, Table } from "../game";
 import {
@@ -715,26 +716,37 @@ export function inRun(link: GameLink): boolean {
   return link.game !== undefined && !link.game.state.over && hud !== null && hud.getClientRects().length > 0;
 }
 
-/** The game keeps its Nightmare ladder in localStorage as {cleared: <highest level won>}. */
-function ladderCleared(): number {
+/** The game's own localStorage entries, parsed where they are JSON. */
+function gameStorage(): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
   try {
-    const cleared = (JSON.parse(localStorage.getItem("tibo.ladder.v1") ?? "{}") as { cleared?: unknown }).cleared;
-    return typeof cleared === "number" ? cleared : 0;
-  } catch {
-    return 0;
-  }
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key === null || !key.startsWith("tibo.")) continue;
+      const raw = localStorage.getItem(key) ?? "";
+      try {
+        out[key] = JSON.parse(raw);
+      } catch {
+        out[key] = raw;
+      }
+    }
+  } catch {}
+  return out;
 }
 
 export function snapshot(link: GameLink, discovery: Discovery, commands: CommandStatus[]): Snapshot {
   link.noteRunLink();
   const game = link.game;
+  const reflection =
+    game === undefined || link.table === undefined || !link.ready ? {} : { game: reflect(link, game.state), gameEvents: link.events.map((e) => toJson(e) as Record<string, unknown>) };
   const playing = game !== undefined && inRun(link);
   const runMode = game === undefined ? undefined : game.state.daily === undefined ? "openWorld" : "daily";
   const mode = playing ? runMode : (modeScreen() ?? runMode);
   const base = {
     capturedAt: Date.now(),
+    ...reflection,
+    storage: gameStorage(),
     headless: navigator.webdriver,
-    ladderCleared: ladderCleared(),
     ...(link.simBuild === undefined ? {} : { gameBuild: link.simBuild }),
     commands,
     ...(link.error === undefined ? {} : { error: link.error }),
