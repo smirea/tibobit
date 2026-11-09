@@ -185,7 +185,9 @@ export class Slot {
       // The start screen sometimes misses a click, such as the weapon picker showing nothing picked.
       first = e instanceof Error ? e.message : String(e);
     }
-    console.error(`${this.name}: a fresh game on seed ${seed} failed (${first}); trying once more`);
+    console.error(`${this.name}: a fresh game on seed ${seed} failed (${first}); restarting the game and trying once more`);
+    // A tab left on an error page, or stuck on a screen, only recovers when it is opened again.
+    await this.restartGame();
     const again = await this.freshOnce(seed, difficulty, weapon);
     const second = (await this.state()).run?.seed;
     if (second !== seed) throw new Error(`asked for seed ${seed} twice: ${first}, then the game rolled ${second ?? "nothing"}`);

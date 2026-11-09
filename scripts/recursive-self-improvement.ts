@@ -7,6 +7,7 @@
 // Everything the coach knows between calls is in gameplay/ (see scripts/gameplay.ts).
 import path from "node:path";
 import { mkdirSync } from "node:fs";
+import { lookup } from "node:dns/promises";
 import { type LoadoutSpec, parseLoadout } from "../src/agent/protocol";
 import { type HarnessName, checkHarness, jsonObject, runCoach } from "./coach";
 import * as loop from "./gameplay";
@@ -94,7 +95,26 @@ if (main === undefined) throw new Error("no main slot");
 // A rebuilt userscript reaches the games when they restart, which happens between iterations.
 const DIST = path.join(ROOT, "dist", "tibo-helper.user.js");
 let gamesBuilt = Bun.file(DIST).lastModified;
+// An outage on 2026-11-09 burned three loops: every coach call failed fast and the headless tabs
+// stayed on Chrome's error page. The loop waits it out instead and then reloads the games.
+const NEEDED_HOSTS = ["api.anthropic.com", "openrouter.ai", "tibo.dog"];
+async function offlineHost(): Promise<string | undefined> {
+  for (const host of NEEDED_HOSTS) if (!(await lookup(host).then(() => true, () => false))) return host;
+  return undefined;
+}
+async function waitOnline() {
+  const down = await offlineHost();
+  if (down === undefined) return;
+  const since = Date.now();
+  console.error(`${down} does not resolve; waiting for the network`);
+  while (!stopping && (await offlineHost()) !== undefined) await Bun.sleep(30_000);
+  console.log(`the network is back after ${Math.round((Date.now() - since) / 60_000)} min; restarting the games`);
+  await Promise.all(opened.map((s) => s.restartGame()));
+}
+const UNREACHABLE = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|Can't reach the API/;
+
 async function refreshGames() {
+  await waitOnline();
   if (Bun.file(DIST).lastModified === gamesBuilt) return;
   gamesBuilt = Bun.file(DIST).lastModified;
   console.log("the userscript was rebuilt; restarting the games");
@@ -131,6 +151,7 @@ async function ask<T>(tag: string, prompt: string, check: (raw: Record<string, u
   await Bun.write(path.join(RUNS, `${tag}.prompt.md`), prompt);
   let request = prompt;
   for (let attempt = 1; attempt <= 3 && !stopping; attempt++) {
+    await waitOnline();
     const started = Date.now();
     const said = await runCoach(harness, model, request, COACH_TIMEOUT_MS, () => {}, effort);
     const seconds = Math.round((Date.now() - started) / 1000);
@@ -138,6 +159,8 @@ async function ask<T>(tag: string, prompt: string, check: (raw: Record<string, u
     const raw = jsonObject(said.text);
     if (raw === undefined) {
       console.error(`${tag}: no JSON from the coach after ${seconds}s${said.timedOut ? " (timed out)" : ""}: ${(said.error || said.text || said.stderr).slice(0, 400)}`);
+      // A call lost to an outage does not count; waitOnline holds the next one until the network is back.
+      if (UNREACHABLE.test(said.error || said.stderr) && (await offlineHost()) !== undefined) attempt--;
       if (said.text.trim() !== "" && !said.timedOut) request = `${prompt}\n\n# Your previous reply held no JSON object\n\nReply again in full, with only the JSON object.`;
       await Bun.sleep(15_000);
       continue;
