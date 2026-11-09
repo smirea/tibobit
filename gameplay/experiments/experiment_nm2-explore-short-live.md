@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | done |
 | Area | map |
-| Result | - |
+| Result | refuted |
 | Created | L5.I7 |
-| Updated | L5.I7 |
+| Updated | L8.I1 |
 
 ## Hypothesis
 
@@ -18,7 +18,7 @@ Five fresh live NM2 steam-vent games of 300s on 1919, 4141, 2121, 1313 and 4444,
 
 ## Findings
 
-(none yet)
+L5.I7: 0 of 3 played games alive at 5:00 (died 2:03, 2:09, 2:29, no evolution, 0-3 chests); 2 games did not run because the bot exited with code 1. Even 2 of 2 on the missing seeds would be 2 of 5, so refuted. See B133.
 
 ## Games
 
