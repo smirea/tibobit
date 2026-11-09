@@ -15,12 +15,13 @@ import {
 import { type Data, liveData } from "../data";
 import { modeScreen } from "./menu";
 import type { Discovery } from "../discovery";
-import type { Game, GameLink, GameState, Poi, Pool } from "../game";
+import type { Game, GameLink, GameState, Poi, Pool, Table } from "../game";
 import {
   type BuffView,
   type ComboView,
   type CommandStatus,
   DIRECTIONS,
+  type EnemyView,
   type Direction,
   type EventView,
   type ForecastView,
@@ -35,7 +36,6 @@ import {
 const NEAREST = 10;
 const TICKS_PER_SECOND = 60;
 const HAZARD_RANGE = 600;
-const MAX_POIS = 15;
 const SECTOR_RANGE = 300;
 const PATH_AHEAD = 60;
 const HURT_WINDOW_TICKS = 180;
@@ -76,7 +76,40 @@ const round = (n: number) => Math.round(n * 10) / 10;
 /** The content kind an event's `id` names, for its English name. */
 const EVENT_NAMES: Record<string, string> = { bossSpawn: "boss", bossDefeated: "boss", biome: "biome", grokBotHelp: "botHelp", dogJoined: "dog" };
 
-function totals(run: GameState["run"]): RunTotals {
+// Three decimals, since stat bonuses such as a shrine's +0.12 damage are fractions.
+const exact = (n: number) => Math.round(n * 1000) / 1000;
+const numbers = (o: object): Record<string, number> => Object.fromEntries(Object.entries(o).filter((e): e is [string, number] => typeof e[1] === "number" && Number.isFinite(e[1])).map(([k, v]) => [k, exact(v)]));
+
+/** Per dog breed that joined: when, and every kind of help the game counts for it that is not zero. */
+function dogs(run: GameState["run"], table: Table): RunTotals["dogs"] {
+  const out: RunTotals["dogs"] = {};
+  for (const dog of run.dogs) out[dog.id] = { joinedAt: round(dog.at) };
+  for (const [help, column] of Object.entries(run.dogHelp))
+    for (let i = 0; i < column.length; i++) {
+      const v = column[i] ?? 0;
+      if (v === 0) continue;
+      const id = table.dogAt(i).id;
+      (out[id] ??= {})[help] = exact(v);
+    }
+  return out;
+}
+
+/** Every kind of enemy alive, by id, most numerous first: how many, how many elite, the nearest one's distance, and the strongest one's numbers. */
+function enemyKinds(enemies: EnemyView[]): RunView["enemies"]["kinds"] {
+  const out: RunView["enemies"]["kinds"] = {};
+  for (const e of enemies) {
+    const k = (out[e.id] ??= { name: e.name, count: 0, elites: 0, nearest: e.dist, maxHp: e.maxHp, damage: e.damage, speed: e.speed, radius: e.radius });
+    k.count++;
+    if (e.elite) k.elites++;
+    k.nearest = Math.min(k.nearest, e.dist);
+    k.maxHp = Math.max(k.maxHp, e.maxHp);
+    k.damage = Math.max(k.damage, e.damage);
+  }
+  return Object.fromEntries(Object.entries(out).sort((a, b) => b[1].count - a[1].count));
+}
+
+function totals(s: GameState, table: Table): RunTotals {
+  const run = s.run;
   return {
     kills: run.kills,
     damageTaken: byDamage(run.damageTakenBySource),
@@ -94,6 +127,9 @@ function totals(run: GameState["run"]): RunTotals {
     revivesUsed: run.revivesUsed,
     won: run.won,
     ...(run.killer === "" ? {} : { killer: run.killer }),
+    counters: { ...numbers(s.counters), ...numbers(run) },
+    dogs: dogs(run, table),
+    shrineStats: Object.fromEntries(Object.entries(numbers(s.loadout.shrineTotals)).filter(([, v]) => v !== 0)),
   };
 }
 
@@ -388,8 +424,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
         ...(p.kind === "vendor" && economy?.vendorPrice !== undefined ? { prices: economy.vendorPrice } : {}),
       };
     })
-    .sort((a, b) => a.dist - b.dist)
-    .slice(0, MAX_POIS);
+    .sort((a, b) => a.dist - b.dist);
 
   const zoneKind = Object.fromEntries(Object.entries(enums.zoneKinds).map(([k, v]) => [v, k]));
   const zoneShape = Object.fromEntries(Object.entries(enums.zoneShapes).map(([k, v]) => [v, k]));
@@ -639,8 +674,9 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
       banished: [...s.loadout.banished],
     },
     stats: statValues(stats),
+    statBonuses: Object.fromEntries(Object.entries(numbers(s.loadout.totals)).filter(([, v]) => v !== 0)),
     buffs: buffs(s),
-    totals: totals(s.run),
+    totals: totals(s, table),
     schedule,
     events,
     combos: relevantCombos(d.combos, loadout).map((c) => comboView(d, discovery, c, loadout)),
@@ -658,7 +694,7 @@ function runView(link: GameLink, game: Game, discovery: Discovery, d: Data): Run
     })),
     ...(choice === undefined ? {} : { choice: { kind: choice.kind, options: options(d, discovery, loadout, s.loadout.banished), raw: toJson(choice) } }),
     bosses: bosses.sort((a, b) => a.dist - b.dist),
-    enemies: { total: enemies.length, nearest: nearest(enemies), elites: enemies.filter((e) => e.elite).sort((a, b) => a.dist - b.dist) },
+    enemies: { total: enemies.length, nearest: nearest(enemies), elites: enemies.filter((e) => e.elite).sort((a, b) => a.dist - b.dist), kinds: enemyKinds(enemies) },
     pickups: { counts, chests: chests.sort((a, b) => a.dist - b.dist), nearest: nearest(loose) },
     pois,
     hazards: nearest(hazards, 20),
@@ -705,7 +741,7 @@ export function snapshot(link: GameLink, discovery: Discovery, commands: Command
     ...(link.runLink === undefined ? {} : { lastRunLink: link.runLink }),
     ...(mode === undefined ? {} : { mode }),
   };
-  const ended = game?.state.over ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, ...totals(game.state.run) } } : {};
+  const ended = game?.state.over && link.table !== undefined ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, ...totals(game.state, link.table) } } : {};
   if (!playing) return { ...base, ...ended, screen: game?.state.over ? "over" : "title" };
   const d = liveData(link);
   if (d === undefined || !link.ready) return { ...base, screen: "run", error: link.error ?? "game content not loaded yet" };

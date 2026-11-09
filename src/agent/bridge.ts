@@ -146,9 +146,9 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
   const chat: ChatMessage[] = [];
   let inFlight = 0;
   let lastPush = 0;
-  // The English text loads only when a run starts, after the content tables, so the encyclopedia
-  // goes up again each time more of it has arrived: -1 means not sent to this server yet.
-  let sentWithMessages = -1;
+  // The English text loads only when a run starts, after the content tables, and each run has its
+  // own rules, so the encyclopedia goes up again whenever either changed since it was last sent.
+  let sentWith: { messages: number; rules: object | undefined } | undefined;
   controller.store = {
     put: async (file) => {
       await gmCall("POST", `${origin}/bridge/checkpoint`, JSON.stringify(file));
@@ -236,7 +236,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
           if ("hello" in envelope) {
             connected = true;
             error = undefined;
-            sentWithMessages = -1;
+            sentWith = undefined;
             // The server replays its chat backlog after the hello.
             chat.length = 0;
             // This browser's settings win over whatever the server kept, so they survive its restarts.
@@ -265,13 +265,13 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
     const now = performance.now();
     if (now - lastPush < (inRun(link) ? RUN_INTERVAL_MS : IDLE_INTERVAL_MS)) return;
     lastPush = now;
-    const messages = Object.keys(link.messages).length;
-    if (sentWithMessages !== messages) {
+    const sending = { messages: Object.keys(link.messages).length, rules: link.game?.state.cfg };
+    if (sentWith?.messages !== sending.messages || sentWith.rules !== sending.rules) {
       const book = encyclopedia(link);
       if (book !== undefined) {
-        sentWithMessages = messages;
+        sentWith = sending;
         void post(origin, "/bridge/encyclopedia", book).then((ok) => {
-          if (!ok) sentWithMessages = -1;
+          if (!ok) sentWith = undefined;
         });
       }
     }

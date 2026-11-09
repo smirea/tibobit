@@ -203,6 +203,12 @@ export type RunTotals = {
   won: boolean;
   /** The source of the killing blow, once Tibo is dead. */
   killer?: string;
+  /** Every number the game counts over the run, by the game's own names: distance walked, dodges, peak enemies, curse time, Grok Bot helps, hits, crits, near misses and the rest. */
+  counters: Record<string, number>;
+  /** What each dog that joined has done, by breed id: when it joined and each kind of help the game counts (damage, healed, blocked, gold and so on). */
+  dogs: Record<string, Record<string, number>>;
+  /** What Spud Shrine picks have added to each stat so far, by the game's stat names. */
+  shrineStats: Record<string, number>;
 };
 
 /** A timed boost; `endsIn` is game seconds left, `mult` the gold or fire-rate multiplier. */
@@ -270,6 +276,8 @@ export type RunView = {
    * base), and flat values such as maxHp, armor, recovery, magnetRadius, luck, curse, critChance and evasion.
    */
   stats: Record<string, number>;
+  /** What passives, items, shrines and the like add to each stat, before the base, by the game's own stat names (might, area, maxHp, armor and so on); zeros left out. */
+  statBonuses: Record<string, number>;
   buffs: BuffView[];
   totals: RunTotals;
   /** The minutes still to come that bring a boss, an elite or an event, in order. */
@@ -281,10 +289,16 @@ export type RunView = {
   choice?: { kind: string; options: OptionView[]; raw?: unknown };
   bosses: (Rel & { id: string; name: string; hp: number; maxHp: number; damage: number; speed: number; radius: number })[];
   /** `elites` is every elite alive, nearest first, wherever it is; `uid` follows one enemy across snapshots. */
-  enemies: { total: number; nearest: EnemyView[]; elites: EnemyView[] };
+  enemies: {
+    total: number;
+    nearest: EnemyView[];
+    elites: EnemyView[];
+    /** Every kind alive, by enemy id, most numerous first: the count, the elites among them, the nearest one's distance and the strongest one's max hp, contact damage, speed and radius. */
+    kinds: Record<string, { name: string; count: number; elites: number; nearest: number; maxHp: number; damage: number; speed: number; radius: number }>;
+  };
   /** Counts by kind, every chest, and the nearest pickups that are not xp gems. */
   pickups: { counts: Record<string, number>; chests: PickupView[]; nearest: PickupView[] };
-  /** The 15 nearest unused points of interest. Standing inside one's circle charges it; `charge` and `chargeNeeded` are seconds. */
+  /** Every unused point of interest the game has placed in the loaded map, nearest first. Standing inside one's circle charges it; `charge` and `chargeNeeded` are seconds. */
   /** `description` is the game's own line for it, such as "An elite waits here. It drops a chest." */
   /** `price` is the gold a Potato Crate takes now (each one bought raises the next); `prices` a vendor's by item rarity. */
   /** `variant` names what a "bigUpdate" spot is, such as "chiliBottle" or "spudForge"; a variety place such as the chili bottle has `chargeNeeded` 0 because the game does not export its charge time. */
@@ -349,6 +363,13 @@ export type SectorView = {
 /** `charge` and `chargeNeeded` (seconds) appear on pickups you open by standing on them. */
 export type PickupView = Rel & { uid: number; kind: string; value: number; charge?: number; chargeNeeded?: number };
 
+/**
+ * The game's content, each entry its own definition plus all its English lines (name, desc and the
+ * like). `glossary` holds the English of kinds without a definition table, such as shrine stat
+ * labels and rarities, by kind and id. `rules` is the game's config for the run it held when this
+ * was taken (`rulesFor` names that run's difficulty): scaling, elites, bosses, economy, every spot's
+ * rules and the rest.
+ */
 export type Encyclopedia = {
   capturedAt: number;
   weapons: unknown[];
@@ -357,8 +378,14 @@ export type Encyclopedia = {
   recipes: unknown[];
   enemies: unknown[];
   bosses: unknown[];
+  dogs: unknown[];
   pois: unknown[];
+  events: unknown[];
+  botHelps: unknown[];
   biomes: unknown[];
+  glossary: Record<string, Record<string, Record<string, string>>>;
+  rules?: Record<string, unknown>;
+  rulesFor?: string;
 };
 
 function fail(message: string): never {

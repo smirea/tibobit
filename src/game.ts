@@ -33,7 +33,10 @@ export type Table = Content & {
   dogAt(index: number): { id: string };
   botHelpAt(index: number): { id: string };
   biomes: { id: string }[];
-  pois: { id?: string; kind?: string }[];
+  pois: { kind: string; radius: number }[];
+  dogs: { id: string }[];
+  events: { id: string }[];
+  botHelps: { id: string }[];
 };
 
 export type Offer = { type: "weapon" | "passive" | "item"; id: string; level?: number; isNew?: boolean };
@@ -75,6 +78,10 @@ export type GameState = {
     banishes: number;
     cursesTaken: number;
     revivesUsed: number;
+    /** What every Spud Shrine pick has added so far, by the game's stat names; zero for the rest. */
+    shrineTotals: Record<string, number>;
+    /** What passives, items, shrines and the like add to each stat before the base, by the game's stat names. */
+    totals: Record<string, number>;
     /** A class whose getters are the effective stats: maxHp, moveSpeedMult, armor, luck and so on. */
     stats: { maxHp: number; moveSpeedMult: number; revivals: number; dashCharges: number; dashCooldownMult: number };
   };
@@ -146,7 +153,13 @@ export type GameState = {
     shrinesUsed: number;
     itemsBought: number;
     revivesUsed: number;
+    /** Each dog that joined, with the game time it joined at. */
+    dogs: { id: string; at: number }[];
+    /** What each dog breed has done this run, one column per kind of help, indexed like the content table's dogs. */
+    dogHelp: Record<string, ArrayLike<number>>;
   };
+  /** Run-wide tallies the game keeps alongside `run`, such as hits, crits, shots and near misses. */
+  counters: Record<string, number>;
   /** Only on a Daily: its weather, and the gear kit Tibo wears, by slot. */
   daily?: { weather: string; kit: Record<string, { gear: string; lines: { affix: string; roll: number }[] }> };
 };

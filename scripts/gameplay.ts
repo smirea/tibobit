@@ -170,6 +170,18 @@ export const BLOCKS = {
   current_goal: "the goal under way and since when",
   recent_goals: "the last 6 goals and how each ended",
   weapon_damage: "damage dealt so far by each weapon held, most first, with its rate a minute, e.g. 'Damage dealt so far by weapon: Steam Vent 4012 (1783 a minute), Hash Hawk 2210 (982 a minute).' (not part of {{state}})",
+  stats: "every stat the game computes for Tibo now, by the game's own names (damageMult, maxHp, armor, recovery, magnetRadius, luck and the rest), what passives, items and shrines add to each, and what shrines alone have added",
+  resources: "rerolls, skips, banishes, revives left and curses held",
+  buffs: "timed boosts running, with seconds left",
+  schedule: "the coming minutes that bring a boss, an elite or an event, by the game's names",
+  enemy_kinds: "every kind of enemy alive, by the game's name: how many, how many elite, the nearest one's distance, max hp, contact damage and speed",
+  elites: "every elite alive: name, health, contact damage, distance and direction",
+  hazards: "terrain hazards and attack zones near Tibo, by the game's kind names, with shape, radius, distance and when a telegraphed attack lands",
+  pickups: "pickups on the ground counted by kind, and the nearest ones that are not xp gems with their kind, value and distance",
+  spots: "every unused spot on the loaded map, nearest first, with the game's name and description, distance, direction, charge, radius and price, then the game's rules for each kind listed",
+  dogs: "each of Tibo's dogs: name, breed, the game's description, level, the game's numbers for its ability and aura, and what it has done so far this run",
+  events: "the last 10 game events (bosses, banners, chests, evolutions, dogs joining) with their times",
+  counters: "every number the game has counted this run that is not zero: distance walked, hits, crits, near misses, dodges, peak enemies, gold, shrines used and the rest",
   state: "every block above except difficulty, mode and weapon_damage, one per line: the whole state",
 } as const;
 export type BlockName = keyof typeof BLOCKS;
@@ -1101,7 +1113,8 @@ export async function logForPrompt(file: string, limit: number): Promise<string>
 // changed between its start and its end; a full run reports the whole run.
 
 const COUNTERS = ["goldEarned", "goldSpent", "bossesKilled", "elitesKilled", "bossChests", "cratesBought", "shrinesUsed", "itemsBought", "revivesUsed"] as const;
-export type Totals = Pick<RunTotals, "kills" | "damageTaken" | "damageDealt" | "killsBy" | "made" | (typeof COUNTERS)[number]> & { killer?: string };
+// `counters`, `dogs` and `shrineStats` are absent from results saved before the game reported them.
+export type Totals = Pick<RunTotals, "kills" | "damageTaken" | "damageDealt" | "killsBy" | "made" | (typeof COUNTERS)[number]> & Partial<Pick<RunTotals, "counters" | "dogs" | "shrineStats">> & { killer?: string };
 
 const byKey = (end: Record<string, number>, start: Record<string, number>) =>
   Object.fromEntries(
@@ -1109,6 +1122,14 @@ const byKey = (end: Record<string, number>, start: Record<string, number>) =>
       .map(([k, v]) => [k, Math.round((v - (start[k] ?? 0)) * 10) / 10] as const)
       .filter(([, v]) => v > 0)
       .sort((a, b) => b[1] - a[1]),
+  );
+
+/** Every key whose number changed, by how much, keeping the game's order. */
+const changed = (end: Record<string, number> = {}, start: Record<string, number> = {}) =>
+  Object.fromEntries(
+    Object.entries(end)
+      .map(([k, v]) => [k, Math.round((v - (start[k] ?? 0)) * 1000) / 1000] as const)
+      .filter(([, v]) => v !== 0),
   );
 
 /** What happened between two snapshots' totals; `start` undefined counts the whole run. */
@@ -1123,12 +1144,24 @@ export function totalsBetween(end: RunTotals, start?: RunTotals): Totals {
     made: end.made.filter((m) => !s.made.some((x) => x.id === m.id)),
     ...(Object.fromEntries(COUNTERS.map((c) => [c, Math.round(end[c] - s[c])])) as Record<(typeof COUNTERS)[number], number>),
     ...(end.killer === undefined ? {} : { killer: end.killer }),
+    // A page on an older userscript sends none of these.
+    counters: changed(end.counters, s.counters),
+    dogs: Object.fromEntries(
+      Object.entries(end.dogs ?? {})
+        .map(([id, did]) => {
+          const before = s.dogs?.[id];
+          const { joinedAt, ...help } = did;
+          return [id, { ...(before === undefined && joinedAt !== undefined ? { joinedAt } : {}), ...changed(help, before) }] as const;
+        })
+        .filter(([, did]) => Object.keys(did).length > 0),
+    ),
+    shrineStats: changed(end.shrineStats, s.shrineStats),
   };
 }
 
 /** The stats as lines a coach reads. */
 export function totalsLines(t: Totals): string[] {
-  const list = (r: Record<string, number>, limit = 8) => Object.entries(r).slice(0, limit).map(([k, v]) => `${k} ${v}`).join(", ") || "none";
+  const list = (r: Record<string, number>) => Object.entries(r).map(([k, v]) => `${k} ${v}`).join(", ") || "none";
   const sum = (r: Record<string, number>) => Math.round(Object.values(r).reduce((a, b) => a + b, 0));
   return [
     `Damage taken ${sum(t.damageTaken)}, by source: ${list(t.damageTaken)}${t.killer === undefined ? "" : `; the killing blow: ${t.killer}`}.`,
@@ -1136,6 +1169,9 @@ export function totalsLines(t: Totals): string[] {
     `Kills ${t.kills}, by weapon: ${list(t.killsBy)}.`,
     `Bosses killed ${t.bossesKilled}, elites killed ${t.elitesKilled}, boss chests ${t.bossChests}, crates bought ${t.cratesBought}, shrines used ${t.shrinesUsed}, items bought ${t.itemsBought}, revives used ${t.revivesUsed}; gold earned ${t.goldEarned}, spent ${t.goldSpent}.`,
     `Made: ${t.made.map((m) => `${m.id} at ${clock(m.at)}`).join(", ") || "no evolution, union or evolved item"}.`,
+    ...(t.shrineStats === undefined ? [] : [`Stats added by shrines: ${list(t.shrineStats)}.`]),
+    ...(t.dogs === undefined ? [] : [`Dogs: ${Object.entries(t.dogs).map(([id, did]) => `${id} (${list(did)})`).join("; ") || "none"}.`]),
+    ...(t.counters === undefined ? [] : [`Everything else the game counted: ${list(t.counters)}.`]),
   ];
 }
 

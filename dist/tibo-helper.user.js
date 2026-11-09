@@ -140,20 +140,37 @@
   function plain(value) {
     return JSON.parse(JSON.stringify(value, (_k, v) => v instanceof Map ? Object.fromEntries(v) : v instanceof Set ? [...v] : v));
   }
+  function textOf(link, kind, id) {
+    const prefix = `content.${kind}.${id}.`;
+    const out = {};
+    for (const [key, lines] of Object.entries(link.messages))
+      if (key.startsWith(prefix) && lines.length > 0)
+        out[key.slice(prefix.length)] = lines.join(`
+`);
+    return out;
+  }
   function encyclopedia(link) {
     const table = link.table;
     if (table === undefined || !link.ready)
       return;
     const catalog = buildCatalog(table, link.messages);
-    const text = (kind, id) => ({
-      name: link.message(`content.${kind}.${id}.name`) ?? id,
-      ...link.message(`content.${kind}.${id}.desc`) === undefined ? {} : { description: link.message(`content.${kind}.${id}.desc`) }
-    });
-    const withText = (kind, defs) => defs.map((d) => ({ ...text(kind, d.id), ...plain(d) }));
+    const withText = (kind, defs) => defs.map((d) => ({ ...textOf(link, kind, d.id), ...plain(d) }));
     const maxLevel = (key) => catalog.maxLevel[key];
+    const state = link.game?.state;
+    const rules = state === undefined ? undefined : plain(state.cfg);
+    const activation = state?.cfg.activation.seconds ?? {};
+    const tabled = new Set(["weapon", "passive", "item", "enemy", "boss", "dog", "poi", "biome", "event", "botHelp"]);
+    const glossary = {};
+    for (const key of Object.keys(link.messages)) {
+      const m = key.match(/^content\.([^.]+)\.([^.]+)\.[^.]+$/);
+      if (m === null || tabled.has(m[1] ?? ""))
+        continue;
+      const [, kind = "", id = ""] = m;
+      (glossary[kind] ??= {})[id] ??= textOf(link, kind, id);
+    }
     return {
       capturedAt: Date.now(),
-      weapons: table.allWeapons.map((w) => ({ ...text("weapon", w.id), maxLevel: maxLevel(`weapon:${w.id}`) ?? 1, ...plain(w) })),
+      weapons: table.allWeapons.map((w) => ({ ...textOf(link, "weapon", w.id), maxLevel: maxLevel(`weapon:${w.id}`) ?? 1, ...plain(w) })),
       passives: withText("passive", table.passives),
       items: withText("item", table.allItems),
       recipes: catalog.recipes.map(toCombo).map((c) => ({
@@ -163,9 +180,19 @@
         parts: c.parts.map((p) => ({ ...p, name: nameOf(catalog, p.key) }))
       })),
       enemies: withText("enemy", table.enemies),
-      bosses: table.bossIds.map((id) => ({ id, ...text("boss", id), title: link.message(`content.boss.${id}.title`) })),
-      pois: Object.keys(link.messages).map((k) => k.match(/^content\.poi\.([^.]+)\.name$/)?.[1]).filter((kind) => kind !== undefined).map((kind) => ({ kind, ...text("poi", kind) })),
-      biomes: withText("biome", table.biomes)
+      bosses: table.bossIds.map((id) => ({ id, ...textOf(link, "boss", id) })),
+      dogs: withText("dog", table.dogs),
+      pois: table.pois.map((p) => ({
+        ...textOf(link, "poi", p.kind),
+        ...plain(p),
+        ...activation[p.kind] === undefined ? {} : { chargeSeconds: activation[p.kind] },
+        ...rules?.[p.kind] === undefined ? {} : { rules: rules[p.kind] }
+      })),
+      events: withText("event", table.events),
+      botHelps: withText("botHelp", table.botHelps),
+      biomes: withText("biome", table.biomes),
+      glossary,
+      ...state === undefined || rules === undefined ? {} : { rules, rulesFor: state.difficulty === "nightmare" ? `nightmare-${state.cfg.ladder.level}` : state.difficulty }
     };
   }
 
@@ -382,7 +409,6 @@
   var NEAREST = 10;
   var TICKS_PER_SECOND = 60;
   var HAZARD_RANGE = 600;
-  var MAX_POIS = 15;
   var SECTOR_RANGE = 300;
   var PATH_AHEAD = 60;
   var HURT_WINDOW_TICKS = 180;
@@ -415,7 +441,36 @@
   }
   var round = (n) => Math.round(n * 10) / 10;
   var EVENT_NAMES = { bossSpawn: "boss", bossDefeated: "boss", biome: "biome", grokBotHelp: "botHelp", dogJoined: "dog" };
-  function totals(run) {
+  var numbers = (o) => Object.fromEntries(Object.entries(o).filter((e) => typeof e[1] === "number" && Number.isFinite(e[1])).map(([k, v]) => [k, round(v)]));
+  function dogs(run, table) {
+    const out = {};
+    for (const dog of run.dogs)
+      out[dog.id] = { joinedAt: round(dog.at) };
+    for (const [help, column] of Object.entries(run.dogHelp))
+      for (let i = 0;i < column.length; i++) {
+        const v = column[i] ?? 0;
+        if (v === 0)
+          continue;
+        const id = table.dogAt(i).id;
+        (out[id] ??= {})[help] = round(v);
+      }
+    return out;
+  }
+  function enemyKinds(enemies) {
+    const out = {};
+    for (const e of enemies) {
+      const k = out[e.id] ??= { name: e.name, count: 0, elites: 0, nearest: e.dist, maxHp: e.maxHp, damage: e.damage, speed: e.speed, radius: e.radius };
+      k.count++;
+      if (e.elite)
+        k.elites++;
+      k.nearest = Math.min(k.nearest, e.dist);
+      k.maxHp = Math.max(k.maxHp, e.maxHp);
+      k.damage = Math.max(k.damage, e.damage);
+    }
+    return Object.fromEntries(Object.entries(out).sort((a, b) => b[1].count - a[1].count));
+  }
+  function totals(s, table) {
+    const run = s.run;
     return {
       kills: run.kills,
       damageTaken: byDamage(run.damageTakenBySource),
@@ -432,7 +487,10 @@
       made: [...run.evolutions, ...run.unions, ...run.itemEvolutions].map((m) => ({ id: m.id, at: round(m.at) })),
       revivesUsed: run.revivesUsed,
       won: run.won,
-      ...run.killer === "" ? {} : { killer: run.killer }
+      ...run.killer === "" ? {} : { killer: run.killer },
+      counters: { ...numbers(s.counters), ...numbers(run) },
+      dogs: dogs(run, table),
+      shrineStats: Object.fromEntries(Object.entries(numbers(s.loadout.shrineTotals)).filter(([, v]) => v !== 0))
     };
   }
   function statValues(stats) {
@@ -684,7 +742,7 @@
         ...p.kind === "paidChest" && cratePrice !== undefined ? { price: cratePrice } : {},
         ...p.kind === "vendor" && economy?.vendorPrice !== undefined ? { prices: economy.vendorPrice } : {}
       };
-    }).sort((a, b) => a.dist - b.dist).slice(0, MAX_POIS);
+    }).sort((a, b) => a.dist - b.dist);
     const zoneKind = Object.fromEntries(Object.entries(enums.zoneKinds).map(([k, v]) => [v, k]));
     const zoneShape = Object.fromEntries(Object.entries(enums.zoneShapes).map(([k, v]) => [v, k]));
     const px = s.player.x[me] ?? 0;
@@ -924,8 +982,9 @@
         banished: [...s.loadout.banished]
       },
       stats: statValues(stats),
+      statBonuses: Object.fromEntries(Object.entries(numbers(s.loadout.totals)).filter(([, v]) => v !== 0)),
       buffs: buffs(s),
-      totals: totals(s.run),
+      totals: totals(s, table),
       schedule,
       events,
       combos: relevantCombos(d.combos, loadout).map((c) => comboView(d, discovery, c, loadout)),
@@ -943,7 +1002,7 @@
       })),
       ...choice === undefined ? {} : { choice: { kind: choice.kind, options: options(d, discovery, loadout, s.loadout.banished), raw: toJson(choice) } },
       bosses: bosses.sort((a, b) => a.dist - b.dist),
-      enemies: { total: enemies.length, nearest: nearest(enemies), elites: enemies.filter((e) => e.elite).sort((a, b) => a.dist - b.dist) },
+      enemies: { total: enemies.length, nearest: nearest(enemies), elites: enemies.filter((e) => e.elite).sort((a, b) => a.dist - b.dist), kinds: enemyKinds(enemies) },
       pickups: { counts, chests: chests.sort((a, b) => a.dist - b.dist), nearest: nearest(loose) },
       pois,
       hazards: nearest(hazards, 20),
@@ -986,7 +1045,7 @@
       ...link.runLink === undefined ? {} : { lastRunLink: link.runLink },
       ...mode === undefined ? {} : { mode }
     };
-    const ended = game?.state.over ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, ...totals(game.state.run) } } : {};
+    const ended = game?.state.over && link.table !== undefined ? { lastRun: { time: round(game.state.runClock), level: game.state.run.level, ...totals(game.state, link.table) } } : {};
     if (!playing)
       return { ...base, ...ended, screen: game?.state.over ? "over" : "title" };
     const d = liveData(link);
@@ -1085,7 +1144,7 @@
     const chat = [];
     let inFlight = 0;
     let lastPush = 0;
-    let sentWithMessages = -1;
+    let sentWith;
     controller.store = {
       put: async (file) => {
         await gmCall("POST", `${origin}/bridge/checkpoint`, JSON.stringify(file));
@@ -1175,7 +1234,7 @@
             if ("hello" in envelope) {
               connected = true;
               error = undefined;
-              sentWithMessages = -1;
+              sentWith = undefined;
               chat.length = 0;
               post(origin, "/pilot", asChange(settings));
               notify();
@@ -1205,14 +1264,14 @@
       if (now - lastPush < (inRun(link) ? RUN_INTERVAL_MS : IDLE_INTERVAL_MS))
         return;
       lastPush = now;
-      const messages = Object.keys(link.messages).length;
-      if (sentWithMessages !== messages) {
+      const sending = { messages: Object.keys(link.messages).length, rules: link.game?.state.cfg };
+      if (sentWith?.messages !== sending.messages || sentWith.rules !== sending.rules) {
         const book = encyclopedia(link);
         if (book !== undefined) {
-          sentWithMessages = messages;
+          sentWith = sending;
           post(origin, "/bridge/encyclopedia", book).then((ok) => {
             if (!ok)
-              sentWithMessages = -1;
+              sentWith = undefined;
           });
         }
       }

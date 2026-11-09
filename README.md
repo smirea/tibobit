@@ -50,7 +50,7 @@ To use a server on another port, type the port into **Agent port** and press **C
 | Endpoint | What it does |
 | --- | --- |
 | `GET /state` | Latest snapshot: screen, the mode the game is on (`mode`: the open mode screen, else the current or last run), difficulty, score, biome and landmark, a Daily's weather and gear, player (with dash cooldown, stun, freeze, slow, revives, rerolls, skips, banishes and curses), loadout, effective stats, active buffs, run totals (damage dealt and taken and kills by source, gold, chests, evolutions), the schedule of bosses, elites and events by minute, the latest game events (boss spawns and kills, banners, chests, evolutions, level-ups), reachable combos, the panel's unpaired rows (`unpaired`), the open choice with every pairing of every option, bosses, nearest enemies, pickups, points of interest, hazards, enemy bullets and the volleys about to fire, dogs, Grok Bots and visitors. |
-| `GET /encyclopedia` | Every weapon, passive, item, recipe, enemy, boss, point of interest and biome, with English names, descriptions and the game's own stats. |
+| `GET /encyclopedia` | Every weapon, passive, item, recipe, enemy, boss, dog, point of interest, event, Grok Bot help and biome, each the game's own definition with all its English lines, plus a glossary (shrine stat labels, rarities and the like) and the game's rules for the run it holds (`rules`), with each spot's charge time and rules beside it. |
 | `POST /command` | Runs one JSON command. Add `?wait=1` to block until it finishes. |
 | `WS /ws` | Pushes every snapshot as it arrives. Send a JSON command to run it. |
 

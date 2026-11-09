@@ -261,6 +261,15 @@ class RunNotes {
 }
 
 const pct = (part: number, whole: number) => Math.round((100 * part) / Math.max(1, whole));
+/** A damage source ("enemy:<id>", "boss:<id>" or a ground name such as "Hot oil") with the game's name for it when one is in sight. */
+function gameName(r: RunView, source: string): string {
+  const [kind, id = ""] = source.split(":");
+  const name = kind === "enemy" ? r.enemies.kinds[id]?.name : kind === "boss" ? r.bosses.find((b) => b.id === id)?.name : undefined;
+  return name === undefined ? source : `${name} (${source})`;
+}
+
+/** A record as "key value, key value", in the game's own keys. */
+const fields = (o: Record<string, unknown>) => Object.entries(o).map(([k, v]) => `${k} ${typeof v === "object" ? JSON.stringify(v) : v}`).join(", ");
 const near = (r: RunView) => r.sectors.reduce((n, s) => n + s.enemiesNear, 0);
 
 // ---- Run log -------------------------------------------------------------------------------
@@ -400,6 +409,8 @@ class RunLog {
 // The planner reads the game's own description of every card it holds or is offered.
 type Book = Map<string, string>;
 let book: Book | undefined;
+/** The game's own definitions of dogs and spots, keyed "dog:<id>" and "poi:<kind>", with their English lines and, for a spot, its charge time and rules. */
+const defs = new Map<string, Record<string, unknown>>();
 
 /** What each evolution, union or item evolution is made of, by the result's name, from the game's recipes. */
 const recipeParts = new Map<string, string>();
@@ -415,6 +426,8 @@ async function readBook(): Promise<Book> {
       ["item", e.items],
     ] as const)
       for (const d of defs as { id?: string; description?: string }[]) if (d.id !== undefined && d.description !== undefined) out.set(`${kind}:${d.id}`, d.description);
+    for (const d of e.dogs as Record<string, unknown>[]) if (typeof d.id === "string") defs.set(`dog:${d.id}`, d);
+    for (const d of e.pois as Record<string, unknown>[]) if (typeof d.kind === "string") defs.set(`poi:${d.kind}`, d);
     for (const r of e.recipes as { name?: string; parts?: { name?: string; need?: string }[] }[])
       if (r.name !== undefined && r.parts !== undefined) recipeParts.set(r.name, r.parts.map((x) => `${x.name}${x.need === "max" ? " at max level" : ""}`).join(" + "));
     book = out;
@@ -1067,8 +1080,8 @@ function blocks(r: RunView, b: Book): Record<BlockName, () => string> {
       const ready = r.combos.filter((c) => c.ready && c.kind !== "union").map((c) => c.name);
       return ready.length === 0 ? "No recipe is complete yet." : `The next chest opened evolves ${ready.join(" and ")}.`;
     },
-    standing_on: () => `Tibo stands ${spotLine(r) ?? "on no chest or spot"}.${r.hazards.some((h) => h.inside) ? ` Underfoot: ${r.hazards.filter((h) => h.inside).map((h) => hazardWords(h.kind)).join(", ")}.` : ""}`,
-    hurt_by: () => `Hurt in the last 3 seconds by: ${Object.entries(p.hurtBy).map(([k, n]) => `${sourceWords(k)} ${n}`).join(", ") || "nothing"}.`,
+    standing_on: () => `Tibo stands ${spotLine(r) ?? "on no chest or spot"}.${r.hazards.some((h) => h.inside) ? ` Underfoot: ${r.hazards.filter((h) => h.inside).map((h) => `${h.kind} (${h.source})`).join(", ")}.` : ""}`,
+    hurt_by: () => `Hurt in the last 3 seconds by: ${Object.entries(p.hurtBy).map(([k, n]) => `${gameName(r, k)} ${n}`).join(", ") || "nothing"}.`,
     bosses: () => `Bosses: ${r.bosses.map((x) => `${x.name} (${x.id}) ${Math.round(x.dist)} away to the ${x.dir}, ${pct(x.hp, x.maxHp)}% health`).join("; ") || "none"}.`,
     enemies: () => {
       const crowd = [...r.sectors].sort((a, z) => z.enemiesFar - a.enemiesFar);
@@ -1076,6 +1089,43 @@ function blocks(r: RunView, b: Book): Record<BlockName, () => string> {
     },
     current_goal: () => `Current goal: ${pursuit === undefined ? "none" : `${pursuit.title}, since ${clock(pursuit.since)}`}.`,
     recent_goals: () => `Recent goals: ${outcomes.slice(-6).map((o) => `${clock(o.time)} ${o.title}: ${o.outcome}`).join("; ") || "none yet"}.`,
+    stats: () =>
+      `Stats: ${fields(r.stats)}.${Object.keys(r.statBonuses).length === 0 ? "" : ` Added by passives, items, shrines and the like: ${fields(r.statBonuses)}.`}${Object.keys(r.totals.shrineStats).length === 0 ? "" : ` Added by shrines alone: ${fields(r.totals.shrineStats)}.`}`,
+    resources: () => `Rerolls ${p.rerolls}, skips ${p.skips}, banishes ${p.banishes}, revives left ${p.revivesLeft}, curses held ${p.curses}.`,
+    spots: () => {
+      if (r.pois.length === 0) return "Spots: none on the loaded map.";
+      const kinds = [...new Set(r.pois.map((x) => x.kind))];
+      const rules = kinds.flatMap((k) => {
+        const d = defs.get(`poi:${k}`)?.rules;
+        return d === undefined ? [] : [`\n  - ${k}: ${JSON.stringify(d)}`];
+      });
+      return `Spots on the loaded map, nearest first:${r.pois
+        .map((x) => `\n  - ${x.name} (${x.kind}) ${Math.round(x.dist)} away to the ${x.dir}${x.description === "" ? "" : `: ${x.description}`} Charged ${x.charge} of ${x.chargeNeeded} s, radius ${x.radius}${x.price === undefined ? "" : `, price ${x.price} gold`}${x.prices === undefined ? "" : `, item prices by rarity ${x.prices.join(", ")} gold`}.`)
+        .join("")}${rules.length === 0 ? "" : `\nThe game's rules for these kinds of spot:${rules.join("")}`}`;
+    },
+    dogs: () =>
+      r.pets.length === 0
+        ? "Dogs: none."
+        : `Dogs:${r.pets
+            .map((x) => {
+              const d = defs.get(`dog:${x.id}`) ?? {};
+              const facts = Object.entries(d).filter(([k]) => !["id", "name", "desc", "breed"].includes(k));
+              const did = r.totals.dogs[x.id];
+              return `\n  - ${x.name}${typeof d.breed === "string" ? ` (${d.breed})` : ""} level ${x.level}, ${Math.round(x.dist)} away to the ${x.dir}${typeof d.desc === "string" ? `: ${d.desc}` : ""} The game's numbers: ${facts.map(([k, v]) => `${k} ${JSON.stringify(v)}`).join(", ")}.${did === undefined ? "" : ` So far: ${fields(did)}.`}`;
+            })
+            .join("")}`,
+    pickups: () =>
+      `Pickups on the ground by kind: ${fields(r.pickups.counts) || "none"}. Nearest that are not xp gems: ${r.pickups.nearest.map((x) => `${x.kind} worth ${x.value} ${Math.round(x.dist)} away to the ${x.dir}`).join("; ") || "none"}.`,
+    buffs: () => `Timed boosts: ${r.buffs.map((x) => `${x.id} ${x.endsIn} s left${x.mult === undefined ? "" : ` (x${x.mult})`}`).join(", ") || "none"}.`,
+    schedule: () =>
+      `Coming up: ${r.schedule.map((w) => `minute ${w.minute}: ${[...(w.boss === undefined ? [] : [`boss ${w.boss.name} (${w.boss.id})`]), ...(w.elite ? ["an elite"] : []), ...w.events.map((e) => `event ${e.name} (${e.id})`)].join(", ")}`).join("; ") || "nothing scheduled"}.`,
+    hazards: () =>
+      `Hazards and attack zones nearby: ${r.hazards.map((h) => `${h.kind} (${h.source}, ${h.shape}, radius ${h.radius}) ${h.inside ? "under Tibo" : `${Math.round(h.dist)} away to the ${h.dir}`}${h.landsIn === undefined ? "" : `, lands in ${h.landsIn} s`}`).join("; ") || "none"}.`,
+    events: () => `Recent game events: ${r.events.slice(-10).map((e) => `${clock(e.time)} ${e.type}${e.name === undefined ? "" : ` ${e.name}`}${e.text === undefined ? "" : `: ${e.text}`}`).join("; ") || "none"}.`,
+    enemy_kinds: () =>
+      `Enemies alive by kind: ${Object.entries(r.enemies.kinds).map(([id, k]) => `${k.name} (${id}) ${k.count}${k.elites === 0 ? "" : `, ${k.elites} elite`}, nearest ${Math.round(k.nearest)} away, max hp ${k.maxHp}, contact damage ${k.damage}, speed ${k.speed}`).join("; ") || "none"}.`,
+    elites: () => `Elites alive: ${r.enemies.elites.map((e) => `${e.name} (${e.id}) ${e.hp}/${e.maxHp} hp, contact damage ${e.damage}, ${Math.round(e.dist)} away to the ${e.dir}`).join("; ") || "none"}.`,
+    counters: () => `What the game has counted this run: ${fields(Object.fromEntries(Object.entries(r.totals.counters).filter(([, n]) => n !== 0)))}.`,
     weapon_damage: () => {
       const dealt = r.totals.damageDealt;
       const minutes = Math.max(r.time, 1) / 60;
@@ -1098,6 +1148,18 @@ function blocks(r: RunView, b: Book): Record<BlockName, () => string> {
       v.enemies(),
       v.current_goal(),
       v.recent_goals(),
+      v.stats(),
+      v.resources(),
+      v.buffs(),
+      v.schedule(),
+      v.enemy_kinds(),
+      v.elites(),
+      v.hazards(),
+      v.pickups(),
+      v.spots(),
+      v.dogs(),
+      v.events(),
+      v.counters(),
     ].join("\n");
   return { ...v, state };
 }
