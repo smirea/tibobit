@@ -2,7 +2,7 @@
 import { mkdir, readdir, rename } from "node:fs/promises";
 import path from "node:path";
 import type { ServerWebSocket, Subprocess } from "bun";
-import { BRIDGE_PORT, CHECKPOINT_NAME, type CheckpointMeta, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, DEFAULT_SETTINGS, type PilotChange, type PilotSettings, parseChatLine, parseCommand, parsePilotChange, trimChat } from "../src/agent/protocol";
+import { BRIDGE_PORT, CHECKPOINT_NAME, type RawGroup, parseRaw, withoutRaw, type CheckpointMeta, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, DEFAULT_SETTINGS, type PilotChange, type PilotSettings, parseChatLine, parseCommand, parsePilotChange, trimChat } from "../src/agent/protocol";
 
 const KEEPALIVE_MS = 5_000;
 const option = (name: string, fallback: string) => {
@@ -32,7 +32,7 @@ let page: ReadableStreamDefaultController<Uint8Array> | undefined;
 // Which tab holds the stream, so that tab can take it back when its old stream outlives a reconnect.
 let pageTab: string | undefined;
 let nextId = 1;
-const sockets = new Set<ServerWebSocket<unknown>>();
+const sockets = new Set<ServerWebSocket<{ raw: RawGroup[] }>>();
 const waiters = new Set<() => void>();
 const encoder = new TextEncoder();
 
@@ -111,12 +111,13 @@ async function jsonBody(req: Request): Promise<unknown> {
   return req.json();
 }
 
-function state() {
+/** The latest snapshot for a client, with only the raw groups it asked for. */
+function state(raw: RawGroup[] = []) {
   if (latest === undefined) return undefined;
   // The settings tell a running bot, every step, how often to plan and act and whether to keep
   // notes. Only a bot the panel started follows them; one started by hand keeps its own flags.
   const settings: Partial<PilotSettings> = pilot.state === "off" ? {} : { pace: pilot.pace, incognito: pilot.incognito };
-  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, ...settings, ...latest.snapshot };
+  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, ...settings, ...withoutRaw(latest.snapshot, raw) };
 }
 
 function statusOf(id: number): CommandStatus | undefined {
@@ -162,10 +163,12 @@ function errorResponse(e: unknown, status = 400) {
 
 const HELP = `tibo.dog agent server
 
-GET  /state          latest game snapshot (positions are world units, +x right, +y down)
+GET  /state          latest snapshot: the game state (its per-entity lists left out), surroundings and forecast;
+                     ?raw=pickups,enemies,bullets,emitters,zones,projectiles,activeHazards (or all) adds those lists,
+                     which are large and mostly noise: read surroundings and forecast first
+WS   /ws?raw=...     pushes every snapshot, raw groups as for /state; send a JSON command to run it
 GET  /encyclopedia   every weapon, passive, item, recipe, enemy, boss, point of interest and biome
 POST /command        JSON command, see src/agent/protocol.ts; add ?wait=1 to block until it finishes
-WS   /ws             pushes every snapshot; send a JSON command to run it
 POST /pilot          {"on": true} starts the bot for the tab ("Grok take the wheel"), {"on": false} stops it;
                      {"planEvery": 5, "actEvery": 0.3} sets how often, in seconds, it plans and takes a step;
                      {"incognito": true} has it just play: no notes, no review
@@ -173,7 +176,7 @@ GET  /checkpoints    the saved checkpoints' summaries, oldest first (see the che
 POST /pilot/say      the bot's chat line for the panel: {"role": "planner" | "action" | "system", "text", "detail"?, "model"?, "time"?}
 `;
 
-const server = Bun.serve({
+const server = Bun.serve<{ raw: RawGroup[] }>({
   hostname: "127.0.0.1",
   port: PORT,
   idleTimeout: 0,
@@ -184,8 +187,15 @@ const server = Bun.serve({
       switch (route) {
         case "GET /":
           return new Response(HELP);
-        case "GET /ws":
-          return srv.upgrade(req) ? undefined : errorResponse("websocket upgrade failed");
+        case "GET /ws": {
+          let raw: RawGroup[];
+          try {
+            raw = parseRaw(url.searchParams.get("raw"));
+          } catch (e) {
+            return errorResponse(e, 400);
+          }
+          return srv.upgrade(req, { data: { raw } }) ? undefined : errorResponse("websocket upgrade failed");
+        }
         case "GET /bridge/commands": {
           // One game tab at a time; a second tab keeps retrying until the first goes away.
           const tab = url.searchParams.get("tab") ?? undefined;
@@ -228,10 +238,7 @@ const server = Bun.serve({
         case "POST /bridge/state": {
           latest = { snapshot: (await req.json()) as Snapshot };
           for (const done of [...waiters]) done();
-          if (sockets.size > 0) {
-            const text = JSON.stringify(state());
-            for (const ws of sockets) ws.send(text);
-          }
+          for (const ws of sockets) ws.send(JSON.stringify(state(ws.data.raw)));
           return new Response(null, { status: 204 });
         }
         case "POST /bridge/encyclopedia":
@@ -239,7 +246,13 @@ const server = Bun.serve({
           console.log(`encyclopedia: ${book.weapons.length} weapons, ${book.passives.length} passives, ${book.items.length} items, ${book.dogs.length} dogs, ${book.pois.length} pois`);
           return new Response(null, { status: 204 });
         case "GET /state": {
-          const s = state();
+          let raw: RawGroup[];
+          try {
+            raw = parseRaw(url.searchParams.get("raw"));
+          } catch (e) {
+            return errorResponse(e, 400);
+          }
+          const s = state(raw);
           return s === undefined ? errorResponse("no snapshot yet; is the tibo.dog tab open?", 503) : Response.json(s);
         }
         case "POST /pilot": {
@@ -305,7 +318,7 @@ const server = Bun.serve({
   websocket: {
     open(ws) {
       sockets.add(ws);
-      const s = state();
+      const s = state(ws.data.raw);
       if (s !== undefined) ws.send(JSON.stringify(s));
     },
     close(ws) {

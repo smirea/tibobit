@@ -10,13 +10,21 @@ import {
 
 const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
 
-  state [path] [--format text|json]
+  state [path] [--format text|json] [--raw=<groups>]
                                   the snapshot: \`game\` is the game's state object under its own keys
-                                  (src/agent/reflect.ts says how it is made into JSON), plus the screen,
-                                  the game's localStorage and the commands. A path such as game.loadout
-                                  or game.enemies shows only that part. text is an indented tree, with a
-                                  list of entries as a table; json is it all on one line
-  watch [path]                    the text state, refreshed 4 times a second
+                                  (src/agent/reflect.ts says how it is made into JSON), \`surroundings\`
+                                  and \`forecast\` say what is around Tibo and what each move would cost,
+                                  plus the screen, the game's localStorage and the commands. A path such
+                                  as game.loadout or surroundings shows only that part. text is an
+                                  indented tree, with a list of entries as a table; json is it all on
+                                  one line.
+                                  --raw adds the game's per-entity lists, left out by default:
+                                  pickups, enemies, bullets, emitters, zones, projectiles, activeHazards,
+                                  or all.
+                                  They are large and mostly noise, and surroundings and forecast already
+                                  say what in them matters. Ask for one only to look into something
+                                  those cannot show.
+  watch [path] [--raw=<groups>]   the text state, refreshed 4 times a second
   encyclopedia [section]          JSON of the game's content: weapons, passives, items, recipes, enemies,
                                   bosses, dogs, pois, events, botHelps, biomes, glossary, rules
   move <dir|degrees> [seconds]    dir: up, down, left, right, up-left, up-right, down-left, down-right
@@ -127,6 +135,12 @@ function pick(s: Snap, path: string | undefined): unknown {
   return v;
 }
 
+/** /state, with the raw groups `--raw=a,b` or `--raw a,b` names. */
+function stateRoute(words: string[]): string {
+  const raw = words.find((w) => w.startsWith("--raw="))?.slice("--raw=".length) ?? flag([...words], "--raw");
+  return raw === undefined ? "/state" : `/state?raw=${encodeURIComponent(raw)}`;
+}
+
 function render(s: Snap, path: string | undefined): string {
   const lines = tree(pick(s, path));
   if (!s.connected) lines.unshift("the tibo.dog tab is not connected");
@@ -213,15 +227,15 @@ async function main(argv: string[]) {
       const inline = words.find((w) => w.startsWith("--format="));
       const format = inline?.slice("--format=".length) ?? (words.includes("--format") ? (flag(words, "--format") ?? "") : "text");
       if (format !== "text" && format !== "json") throw new Error(`--format must be text or json, got ${format}`);
-      const path = words.slice(1).find((w) => !w.startsWith("--"));
-      const s = await api<Snap>("/state");
+      const path = words.slice(1).find((w) => !w.startsWith("--") && w !== flag([...words], "--raw"));
+      const s = await api<Snap>(stateRoute(words));
       console.log(format === "json" ? JSON.stringify(pick(s, path)) : render(s, path));
       return;
     }
     case "watch": {
-      const path = words[1];
+      const path = words.slice(1).find((w) => !w.startsWith("--") && w !== flag([...words], "--raw"));
       for (;;) {
-        const s = await api<Snap>("/state").catch((e: Error) => e);
+        const s = await api<Snap>(stateRoute(words)).catch((e: Error) => e);
         process.stdout.write(`\x1b[2J\x1b[H${s instanceof Error ? s.message : render(s, path)}\n`);
         await Bun.sleep(250);
       }

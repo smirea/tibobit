@@ -5,7 +5,7 @@
 // damage taken lately. None of it is sent anywhere as game state.
 import { type Catalog, type Combo, type Key, type Loadout, buildCatalog, combosUsing, comboProgress, idOf, nameOf, partState, partner, relevantCombos, toCombo } from "../src/catalog";
 import type { Content, Messages } from "../src/game";
-import { DIRECTIONS, type Direction, type Encyclopedia, type Forecast, type Snapshot } from "../src/agent/protocol";
+import { DIRECTIONS, type Direction, type Encyclopedia, type Forecast, type Snapshot, type Surroundings } from "../src/agent/protocol";
 
 type Row = { uid: number; slot: number; x: number; y: number };
 type Owned = { def: string; level: number };
@@ -46,12 +46,9 @@ export type GameJson = {
     totals: Record<string, number>;
     shrineTotals: Record<string, number>;
   };
-  enemies: (Row & { def: string; flags: string[]; hp: number; maxHp: number; damage: number; speed: number; radius: number })[];
   bosses: (Row & { def: string; hp: number; maxHp: number; damage: number; speed: number; radius: number })[];
-  pickups: (Row & { kind: string; value: number; charge: number })[];
-  bullets: (Row & { vx: number; vy: number; radius: number })[];
   pets: (Row & { breed: string; level: number })[];
-  world: { activePois: Poi[]; activeHazards: { kind: string; x: number; y: number; radius: number }[] };
+  world: { activePois: Poi[] };
   waves: { rows: { minute: number; boss?: string; elite?: boolean; events?: string[] }[] };
   choiceQueue: Choice[];
   run: Record<string, unknown> & { damageTakenBySource: Record<string, number>; damageBySource: Record<string, number>; elitesKilled: number; dogHelp: Record<string, Record<string, number>> };
@@ -130,18 +127,22 @@ export function readBook(e: Encyclopedia): Book {
 /** The game's English line for a content entry, such as its name or desc, or undefined when the game has none. */
 export const line = (b: Book, kind: string, id: string, field = "name") => b.text.get(`${kind}:${id}`)?.[field];
 
-export type Enemy = GameJson["enemies"][number] & Placed & { name: string; elite: boolean };
+/** An elite: the game's own enemy entry, as `surroundings.elites` gives it, with its English name. */
+export type Elite = Row & Placed & { def: string; hp: number; maxHp: number; damage: number; name: string };
 /** `charged` and `chargeNeeded` are seconds (the game counts charge in ticks); `price` is what a Potato Crate takes now, `prices` a vendor's by rarity. */
 export type Spot = Poi & Placed & { uid: number; name: string; description: string; inside: boolean; charged: number; chargeNeeded: number; price?: number; prices?: number[] };
 /** `charged` and `chargeNeeded` are seconds, for a pickup opened by standing on it, such as a chest. */
-export type Pickup = GameJson["pickups"][number] & Placed & { charged: number; chargeNeeded?: number };
-export type Sector = { dir: Direction; enemiesNear: number; enemiesFar: number; nearestBullet: number | null; xpNear: number };
+/** A pickup that is not an xp gem, as `surroundings.pickups.items` gives it: the game's own entry, where it is, and its charge in seconds. */
+export type Pickup = Row & Placed & { kind: string; value: number; charge: number; charged: number; chargeNeeded?: number };
+/** One direction from Tibo: enemies on screen that way, and bullets coming from it within the horizon. */
+export type Sector = { dir: Direction; enemies: number; bullets: number };
 export type Held = { id: string; name: string; level: number; max: number };
 
 /** Everything the bot reads in one step: the game state, and what is computed from it for the bot. */
 export type World = {
   game: GameJson;
   forecast?: Forecast;
+  surroundings: Surroundings;
   events: Record<string, unknown>[];
   time: number;
   hp: number;
@@ -151,8 +152,7 @@ export type World = {
   weapons: Held[];
   passives: Held[];
   items: { id: string; name: string; count: number }[];
-  enemies: Enemy[];
-  elites: Enemy[];
+  elites: Elite[];
   bosses: (GameJson["bosses"][number] & Placed & { name: string })[];
   chests: Pickup[];
   food: Pickup[];
@@ -166,10 +166,6 @@ export type World = {
 };
 
 const HURT_WINDOW = 3;
-const SECTOR_NEAR = 60;
-const SECTOR_FAR = 150;
-const SECTOR_RANGE = 300;
-const XP_RANGE = 120;
 let hurtHistory: { time: number; taken: Record<string, number> }[] = [];
 
 function recentHurt(time: number, taken: Record<string, number>): Record<string, number> {
@@ -208,7 +204,8 @@ export function pairings(b: Book, g: GameJson, key: Key, level: number) {
 
 export function see(s: Snapshot, b: Book): World | undefined {
   const g = s.game as GameJson | undefined;
-  if (g === undefined) return undefined;
+  const around = s.surroundings;
+  if (g === undefined || around === undefined) return undefined;
   const me = g.player.find((p) => p.slot === g.me);
   if (me === undefined) return undefined;
   const place = (x: number, y: number): Placed => {
@@ -216,12 +213,12 @@ export function see(s: Snapshot, b: Book): World | undefined {
     const dy = y - me.y;
     return { dx, dy, dist: Math.hypot(dx, dy), dir: directionOf(dx, dy) };
   };
-  const enemies = g.enemies.filter((e) => !e.flags.includes("Hidden")).map((e) => ({ ...e, ...place(e.x, e.y), name: line(b, "enemy", e.def) ?? e.def, elite: e.flags.includes("Elite") }));
-  enemies.sort((a, z) => a.dist - z.dist);
   const activation = g.cfg.activation.seconds;
-  const pickups = g.pickups
-    .map((p) => ({ ...p, ...place(p.x, p.y), charged: Math.round((p.charge / 60) * 10) / 10, ...(activation[p.kind] === undefined ? {} : { chargeNeeded: activation[p.kind] }) }))
-    .sort((a, z) => a.dist - z.dist);
+  const pickups = (around.pickups.items as unknown as (Row & Placed & { kind: string; value: number; charge: number })[]).map((p) => ({
+    ...p,
+    charged: Math.round((p.charge / 60) * 10) / 10,
+    ...(activation[p.kind] === undefined ? {} : { chargeNeeded: activation[p.kind] }),
+  }));
   // The game's crate price: base + linear·n + quad·n² + cubic·max(0, n − knee)³ for n crates bought, times the stats' chestPriceMult.
   const e = g.cfg.economy;
   const n = g.paidChestsBought ?? 0;
@@ -247,24 +244,17 @@ export function see(s: Snapshot, b: Book): World | undefined {
       };
     })
     .sort((a, z) => a.dist - z.dist);
-  const bullets = g.bullets.map((x) => place(x.x, x.y));
-  const xp = pickups.filter((p) => p.kind === "xp" && p.dist <= XP_RANGE);
-  const sectors = DIRECTIONS.map((dir) => {
-    const mine = <T extends Placed>(rows: T[]) => rows.filter((r) => r.dir === dir);
-    const nearestBullet = Math.min(...mine(bullets).map((r) => r.dist), Number.POSITIVE_INFINITY);
-    return {
-      dir,
-      enemiesNear: mine(enemies).filter((e) => e.dist <= SECTOR_NEAR).length,
-      enemiesFar: mine(enemies).filter((e) => e.dist <= SECTOR_FAR).length,
-      nearestBullet: nearestBullet <= SECTOR_RANGE ? nearestBullet : null,
-      xpNear: mine(xp).length,
-    };
-  });
+  const sectors = DIRECTIONS.map((dir) => ({
+    dir,
+    enemies: around.enemies.byDirection[dir],
+    bullets: around.bullets.filter((x) => x.from === dir).length,
+  }));
   const held = (kind: "weapon" | "passive", o: Owned) => ({ id: o.def, name: nameOf(b.catalog, `${kind}:${o.def}`), level: o.level, max: b.catalog.maxLevel[`${kind}:${o.def}`] ?? 1 });
   const loadout = loadoutOf(g);
   return {
     game: g,
     ...(s.forecast === undefined ? {} : { forecast: s.forecast }),
+    surroundings: around,
     events: s.gameEvents ?? [],
     time: g.runClock,
     hp: me.hp,
@@ -276,12 +266,11 @@ export function see(s: Snapshot, b: Book): World | undefined {
     items: Object.entries(g.loadout.items)
       .filter(([, n]) => n > 0)
       .map(([id, count]) => ({ id, name: nameOf(b.catalog, `item:${id}`), count })),
-    enemies,
-    elites: enemies.filter((e) => e.elite),
+    elites: around.elites.map((e) => ({ ...(e as unknown as Elite), name: line(b, "enemy", String(e.def)) ?? String(e.def) })),
     bosses: g.bosses.map((x) => ({ ...x, ...place(x.x, x.y), name: line(b, "boss", x.def) ?? x.def })).sort((a, z) => a.dist - z.dist),
     chests: pickups.filter((p) => p.kind === "chest"),
     food: pickups.filter((p) => p.kind === "heal"),
-    pickups: pickups.filter((p) => p.kind !== "xp"),
+    pickups,
     spots,
     sectors,
     combos: relevantCombos(b.combos, loadout).map((c) => ({

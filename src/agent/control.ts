@@ -124,6 +124,7 @@ export class Controller {
     this.link.speed = 1;
     this.link.liveForecast = false;
     this.link.forecastLagTicks = 0;
+    this.link.forecastTicks = 30;
     if (inRun(this.link)) this.link.game?.setPaused(false);
   }
 
@@ -186,6 +187,7 @@ export class Controller {
       case "forecast":
         this.link.liveForecast = command.live;
         if (command.lag !== undefined) this.link.forecastLagTicks = Math.round(command.lag * 60);
+        if (command.seconds !== undefined) this.link.forecastTicks = Math.round(command.seconds * 60);
         this.finish(status, "done");
         return;
       case "start":

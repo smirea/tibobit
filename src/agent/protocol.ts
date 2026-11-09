@@ -44,9 +44,10 @@ export type Command =
    * `live` keeps the snapshot's `forecast` coming while the game runs, a few times a second, for an
    * agent that does not pause between steps. Off, it only appears while the game is paused. `lag`
    * is the seconds between a snapshot and the agent's move landing: a running game's forecast first
-   * plays the input held now for that long, then each direction.
+   * plays the input held now for that long, then each direction. `seconds` is the horizon of both
+   * the forecast and `surroundings` (0.1 to 2; 0.5 until set).
    */
-  | { type: "forecast"; live: boolean; lag?: number }
+  | { type: "forecast"; live: boolean; lag?: number; seconds?: number }
   /**
    * From the title screen, the end screen or mid-run, start a new run. `mode` "daily" plays
    * today's Daily, which has the same seed and build for everyone, so runs are comparable. The
@@ -91,6 +92,65 @@ export type ChoiceAction = { type: "pick" | "banish" | "buy"; index: number } | 
  * uses the game's damage-by-source keys. This is a tool's output, not game state.
  */
 export type Forecast = { lag: number; seconds: number; moves: Record<Direction | "still", { damage: number; dead: boolean; bySource: Record<string, number> }> };
+
+/** Where something is from Tibo, in world units. */
+export type Bearing = { dist: number; dir: Direction };
+
+/**
+ * What is around Tibo, worked out from the game state so an agent need not read every enemy, bullet
+ * and hazard (the snapshot's `raw` groups). A tool's output, not game state. `seconds` is the
+ * horizon, the same as the forecast's.
+ */
+export type Surroundings = {
+  seconds: number;
+  /** Enemies inside the game's camera view, in all and by direction from Tibo. */
+  enemies: { onScreen: number; byDirection: Record<Direction, number> };
+  /** Every elite alive: the game's own enemy entries, nearest first, with where each is. */
+  elites: (Record<string, unknown> & Bearing)[];
+  /** Enemy bullets on a straight path to hit Tibo within `seconds` if he stands still, soonest first: where each comes from, seconds to impact, its damage. */
+  bullets: { from: Direction; in: number; damage: number }[];
+  /** The game's bullet emitters within 300 units: seconds until they fire, bullets per burst, bursts left, damage. */
+  volleys: (Bearing & { firesIn: number; count: number; bursts: number; damage: number })[];
+  /** Hostile attack zones (the game's zones, by its kind and shape names) reaching within 300 units: whether Tibo is inside, when a telegraphed one lands, and which directions walk into it within `seconds`. */
+  attacks: (Bearing & { kind: string; shape: string; inside: boolean; landsIn?: number; enters: Direction[] })[];
+  /** Terrain hazards (the game's world.activeHazards, by kind) Tibo stands in, and those each direction walks into within `seconds`. */
+  hazards: { underfoot: string[]; byDirection: Partial<Record<Direction, string[]>> };
+  /** The game's pickups: how many of each kind, the total `value` of the xp and gold on the ground, and every pickup that is neither (chests, food, rerolls and the like) as the game's own entries, nearest first. */
+  pickups: { counts: Record<string, number>; value: { xp: number; gold: number }; items: (Record<string, unknown> & Bearing)[] };
+};
+
+/**
+ * The game's per-entity lists a snapshot leaves out unless asked for with `raw`: each name is the
+ * key the game keeps the list under. They are large and mostly noise; `surroundings` and `forecast`
+ * say what matters in them.
+ */
+export const RAW_GROUPS = { pickups: ["pickups"], enemies: ["enemies"], bullets: ["bullets"], emitters: ["emitters"], zones: ["zones"], projectiles: ["projectiles"], activeHazards: ["world", "activeHazards"] } as const;
+export type RawGroup = keyof typeof RAW_GROUPS;
+
+/** Parses a `raw` list such as "enemies,zones" (or "all"); throws naming the groups there are. */
+export function parseRaw(list: string | null | undefined): RawGroup[] {
+  if (list === null || list === undefined || list === "") return [];
+  const names = Object.keys(RAW_GROUPS) as RawGroup[];
+  if (list === "all") return names;
+  return list.split(",").map((n) => {
+    const name = n.trim();
+    if (!(names as string[]).includes(name)) fail(`raw takes ${names.join(", ")} or all; got ${name}`);
+    return name as RawGroup;
+  });
+}
+
+/** The snapshot without the raw groups not asked for. */
+export function withoutRaw(s: Snapshot, keep: RawGroup[]): Snapshot {
+  if (s.game === undefined) return s;
+  const game = structuredClone(s.game);
+  for (const [name, path] of Object.entries(RAW_GROUPS) as [RawGroup, readonly string[]][]) {
+    if (keep.includes(name)) continue;
+    let at: Record<string, unknown> | undefined = game;
+    for (const key of path.slice(0, -1)) at = at?.[key] as Record<string, unknown> | undefined;
+    if (at !== undefined) delete at[path.at(-1) ?? ""];
+  }
+  return { ...s, game };
+}
 
 export type LoadoutSpec = {
   weapons: { id: string; level: number }[];
@@ -141,6 +201,8 @@ export type Snapshot = {
   lastRunLink?: string;
   /** See Forecast; present while the game is paused, or running with `forecast` live. */
   forecast?: Forecast;
+  /** See Surroundings; present during a run. */
+  surroundings?: Surroundings;
   /** Whether the page runs under automation (navigator.webdriver), as in scripts/headless.ts. */
   headless?: boolean;
   /** The game's sim chunk; a checkpoint loads only on the build it was saved on. */
@@ -259,7 +321,8 @@ export function parseCommand(input: unknown): Command {
     case "forecast":
       if (typeof c.live !== "boolean") fail("live must be true or false");
       if (c.lag !== undefined && (num(c.lag, "lag") < 0 || num(c.lag, "lag") > 1)) fail("lag must be from 0 to 1 seconds");
-      return { type: "forecast", live: c.live as boolean, ...(c.lag === undefined ? {} : { lag: num(c.lag, "lag") }) };
+      if (c.seconds !== undefined && (num(c.seconds, "seconds") < 0.1 || num(c.seconds, "seconds") > 2)) fail("seconds must be from 0.1 to 2");
+      return { type: "forecast", live: c.live as boolean, ...(c.lag === undefined ? {} : { lag: num(c.lag, "lag") }), ...(c.seconds === undefined ? {} : { seconds: num(c.seconds, "seconds") }) };
     case "dash":
       return c.dir === undefined ? { type: "dash" } : { type: "dash", dir: heading(c.dir, "dir") };
     case "start": {
@@ -362,7 +425,7 @@ export type Inspect =
  * needs an icon there before it type-checks.
  */
 export const ACTION_TAGS = [
-  ...["Loot", "Wander", "Run", "Gems", "Eat", "Hunt", "Spot"],
+  ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
   ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
   ...["Dash", "Start", "Take over", "Over", "Stopped", "Incognito"],
 ] as const;

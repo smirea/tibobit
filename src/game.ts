@@ -353,6 +353,8 @@ export class GameLink {
   forecast: ((game: Game, inputs: { x: number; y: number }[], ticks: number, lagTicks?: number) => Forecast[]) | undefined;
   /** Ticks an agent takes to act on a forecast; the `forecast` command sets it. */
   forecastLagTicks = 0;
+  /** How far the forecast and the surroundings look ahead, in ticks. */
+  forecastTicks = 30;
   /** A deep copy of a game state that shares content definitions and rule modules with it, as the sim needs. */
   copyState: ((state: GameState) => GameState) | undefined;
   /** A copy of the game that steps without recording, rendering or being taken for the live game. */

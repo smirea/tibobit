@@ -155,7 +155,9 @@
           fail("live must be true or false");
         if (c.lag !== undefined && (num(c.lag, "lag") < 0 || num(c.lag, "lag") > 1))
           fail("lag must be from 0 to 1 seconds");
-        return { type: "forecast", live: c.live, ...c.lag === undefined ? {} : { lag: num(c.lag, "lag") } };
+        if (c.seconds !== undefined && (num(c.seconds, "seconds") < 0.1 || num(c.seconds, "seconds") > 2))
+          fail("seconds must be from 0.1 to 2");
+        return { type: "forecast", live: c.live, ...c.lag === undefined ? {} : { lag: num(c.lag, "lag") }, ...c.seconds === undefined ? {} : { seconds: num(c.seconds, "seconds") } };
       case "dash":
         return c.dir === undefined ? { type: "dash" } : { type: "dash", dir: heading(c.dir, "dir") };
       case "start": {
@@ -221,7 +223,7 @@
     return change;
   }
   var ACTION_TAGS = [
-    ...["Loot", "Wander", "Run", "Gems", "Eat", "Hunt", "Spot"],
+    ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
     ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
     ...["Dash", "Start", "Take over", "Over", "Stopped", "Incognito"]
   ];
@@ -372,8 +374,154 @@
     return value(s, "");
   }
 
+  // src/agent/surroundings.ts
+  var REACH = 300;
+  var PATH_SAMPLES = [0.25, 0.5, 0.75, 1];
+  function directionOf(dx, dy) {
+    const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
+    return DIRECTIONS[(octant + 8) % 8] ?? "right";
+  }
+  var round = (n) => Math.round(n * 10) / 10;
+  var bearing = (dx, dy) => ({ dist: round(Math.hypot(dx, dy)), dir: directionOf(dx, dy) });
+  var unit = (dir) => {
+    const a = DIRECTIONS.indexOf(dir) * Math.PI / 4;
+    return { x: Math.cos(a), y: Math.sin(a) };
+  };
+  function* alive(p) {
+    for (let n = 0;n < p.pool.count; n++) {
+      const slot = p.pool.slotAt(n);
+      if (slot >= 0 && p.pool.isAlive(slot))
+        yield slot;
+    }
+  }
+  function surroundings(link, s, seconds, rows) {
+    const enums = link.enums;
+    const me = s.me;
+    const px = s.player.x[me] ?? 0;
+    const py = s.player.y[me] ?? 0;
+    const radius = s.player.radius[me] ?? 6;
+    const reach = s.cfg.player.baseSpeed * s.loadout.stats.moveSpeedMult * seconds;
+    const halfW = s.view.width / 2;
+    const halfH = s.view.height / 2;
+    const hidden = enums?.enemyFlags.Hidden ?? 0;
+    const byDirection = Object.fromEntries(DIRECTIONS.map((d) => [d, 0]));
+    let onScreen = 0;
+    for (const i of alive(s.enemies)) {
+      if ((s.enemies.flags[i] ?? 0) & hidden)
+        continue;
+      const dx = (s.enemies.x[i] ?? 0) - px;
+      const dy = (s.enemies.y[i] ?? 0) - py;
+      if (Math.abs(dx) > halfW || Math.abs(dy) > halfH)
+        continue;
+      onScreen++;
+      byDirection[directionOf(dx, dy)]++;
+    }
+    const elites = rows.enemies.filter((e) => Array.isArray(e.flags) && e.flags.includes("Elite")).map((e) => ({ ...e, ...bearing(Number(e.x) - px, Number(e.y) - py) })).sort((a, b) => a.dist - b.dist);
+    const bullets = [];
+    const b = s.bullets;
+    for (const i of alive(b)) {
+      const dx = (b.x[i] ?? 0) - px;
+      const dy = (b.y[i] ?? 0) - py;
+      const vx = b.vx[i] ?? 0;
+      const vy = b.vy[i] ?? 0;
+      const v2 = vx * vx + vy * vy;
+      const t = v2 === 0 ? 0 : Math.max(0, -(dx * vx + dy * vy) / v2);
+      if (t > seconds)
+        continue;
+      const gap = Math.hypot(dx + vx * t, dy + vy * t);
+      if (gap > radius + (b.radius[i] ?? 0))
+        continue;
+      bullets.push({ from: directionOf(dx, dy), in: Math.round(t * 100) / 100, damage: round(b.damage[i] ?? 0) });
+    }
+    bullets.sort((x, y) => x.in - y.in);
+    const volleys = [];
+    for (const i of alive(s.emitters)) {
+      const dx = (s.emitters.x[i] ?? 0) - px;
+      const dy = (s.emitters.y[i] ?? 0) - py;
+      if (Math.hypot(dx, dy) > REACH)
+        continue;
+      volleys.push({ ...bearing(dx, dy), firesIn: round(s.emitters.telegraph[i] ?? 0), count: s.emitters.count[i] ?? 0, bursts: s.emitters.burstsLeft[i] ?? 0, damage: round(s.emitters.damage[i] ?? 0) });
+    }
+    volleys.sort((x, y) => x.dist - y.dist);
+    const inPool = link.inPool;
+    const paths = DIRECTIONS.map((dir) => {
+      const u = unit(dir);
+      return { dir, points: PATH_SAMPLES.map((f) => ({ x: u.x * reach * f, y: u.y * reach * f })) };
+    });
+    const entered = (contains) => paths.filter((p) => p.points.some((q) => contains(q.x, q.y))).map((p) => p.dir);
+    const zoneKind = Object.fromEntries(Object.entries(enums?.zoneKinds ?? {}).map(([k, v]) => [v, k]));
+    const zoneShape = Object.fromEntries(Object.entries(enums?.zoneShapes ?? {}).map(([k, v]) => [v, k]));
+    const attacks = [];
+    for (const i of alive(s.zones)) {
+      if (s.zones.hostile[i] !== 1)
+        continue;
+      const r = s.zones.radius[i] ?? 0;
+      const shape = zoneShape[s.zones.shape[i] ?? 0] ?? "circle";
+      const ax = (s.zones.x[i] ?? 0) - px;
+      const ay = (s.zones.y[i] ?? 0) - py;
+      const poolShape = s.zones.poolShape[i] ?? 0;
+      const turn = s.zones.turn[i] ?? 0;
+      let contains = (x, y) => poolShape !== 0 && inPool !== undefined ? inPool(poolShape, turn, x - ax, y - ay, r, 0) : Math.hypot(x - ax, y - ay) <= r;
+      let nearest = { x: ax, y: ay };
+      if (shape === "line") {
+        const angle = s.zones.angle[i] ?? 0;
+        const length = s.zones.length[i] ?? 0;
+        const ux = Math.cos(angle);
+        const uy = Math.sin(angle);
+        const closest = (x, y) => {
+          const t = Math.max(0, Math.min(length, (x - ax) * ux + (y - ay) * uy));
+          return { x: ax + ux * t, y: ay + uy * t };
+        };
+        contains = (x, y) => {
+          const c = closest(x, y);
+          return Math.hypot(x - c.x, y - c.y) <= r;
+        };
+        nearest = closest(0, 0);
+      }
+      const at = bearing(nearest.x, nearest.y);
+      if (at.dist - r > REACH)
+        continue;
+      const kind = zoneKind[s.zones.kind[i] ?? -1] ?? String(s.zones.kind[i]);
+      attacks.push({ ...at, kind, shape, inside: contains(0, 0), ...kind === "telegraph" ? { landsIn: round(s.zones.delay[i] ?? 0) } : {}, enters: entered(contains) });
+    }
+    attacks.sort((x, y) => x.dist - y.dist);
+    const underfoot = [];
+    const hazardPaths = {};
+    for (const h of s.world.activeHazards) {
+      const cx = h.x - px;
+      const cy = h.y - py;
+      if (Math.hypot(cx, cy) - h.radius > REACH)
+        continue;
+      const contains = (x, y) => inPool === undefined ? Math.hypot(x - cx, y - cy) <= h.radius : inPool(h.poolShape, h.turn, x - cx, y - cy, h.radius, 0);
+      if (contains(0, 0)) {
+        if (!underfoot.includes(h.kind))
+          underfoot.push(h.kind);
+        continue;
+      }
+      for (const dir of entered(contains)) {
+        const list = hazardPaths[dir] ??= [];
+        if (!list.includes(h.kind))
+          list.push(h.kind);
+      }
+    }
+    const counts = {};
+    const value = { xp: 0, gold: 0 };
+    const items = [];
+    for (const p of rows.pickups) {
+      const kind = String(p.kind);
+      counts[kind] = (counts[kind] ?? 0) + 1;
+      const dx = Number(p.x) - px;
+      const dy = Number(p.y) - py;
+      if (kind === "xp" || kind === "gold")
+        value[kind] += Number(p.value) || 0;
+      else
+        items.push({ ...p, ...bearing(dx, dy) });
+    }
+    items.sort((a, z) => a.dist - z.dist);
+    return { seconds, enemies: { onScreen, byDirection }, elites, bullets, volleys, attacks, hazards: { underfoot, byDirection: hazardPaths }, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
+  }
+
   // src/agent/snapshot.ts
-  var SIM_FORECAST_TICKS = 60;
   var TICKS_PER_SECOND = 60;
   function choiceCards() {
     const cards = [...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")];
@@ -390,13 +538,13 @@
     if (link.forecast === undefined || s.over || s.choiceQueue.length > 0 || !(s.paused || link.liveForecast))
       return;
     const cached = forecastCache?.game === game ? forecastCache : undefined;
-    if (cached !== undefined && (cached.tick === s.tick || !s.paused && s.tick > cached.tick && s.tick - cached.tick < LIVE_FORECAST_TICKS))
+    if (cached !== undefined && cached.forecast.seconds === link.forecastTicks / TICKS_PER_SECOND && (cached.tick === s.tick || !s.paused && s.tick > cached.tick && s.tick - cached.tick < LIVE_FORECAST_TICKS))
       return cached.forecast;
     const inputs = [...DIRECTIONS.map((_, i) => ({ x: Math.cos(i * Math.PI / 4), y: Math.sin(i * Math.PI / 4) })), { x: 0, y: 0 }];
     const lagTicks = s.paused ? 0 : link.forecastLagTicks;
-    const outcomes = link.forecast(game, inputs, SIM_FORECAST_TICKS, lagTicks).map((f) => ({ damage: f.damage, dead: f.dead, bySource: f.bySource }));
+    const outcomes = link.forecast(game, inputs, link.forecastTicks, lagTicks).map((f) => ({ damage: f.damage, dead: f.dead, bySource: f.bySource }));
     const moves = Object.fromEntries([...DIRECTIONS, "still"].map((m, i) => [m, outcomes[i] ?? { damage: 0, dead: false, bySource: {} }]));
-    const forecast = { lag: lagTicks / TICKS_PER_SECOND, seconds: SIM_FORECAST_TICKS / TICKS_PER_SECOND, moves };
+    const forecast = { lag: lagTicks / TICKS_PER_SECOND, seconds: link.forecastTicks / TICKS_PER_SECOND, moves };
     forecastCache = { game, tick: s.tick, forecast };
     return forecast;
   }
@@ -430,11 +578,13 @@
     const mode = playing ? runMode : modeScreen() ?? runMode;
     const loaded = game !== undefined && link.table !== undefined && link.ready;
     const forecast = playing && loaded ? simForecast(link, game) : undefined;
+    const reflection = loaded ? reflect(link, game.state) : undefined;
     const screen = game === undefined || !playing && !game.state.over ? "title" : game.state.over ? "over" : game.state.choiceQueue.length > 0 ? "choice" : game.state.paused || pauseMenuOpen() ? "paused" : "run";
     return {
       capturedAt: Date.now(),
       screen,
-      ...loaded ? { game: reflect(link, game.state), gameEvents: link.events.map(json) } : {},
+      ...reflection === undefined ? {} : { game: reflection, gameEvents: link.events.map(json) },
+      ...reflection === undefined || !playing ? {} : { surroundings: surroundings(link, game.state, link.forecastTicks / TICKS_PER_SECOND, { enemies: reflection.enemies ?? [], pickups: reflection.pickups ?? [] }) },
       storage: gameStorage(),
       headless: navigator.webdriver,
       ...link.simBuild === undefined ? {} : { gameBuild: link.simBuild },
@@ -1196,6 +1346,7 @@
       this.link.speed = 1;
       this.link.liveForecast = false;
       this.link.forecastLagTicks = 0;
+      this.link.forecastTicks = 30;
       if (inRun(this.link))
         this.link.game?.setPaused(false);
     }
@@ -1265,6 +1416,8 @@
           this.link.liveForecast = command.live;
           if (command.lag !== undefined)
             this.link.forecastLagTicks = Math.round(command.lag * 60);
+          if (command.seconds !== undefined)
+            this.link.forecastTicks = Math.round(command.seconds * 60);
           this.finish(status, "done");
           return;
         case "start":
@@ -1655,6 +1808,7 @@
     pauseAtStart = false;
     forecast;
     forecastLagTicks = 0;
+    forecastTicks = 30;
     copyState;
     simulator;
     simBuild;
@@ -2005,7 +2159,6 @@
     Loot: ["M3 11h18v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z", "M3 11V9a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v2", "M10 11v3h4v-3"],
     Wander: [ring(12, 12, 9), { fill: "M15.5 8.5l-2 5-5 2 2-5z" }],
     Run: [dot(15, 4.5, 2.2), "M13 8.5 11 14", "M13 8.5 9 9.5 7 12.5", "M13 8.5l3 3h3", "M11 14l3 2.5V21", "M11 14l-2 3.5H5"],
-    Gems: ["M7 4h10l4 5-9 11L3 9z", "M3 9h18", "M10 4 8 9l4 11 4-11-2-5"],
     Eat: ["M12 8c-1.5-1.2-3-1.5-4.5-1.2C5 7.3 3.5 9.6 4 13c.6 4 3.2 7.5 5.5 7.5 1 0 1.6-.5 2.5-.5s1.5.5 2.5.5c2.3 0 4.9-3.5 5.5-7.5.5-3.4-1-5.7-3.5-6.2-1.5-.3-3 0-4.5 1.2z", "M12 8c0-2 .5-3.5 2-5"],
     Hunt: [ring(12, 12, 7), "M12 2v5M12 17v5M2 12h5M17 12h5", dot(12, 12, 1.4)],
     Spot: ["M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z", ring(12, 9, 2.5)],

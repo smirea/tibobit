@@ -4,7 +4,7 @@
 // game, a decision model plans (picks every card
 // and sets short-term goals) and acts (steps around danger on the way to the goal). The file removes
 // only options the game itself rules out: cards Tibo cannot take, and moves the game's own
-// simulation says cost clearly more health over the next second than the cheapest one.
+// simulation says cost clearly more health over its horizon (the forecastSeconds knob) than the cheapest one.
 import path from "node:path";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
@@ -159,13 +159,13 @@ async function tellLag(ageMs: number) {
   const lag = Math.round(lagNow(ageMs) * 100) / 100;
   if (Math.abs(lag - lagSent) < 0.03) return;
   lagSent = lag;
-  await send({ type: "forecast", live: true, lag });
+  await send({ type: "forecast", live: true, lag, seconds: knobs().forecastSeconds });
 }
 
 async function setMode() {
   await command({ type: "speed", factor: 1 });
   lagSent = lagNow(30);
-  await command({ type: "forecast", live: true, lag: lagSent });
+  await command({ type: "forecast", live: true, lag: lagSent, seconds: knobs().forecastSeconds });
   await command({ type: "resume" });
   modeSet = true;
 }
@@ -271,7 +271,7 @@ function gameName(b: Book, source: string): string {
 
 /** A record as "key value, key value", in the game's own keys. */
 const fields = (o: Record<string, unknown>) => Object.entries(o).map(([k, v]) => `${k} ${typeof v === "object" ? JSON.stringify(v) : v}`).join(", ");
-const near = (r: World) => r.sectors.reduce((n, s) => n + s.enemiesNear, 0);
+const onScreen = (r: World) => r.surroundings.enemies.onScreen;
 const dashCharges = (r: World) => r.game.player.find((x) => x.slot === r.game.me)?.dashCharges ?? 0;
 
 // ---- Run log -------------------------------------------------------------------------------
@@ -297,7 +297,6 @@ const LOG_COLUMNS = [
   "y",
   "dash",
   "enemies",
-  "enemies_near",
   "goal",
   "action",
   "reason",
@@ -316,7 +315,6 @@ const LOG_COLUMNS = [
   "dealt",
   "elites",
   "elite_list",
-  "nearby",
 ] as const;
 /** `walk`: the page walked Tibo toward its goal without asking a model, and Tibo lost health on the way. `loadout`: what Tibo holds changed. */
 type LogEvent = "plan" | "pick" | "move" | "walk" | "goal" | "loadout" | "run_end";
@@ -357,16 +355,11 @@ class RunLog {
             x: Math.round(r.x),
             y: Math.round(r.y),
             dash: r.game.player.find((x) => x.slot === r.game.me)?.dashCharges ?? 0,
-            enemies: r.enemies.length,
-            enemies_near: near(r),
+            enemies: onScreen(r),
             bosses: r.bosses.map((b) => `${b.name} (${b.def}) ${at(b)} ${pct(b.hp, b.maxHp)}% of ${Math.round(b.maxHp)}`).join("; "),
             dealt: Math.round(Object.values(r.game.run.damageBySource).reduce((a, b) => a + b, 0)),
             elites: r.game.run.elitesKilled,
             elite_list: r.elites.slice(0, 3).map((e) => `${e.uid} ${e.name} (${e.def}) ${Math.round(e.hp)}/${Math.round(e.maxHp)} ${at(e)}`).join("; "),
-            nearby: [...r.enemies.filter((e) => e.dist <= 150).reduce((m, e) => m.set(e.def, (m.get(e.def) ?? 0) + 1), new Map<string, number>())]
-              .sort((a, b) => b[1] - a[1])
-              .map(([id, n]) => `${id} ${n}`)
-              .join("; "),
             hurt_by: Object.entries(r.hurtBy).map(([k, v]) => `${k} ${v}`).join("; "),
             standing_on: spotLine(r) ?? "",
             underfoot: groundSources(r).join("; "),
@@ -437,7 +430,7 @@ const groundSources = (r: World) => Object.keys(r.forecast?.moves.still.bySource
 // The page walks Tibo to the goal on its own while the way there costs no more than the safest
 // move, by the game's own forecast. When it costs more, the action model picks the step, told
 // only the goal and what each move costs. A goal ends when it is used up, reached, stuck or late.
-type Goal = { kind: "chest" | "poi" | "food" | "elite"; uid: number } | { kind: "explore"; dir: Direction } | { kind: "gems" } | { kind: "evade" };
+type Goal = { kind: "chest" | "poi" | "food" | "elite"; uid: number } | { kind: "explore"; dir: Direction } | { kind: "evade" };
 type TargetGoal = Extract<Goal, { uid: number }>;
 type Pursuit = {
   goal: Goal;
@@ -568,8 +561,6 @@ function goalTitle(g: Goal, r: World): string {
       return `Fight the ${r.elites.find((e) => e.uid === g.uid)?.name ?? "elite"}`;
     case "explore":
       return `Explore ${g.dir}`;
-    case "gems":
-      return "Collect xp gems";
     case "evade":
       return "Keep away from enemies";
   }
@@ -615,8 +606,6 @@ function goalTag(g: Goal, r: World): ActionTag {
       return "Hunt";
     case "explore":
       return "Wander";
-    case "gems":
-      return "Gems";
     case "evade":
       return "Run";
   }
@@ -649,12 +638,6 @@ function aimAt(p: Pursuit, r: World): Aim | Ended {
       if (walked >= knobs().exploreDistance) return { done: `walked ${knobs().exploreDistance} units and found nothing new`, success: true };
       return { heading: g.dir, left: knobs().exploreDistance - walked, progress: `${Math.round(walked)} of ${knobs().exploreDistance} walked` };
     }
-    case "gems": {
-      const best = [...r.sectors].sort((a, b) => b.xpNear - a.xpNear)[0];
-      if (best === undefined || best.xpNear === 0) return { done: "no gems left nearby", success: true };
-      if (age >= knobs().gemsSeconds) return { done: `collected for ${knobs().gemsSeconds} seconds`, success: true };
-      return { heading: best.dir, progress: `${best.xpNear} gems to the ${best.dir}` };
-    }
     case "evade":
       if (age >= knobs().evadeSeconds) {
         const lost = Math.round(p.hp - r.hp);
@@ -682,7 +665,7 @@ function begin(goal: Goal, r: World, log: RunLog, decision: Inspect) {
     seen: false,
   };
   const aim = aimAt(p, r);
-  const seconds = goal.kind === "gems" ? knobs().gemsSeconds : goal.kind === "evade" ? knobs().evadeSeconds : goal.kind === "elite" ? knobs().eliteSeconds : "left" in aim && aim.left !== undefined ? aim.left / GOAL_SPEED : 0;
+  const seconds = goal.kind === "evade" ? knobs().evadeSeconds : goal.kind === "elite" ? knobs().eliteSeconds : "left" in aim && aim.left !== undefined ? aim.left / GOAL_SPEED : 0;
   p.deadline = r.time + seconds + GOAL_SLACK;
   pursuit = p;
   log.write(r, { event: "goal", goal: p.id, action: "start", detail: title });
@@ -826,10 +809,11 @@ function outlook(r: World, f: MoveForecast): string {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
     .map(([s]) => sourceWords(s));
-  if (f.dead) return `Tibo would die within a second${sources.length === 0 ? "" : `, killed by ${sources.join(" and ")}`}`;
+  const within = `within ${r.forecast?.seconds ?? knobs().forecastSeconds} seconds`;
+  if (f.dead) return `Tibo would die ${within}${sources.length === 0 ? "" : `, killed by ${sources.join(" and ")}`}`;
   const share = Math.round((100 * f.damage) / r.maxHp);
-  if (share < 1) return "Tibo takes no damage in the next second";
-  return `Tibo would ${hurtWords(share)} within a second, by ${sources.join(" and ")}`;
+  if (share < 1) return `Tibo takes no damage ${within}`;
+  return `Tibo would ${hurtWords(share)} ${within}, by ${sources.join(" and ")}`;
 }
 
 function bearing(dir: Direction, goal: Direction | "stay" | undefined): string {
@@ -849,7 +833,8 @@ function describe(r: World, s: Sector, goal: Direction | "stay" | undefined): st
   return [
     f === undefined ? "" : outlook(r, f),
     boss !== undefined && boss.dist < 250 ? `toward the ${boss.name} boss only ${Math.round(boss.dist)} away, which hurts Tibo on contact` : "",
-    s.enemiesNear > 0 ? `${plural(s.enemiesNear, "enemy")} close` : "no enemies close",
+    s.enemies > 0 ? `${plural(s.enemies, "enemy")} on screen that way` : "no enemies on screen that way",
+    s.bullets > 0 ? `${plural(s.bullets, "enemy bullet")} coming from there` : "",
     bearing(s.dir, goal),
   ]
     .filter(Boolean)
@@ -858,7 +843,7 @@ function describe(r: World, s: Sector, goal: Direction | "stay" | undefined): st
 
 // "Stand still" must carry the threats around Tibo too, or it reads as the safest move in a swarm.
 function standing(r: World, goal: Direction | "stay" | undefined): string {
-  const crowd = near(r) > 0 ? ` with ${plural(near(r), "enemy")} within 60 units closing in` : "";
+  const crowd = onScreen(r) > 0 ? ` with ${plural(onScreen(r), "enemy")} on screen` : "";
   const still = r.forecast?.moves.still;
   const forecast = still === undefined ? "" : `, where ${outlook(r, still).replace(/^Tibo /, "it ")}`;
   const spot = spotLine(r);
@@ -866,7 +851,7 @@ function standing(r: World, goal: Direction | "stay" | undefined): string {
   return `stand still${spot === undefined ? "" : ` ${spot}`}${crowd}${forecast}${purpose}`;
 }
 
-/** What a move costs over the next second as a share of max health, from the game's own simulation. */
+/** What a move costs over the forecast's horizon as a share of max health, from the game's own simulation. */
 function moveCost(r: World, heading: Direction | "stay"): number | undefined {
   const f = forecastFor(r, heading);
   return f === undefined ? undefined : f.dead ? Number.POSITIVE_INFINITY : f.damage / r.maxHp;
@@ -889,14 +874,14 @@ const SAFE_ENOUGH = 0.5;
 function goalWords(p: Pursuit, aim: Aim): string {
   if (p.goal.kind === "evade") return "keep away from enemies";
   if (p.goal.kind === "explore") return `walk ${p.goal.dir} to look for chests and shrines`;
-  if (p.goal.kind === "gems") return `collect the xp gems, most of them to the ${aim.heading}`;
   if (p.goal.kind === "elite") return `${p.title.toLowerCase()}: keep it within ${ELITE_REACH} units so Tibo's weapons kill it, without touching it; it has ${aim.progress}`;
   return aim.heading === "stay" ? `${p.title.toLowerCase()}: stay where Tibo stands, ${aim.progress}` : `${p.title.toLowerCase()}, ${aim.progress}`;
 }
 
 /** A dash charge, a dash template, and an enemy or bullet close enough that dashing could matter. */
 function dashWorthAsking(r: World): boolean {
-  return templates.action.dash.trim() !== "" && dashCharges(r) > 0 && r.sectors.some((x) => x.enemiesNear > 0 || (x.nearestBullet ?? 999) < 40);
+  const still = r.forecast?.moves.still;
+  return templates.action.dash.trim() !== "" && dashCharges(r) > 0 && (r.surroundings.bullets.length > 0 || (still !== undefined && (still.dead || still.damage > 0)));
 }
 
 /** How sure the action model must be to dash: lower while a boss is close, if the knobs say so. */
@@ -925,7 +910,7 @@ async function steer(r: World, p: Pursuit, aim: Aim, log: RunLog, why: string) {
   const moves: Record<string, string> = {};
   for (const s of r.sectors) moves[s.dir] = `walk ${s.dir}: ${describe(r, s, aim.heading)}`;
   moves.stay = standing(r, aim.heading);
-  // The game's own simulation prices every move for the next second, and Laya cannot weigh those
+  // The game's own simulation prices every move over its horizon, and Laya cannot weigh those
   // prices: on replayed states it rated a fatal move safest in 4 of 8, and it stood in hot oil
   // forecast "very badly hurt" for ten seconds while every step out was "scratched" (its danger
   // score tracks how many threats a description lists, not which). So moves that cost clearly
@@ -1111,8 +1096,8 @@ function blocks(r: World, b: Book): Record<BlockName, () => string> {
     hurt_by: () => `Hurt in the last 3 seconds by: ${Object.entries(r.hurtBy).map(([k, n]) => `${gameName(b, k)} ${n}`).join(", ") || "nothing"}.`,
     bosses: () => `Bosses: ${r.bosses.map((x) => `${x.name} (${x.def}) ${Math.round(x.dist)} away to the ${x.dir}, ${pct(x.hp, x.maxHp)}% health`).join("; ") || "none"}.`,
     enemies: () => {
-      const crowd = [...r.sectors].sort((a, z) => z.enemiesFar - a.enemiesFar);
-      return `Enemies: ${r.enemies.length} around, ${near(r)} within 60. Most within 150 to the ${crowd[0]?.dir} (${crowd[0]?.enemiesFar}), fewest to the ${crowd.at(-1)?.dir} (${crowd.at(-1)?.enemiesFar}).`;
+      const crowd = [...r.sectors].sort((a, z) => z.enemies - a.enemies);
+      return `Enemies: ${onScreen(r)} on screen. Most to the ${crowd[0]?.dir} (${crowd[0]?.enemies}), fewest to the ${crowd.at(-1)?.dir} (${crowd.at(-1)?.enemies}).`;
     },
     current_goal: () => `Current goal: ${pursuit === undefined ? "none" : `${pursuit.title}, since ${clock(pursuit.since)}`}.`,
     recent_goals: () => `Recent goals: ${outcomes.slice(-6).map((o) => `${clock(o.time)} ${o.title}: ${o.outcome}`).join("; ") || "none yet"}.`,
@@ -1140,8 +1125,8 @@ function blocks(r: World, b: Book): Record<BlockName, () => string> {
         .join("")}`;
     },
     pickups: () => {
-      const counts = g.pickups.reduce((m, x) => m.set(x.kind, (m.get(x.kind) ?? 0) + 1), new Map<string, number>());
-      return `Pickups on the ground by kind: ${[...counts].map(([k, n]) => `${k} ${n}`).join(", ") || "none"}. Nearest that are not xp gems: ${r.pickups.slice(0, 10).map((x) => `${x.kind} worth ${Math.round(x.value * 10) / 10} ${Math.round(x.dist)} away to the ${x.dir}`).join("; ") || "none"}.`;
+      const p = r.surroundings.pickups;
+      return `Pickups on the ground by kind: ${fields(p.counts) || "none"}; xp worth ${p.value.xp} and gold worth ${p.value.gold} in all. Nearest of the rest: ${r.pickups.slice(0, 10).map((x) => `${x.kind} worth ${Math.round(x.value * 10) / 10} ${Math.round(x.dist)} away to the ${x.dir}`).join("; ") || "none"}.`;
     },
     buffs: () => {
       const timers = Object.entries({ ...(g as unknown as Record<string, unknown>), ...((g as unknown as { moreVariety?: Record<string, unknown> }).moreVariety ?? {}) }).filter(
@@ -1154,25 +1139,12 @@ function blocks(r: World, b: Book): Record<BlockName, () => string> {
         .filter((w) => w.minute * 60 > r.time && (w.boss !== undefined || w.elite === true || (w.events?.length ?? 0) > 0))
         .map((w) => `minute ${w.minute}: ${[...(w.boss === undefined ? [] : [`boss ${line(b, "boss", w.boss) ?? w.boss} (${w.boss})`]), ...(w.elite ? ["an elite"] : []), ...(w.events ?? []).map((e) => `event ${line(b, "event", e) ?? e} (${e})`)].join(", ")}`)
         .join("; ") || "nothing scheduled"}.`,
-    hazards: () =>
-      `Hazards near Tibo (world.activeHazards): ${g.world.activeHazards
-        .map((h) => ({ ...h, d: Math.hypot(h.x - r.x, h.y - r.y) }))
-        .filter((h) => h.d - h.radius < 300)
-        .sort((a, z) => a.d - z.d)
-        .map((h) => `${h.kind} radius ${Math.round(h.radius)} ${Math.round(h.d)} away`)
-        .join("; ") || "none"}.`,
-    events: () => `Recent game events: ${r.events.slice(-10).map((e) => `${typeof e.time === "number" ? clock(e.time) : "?"} ${JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => k !== "time")))}`).join("; ") || "none"}.`,
-    enemy_kinds: () => {
-      const kinds = new Map<string, { n: number; elites: number; nearest: number; maxHp: number; damage: number; speed: number }>();
-      for (const e of r.enemies) {
-        const k = kinds.get(e.def) ?? { n: 0, elites: 0, nearest: e.dist, maxHp: 0, damage: 0, speed: e.speed };
-        kinds.set(e.def, { n: k.n + 1, elites: k.elites + (e.elite ? 1 : 0), nearest: Math.min(k.nearest, e.dist), maxHp: Math.max(k.maxHp, e.maxHp), damage: Math.max(k.damage, e.damage), speed: k.speed });
-      }
-      return `Enemies alive by kind: ${[...kinds]
-        .sort((a, z) => z[1].n - a[1].n)
-        .map(([id, k]) => `${line(b, "enemy", id) ?? id} (${id}) ${k.n}${k.elites === 0 ? "" : `, ${k.elites} elite`}, nearest ${Math.round(k.nearest)} away, maxHp ${Math.round(k.maxHp * 10) / 10}, damage ${Math.round(k.damage * 10) / 10}, speed ${k.speed}`)
-        .join("; ") || "none"}.`;
+    hazards: () => {
+      const a = r.surroundings;
+      const paths = Object.entries(a.hazards.byDirection).map(([dir, kinds]) => `${dir}: ${kinds?.join(", ")}`);
+      return `Within ${a.seconds} s: underfoot ${a.hazards.underfoot.join(", ") || "nothing"}; walking into ${paths.join("; ") || "nothing"}. Attacks near: ${a.attacks.map((x) => `${x.kind} (${x.shape}) ${Math.round(x.dist)} away to the ${x.dir}${x.inside ? ", Tibo is inside" : ""}${x.landsIn === undefined ? "" : `, lands in ${x.landsIn} s`}${x.enters.length === 0 ? "" : `, walking ${x.enters.join(" or ")} enters it`}`).join("; ") || "none"}. Bullets that would hit a Tibo standing still: ${a.bullets.map((x) => `from the ${x.from} in ${x.in} s for ${x.damage}`).join("; ") || "none"}.`;
     },
+    events: () => `Recent game events: ${r.events.slice(-10).map((e) => `${typeof e.time === "number" ? clock(e.time) : "?"} ${JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => k !== "time")))}`).join("; ") || "none"}.`,
     elites: () => `Elites alive: ${r.elites.map((e) => `${e.name} (${e.def}) ${Math.round(e.hp)}/${Math.round(e.maxHp)} hp, damage ${Math.round(e.damage * 10) / 10}, ${Math.round(e.dist)} away to the ${e.dir}`).join("; ") || "none"}.`,
     counters: () => `What the game has counted this run: counters ${fields(nonzero(g.counters))}; run ${fields(nonzero(g.run))}.`,
     weapon_damage: () => {
@@ -1217,8 +1189,6 @@ function goalOptions(r: World): GoalOption[] {
     return until === undefined || until <= r.time || last === undefined ? "" : `; Tibo gave up on it at ${clock(last.time)} because ${last.outcome}`;
   };
   const ready = r.combos.filter((c) => c.ready && c.combo.recipe.kind !== "union").map((c) => c.name);
-  const gems = r.sectors.reduce((n, s) => n + s.xpNear, 0);
-  const gemSide = [...r.sectors].sort((a, z) => z.xpNear - a.xpNear)[0];
   return [
     ...r.chests
       .filter((c) => c.dist < PLAN_RANGE)
@@ -1247,10 +1217,9 @@ function goalOptions(r: World): GoalOption[] {
         goal: { kind: "elite" as const, uid: e.uid },
         text: `fight the ${e.name} elite ${Math.round(e.dist)} away to the ${e.dir} (${e.hp} health left): keep it within reach of Tibo's weapons for up to ${knobs().eliteSeconds} seconds until it dies, which drops a chest${given(`E${e.uid}`)}`,
       })),
-    ...(gems === 0 ? [] : [{ goal: { kind: "gems" as const }, text: `collect the ${gems} xp gems nearby, most of them to the ${gemSide?.dir}, for up to ${knobs().gemsSeconds} seconds` }]),
     ...r.sectors.map((s) => ({
       goal: { kind: "explore" as const, dir: s.dir },
-      text: `explore ${s.dir}: walk ${knobs().exploreDistance} units that way, stopping at the first new chest, toward ${plural(s.enemiesFar, "enemy")} within 150`,
+      text: `explore ${s.dir}: walk ${knobs().exploreDistance} units that way, stopping at the first new chest, toward ${plural(s.enemies, "enemy")} on screen that way`,
     })),
     { goal: { kind: "evade" }, text: `keep away from enemies for ${knobs().evadeSeconds} seconds` },
   ];
@@ -1677,10 +1646,10 @@ async function main() {
       lastReport = Math.floor(r.time / 30);
       const per = (ms: number) => Math.round(ms / Math.max(1, timings.steps));
       console.log(
-        `${r.time}s hp ${Math.round(r.hp)}/${Math.round(r.maxHp)} lv ${r.game.loadout.level} enemies ${r.enemies.length} ${r.weapons.map((w) => `${w.id}:${w.level}`).join(",")} | per step: state ${per(timings.state)}ms decide ${per(timings.decide)}ms command ${per(timings.command)}ms`,
+        `${r.time}s hp ${Math.round(r.hp)}/${Math.round(r.maxHp)} lv ${r.game.loadout.level} enemies on screen ${onScreen(r)} ${r.weapons.map((w) => `${w.id}:${w.level}`).join(",")} | per step: state ${per(timings.state)}ms decide ${per(timings.decide)}ms command ${per(timings.command)}ms`,
       );
       Object.assign(timings, { state: 0, decide: 0, command: 0, steps: 0 });
-      log.write(`${JSON.stringify({ event: "tick", time: r.time, hp: r.hp, level: r.game.loadout.level, enemies: r.enemies.length })}\n`);
+      log.write(`${JSON.stringify({ event: "tick", time: r.time, hp: r.hp, level: r.game.loadout.level, enemies: onScreen(r) })}\n`);
       log.flush();
     }
     steps++;

@@ -2,9 +2,8 @@ import type { Game, GameLink } from "../game";
 import { modeScreen } from "./menu";
 import { DIRECTIONS, type CommandStatus, type Forecast, type Snapshot } from "./protocol";
 import { reflect } from "./reflect";
+import { surroundings } from "./surroundings";
 
-// The game's own sim, run forward on a copy: exact for every attack, pool and bullet pattern.
-const SIM_FORECAST_TICKS = 60;
 const TICKS_PER_SECOND = 60;
 
 /**
@@ -42,13 +41,14 @@ function simForecast(link: GameLink, game: Game): Forecast | undefined {
   const s = game.state;
   if (link.forecast === undefined || s.over || s.choiceQueue.length > 0 || !(s.paused || link.liveForecast)) return undefined;
   const cached = forecastCache?.game === game ? forecastCache : undefined;
-  if (cached !== undefined && (cached.tick === s.tick || (!s.paused && s.tick > cached.tick && s.tick - cached.tick < LIVE_FORECAST_TICKS))) return cached.forecast;
+  if (cached !== undefined && cached.forecast.seconds === link.forecastTicks / TICKS_PER_SECOND && (cached.tick === s.tick || (!s.paused && s.tick > cached.tick && s.tick - cached.tick < LIVE_FORECAST_TICKS))) return cached.forecast;
   const inputs = [...DIRECTIONS.map((_, i) => ({ x: Math.cos((i * Math.PI) / 4), y: Math.sin((i * Math.PI) / 4) })), { x: 0, y: 0 }];
   // A paused game waits for the agent, so the move lands on this very tick; a running one keeps going meanwhile.
   const lagTicks = s.paused ? 0 : link.forecastLagTicks;
-  const outcomes = link.forecast(game, inputs, SIM_FORECAST_TICKS, lagTicks).map((f) => ({ damage: f.damage, dead: f.dead, bySource: f.bySource }));
+  // The game's own sim, run forward on a copy: exact for every attack, pool and bullet pattern.
+  const outcomes = link.forecast(game, inputs, link.forecastTicks, lagTicks).map((f) => ({ damage: f.damage, dead: f.dead, bySource: f.bySource }));
   const moves = Object.fromEntries([...DIRECTIONS, "still" as const].map((m, i) => [m, outcomes[i] ?? { damage: 0, dead: false, bySource: {} }])) as Forecast["moves"];
-  const forecast = { lag: lagTicks / TICKS_PER_SECOND, seconds: SIM_FORECAST_TICKS / TICKS_PER_SECOND, moves };
+  const forecast = { lag: lagTicks / TICKS_PER_SECOND, seconds: link.forecastTicks / TICKS_PER_SECOND, moves };
   forecastCache = { game, tick: s.tick, forecast };
   return forecast;
 }
@@ -86,11 +86,13 @@ export function snapshot(link: GameLink, commands: CommandStatus[]): Snapshot {
   const mode = playing ? runMode : (modeScreen() ?? runMode);
   const loaded = game !== undefined && link.table !== undefined && link.ready;
   const forecast = playing && loaded ? simForecast(link, game) : undefined;
+  const reflection = loaded ? reflect(link, game.state) : undefined;
   const screen = game === undefined || (!playing && !game.state.over) ? "title" : game.state.over ? "over" : game.state.choiceQueue.length > 0 ? "choice" : game.state.paused || pauseMenuOpen() ? "paused" : "run";
   return {
     capturedAt: Date.now(),
     screen,
-    ...(loaded ? { game: reflect(link, game.state), gameEvents: link.events.map(json) } : {}),
+    ...(reflection === undefined ? {} : { game: reflection, gameEvents: link.events.map(json) }),
+    ...(reflection === undefined || !playing ? {} : { surroundings: surroundings(link, game.state, link.forecastTicks / TICKS_PER_SECOND, { enemies: (reflection.enemies ?? []) as Record<string, unknown>[], pickups: (reflection.pickups ?? []) as Record<string, unknown>[] }) }),
     storage: gameStorage(),
     headless: navigator.webdriver,
     ...(link.simBuild === undefined ? {} : { gameBuild: link.simBuild }),

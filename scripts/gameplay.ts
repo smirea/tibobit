@@ -166,7 +166,7 @@ export const BLOCKS = {
   standing_on: "the chest or spot Tibo stands on and how far it is charged, and the ground damage sources standing still would take, by the forecast",
   hurt_by: "damage taken in the last 3 seconds by source",
   bosses: "bosses with distance, direction and health",
-  enemies: "enemies around, how many within 60 units, and the most and least crowded directions within 150",
+  enemies: "enemies on screen, and the directions with the most and the fewest",
   current_goal: "the goal under way and since when",
   recent_goals: "the last 6 goals and how each ended",
   weapon_damage: "damage dealt so far by each weapon held, most first, with its rate a minute, e.g. 'Damage dealt so far by weapon: Steam Vent 4012 (1783 a minute), Hash Hawk 2210 (982 a minute).' (not part of {{state}})",
@@ -174,10 +174,9 @@ export const BLOCKS = {
   resources: "the game's loadout.rerolls, skips, banishes, cursesTaken and revivesUsed, and loadout.stats.revivals",
   buffs: "the game's timers that end later (keys ending in Until, such as goldRushUntil and frenzyUntil), with seconds left",
   schedule: "the coming minutes that bring a boss, an elite or an event, by the game's names",
-  enemy_kinds: "every kind of enemy alive, by the game's name: how many, how many elite, the nearest one's distance, max hp, contact damage and speed",
   elites: "every elite alive: name, health, contact damage, distance and direction",
-  hazards: "the game's world.activeHazards within 300 of Tibo: kind, radius and distance",
-  pickups: "pickups on the ground counted by kind, and the nearest ones that are not xp gems with their kind, value and distance",
+  hazards: "from surroundings, within the forecast's horizon: the game's hazard kinds underfoot and in each direction's path, attack zones near Tibo (kind, shape, whether Tibo is inside, when a telegraph lands, which directions walk into it), and bullets that would hit a Tibo standing still",
+  pickups: "pickups on the ground counted by the game's kind, the total xp and gold on the ground, and the nearest of the rest (chests, food and the like) with their kind, value and distance",
   spots: "every unused spot on the loaded map, nearest first, with the game's name and description, distance, direction, charge, radius and price",
   dogs: "each of Tibo's dogs: name, breed, the game's description, level, the game's own definition (ability, aura, levelUps and the rest) and its run.dogHelp so far",
   events: "the last 10 events the game recorded, as the game wrote them, with their run times",
@@ -192,23 +191,23 @@ export const SLOTS = {
   "planner.goal": { about: "asked once per goal option as a yes/no question (noul); the option rated highest becomes the goal", vars: { goal: "one goal option in words, e.g. 'walk to the chest 120 away to the up-left and stand on it for 1 seconds to open it, which gives a free pick'" }, required: ["goal"] },
   "planner.pick": { about: "asked once at a level-up, chest or shrine as a choice among the cards; each card key carries its kind, slot, pairings, whether the game recommends it, and the game's description", vars: { choice: "level-up, chest or shrine" }, required: [] },
   "action.state": { about: "the action model's state, sent once per step it is asked about", vars: { goal: "the goal in words with its progress, e.g. 'open the chest, 80 away to the left'" }, required: [] },
-  "action.hurt": { about: "asked once per move offered, answered on the scale: takes no damage, gets scratched, gets badly hurt, gets very badly hurt, dies", vars: { move: "one move in words: the game's own forecast for the next second first, then a boss or hazard that way, enemies close, and how it bears on the goal", goal: "as in action.state" }, required: ["move"] },
+  "action.hurt": { about: "asked once per move offered, answered on the scale: takes no damage, gets scratched, gets badly hurt, gets very badly hurt, dies", vars: { move: "one move in words: the game's own forecast over the forecastSeconds horizon first, then a boss or hazard that way, enemies close, and how it bears on the goal", goal: "as in action.state" }, required: ["move"] },
   "action.useful": { about: "asked once per move offered as a yes/no question (noul); among the moves rated about as safe as the safest, the most useful wins", vars: { move: "as in action.hurt", goal: "as in action.state" }, required: ["move"] },
   "action.dash": { about: "asked as a yes/no question when Tibo has a dash charge and an enemy or bullet is close; above dashThreshold (bossDashThreshold near a boss) Tibo dashes the chosen way. Empty: never dash", vars: { goal: "as in action.state" }, required: [] },
 } as const;
 export type Slot = keyof typeof SLOTS;
 
-export type Knobs = { exploreDistance: number; evadeSeconds: number; gemsSeconds: number; stuckSeconds: number; extraDamage: number; safeMargin: number; distrustSeconds: number; distrustBossRange: number; planEvery: number; eliteSeconds: number; bossOfferRange: number; dashThreshold: number; bossDashThreshold: number; bossDashRange: number; eliteFrom: number; eliteMinHp: number };
+export type Knobs = { exploreDistance: number; evadeSeconds: number; stuckSeconds: number; extraDamage: number; safeMargin: number; distrustSeconds: number; distrustBossRange: number; planEvery: number; eliteSeconds: number; bossOfferRange: number; dashThreshold: number; bossDashThreshold: number; bossDashRange: number; eliteFrom: number; eliteMinHp: number; forecastSeconds: number };
 export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: string }> = {
   exploreDistance: { min: 100, max: 1500, about: "units an explore goal walks before it ends; it also ends at the first chest never listed before" },
   evadeSeconds: { min: 2, max: 30, about: "seconds an evade goal lasts" },
-  gemsSeconds: { min: 3, max: 40, about: "seconds a gems goal collects for at most" },
   stuckSeconds: { min: 2, max: 20, about: "seconds without getting closer (or charging) before a goal is given up" },
-  extraDamage: { min: 0, max: 0.25, about: "share of max health a move may cost over the cheapest move in the next second and still be taken: the page walks Tibo to the goal on its own while the way there costs no more than this over the cheapest, and the action model is never offered a move that costs more" },
+  extraDamage: { min: 0, max: 0.25, about: "share of max health a move may cost over the cheapest move within the forecastSeconds horizon and still be taken: the page walks Tibo to the goal on its own while the way there costs no more than this over the cheapest, and the action model is never offered a move that costs more" },
   safeMargin: { min: 0, max: 0.5, about: "how far above the safest move's hurt rating (as a share of the scale) a move may be and still compete on usefulness" },
   distrustSeconds: { min: 0, max: 30, about: "after Tibo loses health on a step the forecast called free (a walk row), the action model is asked about every step for this many seconds instead of the page walking on its own; 0 trusts the forecast" },
   bossOfferRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is offered every move, even those the one-second forecast prices above extraDamage, since boss attacks are not in that forecast; 0 keeps the usual rule" },
   eliteSeconds: { min: 5, max: 60, about: "seconds a fight-the-elite goal lasts at most: Tibo heads for the elite and keeps it within reach of its weapons until it dies" },
+  forecastSeconds: { min: 0.1, max: 2, about: "how far ahead the game's own simulation prices each move, and how far surroundings look for bullets that would hit, attacks and hazards on each path, in seconds; the action model weighs moves by what they cost over this horizon" },
   planEvery: { min: 1, max: 60, about: "seconds between planner calls while a goal is under way (it is also asked whenever a goal ends, a choice opens, a card is taken or a boss appears); short re-plans switch goals often, long ones let a goal finish. A person watching in the panel sets this instead" },
   distrustBossRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is asked about every step, since boss attacks from afar are not in the one-second forecast; 0 turns it off" },
   dashThreshold: { min: 0.05, max: 0.95, about: "how sure the action model's answer to action.dash must be (a probability) for Tibo to dash; lower dashes more often" },
@@ -236,11 +235,11 @@ export const DEFAULT_TEMPLATES: Templates = {
   },
   action: {
     state: "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
-    hurt: "If Tibo does this: {{move}}. How badly does it hurt Tibo in the next second?",
+    hurt: "If Tibo does this: {{move}}. How badly does it hurt Tibo?",
     useful: "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
     dash: "Is Tibo about to be hit or surrounded, so a quick dash away would save it?",
   },
-  knobs: { exploreDistance: 300, evadeSeconds: 8, gemsSeconds: 12, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1, distrustSeconds: 0, distrustBossRange: 0, planEvery: 5, eliteSeconds: 20, bossOfferRange: 0, dashThreshold: 0.5, bossDashThreshold: 0.5, bossDashRange: 0, eliteFrom: 0, eliteMinHp: 0 },
+  knobs: { exploreDistance: 300, evadeSeconds: 8, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1, distrustSeconds: 0, distrustBossRange: 0, planEvery: 5, eliteSeconds: 20, bossOfferRange: 0, dashThreshold: 0.5, bossDashThreshold: 0.5, bossDashRange: 0, eliteFrom: 0, eliteMinHp: 0, forecastSeconds: 0.5 },
 };
 
 const STATE_LIMIT = 8000;
@@ -611,10 +610,9 @@ export function runStats(csv: string): string {
     const m = b.match(/^(.*?) \(.*\) \d+ \S+ (\d+)%(?: of (\d+))?$/);
     return m === null ? b : `${m[1]} at ${m[2]}%${m[3] === undefined ? "" : ` of ${m[3]}`}`;
   });
-  // An elite is known by its uid; what stood within 150 units when it first showed is what came with it.
-  // Elites of one kind that show within 5 s of each other came as one group.
+  // An elite is known by its uid. Elites of one kind that show within 5 s of each other came as one group.
   const seenUids = new Set<string>();
-  const groups: { s: number; time: string; name: string; hp: number[]; max: string; dist: number; nearby: string }[] = [];
+  const groups: { s: number; time: string; name: string; hp: number[]; max: string; dist: number; onScreen: string }[] = [];
   for (const r of live)
     for (const e of (r.elite_list ?? "").split("; ").filter(Boolean)) {
       const m = e.match(/^(\d+) (.*?) \((.*?)\) (\d+)\/(\d+) (\d+) (\S+)$/);
@@ -622,9 +620,9 @@ export function runStats(csv: string): string {
       seenUids.add(m[1] ?? "");
       const group = groups.find((g) => g.name === m[2] && num(r.seconds) - g.s <= 5);
       if (group !== undefined) group.hp.push(num(m[4]));
-      else groups.push({ s: num(r.seconds), time: r.time ?? "?", name: m[2] ?? "?", hp: [num(m[4])], max: m[5] ?? "?", dist: num(m[6]), nearby: r.nearby || "nothing" });
+      else groups.push({ s: num(r.seconds), time: r.time ?? "?", name: m[2] ?? "?", hp: [num(m[4])], max: m[5] ?? "?", dist: num(m[6]), onScreen: r.enemies ?? "?" });
     }
-  const elitesSeen = groups.map((g) => `${g.time} ${g.hp.length} ${g.name} (${g.hp.join(", ")} of ${g.max} hp), the nearest ${g.dist} away; within 150 of Tibo then: ${g.nearby.replaceAll("; ", ", ")}`);
+  const elitesSeen = groups.map((g) => `${g.time} ${g.hp.length} ${g.name} (${g.hp.join(", ")} of ${g.max} hp), the nearest ${g.dist} away, with ${g.onScreen} enemies on screen then`);
   // Bursts: every stretch where Tibo lost 40+ health within 3 s, hit by hit. hurt_by sums each
   // source over a recent window, so a source's rise from the row before names who hit.
   const hits = live.flatMap((r, i) => {
@@ -669,7 +667,7 @@ export function runStats(csv: string): string {
     .map((r) => {
       const score = (r.detail ?? "").match(/(\d+)%, dashed/)?.[1];
       const boss = Math.min(...[...(r.bosses ?? "").matchAll(/\) (\d+) /g)].map((m) => Number(m[1])));
-      return `${r.time} (dash score ${score ?? "?"}%, health ${Math.round((100 * num(r.hp)) / Math.max(1, num(r.max_hp)))}%, ${num(r.enemies_near)} enemies within 60, ${Number.isFinite(boss) ? `a boss ${boss} away` : "no boss"})`;
+      return `${r.time} (dash score ${score ?? "?"}%, health ${Math.round((100 * num(r.hp)) / Math.max(1, num(r.max_hp)))}%, ${num(r.enemies)} enemies on screen, ${Number.isFinite(boss) ? `a boss ${boss} away` : "no boss"})`;
     });
   const calls = (e: string) => rows.filter((r) => r.event === e);
   const meanMs = (rs: Record<string, string>[]) => Math.round(rs.reduce((a, r) => a + num(r.ms), 0) / Math.max(1, rs.length));
@@ -1071,8 +1069,8 @@ export function botFacts(models: { planner: string; action: string }): string {
     "tibo.dog is a survivors-like game. Weapons fire on their own; the player only walks, dashes, and picks level-up upgrades, chest rewards and shrine options. Tibo has 6 weapon and 6 passive slots. A base weapon at max level plus its catalyst (a passive or an item) evolves at the next chest; evolved weapons are much stronger, and two evolved weapons can sometimes fuse into a union.",
     `Two in-game models play, and which models they are is fixed: the planner (${models.planner}) and the action model (${models.action}). They are small, fast decision models that never write text. Each call sends one state text and a set of questions, all answered against that state: a yes/no question answered as a probability from 0 to 1 (noul), a score on a named scale, or a choice among keys. The templates are that state text and those questions.`,
     "The planner is asked when the game starts, when a goal ends, at every level-up, chest and shrine choice, right after a card is taken, when a boss first appears, and every planEvery seconds while a goal is under way. Each time it rates every goal option with planner.goal, and the highest-rated becomes Tibo's goal. At a choice it also picks a card with planner.pick; a choice with one card it can take is taken without asking.",
-    `The goal options the bot offers: up to 4 chests within ${PLAN_RANGE} units (stand on one for its charge time to open it: a free pick, and it evolves whatever recipe is ready); up to 6 spots that charge, such as shrines, each with the game's description; up to 2 food pickups, which heal; up to 2 elites within range to fight until they die (eliteSeconds at most; elites drop chests); the xp gems nearby, collected for up to gemsSeconds; exploring each of the 8 directions for exploreDistance units, stopping at the first chest never listed before; and evading enemies for evadeSeconds. Chests are not laid out on the map: bosses and elites drop them when they die (extra elites and bosses, such as a curse adds, drop none), and a dropped chest stays until it is opened. A target Tibo gave up on carries that note for ${GIVE_UP_SECONDS} seconds. A goal ends when its target is used up, after stuckSeconds without getting closer or charging, or well past the time the walk should take.`,
-    "Every game plays live, as a person plays it: the game never pauses while the models think (only a level-up, chest or shrine choice stops it). Lockstep, which paused it, is banned as a crutch. Every step (about 0.2 to 0.3 seconds) the game's own simulation forecasts each of the 8 directions and standing still one second ahead; live, it first plays the held move for the time the decision takes. While the way to the goal costs no more than the cheapest move plus extraDamage, the page walks Tibo there without asking a model. Otherwise the action model is asked action.hurt and action.useful about every move that does not cost more than that; the moves rated about as safe as the safest (within safeMargin, and below the middle of the scale) compete on usefulness, and the most useful wins. With a dash charge and an enemy or bullet close, action.dash decides whether Tibo dashes that way.",
+    `The goal options the bot offers: up to 4 chests within ${PLAN_RANGE} units (stand on one for its charge time to open it: a free pick, and it evolves whatever recipe is ready); up to 6 spots that charge, such as shrines, each with the game's description; up to 2 food pickups, which heal; up to 2 elites within range to fight until they die (eliteSeconds at most; elites drop chests); exploring each of the 8 directions for exploreDistance units, stopping at the first chest never listed before; and evading enemies for evadeSeconds. Chests are not laid out on the map: bosses and elites drop them when they die (extra elites and bosses, such as a curse adds, drop none), and a dropped chest stays until it is opened. A target Tibo gave up on carries that note for ${GIVE_UP_SECONDS} seconds. A goal ends when its target is used up, after stuckSeconds without getting closer or charging, or well past the time the walk should take.`,
+    "Every game plays live, as a person plays it: the game never pauses while the models think (only a level-up, chest or shrine choice stops it). Lockstep, which paused it, is banned as a crutch. Every step (about 0.2 to 0.3 seconds) the game's own simulation forecasts each of the 8 directions and standing still forecastSeconds ahead; live, it first plays the held move for the time the decision takes. While the way to the goal costs no more than the cheapest move plus extraDamage, the page walks Tibo there without asking a model. Otherwise the action model is asked action.hurt and action.useful about every move that does not cost more than that; the moves rated about as safe as the safest (within safeMargin, and below the middle of the scale) compete on usefulness, and the most useful wins. With a dash charge and an enemy or bullet close, action.dash decides whether Tibo dashes that way.",
     "Winning means surviving to 20:00; the game goes on after that until Tibo dies. In Open World on Nightmare, winning at Nightmare level N unlocks level N+1, and a full run starts the highest level unlocked, so the ladder climbs one level per win and never drops. Every Nightmare level makes pests and bosses tougher; on every level they start at 40% of their health and grow to full by 8:00, so the opening minutes are the cheapest. A run that passes 20:00 also drops gear, which the bot cannot equip yet.",
   ].join("\n\n");
 }
