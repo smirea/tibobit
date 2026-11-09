@@ -300,6 +300,7 @@ const LOG_COLUMNS = [
   "passives",
   "items",
   "options",
+  "dealt",
 ] as const;
 /** `walk`: the page walked Tibo toward its goal without asking a model, and Tibo lost health on the way. `loadout`: what Tibo holds changed. */
 type LogEvent = "plan" | "pick" | "move" | "walk" | "goal" | "loadout" | "run_end";
@@ -342,7 +343,8 @@ class RunLog {
             dash: p.dashCharges,
             enemies: r.enemies.total,
             enemies_near: near(r),
-            bosses: r.bosses.map((b) => `${b.name} (${b.id}) ${at(b)} ${pct(b.hp, b.maxHp)}%`).join("; "),
+            bosses: r.bosses.map((b) => `${b.name} (${b.id}) ${at(b)} ${pct(b.hp, b.maxHp)}% of ${Math.round(b.maxHp)}`).join("; "),
+            dealt: Math.round(Object.values(r.totals.damageDealt).reduce((a, b) => a + b, 0)),
             hurt_by: Object.entries(p.hurtBy).map(([k, v]) => `${k} ${v}`).join("; "),
             standing_on: spotLine(r) ?? "",
             underfoot: r.hazards.filter((h) => h.inside).map((h) => h.kind).join("; "),

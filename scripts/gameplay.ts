@@ -573,21 +573,32 @@ export function runStats(csv: string): string {
       }
     return [...tally].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => k).join(", ") || "-";
   };
+  // `dealt` is the run's damage dealt so far; logs before 2026-11-09 lack it.
+  const hasDealt = live.some((r) => (r.dealt ?? "") !== "");
+  let dealtBefore = num(live[0]?.dealt);
   const table = [
-    "| Minute | Health at the end | Lost | Gained | Level | Enemies | Hurt most by |",
-    "| --- | --- | --- | --- | --- | --- | --- |",
+    `| Minute | Health at the end | Lost | Gained |${hasDealt ? " Damage dealt |" : ""} Level | Enemies | Hurt most by |`,
+    `| --- | --- | --- | --- |${hasDealt ? " --- |" : ""} --- | --- | --- |`,
     ...[...minutes].map(([m, rs]) => {
       const last = rs.at(-1) ?? {};
       const lost = rs.reduce((a, r) => a + num(r.hp_lost), 0);
       const gained = rs.reduce((a, r) => a + num(r.hp_gained), 0);
-      return `| ${m}:00 | ${last.hp}/${last.max_hp} | ${lost} | ${gained} | ${last.level} | ${last.enemies} | ${sources(rs.filter((r) => num(r.hp_lost) > 0))} |`;
+      const dealt = num(last.dealt) - dealtBefore;
+      dealtBefore = num(last.dealt);
+      return `| ${m}:00 | ${last.hp}/${last.max_hp} | ${lost} | ${gained} |${hasDealt ? ` ${dealt} |` : ""} ${last.level} | ${last.enemies} | ${sources(rs.filter((r) => num(r.hp_lost) > 0))} |`;
     }),
   ];
   const seenBoss = new Map<string, string>();
   for (const r of live) for (const b of (r.bosses ?? "").split("; ").filter(Boolean)) {
-    const name = b.replace(/\s+\d+\s+\S+\s+\d+%$/, "");
+    const name = b.replace(/\s+\d+\s+\S+\s+\d+%( of \d+)?$/, "");
     if (!seenBoss.has(name)) seenBoss.set(name, r.time ?? "?");
   }
+  // Every entry is its own boss with its own health, even when several share an id and a spot.
+  const lastRow = live.at(-1) ?? {};
+  const bossesAtEnd = (lastRow.bosses ?? "").split("; ").filter(Boolean).map((b) => {
+    const m = b.match(/^(.*?) \(.*\) \d+ \S+ (\d+)%(?: of (\d+))?$/);
+    return m === null ? b : `${m[1]} at ${m[2]}%${m[3] === undefined ? "" : ` of ${m[3]}`}`;
+  });
   const firstChest = live.find((r) => (r.chests ?? "") !== "")?.time;
   const goals = new Map<string, { done: number; failed: number; dropped: number }>();
   for (const r of rows.filter((x) => x.event === "goal" && x.action !== "start")) {
@@ -618,6 +629,7 @@ export function runStats(csv: string): string {
     ...table,
     "",
     `- Bosses first seen: ${[...seenBoss].map(([k, t]) => `${k} at ${t}`).join("; ") || "none"}.`,
+    `- Bosses alive at ${lastRow.time ?? "the end"}, each a separate boss with its own health: ${bossesAtEnd.join("; ") || "none"}.`,
     `- First chest listed: ${firstChest ?? "never"}. First time under 25% health: ${low ?? "never"}.`,
     `- Goals by kind (done / gave up / dropped): ${[...goals].map(([k, g]) => `${k} ${g.done}/${g.failed}/${g.dropped}`).join("; ") || "none"}.`,
     `- Dashes: ${dashes.length}${dashes.length === 0 ? "" : `: ${dashes.slice(0, 12).join("; ")}${dashes.length > 12 ? "; …" : ""}`}.`,
