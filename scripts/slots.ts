@@ -232,7 +232,7 @@ export class Slot {
     const code = await bot.exited;
     this.children.splice(this.children.indexOf(bot), 1);
     if (code !== 0) {
-      const cause = (await Bun.file(`${base}.bot.log`).text().catch(() => "")).match(/^error: (.*)$/m)?.[1];
+      const cause = (await Bun.file(`${base}.bot.log`).text().catch(() => "")).match(/^(?:error|\w*Error): (.*)$/m)?.[1];
       throw new Error(`the bot exited with code ${code}${cause === undefined ? "" : ` (${cause})`}; see ${base}.bot.log`);
     }
     const result = (await Bun.file(`${base}.result.json`).json()) as TrialResult;

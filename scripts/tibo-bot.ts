@@ -177,16 +177,18 @@ async function decide(state: string, questions: Record<string, Question>, model 
   const body = JSON.stringify({ model, state, questions });
   let json: { answers?: Record<string, Answer>; error?: unknown } | undefined;
   const headers: Record<string, string> = { "content-type": "application/json", ...(DECIDER_KEY === undefined ? {} : { authorization: `Bearer ${DECIDER_KEY}` }) };
-  // LM Studio occasionally never answers a request, and OpenRouter rate-limits; ask again.
+  // LM Studio occasionally never answers a request, and OpenRouter rate-limits; ask again. A lost
+  // network gets two minutes to come back: five games died to a short DNS outage on 2026-11-09.
   for (let attempt = 0; json === undefined; attempt++) {
     try {
       const res = await timed("decide", fetch(DECIDER, { method: "POST", headers, body, signal: AbortSignal.timeout(60_000) }));
       if (res.status === 429 || res.status >= 500) throw new Error(`HTTP ${res.status}`);
       json = (await res.json()) as { answers?: Record<string, Answer>; error?: unknown };
     } catch (e) {
-      if (attempt >= 5) throw e;
+      const offline = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|Unable to connect/.test(String(e)) && performance.now() - started < 120_000;
+      if (attempt >= 5 && !offline) throw e;
       console.log(`decision request failed (${e instanceof Error ? e.message : e}); retrying`);
-      await Bun.sleep(250 * 2 ** attempt);
+      await Bun.sleep(Math.min(5000, 250 * 2 ** attempt));
     }
   }
   latency.push(performance.now() - started);

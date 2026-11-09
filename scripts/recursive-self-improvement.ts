@@ -102,16 +102,30 @@ async function offlineHost(): Promise<string | undefined> {
   for (const host of NEEDED_HOSTS) if (!(await lookup(host).then(() => true, () => false))) return host;
   return undefined;
 }
-async function waitOnline() {
+/** Waits until every host resolves; true when it had to wait. */
+async function waitForHosts(): Promise<boolean> {
   const down = await offlineHost();
-  if (down === undefined) return;
+  if (down === undefined) return false;
   const since = Date.now();
   console.error(`${down} does not resolve; waiting for the network`);
   while (!stopping && (await offlineHost()) !== undefined) await Bun.sleep(30_000);
-  console.log(`the network is back after ${Math.round((Date.now() - since) / 60_000)} min; restarting the games`);
-  await Promise.all(opened.map((s) => s.restartGame()));
+  console.log(`the network is back after ${Math.round((Date.now() - since) / 60_000)} min`);
+  return true;
+}
+async function waitOnline() {
+  if (await waitForHosts()) await Promise.all(opened.map((s) => s.restartGame()));
 }
 const UNREACHABLE = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|Can't reach the API/;
+
+/** Plays a game, and once more on a reopened tab when the network lost it; other slots play on meanwhile. */
+async function playGame(slot: Slot, spec: GameSpec, gyms: Gym[], build: (gym: Gym) => Promise<Gym>): Promise<GameResult> {
+  const first = await slot.play(spec, gyms, EVAL_SEED, build);
+  if (stopping || first.error === undefined || !UNREACHABLE.test(first.error)) return first;
+  console.error(`${spec.id}: lost to the network (${first.error.slice(0, 200)}); playing it again`);
+  await waitForHosts();
+  await slot.restartGame();
+  return slot.play(spec, gyms, EVAL_SEED, build);
+}
 
 async function refreshGames() {
   await waitOnline();
@@ -595,7 +609,7 @@ async function experimentIteration(state: loop.CoachState) {
   const results = await onSlots(slots, reply.games, async (slot, spec) => {
     console.log(`${spec.id} on ${slot.name}: ${spec.label}`);
     // A gym is built again on the slot that needs it, which runs the newest game build.
-    const r = await slot.play(spec, gyms, EVAL_SEED, (g) => buildGym(slot, g, templates));
+    const r = await playGame(slot, spec, gyms, (g) => buildGym(slot, g, templates));
     console.log(`${spec.id}: ${outcome(r)}`);
     return r;
   });
@@ -675,7 +689,7 @@ async function rehearse(state: loop.CoachState, playbook: Playbook): Promise<Reh
   const specs = [...arm("your playbook", playbook.templates, playbook.weapon, same ? "" : "a"), ...(same || baseline === undefined ? [] : arm("the last full run's playbook", baseline.templates, baseline.weapon, "b"))];
   const gyms = await loop.readGyms();
   const results = await onSlots(slots, specs, async (slot, spec) => {
-    const r = await slot.play(spec, gyms, EVAL_SEED, (g) => buildGym(slot, g, spec.templates));
+    const r = await playGame(slot, spec, gyms, (g) => buildGym(slot, g, spec.templates));
     console.log(`${spec.id}: ${outcome(r)}`);
     return r;
   });
