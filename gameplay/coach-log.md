@@ -436,3 +436,69 @@ Loop 4 was the first loop played live, with lockstep banned. The unchanged playb
 Loop 4 ran live (lockstep banned). Nine iterations of prompt and knob variants (Mascot package, armor, commit picks, hurt prompts, extraDamage 0, start weapons, Hot Streak picks, spot goals) each lived no more often than the control; only a swapped-in Hot Streak loadout lived. The final full run on TIBO10 died at 2:25 on NM2 (2:15 last time) with six 1/8 weapons, no passives, no evolution and 0 chests opened. The causes: an elite fight at 82% hp cost 56 hp, and the low-hp evade rule then sent the bot away from the three chests that elite dropped. Later, evade was rated under 30% above half hp with the Mascot 43 units away, and the dash prompt never passed 0.5 until every move was lethal. Next loop: stop prompt-rewording variants and test mechanisms seen in the logs. In order: chest-within-150 outranks evade, the new boss dash-threshold knobs, weapon-focus picks, and elite and nest gating. Use at least 5 fresh live seeds per arm, paired, and do not train on TIBO10.
 
 Rewrote coach.md # Experiments, coach.md # Full run, coach.md # Reflect.
+
+## Note from the loop manager (2026-11-08 15:42)
+
+New knobs from loop 5: eliteFrom and eliteMinHp take elite fights out of the goal options before a game time or below a share of health (in the L4 rehearsal, elite fights at 1:00-1:20 cost 37-103 health in four of five games). dashThreshold, bossDashThreshold and bossDashRange set how sure the dash answer must be. These change what the bot does without rewording a prompt.
+
+## L5.I1: experiments (2026-11-08 15:45)
+
+The last full run (live NM2, TIBO10) died at 2:25 with 0 chests opened. A 16 s elite fight at 82% hp cost 56 hp and dropped 3 chests. The goal text's low-hp clause then rated Keep away 76-79% and Open the chest 19%, so the bot walked away from chests 56-112 units away. No prompt-rewording variant has beaten the live control, so this loop tests mechanisms instead, in priority order. This iteration runs priority 1, chest before evade, on the five seeds where the unchanged playbook has died live: 1919, 4141, 2121, 1313 and 4444. The arm changes only the planner.goal text. A chest within about 150 units, with no boss within 200, is rated highest at any hp. Everything else, including the 10:00 gold rule and elite handling, is kept. Existing controls on these seeds all died (2:03 to 3:06; two died twice on 1919 and 4141). The bar is at least 4 of 5 alive at 5:00 with an evolution by about 2:30. If the arm lives 2 or fewer of 5, I close it as refuted. I will also check whether low-hp deaths rise, since that is the risk. The boss dash knobs (priority 2) come next iteration. I am not building gyms this iteration, and the playbook is unchanged because no live evidence supports a change yet.
+
+Games: 5, 1 lived, for nm2-chest-before-evade.
+
+## L5.I2: experiments (2026-11-08 15:52)
+
+L5.I1 tested priority 1, chest before evade at any hp, on the five seeds where the unchanged live playbook had died 0 of 5. It lived 1 of 5, so by my rule it is refuted. 4444 was alive at 5:00 (18 chests, gratin-arc 2:57, 108 damage). 1919 died 4:08 (12 chests, but 47/120 hp at 2:00 and 14/120 at 4:00). 4141 died 2:16 (sand-crab 144 damage, 1 chest). 2121 died 2:03 (Mascot 76, 6 chests, no evolution). 1313 died 2:42 (sand-crab 83, 9 chests, hunters-moon at 2:24). The chest flow did rise (1-18 chests against 1-3 in the dead controls). Even so, three of the four deaths reached the 2:00 Mascot at 6-47 hp after losing 69-116 hp in minute 0-1 to charger and chip damage, and no evolution came before 2:24. Chests alone do not undo minute-1 hp loss. Dashes did not track survival either (12, 11, 1, 11, 0 across the games). This iteration tests priority 2, the boss dash knobs now in the bot: bossDashThreshold 0.25 with bossDashRange 150, with the playbook text unchanged. It runs on four of the same dying seeds (1919, 4141, 2121, 1313), paired against their existing controls, which died 0 of 4. I want to see whether a charge is kept for the Mascot and how much of its damage is avoided. Four seeds is below the five I want per arm, so even a clean result is a lead. The fifth game is a meta-area game, since meta has had none since loop 3: the unchanged playbook on a fresh seed (5151), extending the live baseline rate. Elite gating (eliteMinHp, eliteFrom) is next if the dash knobs fail. No gyms are built and no playbook change is made, because nothing has been confirmed live.
+
+Games: 5, 2 lived, for nm2-boss-dash-knob, nm2-live-baseline-fresh.
+
+## L5.I3: experiments (2026-11-08 15:57)
+
+L5.I2 tested the boss dash knobs (bossDashThreshold 0.25, bossDashRange 150) on the four seeds where the unchanged live playbook had died (controls 0 of 4). It lived 2 of 4: 1919 and 4141 were alive at 5:00 with Mascot damage of 31 and 59, and 2121 and 1313 died at 2:09 and 2:07. The fifth game, the unchanged playbook on new seed 5151, died at 2:30, which puts the live baseline at about 5 of 20. By my rule 2 of 4 is a lead, not a confirmation. The dash timing separates the games. The two survivors held 4 and 10 dashes and spent them at 2:02-3:03, around the Mascot. The two deaths spent 10 and 20 dashes early on pests (1313 had 20 dashes between 0:54 and 1:51; 2121 had 10 between 1:31 and 2:05) and reached 2:00 at 1-13 hp. That suggests dashThreshold 0.5 burns charges on chip damage, and a higher normal threshold could save them for the boss. Because those deaths reached 2:00 at 1-13 hp, minute-1 hp is still the main failure, which is why elite gating is the next lever. L5.I3 has two tests. (1) The dash knobs get a fifth paired seed (4444, control died 2:15), plus a variant that raises dashThreshold to 0.75 with the same boss knobs on 2121 and 1313, the seeds where the first version failed. (2) Elite gating with eliteMinHp 0.85 (priority 4) on 1919 and 4141, to see whether skipping elite fights below 85% hp preserves minute-0/1 hp without starving chests; the L4 full run lost 56 hp to an elite at 82% hp. All games are fresh live NM2 starts on seeds with dead controls, and the playbook is unchanged.
+
+Games: 5, 0 lived, for nm2-boss-dash-knob, nm2-dash-save-threshold, nm2-elite-nest-gating.
+
+## L5.I4: experiments (2026-11-08 16:01)
+
+L5.I3 went 0 of 5 alive at 5:00, so none of its three arms helped. The boss dash knobs (0.25/150) on 4444 died at 3:10 after 23 dashes, 10 of them before 1:50 at 16-34% hp on pests. That makes 2 of 5 for the knobs against 0 of 5 for the controls, a lead but nowhere near 4 of 5. Raising dashThreshold to 0.75 was worse: 2121 died 2:18 and 1313 died 1:45 with 0 dashes. The dash scores sit around 0.51-0.55, so 0.75 turns dashing off. eliteMinHp 0.85 died on 1919 (3:42, 6 chests, no evolution) and 4141 (2:11, 0 chests). Gating elites by hp did not protect minute-1 hp. 4141 lost 65 hp in minute 1 to a sand-crab with no elite fight. Every live arm so far (chest-first 1/5, boss knobs 2/5, elite gate 0/2, dash 0.75 0/2) is within noise of the roughly 25% live baseline. The recurring cause is minute 0-1 chip damage from chargers (sand-crab, potato-beetle) while the weapon is too weak to get elites or an evolution. The one thing that separated survivors was early power. This iteration tests priority 3, weapon-focus picks. The prompt takes up to 3 aim-free, non-dash weapons, then puts every level into the highest-level held weapon, then its catalyst at level 5+, and bans on-dash weapons and a 4th weapon. It is different from the refuted Steam-Vent-only commit prompt. It plays live on the five seeds where the unchanged playbook died (1919, 4141, 2121, 1313, 4444; controls 0 of 5), paired. The playbook and knobs are unchanged apart from the pick prompt. Beating the baseline needs 4 of 5 alive at 5:00 with an evolution by about 2:30. No gym builds: the two live opening gyms stay ready, and a game build change would break new ones.
+
+Games: 5, 0 lived, for nm2-weapon-focus-picks.
+
+## L5.I5: experiments (2026-11-08 16:05)
+
+L5.I4 (weapon-focus picks) lived 0 of 5 on the seeds where the unchanged playbook lived 0 of 5. All five died at 2:09-2:24 and four of the five deaths had the Mascot as the killing blow. None had an evolution, and chests were 0-3. The pick prompt was not the cause: 2121 and 1313 had already lost 80-85 hp in minute 0, before any pick mattered. The dash logs show 17-24 dashes spent on single pests at 17-40% hp. The stats also show the page walked through 15-19 hits on its own in the dead games, which were hits the one-second forecast had called free (chargers, bullets). distrustSeconds exists to cover exactly that, and it has never been tested live in the opening; its only earlier test was lockstep and from 16:40. This iteration plays distrustSeconds 10 with everything else unchanged on the five dying seeds (1919, 4141, 2121, 1313, 4444), paired against their all-dead controls. Passing needs 4 of 5 alive at 5:00 with an evolution by about 2:30. At 2 or fewer of 5 it is refuted. I am closing nm2-weapon-focus-picks as refuted. No playbook change and no gyms: nothing has been confirmed live, and a game build change would break new gyms.
+
+Games: 5, 0 lived, for nm2-distrust-seconds-live.
+
+## L5.I6: experiments (2026-11-08 16:10)
+
+L5.I5 played distrustSeconds 10 on the five seeds where the unchanged playbook is 0 of 5 alive, and it lived 0 of 5. Deaths came at 1:32-2:20 with 0-9 chests and no evolution. Minute 0-1 hp loss was again 80-111 (sand-crab 83 on 1313, potato-beetle 54-62, tomato-leech 61), and the dash fired 6-12 times on single pests at 31-58% scores. The page walked through only 1-6 hits per game, so unforecast hits are not the explanation I gave in L5.I5. Priorities 1-4 are now all tested live (chest-before-evade 1/5, boss dash knobs 2/5, weapon-focus picks 0/5, elite gating 0/2, dash 0.75 0/2, distrust 0/5). None beat the roughly 25% live baseline. The movement layer still has two untested live knobs. This iteration tests the first one, safeMargin 0, on the same five dying seeds. In a crowd, where the action model is asked, safeMargin 0.1 lets a slightly riskier move that is 'more useful' beat the safest one. At 0 it always takes the safest-rated move. Minute-0/1 chip damage is where the runs die, so this is the direct test of whether choosing safer steps cuts it. It is a single knob change with the playbook unchanged. The bar is 4 of 5 alive at 5:00 with an evolution by about 2:30. At 2 or fewer of 5 it is refuted. I also check chests, so that safer steps do not starve the chest goals. The next knob is exploreDistance 100: explore found no chests in the first 2 minutes in any live game (B117), so short legs may avoid walking into new pests. No gyms and no playbook change, because nothing is confirmed live.
+
+Games: 5, 0 lived, for nm2-safe-margin-live.
+
+## L5.I7: experiments (2026-11-08 16:14)
+
+L5.I6 tested safeMargin 0 live on the five seeds where the unchanged playbook lives 0 of 5 (1919, 4141, 2121, 1313, 4444). It lived 0 of 5, dying at 2:08-3:04. Minute 0-1 hp loss was again 36-171, mostly from fry-fly, tomato-leech, potato-beetle and spittlebug, and the Mascot or a chaser finished a bot at 1-17 hp. There were no evolutions, and 0-1 chests in four of the five games. Dashes were spent on single pests at 51-54% scores, so the choice of step is not the lever. Every mechanism on the priority list is now tested live and none beats the roughly 25% baseline: chest before evade, boss dash knobs, weapon-focus picks, elite gating, distrust 10, and safeMargin 0. The movement-layer knob still untested is exploreDistance. The logs show explore legs spend minute 0-2 walking into new pests, finding no chests (B117). Explore goals were 7-14 per dead game, and the 1313 game never saw a chest. This iteration plays exploreDistance 100 on the same five seeds, paired against their all-dead controls. The knob shortens every explore leg so the bot re-plans near its start instead of crossing the map. It is a behaviour change, not a rewording. The bar is 4 of 5 alive at 5:00 with an evolution by about 2:30. At 2 or fewer of 5 it is refuted. I will also check that chest flow does not starve. No gyms are built, because a build change would break them. The playbook is unchanged, since nothing has been confirmed live.
+
+Games: 5, 0 lived, for nm2-explore-short-live.
+
+## L5.I8: no usable plan (2026-11-08 20:18)
+
+The coach gave no usable reply, so this iteration played nothing.
+
+## L5.I9: no usable plan (2026-11-09 00:22)
+
+The coach gave no usable reply, so this iteration played nothing.
+
+## L5.I10: rehearsal (2026-11-09 02:24)
+
+Your playbook is the one the last full run played; it lived in 0 of 5 fresh Nightmare 1 games of 300s.
+
+## L5.I10: full run (2026-11-09 05:56)
+
+The coach gave no plan; the run plays the playbook as it stands.
+
+## L5.I10: reflection (2026-11-09 06:42)
+
+The coach gave no usable reflection.
