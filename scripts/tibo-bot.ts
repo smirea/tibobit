@@ -1448,9 +1448,24 @@ async function main() {
     rescuedLink = undefined;
   };
 
+  // The tab's command stream can drop and reconnect after 3s; the server re-sends the pilot state
+  // when it does, so the run carries on. Two training games were lost to drops before this wait.
+  const reconnected = async (): Promise<Snap> => {
+    const since = Date.now();
+    for (;;) {
+      await Bun.sleep(500);
+      const s = await api<Snap>("/state");
+      if (s.connected) {
+        console.error(`the game tab dropped its connection and came back after ${((Date.now() - since) / 1000).toFixed(1)}s`);
+        return s;
+      }
+      if (Date.now() - since > 20_000) throw new Error("the game tab lost its connection to the agent server for 20s");
+    }
+  };
+
   for (;;) {
-    const s = await timed("state", api<Snap>("/state"));
-    if (!s.connected) throw new Error("the game tab is not connected to the agent server");
+    const polled = await timed("state", api<Snap>("/state"));
+    const s = polled.connected ? polled : await reconnected();
     await fillLink(s);
     if (s.screen === "title" || s.screen === "over") {
       if (TRIAL !== undefined) return endTrial(last, s.lastRun ?? (last === undefined ? undefined : { time: last.time, level: last.player.level, ...last.totals }));

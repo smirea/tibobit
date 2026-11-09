@@ -3,7 +3,7 @@
 // evaluation seed) or from a gym, optionally with the build swapped, and the bot plays it for a set
 // time (tibo-bot.ts --trial). A gym is built the same way and saved at its time.
 import path from "node:path";
-import { mkdirSync } from "node:fs";
+import { closeSync, mkdirSync, openSync } from "node:fs";
 import type { CheckpointMeta, CommandStatus, LoadoutSpec, Snapshot } from "../src/agent/protocol";
 import { type Gym, type Templates, type Totals, clock, runStats } from "./gameplay";
 
@@ -101,8 +101,11 @@ export class Slot {
   }
 
   private spawn(script: string, args: string[], log: string): Child {
-    const out = Bun.file(log);
+    // Appended, so a restarted loop keeps the evidence of what went wrong before it.
+    const out = openSync(log, "a");
     const child = Bun.spawn([process.execPath, path.join(import.meta.dir, script), ...args], { cwd: ROOT, stdin: "ignore", stdout: out, stderr: out });
+    // The child holds its own copy; the loop spawns a bot per game and would run out of descriptors.
+    closeSync(out);
     this.children.push(child);
     return child;
   }
@@ -228,7 +231,10 @@ export class Slot {
     );
     const code = await bot.exited;
     this.children.splice(this.children.indexOf(bot), 1);
-    if (code !== 0) throw new Error(`the bot exited with code ${code}; see ${base}.bot.log`);
+    if (code !== 0) {
+      const cause = (await Bun.file(`${base}.bot.log`).text().catch(() => "")).match(/^error: (.*)$/m)?.[1];
+      throw new Error(`the bot exited with code ${code}${cause === undefined ? "" : ` (${cause})`}; see ${base}.bot.log`);
+    }
     const result = (await Bun.file(`${base}.result.json`).json()) as TrialResult;
     const csv = result.log === undefined ? "" : await Bun.file(result.log).text().catch(() => "");
     return { result, stats: csv === "" ? "(no log)" : runStats(csv) };
