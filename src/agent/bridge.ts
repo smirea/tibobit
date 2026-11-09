@@ -72,6 +72,19 @@ const CHECKPOINT_TIMEOUT_MS = 120_000;
 const IDLE_INTERVAL_MS = 500;
 const RECONNECT_MS = 3000;
 const MAX_IN_FLIGHT = 4;
+const HELLO_TIMEOUT_MS = 5000;
+// The server lets this tab take back a stream of its own that outlived an abort, and refuses other tabs.
+const TAB_ID = crypto.randomUUID();
+
+/** The server's `{"error": ...}` body, or a fallback naming the status. */
+function refusal(r: GmResponse, origin: string): string {
+  const text = r.responseText ?? (typeof r.response === "string" ? r.response : "");
+  try {
+    const { error } = JSON.parse(text) as { error?: unknown };
+    if (typeof error === "string") return error;
+  } catch {}
+  return `the agent server on ${origin} refused the connection (${r.status})`;
+}
 
 function post(origin: string, path: string, body: unknown): Promise<boolean> {
   return new Promise((resolve) =>
@@ -155,24 +168,37 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
   const listen = () => {
     const mine = ++session;
     if (NOT_GRANTED !== undefined) return;
+    // Tampermonkey may end one request through several of these callbacks; only the first retries.
+    let over = false;
+    const retry = (why?: string) => {
+      if (over) return;
+      over = true;
+      clearTimeout(silence);
+      if (why !== undefined && mine === session) error = why;
+      reconnect(mine);
+    };
+    const silence = setTimeout(() => {
+      if (connected || mine !== session) return;
+      request?.abort();
+      retry(`the agent server on ${origin} did not answer`);
+    }, HELLO_TIMEOUT_MS);
     request = GM_xmlhttpRequest({
       method: "GET",
-      url: `${origin}/bridge/commands`,
+      url: `${origin}/bridge/commands?tab=${TAB_ID}`,
       responseType: "stream",
       // Tampermonkey reports no status yet at loadstart, so the server's first line, a hello,
-      // is what marks the connection live. A refused connection (409) never sends one.
+      // is what marks the connection live. A refused connection (409) never sends one, and
+      // Tampermonkey hands over its body here or only in onload.
       onloadstart: (r) => {
         const body = r.response as ReadableStream<Uint8Array> | null;
-        if (body === null) return reconnect(mine);
+        if (body === null) return;
         read(body, mine)
           .catch(() => {})
-          .finally(() => reconnect(mine));
+          .finally(() => retry());
       },
-      onerror: () => {
-        if (mine === session) error = `no agent server on ${origin}`;
-        notify();
-        reconnect(mine);
-      },
+      onload: (r) => retry(r.status >= 300 ? refusal(r, origin) : undefined),
+      onerror: () => retry(`no agent server on ${origin}`),
+      ontimeout: () => retry(`no agent server on ${origin}`),
     });
   };
 

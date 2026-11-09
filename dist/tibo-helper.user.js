@@ -1028,6 +1028,17 @@
   var IDLE_INTERVAL_MS = 500;
   var RECONNECT_MS = 3000;
   var MAX_IN_FLIGHT = 4;
+  var HELLO_TIMEOUT_MS = 5000;
+  var TAB_ID = crypto.randomUUID();
+  function refusal(r, origin) {
+    const text = r.responseText ?? (typeof r.response === "string" ? r.response : "");
+    try {
+      const { error } = JSON.parse(text);
+      if (typeof error === "string")
+        return error;
+    } catch {}
+    return `the agent server on ${origin} refused the connection (${r.status})`;
+  }
   function post(origin, path, body) {
     return new Promise((resolve) => GM_xmlhttpRequest({
       method: "POST",
@@ -1093,22 +1104,35 @@
       const mine = ++session;
       if (NOT_GRANTED !== undefined)
         return;
+      let over = false;
+      const retry = (why) => {
+        if (over)
+          return;
+        over = true;
+        clearTimeout(silence);
+        if (why !== undefined && mine === session)
+          error = why;
+        reconnect(mine);
+      };
+      const silence = setTimeout(() => {
+        if (connected || mine !== session)
+          return;
+        request?.abort();
+        retry(`the agent server on ${origin} did not answer`);
+      }, HELLO_TIMEOUT_MS);
       request = GM_xmlhttpRequest({
         method: "GET",
-        url: `${origin}/bridge/commands`,
+        url: `${origin}/bridge/commands?tab=${TAB_ID}`,
         responseType: "stream",
         onloadstart: (r) => {
           const body = r.response;
           if (body === null)
-            return reconnect(mine);
-          read(body, mine).catch(() => {}).finally(() => reconnect(mine));
+            return;
+          read(body, mine).catch(() => {}).finally(() => retry());
         },
-        onerror: () => {
-          if (mine === session)
-            error = `no agent server on ${origin}`;
-          notify();
-          reconnect(mine);
-        }
+        onload: (r) => retry(r.status >= 300 ? refusal(r, origin) : undefined),
+        onerror: () => retry(`no agent server on ${origin}`),
+        ontimeout: () => retry(`no agent server on ${origin}`)
       });
     };
     const receivePilot = (next) => {

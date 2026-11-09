@@ -29,6 +29,8 @@ const PILOT_ARGS = option("pilot", "--decider openrouter --model typesafe/jev-1.
 let latest: { snapshot: Snapshot } | undefined;
 let book: Encyclopedia | undefined;
 let page: ReadableStreamDefaultController<Uint8Array> | undefined;
+// Which tab holds the stream, so that tab can take it back when its old stream outlives a reconnect.
+let pageTab: string | undefined;
 let nextId = 1;
 const sockets = new Set<ServerWebSocket<unknown>>();
 const waiters = new Set<() => void>();
@@ -186,11 +188,21 @@ const server = Bun.serve({
           return srv.upgrade(req) ? undefined : errorResponse("websocket upgrade failed");
         case "GET /bridge/commands": {
           // One game tab at a time; a second tab keeps retrying until the first goes away.
-          if (page !== undefined) return errorResponse("another tibo.dog tab is already connected", 409);
+          const tab = url.searchParams.get("tab") ?? undefined;
+          if (page !== undefined && (tab === undefined || tab !== pageTab))
+            return errorResponse(`another tibo.dog tab is using the agent server on :${PORT}; close it or pick another port`, 409);
+          if (page !== undefined) {
+            try {
+              page.close();
+            } catch {}
+          }
+          let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
           return new Response(
             new ReadableStream<Uint8Array>({
               start(controller) {
+                stream = controller;
                 page = controller;
+                pageTab = tab;
                 toPage({ hello: true });
                 toPage({ pilot });
                 for (const message of chat) toPage({ chat: message });
@@ -205,6 +217,7 @@ const server = Bun.serve({
                 }, KEEPALIVE_MS);
               },
               cancel() {
+                if (page !== stream) return;
                 page = undefined;
                 console.log("game tab disconnected");
               },
