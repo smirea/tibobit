@@ -203,7 +203,10 @@ async function decide(state: string, questions: Record<string, Question>, model 
 }
 
 // ---- The run -------------------------------------------------------------------------------
-const MODE: GameMode = MODE_ARG === "current" ? ((await api<Snap>("/state")).mode ?? "daily") : MODE_ARG;
+// The live state, plus what the bot keeps beyond it: the game's rules (charge times, crate prices),
+// its run tallies (logs and results) and the browser's storage (the Nightmare ladder).
+const STATE = "/state?raw=cfg,run,counters,storage";
+const MODE: GameMode = MODE_ARG === "current" ? ((await api<Snap>(STATE)).mode ?? "daily") : MODE_ARG;
 const MODE_NAME = MODE === "daily" ? "daily" : "world";
 const WIN_SECONDS = 1200;
 // Read once at startup: the code this process runs, whatever is committed while it plays.
@@ -1392,7 +1395,7 @@ async function seedPage() {
   const sent = await command({ type: "seed", seed: SEED }, 30);
   if (sent.state !== "done") throw new Error(`could not set seed ${SEED}: ${sent.detail ?? sent.state}`);
   await Bun.sleep(4000);
-  for (let i = 0; i < 90 && !(await api<Snap>("/state")).connected; i++) await Bun.sleep(1000);
+  for (let i = 0; i < 90 && !(await api<Snap>(STATE)).connected; i++) await Bun.sleep(1000);
 }
 
 async function start(weapon = ""): Promise<void> {
@@ -1401,7 +1404,7 @@ async function start(weapon = ""): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     await seedPage();
     await startRun(weapon);
-    const got = gameSeed(await api<Snap>("/state"));
+    const got = gameSeed(await api<Snap>(STATE));
     if (got === want) break;
     if (attempt === 2) throw new Error(`asked for seed ${want} twice, the game rolled ${got ?? "nothing"}`);
     console.log(`asked for seed ${want}, the game rolled ${got ?? "nothing"}; trying once more`);
@@ -1421,7 +1424,7 @@ async function startRun(weapon = ""): Promise<void> {
   }
   if (started.state !== "done") {
     // The page has already shown the finished run's link by now; a reload would lose it.
-    rescuedLink = (await api<Snap>("/state")).lastRunLink ?? rescuedLink;
+    rescuedLink = (await api<Snap>(STATE)).lastRunLink ?? rescuedLink;
     console.log(`start failed (${started.detail ?? started.state}); reloading the game page`);
     if (RELOAD !== "") await fetch(RELOAD).catch(() => undefined);
     await Bun.sleep(8000);
@@ -1470,7 +1473,7 @@ async function main() {
   recordCrash = async (e) => {
     if (notes !== undefined) await cutShort(notes, `the bot crashed (${e instanceof Error ? e.message : String(e)})`);
   };
-  const now = await api<Snap>("/state");
+  const now = await api<Snap>(STATE);
   // Every run the bot starts begins fresh, so a Daily always begins at tick 0 on its fixed seed.
   let adopted = TAKEOVER && now.game !== undefined && now.screen !== "over" && now.screen !== "title";
   if (TRIAL !== undefined && !adopted) throw new Error("--trial plays the run in progress, and there is none; start a run and load a checkpoint first");
@@ -1540,7 +1543,7 @@ async function main() {
     const since = Date.now();
     for (;;) {
       await Bun.sleep(500);
-      const s = await api<Snap>("/state");
+      const s = await api<Snap>(STATE);
       if (s.connected) {
         console.error(`the game tab dropped its connection and came back after ${((Date.now() - since) / 1000).toFixed(1)}s`);
         return s;
@@ -1550,7 +1553,7 @@ async function main() {
   };
 
   for (;;) {
-    const polled = await timed("state", api<Snap>("/state"));
+    const polled = await timed("state", api<Snap>(STATE));
     const s = polled.connected ? polled : await reconnected();
     await fillLink(s);
     if (s.screen === "title" || s.screen === "over") {
@@ -1580,7 +1583,7 @@ async function main() {
         // The share link only exists on the run summary, and a page reload loses it, so it goes into
         // the notes now, before the review, rather than whenever the next run starts.
         const summary = await command({ type: "summary" }, 60);
-        const shown = (await api<Snap>("/state")).lastRunLink;
+        const shown = (await api<Snap>(STATE)).lastRunLink;
         if (summary.state === "done" && shown !== undefined && shown !== s.lastRunLink) {
           ended.link = shown;
           await ended.write();
@@ -1596,7 +1599,7 @@ async function main() {
           // A run the panel played hands the wheel back on its end screen instead of starting another.
           if (awaitingLink !== undefined && !TAKEOVER) {
             await start();
-            await fillLink(await api<Snap>("/state"));
+            await fillLink(await api<Snap>(STATE));
           }
           return;
         }

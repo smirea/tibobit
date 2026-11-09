@@ -18,12 +18,12 @@ const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
                                   as game.loadout or surroundings shows only that part. text is an
                                   indented tree, with a list of entries as a table; json is it all on
                                   one line.
-                                  --raw adds the game's per-entity lists, left out by default:
-                                  pickups, enemies, bullets, emitters, zones, projectiles, activeHazards,
-                                  or all.
-                                  They are large and mostly noise, and surroundings and forecast already
-                                  say what in them matters. Ask for one only to look into something
-                                  those cannot show.
+                                  The game state holds only what a live game needs (LIVE_GAME in
+                                  src/agent/protocol.ts). --raw adds game state paths left out, such as
+                                  enemies, pickups, bullets, zones, world.activeHazards, run, counters or
+                                  cfg, or storage, or all. They are large and mostly noise for play, and
+                                  surroundings and forecast already say what in them matters. Ask for
+                                  one only to look into something those cannot show.
   watch [path] [--raw=<groups>]   the text state, refreshed 4 times a second
   encyclopedia [section]          JSON of the game's content: weapons, passives, items, recipes, enemies,
                                   bosses, dogs, pois, events, botHelps, biomes, glossary, rules

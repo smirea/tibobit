@@ -120,36 +120,60 @@ export type Surroundings = {
 };
 
 /**
- * The game's per-entity lists a snapshot leaves out unless asked for with `raw`: each name is the
- * key the game keeps the list under. They are large and mostly noise; `surroundings` and `forecast`
- * say what matters in them.
+ * What of the game's state a live game needs, by the game's own keys (dotted for a part of one):
+ * the clock, Tibo, his loadout and choice, bosses, dogs, Grok Bots and visitors, the spots on the
+ * map, the schedule, timed boosts, and how strong enemies are scaled now. A snapshot carries only
+ * these unless `raw` asks for more; what matters in the per-entity lists left out (enemies,
+ * bullets, hazards, pickups and the like) is in `surroundings`. Left out as well: what the game
+ * keeps about the run as a whole (`run`, `counters`), its rules (`cfg`), what the run started
+ * from, the engine's and each weapon's own workings, and the browser's `storage`.
  */
-export const RAW_GROUPS = { pickups: ["pickups"], enemies: ["enemies"], bullets: ["bullets"], emitters: ["emitters"], zones: ["zones"], projectiles: ["projectiles"], activeHazards: ["world", "activeHazards"] } as const;
-export type RawGroup = keyof typeof RAW_GROUPS;
+export const LIVE_GAME = [
+  ...["runClock", "time", "tick", "over", "paused", "difficulty", "me", "player", "choiceQueue"],
+  ...["bosses", "pets", "grokBots", "visitor", "andrew", "samir", "alex", "summons"],
+  ...["currentBiome", "currentLandmark", "waves", "scale", "goldRushUntil", "goldRushMult", "frenzyUntil", "moreVariety", "paidChestsBought", "nextGrokBotAt", "limitBreak"],
+  ...["loadout.level", "loadout.xp", "loadout.xpNext", "loadout.gold", "loadout.weapons", "loadout.passives", "loadout.items", "loadout.pendingLevels"],
+  ...["loadout.rerolls", "loadout.skips", "loadout.banishes", "loadout.banished", "loadout.cursesTaken", "loadout.revivesUsed"],
+  ...["loadout.stats", "loadout.totals", "loadout.shrineTotals", "loadout.thermal", "world.activePois"],
+] as const;
 
-/** Parses a `raw` list such as "enemies,zones" (or "all"); throws naming the groups there are. */
-export function parseRaw(list: string | null | undefined): RawGroup[] {
+/**
+ * Parses a `raw` list: paths into the game state by its own keys, such as "enemies", "cfg", "run"
+ * or "world.activeHazards", plus "storage" for the browser's, or "all" for everything.
+ */
+export function parseRaw(list: string | null | undefined): string[] {
   if (list === null || list === undefined || list === "") return [];
-  const names = Object.keys(RAW_GROUPS) as RawGroup[];
-  if (list === "all") return names;
   return list.split(",").map((n) => {
-    const name = n.trim();
-    if (!(names as string[]).includes(name)) fail(`raw takes ${names.join(", ")} or all; got ${name}`);
-    return name as RawGroup;
+    const path = n.trim();
+    if (!/^[\w.]+$/.test(path)) fail(`raw takes game state paths such as enemies,cfg,world.activeHazards, or storage, or all; got ${path}`);
+    return path;
   });
 }
 
-/** The snapshot without the raw groups not asked for. */
-export function withoutRaw(s: Snapshot, keep: RawGroup[]): Snapshot {
-  if (s.game === undefined) return s;
-  const game = structuredClone(s.game);
-  for (const [name, path] of Object.entries(RAW_GROUPS) as [RawGroup, readonly string[]][]) {
-    if (keep.includes(name)) continue;
-    let at: Record<string, unknown> | undefined = game;
-    for (const key of path.slice(0, -1)) at = at?.[key] as Record<string, unknown> | undefined;
-    if (at !== undefined) delete at[path.at(-1) ?? ""];
+const at = (o: unknown, path: string): unknown => path.split(".").reduce<unknown>((v, k) => (typeof v === "object" && v !== null ? (v as Record<string, unknown>)[k] : undefined), o);
+function put(o: Record<string, unknown>, path: string, v: unknown) {
+  const keys = path.split(".");
+  let here = o;
+  for (const k of keys.slice(0, -1)) here = (here[k] ??= {}) as Record<string, unknown>;
+  here[keys.at(-1) ?? ""] = v;
+}
+
+/** The snapshot as a live game needs it, with the `raw` paths added back; throws on a path the game state does not have. */
+export function liveView(s: Snapshot, raw: string[]): Snapshot {
+  if (raw.includes("all")) return s;
+  const { storage, game: full, ...rest } = s;
+  const view: Snapshot = { ...rest, ...(raw.includes("storage") && storage !== undefined ? { storage } : {}) };
+  if (full === undefined) return view;
+  const game: Record<string, unknown> = {};
+  for (const path of [...LIVE_GAME, ...raw.filter((p) => p !== "storage")]) {
+    const v = at(full, path);
+    if (v === undefined) {
+      if ((LIVE_GAME as readonly string[]).includes(path)) continue;
+      fail(`the game state has no ${path}; its keys are ${Object.keys(full).join(", ")}`);
+    }
+    put(game, path, v);
   }
-  return { ...s, game };
+  return { ...view, game };
 }
 
 export type LoadoutSpec = {

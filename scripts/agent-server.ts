@@ -2,7 +2,7 @@
 import { mkdir, readdir, rename } from "node:fs/promises";
 import path from "node:path";
 import type { ServerWebSocket, Subprocess } from "bun";
-import { BRIDGE_PORT, CHECKPOINT_NAME, type RawGroup, parseRaw, withoutRaw, type CheckpointMeta, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, DEFAULT_SETTINGS, type PilotChange, type PilotSettings, parseChatLine, parseCommand, parsePilotChange, trimChat } from "../src/agent/protocol";
+import { BRIDGE_PORT, CHECKPOINT_NAME, liveView, parseRaw, type CheckpointMeta, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, DEFAULT_SETTINGS, type PilotChange, type PilotSettings, parseChatLine, parseCommand, parsePilotChange, trimChat } from "../src/agent/protocol";
 
 const KEEPALIVE_MS = 5_000;
 const option = (name: string, fallback: string) => {
@@ -32,7 +32,7 @@ let page: ReadableStreamDefaultController<Uint8Array> | undefined;
 // Which tab holds the stream, so that tab can take it back when its old stream outlives a reconnect.
 let pageTab: string | undefined;
 let nextId = 1;
-const sockets = new Set<ServerWebSocket<{ raw: RawGroup[] }>>();
+const sockets = new Set<ServerWebSocket<{ raw: string[] }>>();
 const waiters = new Set<() => void>();
 const encoder = new TextEncoder();
 
@@ -112,12 +112,12 @@ async function jsonBody(req: Request): Promise<unknown> {
 }
 
 /** The latest snapshot for a client, with only the raw groups it asked for. */
-function state(raw: RawGroup[] = []) {
+function state(raw: string[] = []) {
   if (latest === undefined) return undefined;
   // The settings tell a running bot, every step, how often to plan and act and whether to keep
   // notes. Only a bot the panel started follows them; one started by hand keeps its own flags.
   const settings: Partial<PilotSettings> = pilot.state === "off" ? {} : { pace: pilot.pace, incognito: pilot.incognito };
-  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, ...settings, ...withoutRaw(latest.snapshot, raw) };
+  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, ...settings, ...liveView(latest.snapshot, raw) };
 }
 
 function statusOf(id: number): CommandStatus | undefined {
@@ -163,9 +163,10 @@ function errorResponse(e: unknown, status = 400) {
 
 const HELP = `tibo.dog agent server
 
-GET  /state          latest snapshot: the game state (its per-entity lists left out), surroundings and forecast;
-                     ?raw=pickups,enemies,bullets,emitters,zones,projectiles,activeHazards (or all) adds those lists,
-                     which are large and mostly noise: read surroundings and forecast first
+GET  /state          latest snapshot: what of the game state a live game needs (LIVE_GAME in
+                     src/agent/protocol.ts), surroundings and forecast; ?raw=enemies,cfg,run,world.activeHazards,
+                     storage or all adds game state paths left out. They are large and mostly noise for play:
+                     read surroundings and forecast first
 WS   /ws?raw=...     pushes every snapshot, raw groups as for /state; send a JSON command to run it
 GET  /encyclopedia   every weapon, passive, item, recipe, enemy, boss, point of interest and biome
 POST /command        JSON command, see src/agent/protocol.ts; add ?wait=1 to block until it finishes
@@ -176,7 +177,7 @@ GET  /checkpoints    the saved checkpoints' summaries, oldest first (see the che
 POST /pilot/say      the bot's chat line for the panel: {"role": "planner" | "action" | "system", "text", "detail"?, "model"?, "time"?}
 `;
 
-const server = Bun.serve<{ raw: RawGroup[] }>({
+const server = Bun.serve<{ raw: string[] }>({
   hostname: "127.0.0.1",
   port: PORT,
   idleTimeout: 0,
@@ -188,9 +189,10 @@ const server = Bun.serve<{ raw: RawGroup[] }>({
         case "GET /":
           return new Response(HELP);
         case "GET /ws": {
-          let raw: RawGroup[];
+          let raw: string[];
           try {
             raw = parseRaw(url.searchParams.get("raw"));
+            state(raw);
           } catch (e) {
             return errorResponse(e, 400);
           }
@@ -238,7 +240,13 @@ const server = Bun.serve<{ raw: RawGroup[] }>({
         case "POST /bridge/state": {
           latest = { snapshot: (await req.json()) as Snapshot };
           for (const done of [...waiters]) done();
-          for (const ws of sockets) ws.send(JSON.stringify(state(ws.data.raw)));
+          for (const ws of sockets) {
+            try {
+              ws.send(JSON.stringify(state(ws.data.raw)));
+            } catch (e) {
+              ws.send(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+            }
+          }
           return new Response(null, { status: 204 });
         }
         case "POST /bridge/encyclopedia":
@@ -246,13 +254,18 @@ const server = Bun.serve<{ raw: RawGroup[] }>({
           console.log(`encyclopedia: ${book.weapons.length} weapons, ${book.passives.length} passives, ${book.items.length} items, ${book.dogs.length} dogs, ${book.pois.length} pois`);
           return new Response(null, { status: 204 });
         case "GET /state": {
-          let raw: RawGroup[];
+          let raw: string[];
           try {
             raw = parseRaw(url.searchParams.get("raw"));
           } catch (e) {
             return errorResponse(e, 400);
           }
-          const s = state(raw);
+          let s;
+          try {
+            s = state(raw);
+          } catch (e) {
+            return errorResponse(e, 400);
+          }
           return s === undefined ? errorResponse("no snapshot yet; is the tibo.dog tab open?", 503) : Response.json(s);
         }
         case "POST /pilot": {

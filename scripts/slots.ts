@@ -158,7 +158,8 @@ export class Slot {
     return status;
   }
 
-  state = () => this.api<Snap>("/state");
+  /** The snapshot, with the game state paths in `raw` beyond what a live game needs (see LIVE_GAME); `run` holds the seed. */
+  state = (raw = "run") => this.api<Snap>(`/state?raw=${raw}`);
 
   async connected(limitMs: number): Promise<Snap> {
     const end = Date.now() + limitMs;

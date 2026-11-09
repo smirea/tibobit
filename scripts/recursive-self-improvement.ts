@@ -149,7 +149,7 @@ const BOOK = await encyclopedia();
 const idsOf = (section: string, keep: (x: Record<string, unknown>) => boolean = () => true) =>
   new Set((BOOK[section] as Record<string, unknown>[]).filter((x) => typeof x.id === "string" && keep(x)).map((x) => x.id as string));
 const IDS = { weapons: idsOf("weapons"), base: idsOf("weapons", (w) => w.tier === "base"), passives: idsOf("passives"), items: idsOf("items") };
-const ladder = async () => ladderCleared(await main.state());
+const ladder = async () => ladderCleared(await main.state("storage"));
 // The start command names the weapons the profile offers when asked for one it does not.
 const OFFERED = await (async () => {
   const probe = await main.api<{ state: string; detail?: string }>("/command?wait=1&timeout=120", { type: "start", mode: "openWorld", difficulty: "nightmare", weapon: "no-such-weapon" });
@@ -298,7 +298,7 @@ async function facts(state: loop.CoachState, playbook: Playbook): Promise<string
     "## The game's encyclopedia: every id you can use",
     JSON.stringify(BOOK),
     "## The game's cfg: the rules of the last game the full-run tab played (game.cfg in the state)",
-    JSON.stringify((await main.state()).game?.cfg ?? "no game has been played in the full-run tab yet"),
+    JSON.stringify((await main.state("cfg")).game?.cfg ?? "no game has been played in the full-run tab yet"),
   ].join("\n\n");
 }
 
