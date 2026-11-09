@@ -22,10 +22,15 @@
       "distrustBossRange": 0,
       "planEvery": 5,
       "eliteSeconds": 20,
-      "bossOfferRange": 0
+      "bossOfferRange": 0,
+      "dashThreshold": 0.5,
+      "bossDashThreshold": 0.5,
+      "bossDashRange": 0,
+      "eliteFrom": 0,
+      "eliteMinHp": 0
     }
   },
-  "weapon": "steam-vent",
-  "updated": "sonnet-high L2.I9",
-  "why": "Steam-vent, lockstep 1 and chest-first have survived every natural Nightmare 1 game and lived 17:20 and 18:36 in full runs. The one late lever that held is spending gold: gold rule alone took 22 damage and gold rule plus armor picks 77, against 231 and 308 for the baselines, and L2.I7.G5 spent 5189 gold at 56 damage. The full run left 7946 gold unspent. The rule is gated to 10:00 onward and to no boss within 300 units, so the proven opening is unchanged. L2.I9 re-tests it against the old text."
+  "weapon": "deep-fryer",
+  "updated": "L9.I5",
+  "why": "Deep-fryer dealt more damage by 2:00 than Steam Vent in 6 of 6 paired fresh NM2 seeds (about 2-5k more) and opened more chests in 4 of 6 pairs; it lived 1 of 6 against 0 of 6. Survival gain is unproven. Steam Vent never offered itself for levelling and killed no elites early. The pre-run rehearsal checks this against the old playbook."
 }

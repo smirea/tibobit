@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | proposed |
+| Status | done |
 | Area | bosses |
-| Result | - |
+| Result | confirmed |
 | Created | L8.I10 |
-| Updated | L8.I10 |
+| Updated | L9.I10 |
 
 ## Hypothesis
 
@@ -18,7 +18,7 @@ Live games from nm2-live-min5 or a fresh opening, reading the bosses block at 2:
 
 ## Findings
 
-(none yet)
+Three separate Mascots of 1131 hp each (B158). A 66-dps build cannot kill them; the L9.I10 full-run build (Mash Snowball 8/8 at 1:56, about 300+ dps) killed all three by about 2:22 and took 3.5 damage from them. Early dps jump from an early chest is the lever, not hp or dash.
 
 ## Games
 
