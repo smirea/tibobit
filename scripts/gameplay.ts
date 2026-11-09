@@ -599,6 +599,38 @@ export function runStats(csv: string): string {
     const m = b.match(/^(.*?) \(.*\) \d+ \S+ (\d+)%(?: of (\d+))?$/);
     return m === null ? b : `${m[1]} at ${m[2]}%${m[3] === undefined ? "" : ` of ${m[3]}`}`;
   });
+  // An elite is known by its uid; what stood within 150 units when it first showed is what came with it.
+  // Elites of one kind that show within 5 s of each other came as one group.
+  const seenUids = new Set<string>();
+  const groups: { s: number; time: string; name: string; hp: number[]; max: string; dist: number; nearby: string }[] = [];
+  for (const r of live)
+    for (const e of (r.elite_list ?? "").split("; ").filter(Boolean)) {
+      const m = e.match(/^(\d+) (.*?) \((.*?)\) (\d+)\/(\d+) (\d+) (\S+)$/);
+      if (m === null || seenUids.has(m[1] ?? "")) continue;
+      seenUids.add(m[1] ?? "");
+      const group = groups.find((g) => g.name === m[2] && num(r.seconds) - g.s <= 5);
+      if (group !== undefined) group.hp.push(num(m[4]));
+      else groups.push({ s: num(r.seconds), time: r.time ?? "?", name: m[2] ?? "?", hp: [num(m[4])], max: m[5] ?? "?", dist: num(m[6]), nearby: r.nearby || "nothing" });
+    }
+  const elitesSeen = groups.map((g) => `${g.time} ${g.hp.length} ${g.name} (${g.hp.join(", ")} of ${g.max} hp), the nearest ${g.dist} away; within 150 of Tibo then: ${g.nearby.replaceAll("; ", ", ")}`);
+  // Bursts: every stretch where Tibo lost 40+ health within 3 s, hit by hit. hurt_by sums each
+  // source over a recent window, so a source's rise from the row before names who hit.
+  const hits = live.flatMap((r, i) => {
+    if (num(r.hp_lost) <= 0) return [];
+    const before = new Map((live[i - 1]?.hurt_by ?? "").split("; ").filter(Boolean).map((p) => [p.replace(/\s+[\d.]+$/, ""), num(p.match(/([\d.]+)$/)?.[1])]));
+    const by = (r.hurt_by ?? "").split("; ").filter(Boolean).map((p) => [p.replace(/\s+[\d.]+$/, ""), num(p.match(/([\d.]+)$/)?.[1])] as const).filter(([k, v]) => v > (before.get(k) ?? 0) + 0.05).map(([k]) => k);
+    return [{ s: num(r.seconds), text: `${r.time} -${r.hp_lost} to ${r.hp}${by.length > 0 ? ` (${by.join(", ")})` : ""}` }];
+  });
+  const bursts: string[] = [];
+  for (let i = 0; i < hits.length; ) {
+    let j = i;
+    const start = hits[i]?.s ?? 0;
+    const lost = live.filter((r) => num(r.seconds) >= start && num(r.seconds) < start + 3).reduce((a, r) => a + num(r.hp_lost), 0);
+    if (lost < 40) { i++; continue; }
+    while (j + 1 < hits.length && (hits[j + 1]?.s ?? 0) < (hits[j]?.s ?? 0) + 3) j++;
+    bursts.push(hits.slice(i, j + 1).map((h) => h.text).join("; "));
+    i = j + 1;
+  }
   const firstChest = live.find((r) => (r.chests ?? "") !== "")?.time;
   // Only Tibo opens chests, so a chest goal that finishes is a chest opened.
   const opened = rows.filter((r) => r.event === "goal" && r.action === "done" && goalKind(r.goal ?? "") === "chest");
@@ -636,6 +668,8 @@ export function runStats(csv: string): string {
     `- Bosses first seen: ${[...seenBoss].map(([k, t]) => `${k} at ${t}`).join("; ") || "none"}.`,
     `- Bosses alive at ${lastRow.time ?? "the end"}, each a separate boss with its own health: ${bossesAtEnd.join("; ") || "none"}.`,
     `- ${byTwo}: damage dealt ${hasDealt ? num(atTwo.dealt) : "not logged"}, elites killed ${(atTwo.elites ?? "") === "" ? "not logged" : num(atTwo.elites)}, chests opened ${openedByTwo}. Chests opened in the whole game: ${opened.length}, the first at ${opened[0]?.time ?? "never"}.`,
+    `- Elites first seen: ${elitesSeen.join(" | ") || (live.some((r) => r.elite_list !== undefined) ? "none" : "not logged")}.`,
+    `- Bursts of 40+ health lost within 3 s, hit by hit: ${bursts.join(" | ") || "none"}.`,
     `- First chest listed: ${firstChest ?? "never"}. First time under 25% health: ${low ?? "never"}.`,
     `- Goals by kind (done / gave up / dropped): ${[...goals].map(([k, g]) => `${k} ${g.done}/${g.failed}/${g.dropped}`).join("; ") || "none"}.`,
     `- Dashes: ${dashes.length}${dashes.length === 0 ? "" : `: ${dashes.slice(0, 12).join("; ")}${dashes.length > 12 ? "; …" : ""}`}.`,

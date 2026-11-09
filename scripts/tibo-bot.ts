@@ -304,6 +304,8 @@ const LOG_COLUMNS = [
   "options",
   "dealt",
   "elites",
+  "elite_list",
+  "nearby",
 ] as const;
 /** `walk`: the page walked Tibo toward its goal without asking a model, and Tibo lost health on the way. `loadout`: what Tibo holds changed. */
 type LogEvent = "plan" | "pick" | "move" | "walk" | "goal" | "loadout" | "run_end";
@@ -349,6 +351,11 @@ class RunLog {
             bosses: r.bosses.map((b) => `${b.name} (${b.id}) ${at(b)} ${pct(b.hp, b.maxHp)}% of ${Math.round(b.maxHp)}`).join("; "),
             dealt: Math.round(Object.values(r.totals.damageDealt).reduce((a, b) => a + b, 0)),
             elites: r.totals.elitesKilled,
+            elite_list: r.enemies.elites.slice(0, 3).map((e) => `${e.uid} ${e.name} (${e.id}) ${Math.round(e.hp)}/${Math.round(e.maxHp)} ${at(e)}`).join("; "),
+            nearby: [...r.enemies.nearest.filter((e) => e.dist <= 150).reduce((m, e) => m.set(e.id, (m.get(e.id) ?? 0) + 1), new Map<string, number>())]
+              .sort((a, b) => b[1] - a[1])
+              .map(([id, n]) => `${id} ${n}`)
+              .join("; "),
             hurt_by: Object.entries(p.hurtBy).map(([k, v]) => `${k} ${v}`).join("; "),
             standing_on: spotLine(r) ?? "",
             underfoot: r.hazards.filter((h) => h.inside).map((h) => h.kind).join("; "),
