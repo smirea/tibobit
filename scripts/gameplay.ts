@@ -8,7 +8,7 @@
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import type { CheckpointMeta, LoadoutSpec, RunTotals } from "../src/agent/protocol";
+import type { CheckpointMeta, LoadoutSpec } from "../src/agent/protocol";
 
 export const GAMEPLAY = path.join(import.meta.dir, "..", "gameplay");
 export const NOTES_DIR = path.join(GAMEPLAY, "notes");
@@ -163,25 +163,25 @@ export const BLOCKS = {
   banished: "what was banished this run, which the game never offers again",
   recipes: "every recipe that uses something held, with each part's state",
   evolutions: "what the next chest evolves, or that no recipe is complete",
-  standing_on: "the chest or spot Tibo stands on and how far it is charged, and any hazard underfoot",
+  standing_on: "the chest or spot Tibo stands on and how far it is charged, and the ground damage sources standing still would take, by the forecast",
   hurt_by: "damage taken in the last 3 seconds by source",
   bosses: "bosses with distance, direction and health",
   enemies: "enemies around, how many within 60 units, and the most and least crowded directions within 150",
   current_goal: "the goal under way and since when",
   recent_goals: "the last 6 goals and how each ended",
   weapon_damage: "damage dealt so far by each weapon held, most first, with its rate a minute, e.g. 'Damage dealt so far by weapon: Steam Vent 4012 (1783 a minute), Hash Hawk 2210 (982 a minute).' (not part of {{state}})",
-  stats: "every stat the game computes for Tibo now, by the game's own names (damageMult, maxHp, armor, recovery, magnetRadius, luck and the rest), what passives, items and shrines add to each, and what shrines alone have added",
-  resources: "rerolls, skips, banishes, revives left and curses held",
-  buffs: "timed boosts running, with seconds left",
+  stats: "the game's loadout.stats (every effective stat by its own name: damageMult, maxHp, armor, recovery, magnetRadius, luck and the rest), loadout.totals (what passives, items, shrines and the like add) and loadout.shrineTotals (what shrines added), zeros left out of the last two",
+  resources: "the game's loadout.rerolls, skips, banishes, cursesTaken and revivesUsed, and loadout.stats.revivals",
+  buffs: "the game's timers that end later (keys ending in Until, such as goldRushUntil and frenzyUntil), with seconds left",
   schedule: "the coming minutes that bring a boss, an elite or an event, by the game's names",
   enemy_kinds: "every kind of enemy alive, by the game's name: how many, how many elite, the nearest one's distance, max hp, contact damage and speed",
   elites: "every elite alive: name, health, contact damage, distance and direction",
-  hazards: "terrain hazards and attack zones near Tibo, by the game's kind names, with shape, radius, distance and when a telegraphed attack lands",
+  hazards: "the game's world.activeHazards within 300 of Tibo: kind, radius and distance",
   pickups: "pickups on the ground counted by kind, and the nearest ones that are not xp gems with their kind, value and distance",
   spots: "every unused spot on the loaded map, nearest first, with the game's name and description, distance, direction, charge, radius and price",
-  dogs: "each of Tibo's dogs: name, breed, the game's description, level, the game's numbers for its ability and aura, and what it has done so far this run",
-  events: "the last 10 game events (bosses, banners, chests, evolutions, dogs joining) with their times",
-  counters: "every number the game has counted this run that is not zero: distance walked, hits, crits, near misses, dodges, peak enemies, gold, shrines used and the rest",
+  dogs: "each of Tibo's dogs: name, breed, the game's description, level, the game's own definition (ability, aura, levelUps and the rest) and its run.dogHelp so far",
+  events: "the last 10 events the game recorded, as the game wrote them, with their run times",
+  counters: "every number in the game's counters and run that is not zero: distance, hits, crits, nearMisses, dodgePoints, peakEnemies, goldEarned, shrinesUsed and the rest",
   state: "a short default, one per line: time, health, level, gold, dash, weapons, passives, items, banished (when any), recipes, evolutions, standing_on, hurt_by, bosses, enemies, current_goal and recent_goals. Every other block is left out unless a template names it",
 } as const;
 export type BlockName = keyof typeof BLOCKS;
@@ -1108,71 +1108,59 @@ export async function logForPrompt(file: string, limit: number): Promise<string>
 }
 
 // ---- End-of-game stats ---------------------------------------------------------------------------
-// What the game counts over a game: the damage taken by source, the damage dealt and kills by
-// weapon, and the gold, bosses, elites, chests, shrines and items. A training game reports what
-// changed between its start and its end; a full run reports the whole run.
+// What the game counted over a game, straight from its state: its `run` object, its `counters` and
+// what shrines added (`loadout.shrineTotals`), under the game's own keys. A training game reports
+// what changed between its start and its end; a full run reports the whole run.
 
-const COUNTERS = ["goldEarned", "goldSpent", "bossesKilled", "elitesKilled", "bossChests", "cratesBought", "shrinesUsed", "itemsBought", "revivesUsed"] as const;
-// `counters`, `dogs` and `shrineStats` are absent from results saved before the game reported them.
-export type Totals = Pick<RunTotals, "kills" | "damageTaken" | "damageDealt" | "killsBy" | "made" | (typeof COUNTERS)[number]> & Partial<Pick<RunTotals, "counters" | "dogs" | "shrineStats">> & { killer?: string };
+/** The game's own tallies, taken from a snapshot's `game`. */
+export type Tallies = { run: Record<string, unknown>; counters: Record<string, unknown>; shrineTotals: Record<string, unknown> };
+export const talliesOf = (game: { run: unknown; counters: unknown; loadout: { shrineTotals: unknown } }): Tallies => ({
+  run: game.run as Record<string, unknown>,
+  counters: game.counters as Record<string, unknown>,
+  shrineTotals: game.loadout.shrineTotals as Record<string, unknown>,
+});
 
-const byKey = (end: Record<string, number>, start: Record<string, number>) =>
-  Object.fromEntries(
-    Object.entries(end)
-      .map(([k, v]) => [k, Math.round((v - (start[k] ?? 0)) * 10) / 10] as const)
-      .filter(([, v]) => v > 0)
-      .sort((a, b) => b[1] - a[1]),
-  );
+/** What changed between two tallies, with the game's keys: numbers by how much, lists by what is new, the rest when different. */
+export type Totals = Record<string, unknown>;
 
-/** Every key whose number changed, by how much, keeping the game's order. */
-const changed = (end: Record<string, number> = {}, start: Record<string, number> = {}) =>
-  Object.fromEntries(
-    Object.entries(end)
-      .map(([k, v]) => [k, Math.round((v - (start[k] ?? 0)) * 1000) / 1000] as const)
-      .filter(([, v]) => v !== 0),
-  );
-
-/** What happened between two snapshots' totals; `start` undefined counts the whole run. */
-export function totalsBetween(end: RunTotals, start?: RunTotals): Totals {
-  const zero = { damageTaken: {}, damageDealt: {}, killsBy: {}, made: [] };
-  const s = start ?? ({ ...zero, kills: 0, ...Object.fromEntries(COUNTERS.map((c) => [c, 0])) } as unknown as RunTotals);
-  return {
-    kills: end.kills - s.kills,
-    damageTaken: byKey(end.damageTaken, s.damageTaken),
-    damageDealt: byKey(end.damageDealt, s.damageDealt),
-    killsBy: byKey(end.killsBy, s.killsBy),
-    made: end.made.filter((m) => !s.made.some((x) => x.id === m.id)),
-    ...(Object.fromEntries(COUNTERS.map((c) => [c, Math.round(end[c] - s[c])])) as Record<(typeof COUNTERS)[number], number>),
-    ...(end.killer === undefined ? {} : { killer: end.killer }),
-    // A page on an older userscript sends none of these.
-    counters: changed(end.counters, s.counters),
-    dogs: Object.fromEntries(
-      Object.entries(end.dogs ?? {})
-        .map(([id, did]) => {
-          const before = s.dogs?.[id];
-          const { joinedAt, ...help } = did;
-          return [id, { ...(before === undefined && joinedAt !== undefined ? { joinedAt } : {}), ...changed(help, before) }] as const;
-        })
-        .filter(([, did]) => Object.keys(did).length > 0),
-    ),
-    shrineStats: changed(end.shrineStats, s.shrineStats),
-  };
+function changed(end: unknown, start: unknown): unknown {
+  if (typeof end === "number") {
+    const d = Math.round((end - (typeof start === "number" ? start : 0)) * 1000) / 1000;
+    return d === 0 ? undefined : d;
+  }
+  if (Array.isArray(end)) {
+    const before = new Set((Array.isArray(start) ? start : []).map((x) => JSON.stringify(x)));
+    const added = end.filter((x) => !before.has(JSON.stringify(x)));
+    return added.length === 0 ? undefined : added;
+  }
+  if (typeof end === "object" && end !== null) {
+    const s = typeof start === "object" && start !== null ? (start as Record<string, unknown>) : {};
+    const out = Object.fromEntries(
+      Object.entries(end)
+        .map(([k, v]) => [k, changed(v, s[k])] as const)
+        .filter(([, v]) => v !== undefined),
+    );
+    return Object.keys(out).length === 0 ? undefined : out;
+  }
+  return end === start ? undefined : end;
 }
 
-/** The stats as lines a coach reads. */
+/** What happened between two tallies; `start` undefined counts the whole game. */
+export function totalsBetween(end: Tallies, start?: Tallies): Totals {
+  return (changed(end, start) ?? {}) as Totals;
+}
+
+/** The stats as lines a coach reads: one line per part of the game's state, every key that changed. */
 export function totalsLines(t: Totals): string[] {
-  const list = (r: Record<string, number>) => Object.entries(r).map(([k, v]) => `${k} ${v}`).join(", ") || "none";
-  const sum = (r: Record<string, number>) => Math.round(Object.values(r).reduce((a, b) => a + b, 0));
-  return [
-    `Damage taken ${sum(t.damageTaken)}, by source: ${list(t.damageTaken)}${t.killer === undefined ? "" : `; the killing blow: ${t.killer}`}.`,
-    `Damage dealt ${sum(t.damageDealt)}, by weapon: ${list(t.damageDealt)}.`,
-    `Kills ${t.kills}, by weapon: ${list(t.killsBy)}.`,
-    `Bosses killed ${t.bossesKilled}, elites killed ${t.elitesKilled}, boss chests ${t.bossChests}, crates bought ${t.cratesBought}, shrines used ${t.shrinesUsed}, items bought ${t.itemsBought}, revives used ${t.revivesUsed}; gold earned ${t.goldEarned}, spent ${t.goldSpent}.`,
-    `Made: ${t.made.map((m) => `${m.id} at ${clock(m.at)}`).join(", ") || "no evolution, union or evolved item"}.`,
-    ...(t.shrineStats === undefined ? [] : [`Stats added by shrines: ${list(t.shrineStats)}.`]),
-    ...(t.dogs === undefined ? [] : [`Dogs: ${Object.entries(t.dogs).map(([id, did]) => `${id} (${list(did)})`).join("; ") || "none"}.`]),
-    ...(t.counters === undefined ? [] : [`Everything else the game counted: ${list(t.counters)}.`]),
-  ];
+  const flat = (v: unknown, at: string): string[] => {
+    const shown = typeof v === "number" ? String(v) : JSON.stringify(v);
+    if (typeof v !== "object" || v === null || Array.isArray(v)) return [at === "" ? shown : `${at} ${shown}`];
+    return Object.entries(v).flatMap(([k, x]) => flat(x, at === "" ? k : `${at}.${k}`));
+  };
+  return Object.entries(t).flatMap(([part, v]) => {
+    if (typeof v !== "object" || v === null || Array.isArray(v)) return [`${part}: ${flat(v, "").join("")}`];
+    return Object.entries(v as Record<string, unknown>).map(([k, x]) => `${part}.${k}: ${flat(x, "").join(", ")}`);
+  });
 }
 
 // ---- Telling games apart --------------------------------------------------------------------------

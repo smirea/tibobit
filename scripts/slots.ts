@@ -73,6 +73,9 @@ function freePort(): number {
 type Child = ReturnType<typeof Bun.spawn>;
 
 /** One agent server and headless game. The main slot of a loop plays its full runs; the others play training games. */
+/** The seed of the run the tab holds, from the game's `run.seed`. */
+const gameSeed = (s: Snap) => (s.game as { run?: { seed?: unknown } } | undefined)?.run?.seed?.toString();
+
 export class Slot {
   private children: Child[] = [];
   private headless: Child | undefined;
@@ -181,7 +184,7 @@ export class Slot {
     let first: string;
     try {
       const picked = await this.freshOnce(seed, difficulty, weapon);
-      const got = (await this.state()).run?.seed;
+      const got = gameSeed(await this.state());
       if (got === seed) return picked;
       first = `the game rolled seed ${got ?? "nothing"}`;
     } catch (e) {
@@ -192,7 +195,7 @@ export class Slot {
     // A tab left on an error page, or stuck on a screen, only recovers when it is opened again.
     await this.restartGame();
     const again = await this.freshOnce(seed, difficulty, weapon);
-    const second = (await this.state()).run?.seed;
+    const second = gameSeed(await this.state());
     if (second !== seed) throw new Error(`asked for seed ${seed} twice: ${first}, then the game rolled ${second ?? "nothing"}`);
     return again;
   }
@@ -307,7 +310,7 @@ export class Slot {
       // Played in stages, each saved: a death replays that stage from its start (the models choose
       // differently each time) rather than the whole game from 0:00.
       const stage = `gym-${gym.name}-stage`;
-      let time = (await this.state()).run?.time ?? 0;
+      let time = ((await this.state()).game as { runClock?: number } | undefined)?.runClock ?? 0;
       while (time < gym.at - 1) {
         await this.command({ type: "checkpoint", op: "save", name: stage });
         const seconds = Math.min(GYM_STAGE_SECONDS, Math.ceil(gym.at - time));

@@ -157,27 +157,13 @@ export class Controller {
         return;
       case "choose": {
         const game = this.game();
-        if (game.state.choiceQueue.length === 0) throw new Error("no choice is open");
-        if (choiceCards()[command.index] === undefined) throw new Error(`no option ${command.index}; there are ${choiceCards().length}`);
-        // Cards ignore clicks while they animate in (right after a reroll, say), so click until the
-        // choice changes, and fail rather than report a pick that never happened.
-        const shown = () => `${game.state.choiceQueue.length}|${choiceCards().map((c) => c.textContent).join("|")}`;
-        const before = shown();
-        void (async () => {
-          for (let attempt = 0; attempt < 10; attempt++) {
-            choiceCards()[command.index]?.click();
-            if (await until(() => shown() !== before, 300)) return this.finish(status, "done");
-          }
-          // A training loadout once left a level-up whose only card would not take, which stalled the
-          // game for good. The game's own pick is tried, and failing that the choice is dropped.
-          const queued = game.state.choiceQueue.length;
-          try {
-            game.choose({ type: "pick", index: command.index });
-          } catch {}
-          if (game.state.choiceQueue.length < queued) return this.finish(status, "done", "taken through the game, not the card");
-          game.state.choiceQueue.shift();
-          this.finish(status, "done", "dropped: the game would not take any option of this choice");
-        })();
+        const open = game.state.choiceQueue[0];
+        if (open === undefined) throw new Error("no choice is open");
+        const before = JSON.stringify(game.state.choiceQueue);
+        game.choose(command.action);
+        // The game ignores an action it cannot take, such as a pick past the last offer or a reroll with none left.
+        if (JSON.stringify(game.state.choiceQueue) === before) throw new Error(`the game did not take ${JSON.stringify(command.action)} on this ${open.kind} choice`);
+        this.finish(status, "done");
         return;
       }
       case "dash": {

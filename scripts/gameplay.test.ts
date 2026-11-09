@@ -68,24 +68,31 @@ test("the gameplay files in the repo are readable", async () => {
   await checkLoopFiles();
 });
 
-test("a training game's stats count only what happened during it", () => {
-  const base = {
-    ...{ kills: 10, damageTaken: { "enemy:aphid": 5 }, damageDealt: { peeler: 100 }, killsBy: { peeler: 10 }, goldEarned: 20, goldSpent: 0, bossesKilled: 0, elitesKilled: 0, bossChests: 0, cratesBought: 0, shrinesUsed: 0, itemsBought: 0, made: [], revivesUsed: 0, won: false },
-    ...{ counters: { distance: 400, crits: 3, peakEnemies: 30 }, dogs: { greyhound: { joinedAt: 17.2, damage: 100, hits: 14 } }, shrineStats: { duration: 0.1 } },
+test("a training game's stats count only what changed in the game's own tallies", () => {
+  const start = {
+    run: { kills: 10, damageTakenBySource: { "enemy:aphid": 5 }, evolutions: [], killer: "", dogHelp: { damage: { greyhound: 100, terrier: 0 } } },
+    counters: { crits: 3, nearMisses: 1 },
+    shrineTotals: { might: 0, duration: 0.1 },
   };
   const end = {
-    ...base,
-    ...{ kills: 40, damageTaken: { "enemy:aphid": 12.5, "boss:amusing": 30 }, damageDealt: { peeler: 400, "spud-lob": 250 }, killsBy: { peeler: 25, "spud-lob": 15 }, goldEarned: 50, elitesKilled: 1, made: [{ id: "peel-storm", at: 95.5 }], killer: "boss:amusing" },
-    ...{ counters: { distance: 1650.5, crits: 3, peakEnemies: 72 }, dogs: { greyhound: { joinedAt: 17.2, damage: 160, hits: 20 }, terrier: { joinedAt: 56, damage: 69.2 } }, shrineStats: { duration: 0.1, might: 0.12 } },
+    run: { kills: 40, damageTakenBySource: { "enemy:aphid": 12.5, "boss:amusing": 30 }, evolutions: [{ id: "peel-storm", at: 95.5 }], killer: "boss:amusing", dogHelp: { damage: { greyhound: 160, terrier: 69.2 } } },
+    counters: { crits: 3, nearMisses: 4 },
+    shrineTotals: { might: 0.12, duration: 0.1 },
   };
-  const t = totalsBetween(end, base);
-  expect(t).toMatchObject({ kills: 30, damageTaken: { "boss:amusing": 30, "enemy:aphid": 7.5 }, damageDealt: { peeler: 300, "spud-lob": 250 }, killsBy: { peeler: 15, "spud-lob": 15 }, goldEarned: 30, elitesKilled: 1, made: [{ id: "peel-storm", at: 95.5 }], killer: "boss:amusing" });
-  const lines = totalsLines(t);
-  expect(lines[0]).toBe("Damage taken 38, by source: boss:amusing 30, enemy:aphid 7.5; the killing blow: boss:amusing.");
-  expect(lines.slice(-3)).toEqual([
-    "Stats added by shrines: might 0.12.",
-    "Dogs: greyhound (damage 60, hits 6); terrier (joinedAt 56, damage 69.2).",
-    "Everything else the game counted: distance 1250.5, peakEnemies 42.",
+  const t = totalsBetween(end, start);
+  expect(t).toEqual({
+    run: { kills: 30, damageTakenBySource: { "enemy:aphid": 7.5, "boss:amusing": 30 }, evolutions: [{ id: "peel-storm", at: 95.5 }], killer: "boss:amusing", dogHelp: { damage: { greyhound: 60, terrier: 69.2 } } },
+    counters: { nearMisses: 3 },
+    shrineTotals: { might: 0.12 },
+  });
+  expect(totalsLines(t)).toEqual([
+    "run.kills: 30",
+    "run.damageTakenBySource: enemy:aphid 7.5, boss:amusing 30",
+    'run.evolutions: [{"id":"peel-storm","at":95.5}]',
+    'run.killer: "boss:amusing"',
+    "run.dogHelp: damage.greyhound 60, damage.terrier 69.2",
+    "counters.nearMisses: 3",
+    "shrineTotals.might: 0.12",
   ]);
 });
 

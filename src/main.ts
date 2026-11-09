@@ -16,7 +16,7 @@ Object.assign(window, { __tibobit: { link } });
 guardPanelKeys();
 
 function start() {
-  const bridge = startBridge(link, discovery, controller);
+  const bridge = startBridge(link, controller);
   startHelper(link, discovery, bridge);
   startPickShow(bridge);
 }

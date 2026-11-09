@@ -10,8 +10,6 @@ export function validPort(port: number): boolean {
 }
 
 export const DIRECTIONS = ["right", "down-right", "down", "down-left", "left", "up-left", "up", "up-right"] as const;
-/** The damage a copy of the game took when run forward with one input held. Sources are the game's damage-by-source keys. */
-export type ForecastView = { seconds: number; damage: number; dead: boolean; sources: { source: string; damage: number }[] };
 
 export type Direction = (typeof DIRECTIONS)[number];
 
@@ -35,18 +33,18 @@ export type Command =
    */
   | { type: "goto"; to: Target; within?: number; stay?: number | "done"; timeout?: number; pause?: boolean }
   | { type: "stop" }
-  /** Pick an option of the open level-up, chest or shrine choice by its index. */
-  | { type: "choose"; index: number }
+  /** The game's own action on the open choice (a level-up, chest, shrine or shop), as the game's `choose` takes it. */
+  | { type: "choose"; action: ChoiceAction }
   | { type: "dash"; dir?: Heading }
   | { type: "pause" }
   | { type: "resume" }
   /** Run the simulation `factor` ticks per frame (1 to 8). Movement input still applies to every tick. */
   | { type: "speed"; factor: number }
   /**
-   * `live` keeps the sim forecasts (`forecast`, `standingForecast`) coming while the game runs,
-   * a few times a second, for an agent that does not pause between steps. Off, they only appear
-   * while the game is paused. `lag` is the seconds between a snapshot and the agent's move landing:
-   * a running game's forecast first plays the input held now for that long, then each direction.
+   * `live` keeps the snapshot's `forecast` coming while the game runs, a few times a second, for an
+   * agent that does not pause between steps. Off, it only appears while the game is paused. `lag`
+   * is the seconds between a snapshot and the agent's move landing: a running game's forecast first
+   * plays the input held now for that long, then each direction.
    */
   | { type: "forecast"; live: boolean; lag?: number }
   /**
@@ -83,6 +81,17 @@ export type Command =
    */
   | ({ type: "loadout" } & LoadoutSpec);
 
+/** The actions the game's `choose` accepts, as its run recorder logs them. */
+export const CHOICE_ACTIONS = ["pick", "banish", "buy", "reroll", "skip", "close", "accept", "continue", "endRun"] as const;
+export type ChoiceAction = { type: "pick" | "banish" | "buy"; index: number } | { type: "reroll" | "skip" | "close" | "accept" | "continue" | "endRun" };
+
+/**
+ * What the game's own simulation, run forward on a copy of the state, says each move would cost:
+ * the eight directions and standing still, held for `seconds` after the agent's `lag`. `bySource`
+ * uses the game's damage-by-source keys. This is a tool's output, not game state.
+ */
+export type Forecast = { lag: number; seconds: number; moves: Record<Direction | "still", { damage: number; dead: boolean; bySource: Record<string, number> }> };
+
 export type LoadoutSpec = {
   weapons: { id: string; level: number }[];
   passives: { id: string; level: number }[];
@@ -115,46 +124,6 @@ export type CommandStatus = { id: number; command: Command; state: CommandState;
 
 export type Envelope = { id: number; command: Command };
 
-export type Rel = {
-  x: number;
-  y: number;
-  dx: number;
-  dy: number;
-  dist: number;
-  dir: Direction;
-  /** Inside the game's camera view. Things off screen get an arrow at the screen edge in the game. */
-  onScreen: boolean;
-};
-
-export type Owned = { id: string; name: string; level: number; max: number };
-
-export type ComboPart = { key: string; name: string; need: "own" | "max"; state: "done" | "leveling" | "missing"; have?: number; max?: number };
-export type ComboView = { result: string; name: string; kind: "evolution" | "union" | "itemEvolution"; ready: boolean; made: boolean; parts: ComboPart[] };
-
-/** One recipe an option joins: `ready` means picking the option completes it. */
-export type PairingView = ComboView & { partner: { key: string; name: string }; partnerHeld: boolean; partnerBanished: boolean };
-
-/** A held weapon, passive or item with recipes left and no partner held yet, as in the panel. */
-export type UnpairedView = { key: string; name: string; options: { key: string; name: string; result: string; resultName: string; made: boolean; banished: boolean }[] };
-
-export type OptionView = {
-  index: number;
-  type: string;
-  id: string;
-  name: string;
-  /** The option's text on screen, with prices and stats. */
-  label: string;
-  /** False for a greyed-out option, such as an item you cannot afford. */
-  available: boolean;
-  level?: number;
-  /** The game's own pick suggestion. */
-  recommended: boolean;
-  /** Never offered before in this browser profile. */
-  unseen: boolean;
-  /** Every recipe this option is part of whose result is not held yet, held partners first. */
-  combos: PairingView[];
-};
-
 export type GameMode = "openWorld" | "daily";
 
 export type Snapshot = {
@@ -168,11 +137,10 @@ export type Snapshot = {
   storage?: Record<string, unknown>;
   /** The mode the game is on: the mode screen that is open, else the run in play or the one that just ended. Absent before any run. */
   mode?: GameMode;
-  run?: RunView;
   /** The share link of the last finished run, once the game has shown its summary (https://tibo.dog/r/?...). */
   lastRunLink?: string;
-  /** How the most recent run went; set once a run has ended. */
-  lastRun?: { time: number; level: number } & RunTotals;
+  /** See Forecast; present while the game is paused, or running with `forecast` live. */
+  forecast?: Forecast;
   /** Whether the page runs under automation (navigator.webdriver), as in scripts/headless.ts. */
   headless?: boolean;
   /** The game's sim chunk; a checkpoint loads only on the build it was saved on. */
@@ -186,192 +154,6 @@ export function ladderCleared(s: Snapshot): number {
   const cleared = (s.storage?.["tibo.ladder.v1"] as { cleared?: unknown } | undefined)?.cleared;
   return typeof cleared === "number" ? cleared : 0;
 }
-
-export type EnemyView = Rel & { uid: number; id: string; name: string; hp: number; maxHp: number; damage: number; radius: number; speed: number; elite: boolean };
-
-/**
- * What the game counts over the whole run. Sources are a weapon id for damage dealt and kills, and
- * "enemy:<id>", "boss:<id>" or a ground name such as "burn" for damage taken; each map is largest first.
- */
-export type RunTotals = {
-  kills: number;
-  damageTaken: Record<string, number>;
-  damageDealt: Record<string, number>;
-  killsBy: Record<string, number>;
-  goldEarned: number;
-  goldSpent: number;
-  bossesKilled: number;
-  elitesKilled: number;
-  bossChests: number;
-  cratesBought: number;
-  shrinesUsed: number;
-  itemsBought: number;
-  /** Every evolution, union and evolved item made this run, by id, with the game time it was made at. */
-  made: { id: string; at: number }[];
-  revivesUsed: number;
-  /** Survived to `winAt`. The run goes on after a win until Tibo dies. */
-  won: boolean;
-  /** The source of the killing blow, once Tibo is dead. */
-  killer?: string;
-  /** Every number the game counts over the run, by the game's own names: distance walked, dodges, peak enemies, curse time, Grok Bot helps, hits, crits, near misses and the rest. */
-  counters: Record<string, number>;
-  /** What each dog that joined has done, by breed id: when it joined and each kind of help the game counts (damage, healed, blocked, gold and so on). */
-  dogs: Record<string, Record<string, number>>;
-  /** What Spud Shrine picks have added to each stat so far, by the game's stat names. */
-  shrineStats: Record<string, number>;
-};
-
-/** A timed boost; `endsIn` is game seconds left, `mult` the gold or fire-rate multiplier. */
-export type BuffView = { id: "goldRush" | "frenzy" | "fryRush" | "picnic"; endsIn: number; mult?: number };
-
-/**
- * Something the game showed or recorded, newest last: a boss spawning or defeated, a banner
- * (`announce`, whose `announcement.kind` says what, such as "event" with the event's id), a chest,
- * an evolution, a level-up, a dog joining. `time` is the run clock. `name` is the game's English
- * for the boss, biome, Grok Bot, dog or event the event is about, and `text` an event's banner.
- */
-export type EventView = { time: number; type: string; name?: string; text?: string } & Record<string, unknown>;
-
-export type RunView = {
-  /** The run's seed and whether it is today's Daily; the same Daily seed means the same map and spawns. */
-  seed: string;
-  daily: boolean;
-  /** Such as "normal" or "nightmare-3", as the HUD shows it. */
-  difficulty: string;
-  tick: number;
-  time: number;
-  /** The run clock at which the run counts as won. */
-  winAt: number;
-  /** The score on the HUD. */
-  score?: number;
-  biome: { id: string; name: string };
-  /** A Daily's weather, which changes the rules for the whole run. */
-  weather?: { id: string; name: string; description: string };
-  /** The gear a Daily starts Tibo in; its stat lines are already in `stats`. Empty outside a Daily. */
-  gear: { slot: string; id: string; name: string; description: string; lines: { affix: string; roll: number }[] }[];
-  /** The landmark Tibo is in, such as the Coin Laundromat, and the event it holds. */
-  landmark?: { id: string; name: string; event?: { id: string; name: string } };
-  player: {
-    x: number;
-    y: number;
-    hp: number;
-    maxHp: number;
-    level: number;
-    xp: number;
-    xpNext: number;
-    gold: number;
-    dashCharges: number;
-    dashMax: number;
-    /** Seconds until the next dash charge comes back; 0 when every charge is ready. */
-    dashReadyIn: number;
-    invulnerable: boolean;
-    /** Seconds left of each; Tibo cannot move while stunned or frozen. */
-    stunned: number;
-    frozen: number;
-    slowed: number;
-    revivesLeft: number;
-    rerolls: number;
-    skips: number;
-    banishes: number;
-    /** Curses held: those the difficulty starts with plus each Moldy Shrine taken. Each brings more elites and bosses. */
-    curses: number;
-    /** Damage taken in the last 3 game seconds by source, such as "enemy:aphid", "boss:..." or "burn". */
-    hurtBy: Record<string, number>;
-  };
-  /** `banished` lists the ids banished this run, which the game never offers again. */
-  loadout: { weapons: Owned[]; passives: Owned[]; items: { id: string; name: string; count: number }[]; banished: string[] };
-  /**
-   * The effective stats after passives, items, shrines and dogs, by the game's own names:
-   * multipliers such as damageMult, areaMult, cooldownMult, moveSpeedMult and growthMult (1 is
-   * base), and flat values such as maxHp, armor, recovery, magnetRadius, luck, curse, critChance and evasion.
-   */
-  stats: Record<string, number>;
-  /** What passives, items, shrines and the like add to each stat, before the base, by the game's own stat names (might, area, maxHp, armor and so on); zeros left out. */
-  statBonuses: Record<string, number>;
-  buffs: BuffView[];
-  totals: RunTotals;
-  /** The minutes still to come that bring a boss, an elite or an event, in order. */
-  schedule: { minute: number; boss?: { id: string; name: string }; elite: boolean; events: { id: string; name: string }[] }[];
-  events: EventView[];
-  /** Recipes using something held. */
-  combos: ComboView[];
-  unpaired: UnpairedView[];
-  choice?: { kind: string; options: OptionView[]; raw?: unknown };
-  bosses: (Rel & { id: string; name: string; hp: number; maxHp: number; damage: number; speed: number; radius: number })[];
-  /** `elites` is every elite alive, nearest first, wherever it is; `uid` follows one enemy across snapshots. */
-  enemies: {
-    total: number;
-    nearest: EnemyView[];
-    elites: EnemyView[];
-    /** Every kind alive, by enemy id, most numerous first: the count, the elites among them, the nearest one's distance and the strongest one's max hp, contact damage, speed and radius. */
-    kinds: Record<string, { name: string; count: number; elites: number; nearest: number; maxHp: number; damage: number; speed: number; radius: number }>;
-  };
-  /** Counts by kind, every chest, and the nearest pickups that are not xp gems. */
-  pickups: { counts: Record<string, number>; chests: PickupView[]; nearest: PickupView[] };
-  /** Every unused point of interest the game has placed in the loaded map, nearest first. Standing inside one's circle charges it; `charge` and `chargeNeeded` are seconds. */
-  /** `description` is the game's own line for it, such as "An elite waits here. It drops a chest." */
-  /** `price` is the gold a Potato Crate takes now (each one bought raises the next); `prices` a vendor's by item rarity. */
-  /** `variant` names what a "bigUpdate" spot is, such as "chiliBottle" or "spudForge"; a variety place such as the chili bottle has `chargeNeeded` 0 because the game does not export its charge time. */
-  pois: (Rel & { uid: number; kind: string; variant?: string; name: string; description: string; radius: number; inside: boolean; charge: number; chargeNeeded: number; used: boolean; price?: number; prices?: number[] })[];
-  /**
-   * Terrain patches and enemy attack zones. Positions are the zone's nearest point to the player.
-   * A "line" zone (a boss sweep or charge) is a band `radius` wide each side of a segment, so
-   * stepping sideways leaves it; `landsIn` is the seconds until a telegraphed attack hits.
-   */
-  hazards: (Rel & { kind: string; source: "terrain" | "attack"; shape: string; radius: number; inside: boolean; landsIn?: number })[];
-  /** Enemy bullets; `vx`/`vy` are units per second. */
-  bullets: { total: number; nearest: (Rel & { radius: number; vx: number; vy: number })[] };
-  /** Enemy bullet patterns about to fire, nearest first: `firesIn` seconds, then `bursts` volleys of `count` bullets. */
-  volleys: (Rel & { firesIn: number; count: number; bursts: number; speed: number; damage: number })[];
-  /** Tibo's dogs. */
-  pets: (Rel & { id: string; name: string; level: number })[];
-  /**
-   * Grok Bots on the map, each with one kind of `help`, such as a shield or coins. In `mode` wander
-   * one hops over once Tibo comes near, helps when it reaches him, then cheers; beam means it is
-   * leaving, and swarm is a Bot Dock's swarm. `leavesIn` is seconds until its current mode ends.
-   */
-  helpers: (Rel & { help: string; name: string; description: string; mode: string; leavesIn: number })[];
-  /** Poteto, Andrew or Samir while one is walking in; each comes once a run with a gift. */
-  visitors: (Rel & { who: "poteto" | "andrew" | "samir" })[];
-  /** Enemy bullets that would hit the player within 0.6 seconds if it stands still. */
-  standingBulletHits: number;
-  /** Enemies that would reach the player within 0.6 seconds if it stands still, chasing at their base speed. */
-  standingEnemyTouches: number;
-  /** What standing still for the next second costs, from the game's own simulation. Only while paused between agent steps. */
-  standingForecast?: ForecastView;
-  /** Everything around the player bucketed by compass direction, nearest first within each. */
-  sectors: SectorView[];
-};
-
-export type SectorView = {
-  dir: Direction;
-  /** Enemies within 60 and within 150 units in this direction. */
-  enemiesNear: number;
-  enemiesFar: number;
-  /** Distance to the nearest enemy, boss or bullet this way, or null when there is none within 300. */
-  nearestEnemy: number | null;
-  nearestBoss: number | null;
-  nearestBullet: number | null;
-  /** Enemy bullets within 60 units this way. */
-  bulletsNear: number;
-  /** A terrain hazard or attack zone the player is not already in overlaps the next 60 units this way. */
-  hazard: string | null;
-  /** The player stands in a hazard, and 60 units this way is clear of it. */
-  leavesHazard: boolean;
-  /** 60 units this way is outside every enemy attack zone on the ground. */
-  clearOfAttacks: boolean;
-  /** Enemy bullets that would hit the player within 0.6 seconds if it walks this way, from their current paths. */
-  bulletHits: number;
-  /** Enemies that would reach the player within 0.6 seconds if it walks this way, chasing at their base speed. */
-  enemyTouches: number;
-  /** What walking this way for the next second costs, from the game's own simulation. Only while paused between agent steps. */
-  forecast?: ForecastView;
-  /** XP gems within 120 units this way. */
-  xpNear: number;
-};
-
-/** `charge` and `chargeNeeded` (seconds) appear on pickups you open by standing on them. */
-export type PickupView = Rel & { uid: number; kind: string; value: number; charge?: number; chargeNeeded?: number };
 
 /**
  * The game's content, each entry its own definition plus all its English lines (name, desc and the
@@ -463,8 +245,12 @@ export function parseCommand(input: unknown): Command {
         ...(c.pause === true ? { pause: true } : {}),
       };
     }
-    case "choose":
-      return { type: "choose", index: num(c.index, "index") };
+    case "choose": {
+      const a = (c.action ?? {}) as Record<string, unknown>;
+      if (!(CHOICE_ACTIONS as readonly unknown[]).includes(a.type)) fail(`action.type must be one of ${CHOICE_ACTIONS.join(", ")}`);
+      const type = a.type as ChoiceAction["type"];
+      return type === "pick" || type === "banish" || type === "buy" ? { type: "choose", action: { type, index: num(a.index, "action.index") } } : { type: "choose", action: { type } };
+    }
     case "speed": {
       const factor = num(c.factor, "factor");
       if (!Number.isInteger(factor) || factor < 1 || factor > 8) fail("factor must be a whole number from 1 to 8");

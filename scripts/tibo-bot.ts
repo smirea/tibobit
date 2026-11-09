@@ -8,7 +8,8 @@
 import path from "node:path";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type ForecastView, type GameMode, type Inspect, ladderCleared, type MoveOption, type OptionView, type PilotPace, type RunView, type SectorView, type Snapshot } from "../src/agent/protocol";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type ChoiceAction, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type Forecast, type GameMode, type Inspect, ladderCleared, type MoveOption, type PilotPace, type Snapshot } from "../src/agent/protocol";
+import { type Book, type GameJson, type Pickup, type Sector, type Spot, type World, line, pairings, readBook as bookOf, see } from "./world";
 import * as loop from "./gameplay";
 import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "./gameplay";
 
@@ -262,15 +263,16 @@ class RunNotes {
 
 const pct = (part: number, whole: number) => Math.round((100 * part) / Math.max(1, whole));
 /** A damage source ("enemy:<id>", "boss:<id>" or a ground name such as "Hot oil") with the game's name for it when one is in sight. */
-function gameName(r: RunView, source: string): string {
+function gameName(b: Book, source: string): string {
   const [kind, id = ""] = source.split(":");
-  const name = kind === "enemy" ? r.enemies.kinds[id]?.name : kind === "boss" ? r.bosses.find((b) => b.id === id)?.name : undefined;
+  const name = kind === "enemy" || kind === "boss" ? line(b, kind, id) : undefined;
   return name === undefined ? source : `${name} (${source})`;
 }
 
 /** A record as "key value, key value", in the game's own keys. */
 const fields = (o: Record<string, unknown>) => Object.entries(o).map(([k, v]) => `${k} ${typeof v === "object" ? JSON.stringify(v) : v}`).join(", ");
-const near = (r: RunView) => r.sectors.reduce((n, s) => n + s.enemiesNear, 0);
+const near = (r: World) => r.sectors.reduce((n, s) => n + s.enemiesNear, 0);
+const dashCharges = (r: World) => r.game.player.find((x) => x.slot === r.game.me)?.dashCharges ?? 0;
 
 // ---- Run log -------------------------------------------------------------------------------
 // One CSV row per model call and per goal that starts or ends, with the player's state at that
@@ -332,56 +334,56 @@ class RunLog {
     writeFileSync(file, `${LOG_COLUMNS.join(",")}\n`, { flag: "wx" });
   }
 
-  write(r: RunView | undefined, row: LogRow) {
-    const p = r?.player;
-    const lost = p === undefined || this.hp === undefined ? "" : String(Math.max(0, Math.round(this.hp - p.hp)));
-    const gained = p === undefined || this.hp === undefined ? 0 : Math.max(0, Math.round(p.hp - this.hp));
+  write(r: World | undefined, row: LogRow) {
+    const lost = r === undefined || this.hp === undefined ? "" : String(Math.max(0, Math.round(this.hp - r.hp)));
+    const gained = r === undefined || this.hp === undefined ? 0 : Math.max(0, Math.round(r.hp - this.hp));
     this.healed += gained;
-    if (p !== undefined) this.hp = p.hp;
+    if (r !== undefined) this.hp = r.hp;
     const at = (x: { dist: number; dir: string }) => `${Math.round(x.dist)} ${x.dir}`;
+    const l = r?.game.loadout;
     const state: Partial<Record<(typeof LOG_COLUMNS)[number], string | number>> =
-      r === undefined || p === undefined
+      r === undefined || l === undefined
         ? {}
         : {
             time: clock(r.time),
-            seconds: r.time,
-            hp: Math.round(p.hp),
-            max_hp: Math.round(p.maxHp),
+            seconds: Math.round(r.time * 10) / 10,
+            hp: Math.round(r.hp),
+            max_hp: Math.round(r.maxHp),
             hp_lost: lost,
             hp_gained: gained,
-            level: p.level,
-            xp_pct: pct(p.xp, p.xpNext),
-            gold: p.gold,
-            x: Math.round(p.x),
-            y: Math.round(p.y),
-            dash: p.dashCharges,
-            enemies: r.enemies.total,
+            level: l.level,
+            xp_pct: pct(l.xp, l.xpNext),
+            gold: Math.floor(l.gold),
+            x: Math.round(r.x),
+            y: Math.round(r.y),
+            dash: r.game.player.find((x) => x.slot === r.game.me)?.dashCharges ?? 0,
+            enemies: r.enemies.length,
             enemies_near: near(r),
-            bosses: r.bosses.map((b) => `${b.name} (${b.id}) ${at(b)} ${pct(b.hp, b.maxHp)}% of ${Math.round(b.maxHp)}`).join("; "),
-            dealt: Math.round(Object.values(r.totals.damageDealt).reduce((a, b) => a + b, 0)),
-            elites: r.totals.elitesKilled,
-            elite_list: r.enemies.elites.slice(0, 3).map((e) => `${e.uid} ${e.name} (${e.id}) ${Math.round(e.hp)}/${Math.round(e.maxHp)} ${at(e)}`).join("; "),
-            nearby: [...r.enemies.nearest.filter((e) => e.dist <= 150).reduce((m, e) => m.set(e.id, (m.get(e.id) ?? 0) + 1), new Map<string, number>())]
+            bosses: r.bosses.map((b) => `${b.name} (${b.def}) ${at(b)} ${pct(b.hp, b.maxHp)}% of ${Math.round(b.maxHp)}`).join("; "),
+            dealt: Math.round(Object.values(r.game.run.damageBySource).reduce((a, b) => a + b, 0)),
+            elites: r.game.run.elitesKilled,
+            elite_list: r.elites.slice(0, 3).map((e) => `${e.uid} ${e.name} (${e.def}) ${Math.round(e.hp)}/${Math.round(e.maxHp)} ${at(e)}`).join("; "),
+            nearby: [...r.enemies.filter((e) => e.dist <= 150).reduce((m, e) => m.set(e.def, (m.get(e.def) ?? 0) + 1), new Map<string, number>())]
               .sort((a, b) => b[1] - a[1])
               .map(([id, n]) => `${id} ${n}`)
               .join("; "),
-            hurt_by: Object.entries(p.hurtBy).map(([k, v]) => `${k} ${v}`).join("; "),
+            hurt_by: Object.entries(r.hurtBy).map(([k, v]) => `${k} ${v}`).join("; "),
             standing_on: spotLine(r) ?? "",
-            underfoot: r.hazards.filter((h) => h.inside).map((h) => h.kind).join("; "),
-            chests: r.pickups.chests.slice(0, 3).map(at).join("; "),
-            food: r.pickups.nearest.filter((x) => x.kind === "heal").slice(0, 2).map(at).join("; "),
-            pois: r.pois.filter((x) => x.chargeNeeded > 0).slice(0, 4).map((x) => `${x.name} ${at(x)}`).join("; "),
-            weapons: r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join("; "),
-            passives: r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join("; "),
-            items: r.loadout.items.map((i) => `${i.name} x${i.count}`).join("; "),
+            underfoot: groundSources(r).join("; "),
+            chests: r.chests.slice(0, 3).map(at).join("; "),
+            food: r.food.slice(0, 2).map(at).join("; "),
+            pois: r.spots.filter((x) => x.chargeNeeded > 0).slice(0, 4).map((x) => `${x.name} ${at(x)}`).join("; "),
+            weapons: r.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join("; "),
+            passives: r.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join("; "),
+            items: r.items.map((i) => `${i.name} x${i.count}`).join("; "),
           };
     const values = { ...state, ...row, wall: new Date().toISOString().slice(11, 19) } as Record<string, string | number | undefined>;
     appendFileSync(this.file, `${LOG_COLUMNS.map((c) => csvField(String(values[c] ?? ""))).join(",")}\n`);
   }
 
   /** Health lost since the last row. */
-  lostSince(r: RunView): number {
-    return this.hp === undefined ? 0 : Math.max(0, this.hp - r.player.hp);
+  lostSince(r: World): number {
+    return this.hp === undefined ? 0 : Math.max(0, this.hp - r.hp);
   }
 
   /**
@@ -389,11 +391,11 @@ class RunLog {
    * new", or undefined when nothing changed. Chests hand out their rewards without a choice, so
    * this is the only record of what a chest gave.
    */
-  loadoutChange(r: RunView): string | undefined {
-    const now = new Map([...r.loadout.weapons, ...r.loadout.passives].map((x) => [x.name, `${x.level}/${x.max}`] as [string, string]));
+  loadoutChange(r: World): string | undefined {
+    const now = new Map([...r.weapons, ...r.passives].map((x) => [x.name, `${x.level}/${x.max}`] as [string, string]));
     // A new item carries the game's description, so a review can tell what it should have changed.
-    const itemSaid = new Map(r.loadout.items.map((i) => [i.name, said(book ?? new Map(), "item", i.id).replace(/^: /, " (") + (said(book ?? new Map(), "item", i.id) === "" ? "" : ")")] as [string, string]));
-    for (const i of r.loadout.items) now.set(i.name, `x${i.count}`);
+    const itemSaid = new Map(r.items.map((i) => [i.name, book === undefined ? "" : said(book, "item", i.id).replace(/^: (.*)$/, " ($1)")] as [string, string]));
+    for (const i of r.items) now.set(i.name, `x${i.count}`);
     const before = this.held;
     this.held = now;
     if (before === undefined) return undefined;
@@ -407,37 +409,28 @@ class RunLog {
 
 // ---- What the game says about things -------------------------------------------------------
 // The planner reads the game's own description of every card it holds or is offered.
-type Book = Map<string, string>;
 let book: Book | undefined;
-/** The game's own dog definitions, keyed "dog:<id>", with their English lines. */
-const defs = new Map<string, Record<string, unknown>>();
 
-
-async function readBook(): Promise<Book> {
+async function readBook(): Promise<Book | undefined> {
   if (book !== undefined) return book;
   try {
-    const e = await api<Encyclopedia>("/encyclopedia");
-    const out: Book = new Map();
-    for (const [kind, defs] of [
-      ["weapon", e.weapons],
-      ["passive", e.passives],
-      ["item", e.items],
-    ] as const)
-      for (const d of defs as { id?: string; desc?: string }[]) if (d.id !== undefined && d.desc !== undefined) out.set(`${kind}:${d.id}`, d.desc);
-    for (const d of e.dogs as Record<string, unknown>[]) if (typeof d.id === "string") defs.set(`dog:${d.id}`, d);
-    book = out;
-    return out;
+    book = bookOf(await api<Encyclopedia>("/encyclopedia"));
+    return book;
   } catch (e) {
     // Asked again next time: the page sends the encyclopedia a moment after it connects.
     console.error("no encyclopedia yet:", e instanceof Error ? e.message : e);
-    return new Map();
+    return undefined;
   }
 }
 
+/** The game's description of a weapon, passive, item or the like, as ": <text>", or "". */
 const said = (b: Book, kind: string, id: string) => {
-  const d = b.get(`${kind}:${id}`);
+  const d = line(b, kind, id, "desc");
   return d === undefined ? "" : `: ${d.replace(/\s+/g, " ").trim()}`;
 };
+
+/** Ground damage sources (the game's names, such as "Hot oil") that standing still would take now, by the forecast. */
+const groundSources = (r: World) => Object.keys(r.forecast?.moves.still.bySource ?? {}).filter((s) => !s.includes(":"));
 
 // ---- Goals ---------------------------------------------------------------------------------
 // The planner sets goals, things to collect or places to explore for, by the ids it is shown.
@@ -522,40 +515,40 @@ function goalId(g: Goal): string {
   }
 }
 
-const onChest = (c: RunView["pickups"]["chests"][number]) => c.dist <= ON_CHEST;
+const onChest = (c: Pickup) => c.dist <= ON_CHEST;
 // The name alone hides what a spot does: standing in a Beetle Nest wakes an elite.
-const poiWhat = (p: RunView["pois"][number]) => (p.description === "" ? "" : ` (${p.description.replace(/\.$/, "").replace(/\. /g, "; ").toLowerCase()})`);
+const poiWhat = (p: Spot) => (p.description === "" ? "" : ` (${p.description.replace(/\.$/, "").replace(/\. /g, "; ").toLowerCase()})`);
 /** What a shop spot costs against the gold Tibo holds, or "" for a spot that costs nothing. */
-const priceWords = (p: RunView["pois"][number], gold: number) =>
+const priceWords = (p: Spot, gold: number) =>
   p.price !== undefined ? `; it costs ${p.price} gold now, and Tibo has ${gold}` : p.prices !== undefined ? `; its items cost ${p.prices.join(", ")} gold by rarity, and Tibo has ${gold}` : "";
 
 /** Where Tibo stands, as "on a chest, 1 of 3 seconds into opening it", or undefined when on nothing. */
-function spotLine(r: RunView): string | undefined {
-  const chest = r.pickups.chests.find(onChest);
-  if (chest !== undefined) return `on a chest, ${chest.charge ?? 0} of ${chest.chargeNeeded ?? 1} seconds into opening it`;
-  const inside = r.pois.find((p) => p.inside);
+function spotLine(r: World): string | undefined {
+  const chest = r.chests.find(onChest);
+  if (chest !== undefined) return `on a chest, ${chest.charged} of ${chest.chargeNeeded ?? 1} seconds into opening it`;
+  const inside = r.spots.find((p) => p.inside);
   if (inside === undefined) return undefined;
-  return `inside the ${inside.name}${poiWhat(inside)}${inside.chargeNeeded > 0 ? `, charged ${inside.charge} of ${inside.chargeNeeded} seconds` : ""}${priceWords(inside, r.player.gold)}`;
+  return `inside the ${inside.name}${poiWhat(inside)}${inside.chargeNeeded > 0 ? `, charged ${inside.charged} of ${inside.chargeNeeded} seconds` : ""}${priceWords(inside, r.game.loadout.gold)}`;
 }
 
 type Located = { dist: number; dir: Direction; arrived: boolean; charging: number; progress: string; name: string };
 
-function locate(r: RunView, g: TargetGoal): Located | undefined {
+function locate(r: World, g: TargetGoal): Located | undefined {
   if (g.kind === "poi") {
-    const p = r.pois.find((x) => x.uid === g.uid);
-    return p === undefined ? undefined : { dist: p.dist, dir: p.dir, arrived: p.inside, charging: p.chargeNeeded - p.charge, progress: `${p.charge} of ${p.chargeNeeded}s charged`, name: `the ${p.name}` };
+    const p = r.spots.find((x) => x.uid === g.uid);
+    return p === undefined ? undefined : { dist: p.dist, dir: p.dir, arrived: p.inside, charging: p.chargeNeeded - p.charged, progress: `${p.charged} of ${p.chargeNeeded}s charged`, name: `the ${p.name}` };
   }
   if (g.kind === "chest") {
-    const c = r.pickups.chests.find((x) => x.uid === g.uid);
+    const c = r.chests.find((x) => x.uid === g.uid);
     return c === undefined
       ? undefined
-      : { dist: c.dist, dir: c.dir, arrived: onChest(c), charging: (c.chargeNeeded ?? 1) - (c.charge ?? 0), progress: `${c.charge ?? 0} of ${c.chargeNeeded ?? 1}s opened`, name: "the chest" };
+      : { dist: c.dist, dir: c.dir, arrived: onChest(c), charging: (c.chargeNeeded ?? 1) - c.charged, progress: `${c.charged} of ${c.chargeNeeded ?? 1}s opened`, name: "the chest" };
   }
   if (g.kind === "elite") {
-    const e = r.enemies.elites.find((x) => x.uid === g.uid);
+    const e = r.elites.find((x) => x.uid === g.uid);
     return e === undefined ? undefined : { dist: e.dist, dir: e.dir, arrived: e.dist <= ELITE_REACH, charging: 0, progress: `${e.hp} health left, ${Math.round(e.dist)} away to the ${e.dir}`, name: `the ${e.name}` };
   }
-  const f = r.pickups.nearest.find((x) => x.uid === g.uid);
+  const f = r.pickups.find((x) => x.uid === g.uid);
   return f === undefined ? undefined : { dist: f.dist, dir: f.dir, arrived: false, charging: 0, progress: "", name: "the food" };
 }
 
@@ -563,16 +556,16 @@ function locate(r: RunView, g: TargetGoal): Located | undefined {
 const ELITE_REACH = 70;
 const TARGET_DONE = { chest: "opened", poi: "charged and used", food: "eaten", elite: "killed" } as const;
 
-function goalTitle(g: Goal, r: RunView): string {
+function goalTitle(g: Goal, r: World): string {
   switch (g.kind) {
     case "chest":
       return "Open the chest";
     case "poi":
-      return `Charge the ${r.pois.find((p) => p.uid === g.uid)?.name ?? "spot"}`;
+      return `Charge the ${r.spots.find((p) => p.uid === g.uid)?.name ?? "spot"}`;
     case "food":
       return "Eat the food";
     case "elite":
-      return `Fight the ${r.enemies.elites.find((e) => e.uid === g.uid)?.name ?? "elite"}`;
+      return `Fight the ${r.elites.find((e) => e.uid === g.uid)?.name ?? "elite"}`;
     case "explore":
       return `Explore ${g.dir}`;
     case "gems":
@@ -608,12 +601,12 @@ const SPOT_TAGS: Record<string, ActionTag> = {
   frenzyFryer: "Fryer",
 };
 
-function goalTag(g: Goal, r: RunView): ActionTag {
+function goalTag(g: Goal, r: World): ActionTag {
   switch (g.kind) {
     case "chest":
       return "Loot";
     case "poi": {
-      const kind = r.pois.find((p) => p.uid === g.uid)?.kind;
+      const kind = r.spots.find((p) => p.uid === g.uid)?.kind;
       return (kind === undefined ? undefined : SPOT_TAGS[kind]) ?? "Spot";
     }
     case "food":
@@ -629,7 +622,7 @@ function goalTag(g: Goal, r: RunView): ActionTag {
   }
 }
 
-function aimAt(p: Pursuit, r: RunView): Aim | Ended {
+function aimAt(p: Pursuit, r: World): Aim | Ended {
   const g = p.goal;
   const age = r.time - p.since;
   switch (g.kind) {
@@ -650,9 +643,9 @@ function aimAt(p: Pursuit, r: RunView): Aim | Ended {
       return t.arrived ? { progress: t.progress } : { heading: t.dir, left: t.dist, progress: t.progress };
     }
     case "explore": {
-      const found = r.pickups.chests.find((c) => !p.known.has(`C${c.uid}`) && c.dist < PLAN_RANGE);
+      const found = r.chests.find((c) => !p.known.has(`C${c.uid}`) && c.dist < PLAN_RANGE);
       if (found !== undefined) return { done: `found a chest ${Math.round(found.dist)} away to the ${found.dir}`, success: true };
-      const walked = Math.hypot(r.player.x - p.origin.x, r.player.y - p.origin.y);
+      const walked = Math.hypot(r.x - p.origin.x, r.y - p.origin.y);
       if (walked >= knobs().exploreDistance) return { done: `walked ${knobs().exploreDistance} units and found nothing new`, success: true };
       return { heading: g.dir, left: knobs().exploreDistance - walked, progress: `${Math.round(walked)} of ${knobs().exploreDistance} walked` };
     }
@@ -664,14 +657,14 @@ function aimAt(p: Pursuit, r: RunView): Aim | Ended {
     }
     case "evade":
       if (age >= knobs().evadeSeconds) {
-        const lost = Math.round(p.hp - r.player.hp);
+        const lost = Math.round(p.hp - r.hp);
         return { done: lost > 0 ? `the ${knobs().evadeSeconds} seconds ran out, and Tibo lost ${lost} health during them` : `kept clear for ${knobs().evadeSeconds} seconds without losing health`, success: true };
       }
       return { progress: `${Math.ceil(knobs().evadeSeconds - age)}s left` };
   }
 }
 
-function begin(goal: Goal, r: RunView, log: RunLog, decision: Inspect) {
+function begin(goal: Goal, r: World, log: RunLog, decision: Inspect) {
   const title = goalTitle(goal, r);
   const p: Pursuit = {
     goal,
@@ -682,8 +675,8 @@ function begin(goal: Goal, r: RunView, log: RunLog, decision: Inspect) {
     since: r.time,
     deadline: r.time,
     best: { left: Number.POSITIVE_INFINITY, time: r.time },
-    origin: { x: r.player.x, y: r.player.y },
-    hp: r.player.hp,
+    origin: { x: r.x, y: r.y },
+    hp: r.hp,
     steppedOff: 0,
     known: new Set(everListed),
     seen: false,
@@ -698,7 +691,7 @@ function begin(goal: Goal, r: RunView, log: RunLog, decision: Inspect) {
 
 const RESULT_WORDS: Record<GoalResult, string> = { done: "done", failed: "gave up", dropped: "dropped" };
 
-function finish(r: RunView, log: RunLog, outcome: string, result: GoalResult) {
+function finish(r: World, log: RunLog, outcome: string, result: GoalResult) {
   const p = pursuit;
   if (p === undefined) return;
   pursuit = undefined;
@@ -710,14 +703,14 @@ function finish(r: RunView, log: RunLog, outcome: string, result: GoalResult) {
 }
 
 /** The planner's goal takes over, unless it is the one already under way. */
-function setGoal(goal: Goal, r: RunView, log: RunLog, decision: Inspect) {
+function setGoal(goal: Goal, r: World, log: RunLog, decision: Inspect) {
   if (pursuit?.id === goalId(goal)) return;
   if (pursuit !== undefined) finish(r, log, "the planner chose another goal", "dropped");
   begin(goal, r, log, decision);
 }
 
 /** Why the current goal ends now, if it does. */
-function ending(p: Pursuit, r: RunView, aim: Aim | Ended, status: CommandStatus | undefined): Ended | undefined {
+function ending(p: Pursuit, r: World, aim: Aim | Ended, status: CommandStatus | undefined): Ended | undefined {
   if ("done" in aim) return aim;
   if (status?.command.type === "goto" && status.state === "done") return { done: TARGET_DONE[(p.goal as TargetGoal).kind], success: true };
   if (status?.state === "failed" && !STEP_OVER.has(status.detail ?? "")) return { done: `the game said: ${status.detail ?? "failed"}`, success: false };
@@ -733,7 +726,7 @@ function ending(p: Pursuit, r: RunView, aim: Aim | Ended, status: CommandStatus 
 let distrusted: { until: number; lost: number; at: number } | undefined;
 
 /** Why the action model is asked even though the forecast calls the way to the goal cheap, if it is. */
-function distrustReason(r: RunView): string | undefined {
+function distrustReason(r: World): string | undefined {
   if (distrusted !== undefined && r.time < distrusted.until) return `the forecast was not trusted: Tibo lost ${distrusted.lost} health on a step it called free at ${clock(distrusted.at)}`;
   const range = knobs().distrustBossRange;
   const boss = range > 0 ? r.bosses.find((b) => b.dist <= range) : undefined;
@@ -741,17 +734,17 @@ function distrustReason(r: RunView): string | undefined {
 }
 
 /** Why a goal stopped making progress, in the words the planner reads in its recent goals. */
-function stuckWords(p: Pursuit, r: RunView, aim: Aim): string {
+function stuckWords(p: Pursuit, r: World, aim: Aim): string {
   const seconds = knobs().stuckSeconds;
   const off = p.steppedOff === 0 ? "" : `; the action model stepped off it ${plural(p.steppedOff, "time")} to dodge`;
   if (aim.heading !== "stay") return `no closer for ${seconds} seconds${off}`;
-  const spot = p.goal.kind === "poi" ? r.pois.find((x) => x.uid === (p.goal as TargetGoal).uid) : undefined;
-  return `standing on it charged nothing for ${seconds} seconds${spot === undefined ? "" : priceWords(spot, r.player.gold)}${off}`;
+  const spot = p.goal.kind === "poi" ? r.spots.find((x) => x.uid === (p.goal as TargetGoal).uid) : undefined;
+  return `standing on it charged nothing for ${seconds} seconds${spot === undefined ? "" : priceWords(spot, r.game.loadout.gold)}${off}`;
 }
 
 /** One step toward the current goal: walk on while it is safe, else ask the action model. */
-async function pursue(s: Snap, r: RunView, log: RunLog, planner: Planner) {
-  for (const c of r.pickups.chests) everListed.add(`C${c.uid}`);
+async function pursue(s: Snap, r: World, log: RunLog, planner: Planner) {
+  for (const c of r.chests) everListed.add(`C${c.uid}`);
   const gained = log.loadoutChange(r);
   if (gained !== undefined) {
     log.write(r, { event: "loadout", action: gained, ...(pursuit === undefined ? {} : { goal: pursuit.id }) });
@@ -788,7 +781,7 @@ async function pursue(s: Snap, r: RunView, log: RunLog, planner: Planner) {
   }
 }
 
-async function walkOn(p: Pursuit, r: RunView, aim: Aim, status: CommandStatus | undefined, log: RunLog) {
+async function walkOn(p: Pursuit, r: World, aim: Aim, status: CommandStatus | undefined, log: RunLog) {
   const order = aim.to !== undefined ? { type: "goto", to: aim.to, stay: "done" } : { type: "move", dir: aim.heading };
   // One command steers until the goal changes; it is only sent again if it changes or ends.
   const key = JSON.stringify(order);
@@ -800,19 +793,14 @@ async function walkOn(p: Pursuit, r: RunView, aim: Aim, status: CommandStatus | 
 // ---- Action model --------------------------------------------------------------------------
 const plural = (n: number, one: string) => `${n} ${n === 1 ? one : one.replace(/y$/, "ie")}${n === 1 ? "" : "s"}`;
 
-function sourceWords(source: string): string {
-  if (!source.includes(":")) return source.toLowerCase();
-  const [kind = "", id = ""] = source.split(":");
-  if (kind === "enemy") return `${id.replace(/-/g, " ")} enemies`;
-  if (kind === "boss") return `the ${id.replace(/-/g, " ")} boss`;
-  return hazardWords(source);
-}
+/** A damage source in the game's words: the enemy's or boss's English name, else the game's own key, such as "Hot oil". */
+const sourceWords = (source: string) => (book === undefined ? source : gameName(book, source));
 
 // Health samples by game time, to tell the planner whether Tibo is bleeding.
 const healthHistory: { time: number; hp: number }[] = [];
 
-function healthTrend(r: RunView): string {
-  const now = pct(r.player.hp, r.player.maxHp);
+function healthTrend(r: World): string {
+  const now = pct(r.hp, r.maxHp);
   if (healthHistory.length > 0 && (healthHistory.at(-1)?.time ?? 0) > r.time) healthHistory.length = 0;
   healthHistory.push({ time: r.time, hp: now });
   while (healthHistory.length > 1 && (healthHistory[1]?.time ?? 0) <= r.time - 30) healthHistory.shift();
@@ -820,15 +808,6 @@ function healthTrend(r: RunView): string {
   if (then === undefined || r.time - then.time < 20 || Math.abs(then.hp - now) < 10) return "";
   return `, ${then.hp > now ? "down" : "up"} from ${then.hp}% ${Math.round(r.time - then.time)} seconds ago`;
 }
-
-const HAZARD_WORDS: Record<string, string> = {
-  telegraph: "a boss attack about to land",
-  hazardPool: "a damaging puddle",
-  strike: "a strike about to land",
-  slow: "a sticky patch that slows Tibo",
-  chill: "an icy patch that slows Tibo",
-};
-const hazardWords = (kind: string) => HAZARD_WORDS[kind] ?? `a ${kind} patch that hurts Tibo`;
 
 // Words, not percentages: on 50 replayed states Laya picked a move within 2% of the least
 // damaging one 90% of the time with these words, 80% with "would lose N%", and 38% when the
@@ -839,14 +818,18 @@ function hurtWords(share: number): string {
   return "get very badly hurt";
 }
 
-function outlook(r: RunView, f: ForecastView): string {
-  if (f.dead) return `Tibo would die within a second${f.sources.length === 0 ? "" : `, killed by ${f.sources.slice(0, 2).map((x) => sourceWords(x.source)).join(" and ")}`}`;
-  const share = Math.round((100 * f.damage) / r.player.maxHp);
-  if (share < 1) return "Tibo takes no damage in the next second";
-  return `Tibo would ${hurtWords(share)} within a second, by ${f.sources
+type MoveForecast = Forecast["moves"]["still"];
+const forecastFor = (r: World, heading: Direction | "stay") => r.forecast?.moves[heading === "stay" ? "still" : heading];
+
+function outlook(r: World, f: MoveForecast): string {
+  const sources = Object.entries(f.bySource)
+    .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
-    .map((x) => sourceWords(x.source))
-    .join(" and ")}`;
+    .map(([s]) => sourceWords(s));
+  if (f.dead) return `Tibo would die within a second${sources.length === 0 ? "" : `, killed by ${sources.join(" and ")}`}`;
+  const share = Math.round((100 * f.damage) / r.maxHp);
+  if (share < 1) return "Tibo takes no damage in the next second";
+  return `Tibo would ${hurtWords(share)} within a second, by ${sources.join(" and ")}`;
 }
 
 function bearing(dir: Direction, goal: Direction | "stay" | undefined): string {
@@ -860,15 +843,12 @@ function bearing(dir: Direction, goal: Direction | "stay" | undefined): string {
 
 // Only what the next steps need: the forecast first (the models weigh the start of a description
 // most), then what it cannot see, and where the goal lies.
-function describe(r: RunView, s: SectorView, goal: Direction | "stay" | undefined): string {
+function describe(r: World, s: Sector, goal: Direction | "stay" | undefined): string {
   const boss = r.bosses.find((b) => b.dir === s.dir);
+  const f = forecastFor(r, s.dir);
   return [
-    s.forecast === undefined ? "" : outlook(r, s.forecast),
+    f === undefined ? "" : outlook(r, f),
     boss !== undefined && boss.dist < 250 ? `toward the ${boss.name} boss only ${Math.round(boss.dist)} away, which hurts Tibo on contact` : "",
-    s.forecast !== undefined ? "" : s.bulletHits > 0 ? `${plural(s.bulletHits, "enemy bullet")} would hit Tibo` : "",
-    s.forecast !== undefined ? "" : s.enemyTouches > 0 ? `${plural(s.enemyTouches, "enemy")} would bump into Tibo and hurt it` : "",
-    s.hazard !== null ? `into ${hazardWords(s.hazard)}` : "",
-    s.leavesHazard ? "out of the danger Tibo stands in" : "",
     s.enemiesNear > 0 ? `${plural(s.enemiesNear, "enemy")} close` : "no enemies close",
     bearing(s.dir, goal),
   ]
@@ -877,23 +857,22 @@ function describe(r: RunView, s: SectorView, goal: Direction | "stay" | undefine
 }
 
 // "Stand still" must carry the threats around Tibo too, or it reads as the safest move in a swarm.
-function standing(r: RunView, goal: Direction | "stay" | undefined): string {
+function standing(r: World, goal: Direction | "stay" | undefined): string {
   const crowd = near(r) > 0 ? ` with ${plural(near(r), "enemy")} within 60 units closing in` : "";
-  const forecast = r.standingForecast === undefined ? "" : `, where ${outlook(r, r.standingForecast).replace(/^Tibo /, "it ")}`;
-  const under = r.hazards.find((h) => h.inside);
-  const inAttack = under === undefined ? "" : under.landsIn === undefined ? `, staying in ${hazardWords(under.kind)}` : `, staying where a boss attack lands in ${under.landsIn.toFixed(1)} seconds`;
+  const still = r.forecast?.moves.still;
+  const forecast = still === undefined ? "" : `, where ${outlook(r, still).replace(/^Tibo /, "it ")}`;
   const spot = spotLine(r);
   const purpose = goal === "stay" ? ", which is what the goal needs" : goal === undefined ? "" : ", no closer to the goal";
-  return `stand still${spot === undefined ? "" : ` ${spot}`}${crowd}${forecast}${inAttack}${purpose}`;
+  return `stand still${spot === undefined ? "" : ` ${spot}`}${crowd}${forecast}${purpose}`;
 }
 
 /** What a move costs over the next second as a share of max health, from the game's own simulation. */
-function moveCost(r: RunView, heading: Direction | "stay"): number | undefined {
-  const f = heading === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === heading)?.forecast;
-  return f === undefined ? undefined : f.dead ? Number.POSITIVE_INFINITY : f.damage / r.player.maxHp;
+function moveCost(r: World, heading: Direction | "stay"): number | undefined {
+  const f = forecastFor(r, heading);
+  return f === undefined ? undefined : f.dead ? Number.POSITIVE_INFINITY : f.damage / r.maxHp;
 }
 
-function cheapestMove(r: RunView): number | undefined {
+function cheapestMove(r: World): number | undefined {
   const costs = [...DIRECTIONS, "stay" as const].map((h) => moveCost(r, h));
   return costs.every((c) => c !== undefined) ? Math.min(...(costs as number[])) : undefined;
 }
@@ -916,12 +895,12 @@ function goalWords(p: Pursuit, aim: Aim): string {
 }
 
 /** A dash charge, a dash template, and an enemy or bullet close enough that dashing could matter. */
-function dashWorthAsking(r: RunView): boolean {
-  return templates.action.dash.trim() !== "" && r.player.dashCharges > 0 && r.sectors.some((x) => x.enemiesNear > 0 || (x.nearestBullet ?? 999) < 40);
+function dashWorthAsking(r: World): boolean {
+  return templates.action.dash.trim() !== "" && dashCharges(r) > 0 && r.sectors.some((x) => x.enemiesNear > 0 || (x.nearestBullet ?? 999) < 40);
 }
 
 /** How sure the action model must be to dash: lower while a boss is close, if the knobs say so. */
-function dashBar(r: RunView): number {
+function dashBar(r: World): number {
   const k = knobs();
   return k.bossDashRange > 0 && r.bosses.some((b) => b.dist <= k.bossDashRange) ? k.bossDashThreshold : k.dashThreshold;
 }
@@ -930,7 +909,7 @@ function dashBar(r: RunView): number {
  * The page is walking Tibo to its goal without a model, which is when crowds land most of their
  * hits, so the action model still gets the dash question; a yes dashes the way Tibo walks.
  */
-async function dashOnTheWay(r: RunView, p: Pursuit, heading: Direction, log: RunLog) {
+async function dashOnTheWay(r: World, p: Pursuit, heading: Direction, log: RunLog) {
   const vars = stateVars(r, { goal: goalWords(p, { heading, progress: "" }) });
   const started = performance.now();
   const answers = await decide(render(templates.action.state, vars), { dash: { type: "noul", instructions: render(templates.action.dash, vars) } });
@@ -941,7 +920,7 @@ async function dashOnTheWay(r: RunView, p: Pursuit, heading: Direction, log: Run
 }
 
 /** The way to the goal costs more than the safest move: the action model picks this step. */
-async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog, why: string) {
+async function steer(r: World, p: Pursuit, aim: Aim, log: RunLog, why: string) {
   const goal = goalWords(p, aim);
   const moves: Record<string, string> = {};
   for (const s of r.sectors) moves[s.dir] = `walk ${s.dir}: ${describe(r, s, aim.heading)}`;
@@ -981,14 +960,14 @@ async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog, why: string)
   const dashWhy =
     templates.action.dash.trim() === ""
       ? "dash not asked: the template is empty"
-      : r.player.dashCharges === 0
+      : dashCharges(r) === 0
         ? "dash not asked: no charge"
         : !canDash
           ? "dash not asked: nothing close"
           : `dash asked: ${Math.round((answers.dash?.noul ?? 0) * 100)}%${dash ? ", dashed" : ""}`;
   const ruledOut = Object.keys(offered).length - Object.keys(moves).length;
   const forecast = (k: string) => {
-    const f = k === "stay" ? r.standingForecast : r.sectors.find((x) => x.dir === k)?.forecast;
+    const f = forecastFor(r, k === "stay" ? "stay" : (k as Direction));
     return f === undefined ? undefined : f.dead ? "dead" : f.damage === 0 ? "no damage" : `-${Math.round(f.damage)} hp`;
   };
   const weighed: MoveOption[] = Object.entries(offered).map(([k, description]) => {
@@ -1041,85 +1020,165 @@ async function steer(r: RunView, p: Pursuit, aim: Aim, log: RunLog, why: string)
 // one question each; the most promising becomes the goal. It is asked when a goal ends, at every
 // choice, when a boss appears, and every pace.planEvery seconds, so a better goal can take over.
 
-function cardKind(r: RunView, o: OptionView): string {
-  const held = [...r.loadout.weapons, ...r.loadout.passives].find((x) => x.name === o.name);
-  if (o.type === "weapon")
-    return held === undefined ? `new weapon, fills weapon slot ${r.loadout.weapons.length + 1} of 6` : `weapon upgrade to level ${held.level + 1} of ${held.max}`;
-  if (o.type === "passive")
-    return held === undefined ? `new passive, fills passive slot ${r.loadout.passives.length + 1} of 6` : `passive upgrade to level ${held.level + 1} of ${held.max}`;
-  return o.type === "other" ? "" : o.type;
+/** One thing Tibo can do on the open choice: the game's own action, and the words the planner weighs it by. */
+type Card = { action: ChoiceAction; name: string; notes: string[]; text: string };
+
+function slotWords(r: World, type: string, id: string): string {
+  const held = (type === "weapon" ? r.weapons : r.passives).find((x) => x.id === id);
+  if (type === "weapon") return held === undefined ? `new weapon, fills weapon slot ${r.weapons.length + 1} of 6` : `weapon upgrade to level ${held.level + 1} of ${held.max}`;
+  if (type === "passive") return held === undefined ? `new passive, fills passive slot ${r.passives.length + 1} of 6` : `passive upgrade to level ${held.level + 1} of ${held.max}`;
+  return type;
 }
 
-// Shrine and chest options join their lines with "|", and some start with an empty one.
-const cardName = (o: OptionView) => o.name.split(/\s*\|\s*/).find((part) => part !== "") ?? o.label;
+/** An offer in the game's words: a weapon, passive or item by its English name and description, anything else by its own fields. */
+function offerCard(r: World, b: Book, o: Record<string, unknown>, action: ChoiceAction): Card {
+  const ref = (o.item ?? o) as Record<string, unknown>;
+  const type = typeof ref.type === "string" ? ref.type : o.item !== undefined ? "item" : undefined;
+  const id = typeof ref.id === "string" ? ref.id : undefined;
+  const rest = Object.fromEntries(Object.entries(o).filter(([k, v]) => k !== "item" && k !== "type" && k !== "id" && (typeof v !== "object" || v === null)));
+  if (type !== undefined && id !== undefined && (type === "weapon" || type === "passive" || type === "item")) {
+    const key = `${type}:${id}` as const;
+    const level = typeof o.level === "number" ? o.level : 1;
+    const notes = [
+      ...(type === "item" ? [] : [slotWords(r, type, id)]),
+      ...pairings(b, r.game, key, level)
+        .filter((c) => c.partnerHeld)
+        .map((c) => `pairs with your ${c.partner} into ${c.name}${c.ready ? " right away" : ""}`),
+      said(b, type, id).replace(/^: /, ""),
+      ...(Object.keys(rest).length === 0 ? [] : [fields(rest)]),
+    ].filter(Boolean);
+    const name = line(b, type, id) ?? id;
+    return { action, name, notes, text: `${name}${notes.length === 0 ? "" : ` (${notes.join("; ")})`}` };
+  }
+  const name = typeof o.label === "string" ? o.label : (id ?? fields(rest));
+  return { action, name, notes: [fields(rest)], text: `${name} (${fields(rest)})` };
+}
+
+/** Everything the game lets Tibo do on the open choice, by its kind, as the game's `choose` takes it. */
+function cards(r: World, b: Book): Card[] {
+  const c = r.game.choiceQueue[0];
+  if (c === undefined) return [];
+  const l = r.game.loadout;
+  const plain = (type: "reroll" | "skip" | "close" | "accept" | "continue" | "endRun", name: string): Card => ({ action: { type }, name, notes: [], text: name });
+  const listed = (list: unknown, act: "pick" | "buy") =>
+    (Array.isArray(list) ? (list as Record<string, unknown>[]) : []).flatMap((o, index) => (o.sold === true ? [] : [offerCard(r, b, o, { type: act, index })]));
+  switch (c.kind) {
+    case "levelUp":
+      return [...listed(c.offers, "pick"), ...(l.rerolls > 0 ? [plain("reroll", `Reroll (${l.rerolls} left)`)] : []), ...(l.skips > 0 ? [plain("skip", `Skip (${l.skips} left)`)] : [])];
+    case "chest":
+    case "item":
+      return [plain("continue", `Continue (the game shows: ${fields(Object.fromEntries(Object.entries(c).filter(([k]) => k !== "kind")))})`)];
+    case "win":
+      return [plain("continue", "Continue the run past the win"), plain("endRun", "End the run as a winner")];
+    case "curseShrine":
+      return [plain("accept", `Accept (${fields(Object.fromEntries(Object.entries(c).filter(([k]) => k !== "kind" && k !== "poiId")))})`), plain("close", "Leave it")];
+    case "vendor":
+      return [...listed(c.stock, "buy"), plain("close", "Leave the shop")];
+    case "dogSwap":
+      return [...r.game.pets.map((p, index) => ({ action: { type: "pick" as const, index }, name: `Swap ${line(b, "dog", p.breed) ?? p.breed} for the new dog`, notes: [], text: `Swap ${line(b, "dog", p.breed) ?? p.breed} (level ${p.level}) for the new dog` })), plain("close", "Keep the pack as it is")];
+    case "bigUpdate":
+      return [...listed((c.variant as { offers?: unknown } | undefined)?.offers, "pick"), plain("close", "Leave it")];
+    default:
+      return [...listed(c.offers ?? c.stock, "pick"), plain("close", "Leave it")];
+  }
+}
 
 /** Every state block a template may use (see BLOCKS in scripts/gameplay.ts), rendered only when used. */
-function blocks(r: RunView, b: Book): Record<BlockName, () => string> {
-  const p = r.player;
+function blocks(r: World, b: Book): Record<BlockName, () => string> {
+  const g = r.game;
+  const l = g.loadout;
   const owned = (kind: string, xs: { id: string; name: string; level: number; max: number }[]) => xs.map((x) => `\n  - ${x.name} ${x.level}/${x.max}${said(b, kind, x.id)}`).join("") || " none";
-  const hp = pct(p.hp, p.maxHp);
+  const nonzero = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => typeof v === "number" && v !== 0));
+  const hp = pct(r.hp, r.maxHp);
   const v: Record<Exclude<BlockName, "state">, () => string> = {
     time: () => clock(r.time),
     difficulty: () => difficulty,
     mode: () => MODE_NAME,
-    health: () => `Health ${Math.round(p.hp)}/${Math.round(p.maxHp)} (${hp}%${healthTrend(r)})${hp < 40 ? ", which is low" : ""}.`,
-    level: () => `Level ${p.level}, ${pct(p.xp, p.xpNext)}% of the way to the next.`,
-    gold: () => `Gold ${p.gold}.`,
-    dash: () => `Dash charges ${p.dashCharges}.`,
-    weapons: () => `Weapons (${r.loadout.weapons.length} of 6 slots):${owned("weapon", r.loadout.weapons)}`,
-    passives: () => `Passives (${r.loadout.passives.length} of 6 slots):${owned("passive", r.loadout.passives)}`,
-    items: () => `Items:${r.loadout.items.map((i) => `\n  - ${i.name} x${i.count}${said(b, "item", i.id)}`).join("") || " none"}`,
-    banished: () => `Banished this run: ${r.loadout.banished.join(", ") || "nothing"}.`,
+    health: () => `Health ${Math.round(r.hp)}/${Math.round(r.maxHp)} (${hp}%${healthTrend(r)})${hp < 40 ? ", which is low" : ""}.`,
+    level: () => `Level ${l.level}, ${pct(l.xp, l.xpNext)}% of the way to the next.`,
+    gold: () => `Gold ${Math.floor(l.gold)}.`,
+    dash: () => `Dash charges ${dashCharges(r)}.`,
+    weapons: () => `Weapons (${r.weapons.length} of 6 slots):${owned("weapon", r.weapons)}`,
+    passives: () => `Passives (${r.passives.length} of 6 slots):${owned("passive", r.passives)}`,
+    items: () => `Items:${r.items.map((i) => `\n  - ${i.name} x${i.count}${said(b, "item", i.id)}`).join("") || " none"}`,
+    banished: () => `Banished this run: ${l.banished.join(", ") || "nothing"}.`,
     recipes: () => `Recipes in reach: ${r.combos.map((c) => `${c.name} (${c.parts.map((x) => `${x.name} ${x.state}${x.have === undefined ? "" : ` ${x.have}/${x.max}`}`).join(" + ")})`).join("; ") || "none"}.`,
     evolutions: () => {
-      const ready = r.combos.filter((c) => c.ready && c.kind !== "union").map((c) => c.name);
+      const ready = r.combos.filter((c) => c.ready && c.combo.recipe.kind !== "union").map((c) => c.name);
       return ready.length === 0 ? "No recipe is complete yet." : `The next chest opened evolves ${ready.join(" and ")}.`;
     },
-    standing_on: () => `Tibo stands ${spotLine(r) ?? "on no chest or spot"}.${r.hazards.some((h) => h.inside) ? ` Underfoot: ${r.hazards.filter((h) => h.inside).map((h) => `${h.kind} (${h.source})`).join(", ")}.` : ""}`,
-    hurt_by: () => `Hurt in the last 3 seconds by: ${Object.entries(p.hurtBy).map(([k, n]) => `${gameName(r, k)} ${n}`).join(", ") || "nothing"}.`,
-    bosses: () => `Bosses: ${r.bosses.map((x) => `${x.name} (${x.id}) ${Math.round(x.dist)} away to the ${x.dir}, ${pct(x.hp, x.maxHp)}% health`).join("; ") || "none"}.`,
+    standing_on: () => `Tibo stands ${spotLine(r) ?? "on no chest or spot"}.${groundSources(r).length === 0 ? "" : ` Standing still takes damage from: ${groundSources(r).join(", ")}.`}`,
+    hurt_by: () => `Hurt in the last 3 seconds by: ${Object.entries(r.hurtBy).map(([k, n]) => `${gameName(b, k)} ${n}`).join(", ") || "nothing"}.`,
+    bosses: () => `Bosses: ${r.bosses.map((x) => `${x.name} (${x.def}) ${Math.round(x.dist)} away to the ${x.dir}, ${pct(x.hp, x.maxHp)}% health`).join("; ") || "none"}.`,
     enemies: () => {
       const crowd = [...r.sectors].sort((a, z) => z.enemiesFar - a.enemiesFar);
-      return `Enemies: ${r.enemies.total} around, ${near(r)} within 60. Most within 150 to the ${crowd[0]?.dir} (${crowd[0]?.enemiesFar}), fewest to the ${crowd.at(-1)?.dir} (${crowd.at(-1)?.enemiesFar}).`;
+      return `Enemies: ${r.enemies.length} around, ${near(r)} within 60. Most within 150 to the ${crowd[0]?.dir} (${crowd[0]?.enemiesFar}), fewest to the ${crowd.at(-1)?.dir} (${crowd.at(-1)?.enemiesFar}).`;
     },
     current_goal: () => `Current goal: ${pursuit === undefined ? "none" : `${pursuit.title}, since ${clock(pursuit.since)}`}.`,
     recent_goals: () => `Recent goals: ${outcomes.slice(-6).map((o) => `${clock(o.time)} ${o.title}: ${o.outcome}`).join("; ") || "none yet"}.`,
-    stats: () =>
-      `Stats: ${fields(r.stats)}.${Object.keys(r.statBonuses).length === 0 ? "" : ` Added by passives, items, shrines and the like: ${fields(r.statBonuses)}.`}${Object.keys(r.totals.shrineStats).length === 0 ? "" : ` Added by shrines alone: ${fields(r.totals.shrineStats)}.`}`,
-    resources: () => `Rerolls ${p.rerolls}, skips ${p.skips}, banishes ${p.banishes}, revives left ${p.revivesLeft}, curses held ${p.curses}.`,
+    stats: () => {
+      const { values: _, ...stats } = l.stats;
+      return `loadout.stats: ${fields(stats)}. loadout.totals: ${fields(nonzero(l.totals)) || "none"}. loadout.shrineTotals: ${fields(nonzero(l.shrineTotals)) || "none"}.`;
+    },
+    resources: () => `loadout: rerolls ${l.rerolls}, skips ${l.skips}, banishes ${l.banishes}, cursesTaken ${l.cursesTaken}, revivesUsed ${l.revivesUsed}; loadout.stats.revivals ${l.stats.revivals}.`,
     spots: () => {
-      if (r.pois.length === 0) return "Spots: none on the loaded map.";
-      return `Spots on the loaded map, nearest first:${r.pois
-        .map((x) => `\n  - ${x.name} (${x.kind}) ${Math.round(x.dist)} away to the ${x.dir}${x.description === "" ? "" : `: ${x.description}`} Charged ${x.charge} of ${x.chargeNeeded} s, radius ${x.radius}${x.price === undefined ? "" : `, price ${x.price} gold`}${x.prices === undefined ? "" : `, item prices by rarity ${x.prices.join(", ")} gold`}.`)
+      if (r.spots.length === 0) return "Spots: none on the loaded map.";
+      return `Spots on the loaded map, nearest first:${r.spots
+        .map((x) => `\n  - ${x.name} (${x.kind}) ${Math.round(x.dist)} away to the ${x.dir}${x.description === "" ? "" : `: ${x.description}`} Charged ${x.charged} of ${x.chargeNeeded} s, radius ${x.radius}${x.price === undefined ? "" : `, price ${x.price} gold`}${x.prices === undefined ? "" : `, item prices by rarity ${x.prices.join(", ")} gold`}.`)
         .join("")}`;
     },
-    dogs: () =>
-      r.pets.length === 0
-        ? "Dogs: none."
-        : `Dogs:${r.pets
-            .map((x) => {
-              const d = defs.get(`dog:${x.id}`) ?? {};
-              const facts = Object.entries(d).filter(([k]) => !["id", "name", "desc", "breed"].includes(k));
-              const did = r.totals.dogs[x.id];
-              return `\n  - ${x.name}${typeof d.breed === "string" ? ` (${d.breed})` : ""} level ${x.level}, ${Math.round(x.dist)} away to the ${x.dir}${typeof d.desc === "string" ? `: ${d.desc}` : ""} The game's numbers: ${facts.map(([k, v]) => `${k} ${JSON.stringify(v)}`).join(", ")}.${did === undefined ? "" : ` So far: ${fields(did)}.`}`;
-            })
-            .join("")}`,
-    pickups: () =>
-      `Pickups on the ground by kind: ${fields(r.pickups.counts) || "none"}. Nearest that are not xp gems: ${r.pickups.nearest.map((x) => `${x.kind} worth ${x.value} ${Math.round(x.dist)} away to the ${x.dir}`).join("; ") || "none"}.`,
-    buffs: () => `Timed boosts: ${r.buffs.map((x) => `${x.id} ${x.endsIn} s left${x.mult === undefined ? "" : ` (x${x.mult})`}`).join(", ") || "none"}.`,
+    dogs: () => {
+      if (g.pets.length === 0) return "Dogs: none.";
+      const helped = (breed: string) => Object.entries(g.run.dogHelp).flatMap(([help, by]) => (by[breed] ? [`${help} ${Math.round(by[breed] * 10) / 10}`] : [])).join(", ");
+      return `Dogs:${g.pets
+        .map((x) => {
+          const d = b.dogs.get(x.breed) ?? {};
+          const facts = Object.entries(d).filter(([k]) => !["id", "name", "desc", "breed"].includes(k));
+          const did = helped(x.breed);
+          return `\n  - ${line(b, "dog", x.breed) ?? x.breed}${typeof d.breed === "string" ? ` (${d.breed})` : ""} level ${x.level}${typeof d.desc === "string" ? `: ${d.desc}` : ""} The game's numbers: ${facts.map(([k, val]) => `${k} ${JSON.stringify(val)}`).join(", ")}.${did === "" ? "" : ` run.dogHelp: ${did}.`}`;
+        })
+        .join("")}`;
+    },
+    pickups: () => {
+      const counts = g.pickups.reduce((m, x) => m.set(x.kind, (m.get(x.kind) ?? 0) + 1), new Map<string, number>());
+      return `Pickups on the ground by kind: ${[...counts].map(([k, n]) => `${k} ${n}`).join(", ") || "none"}. Nearest that are not xp gems: ${r.pickups.slice(0, 10).map((x) => `${x.kind} worth ${Math.round(x.value * 10) / 10} ${Math.round(x.dist)} away to the ${x.dir}`).join("; ") || "none"}.`;
+    },
+    buffs: () => {
+      const timers = Object.entries({ ...(g as unknown as Record<string, unknown>), ...((g as unknown as { moreVariety?: Record<string, unknown> }).moreVariety ?? {}) }).filter(
+        (e): e is [string, number] => e[0].endsWith("Until") && typeof e[1] === "number" && e[1] > g.time,
+      );
+      return `Timed boosts: ${timers.map(([k, until]) => `${k} ${Math.round(until - g.time)} s left`).join(", ") || "none"}.`;
+    },
     schedule: () =>
-      `Coming up: ${r.schedule.map((w) => `minute ${w.minute}: ${[...(w.boss === undefined ? [] : [`boss ${w.boss.name} (${w.boss.id})`]), ...(w.elite ? ["an elite"] : []), ...w.events.map((e) => `event ${e.name} (${e.id})`)].join(", ")}`).join("; ") || "nothing scheduled"}.`,
+      `Coming up: ${g.waves.rows
+        .filter((w) => w.minute * 60 > r.time && (w.boss !== undefined || w.elite === true || (w.events?.length ?? 0) > 0))
+        .map((w) => `minute ${w.minute}: ${[...(w.boss === undefined ? [] : [`boss ${line(b, "boss", w.boss) ?? w.boss} (${w.boss})`]), ...(w.elite ? ["an elite"] : []), ...(w.events ?? []).map((e) => `event ${line(b, "event", e) ?? e} (${e})`)].join(", ")}`)
+        .join("; ") || "nothing scheduled"}.`,
     hazards: () =>
-      `Hazards and attack zones nearby: ${r.hazards.map((h) => `${h.kind} (${h.source}, ${h.shape}, radius ${h.radius}) ${h.inside ? "under Tibo" : `${Math.round(h.dist)} away to the ${h.dir}`}${h.landsIn === undefined ? "" : `, lands in ${h.landsIn} s`}`).join("; ") || "none"}.`,
-    events: () => `Recent game events: ${r.events.slice(-10).map((e) => `${clock(e.time)} ${e.type}${e.name === undefined ? "" : ` ${e.name}`}${e.text === undefined ? "" : `: ${e.text}`}`).join("; ") || "none"}.`,
-    enemy_kinds: () =>
-      `Enemies alive by kind: ${Object.entries(r.enemies.kinds).map(([id, k]) => `${k.name} (${id}) ${k.count}${k.elites === 0 ? "" : `, ${k.elites} elite`}, nearest ${Math.round(k.nearest)} away, max hp ${k.maxHp}, contact damage ${k.damage}, speed ${k.speed}`).join("; ") || "none"}.`,
-    elites: () => `Elites alive: ${r.enemies.elites.map((e) => `${e.name} (${e.id}) ${e.hp}/${e.maxHp} hp, contact damage ${e.damage}, ${Math.round(e.dist)} away to the ${e.dir}`).join("; ") || "none"}.`,
-    counters: () => `What the game has counted this run: ${fields(Object.fromEntries(Object.entries(r.totals.counters).filter(([, n]) => n !== 0)))}.`,
+      `Hazards near Tibo (world.activeHazards): ${g.world.activeHazards
+        .map((h) => ({ ...h, d: Math.hypot(h.x - r.x, h.y - r.y) }))
+        .filter((h) => h.d - h.radius < 300)
+        .sort((a, z) => a.d - z.d)
+        .map((h) => `${h.kind} radius ${Math.round(h.radius)} ${Math.round(h.d)} away`)
+        .join("; ") || "none"}.`,
+    events: () => `Recent game events: ${r.events.slice(-10).map((e) => `${typeof e.time === "number" ? clock(e.time) : "?"} ${JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => k !== "time")))}`).join("; ") || "none"}.`,
+    enemy_kinds: () => {
+      const kinds = new Map<string, { n: number; elites: number; nearest: number; maxHp: number; damage: number; speed: number }>();
+      for (const e of r.enemies) {
+        const k = kinds.get(e.def) ?? { n: 0, elites: 0, nearest: e.dist, maxHp: 0, damage: 0, speed: e.speed };
+        kinds.set(e.def, { n: k.n + 1, elites: k.elites + (e.elite ? 1 : 0), nearest: Math.min(k.nearest, e.dist), maxHp: Math.max(k.maxHp, e.maxHp), damage: Math.max(k.damage, e.damage), speed: k.speed });
+      }
+      return `Enemies alive by kind: ${[...kinds]
+        .sort((a, z) => z[1].n - a[1].n)
+        .map(([id, k]) => `${line(b, "enemy", id) ?? id} (${id}) ${k.n}${k.elites === 0 ? "" : `, ${k.elites} elite`}, nearest ${Math.round(k.nearest)} away, maxHp ${Math.round(k.maxHp * 10) / 10}, damage ${Math.round(k.damage * 10) / 10}, speed ${k.speed}`)
+        .join("; ") || "none"}.`;
+    },
+    elites: () => `Elites alive: ${r.elites.map((e) => `${e.name} (${e.def}) ${Math.round(e.hp)}/${Math.round(e.maxHp)} hp, damage ${Math.round(e.damage * 10) / 10}, ${Math.round(e.dist)} away to the ${e.dir}`).join("; ") || "none"}.`,
+    counters: () => `What the game has counted this run: counters ${fields(nonzero(g.counters))}; run ${fields(nonzero(g.run))}.`,
     weapon_damage: () => {
-      const dealt = r.totals.damageDealt;
+      const dealt = g.run.damageBySource;
       const minutes = Math.max(r.time, 1) / 60;
-      const held = [...r.loadout.weapons].sort((a, z) => (dealt[z.id] ?? 0) - (dealt[a.id] ?? 0));
+      const held = [...r.weapons].sort((a, z) => (dealt[z.id] ?? 0) - (dealt[a.id] ?? 0));
       return `Damage dealt so far by weapon: ${held.map((w) => `${w.name} ${Math.round(dealt[w.id] ?? 0)} (${Math.round((dealt[w.id] ?? 0) / minutes)} a minute)`).join(", ") || "no weapon"}.`;
     },
   };
@@ -1129,7 +1188,7 @@ function blocks(r: RunView, b: Book): Record<BlockName, () => string> {
       v.weapons(),
       v.passives(),
       v.items(),
-      ...(r.loadout.banished.length === 0 ? [] : [v.banished()]),
+      ...(l.banished.length === 0 ? [] : [v.banished()]),
       v.recipes(),
       v.evolutions(),
       v.standing_on(),
@@ -1143,45 +1202,46 @@ function blocks(r: RunView, b: Book): Record<BlockName, () => string> {
 }
 
 /** The values a template is rendered with: the state blocks and the slot's own, such as {{goal}}. */
-function stateVars(r: RunView, extra: Record<string, string>): Record<string, () => string> {
-  return { ...blocks(r, book ?? new Map()), ...Object.fromEntries(Object.entries(extra).map(([k, x]) => [k, () => x])) };
+function stateVars(r: World, extra: Record<string, string>): Record<string, () => string> {
+  if (book === undefined) throw new Error("the game's encyclopedia has not arrived; the bot reads it before the first decision");
+  return { ...blocks(r, book), ...Object.fromEntries(Object.entries(extra).map(([k, x]) => [k, () => x])) };
 }
 
 type GoalOption = { goal: Goal; text: string };
 
 /** Every goal Tibo could take on next, in words the model can weigh one at a time. */
-function goalOptions(r: RunView): GoalOption[] {
+function goalOptions(r: World): GoalOption[] {
   const given = (id: string) => {
     const until = giveUps.get(id);
     const last = [...outcomes].reverse().find((o) => o.id === id && !o.success);
     return until === undefined || until <= r.time || last === undefined ? "" : `; Tibo gave up on it at ${clock(last.time)} because ${last.outcome}`;
   };
-  const ready = r.combos.filter((c) => c.ready && c.kind !== "union").map((c) => c.name);
+  const ready = r.combos.filter((c) => c.ready && c.combo.recipe.kind !== "union").map((c) => c.name);
   const gems = r.sectors.reduce((n, s) => n + s.xpNear, 0);
   const gemSide = [...r.sectors].sort((a, z) => z.xpNear - a.xpNear)[0];
   return [
-    ...r.pickups.chests
+    ...r.chests
       .filter((c) => c.dist < PLAN_RANGE)
       .slice(0, 4)
       .map((c) => ({
         goal: { kind: "chest" as const, uid: c.uid },
         text: `${onChest(c) ? "stay on the chest Tibo stands on" : `walk to the chest ${Math.round(c.dist)} away to the ${c.dir} and stand on it`} for ${c.chargeNeeded ?? 1} seconds to open it, which gives a free pick${ready.length === 0 ? "" : ` and evolves ${ready.join(" and ")}`}${given(`C${c.uid}`)}`,
       })),
-    ...r.pois
+    ...r.spots
       .filter((x) => x.chargeNeeded > 0 && x.dist < PLAN_RANGE)
       .slice(0, 6)
       .map((x) => ({
         goal: { kind: "poi" as const, uid: x.uid },
-        text: `${x.inside ? `stay inside the ${x.name}` : `walk to the ${x.name} ${Math.round(x.dist)} away to the ${x.dir} and stand inside it`} for ${x.chargeNeeded} seconds${x.description === "" ? "" : ` (${x.description.replace(/\.$/, "")})`}${priceWords(x, r.player.gold)}${given(`P${x.uid}`)}`,
+        text: `${x.inside ? `stay inside the ${x.name}` : `walk to the ${x.name} ${Math.round(x.dist)} away to the ${x.dir} and stand inside it`} for ${x.chargeNeeded} seconds${x.description === "" ? "" : ` (${x.description.replace(/\.$/, "")})`}${priceWords(x, r.game.loadout.gold)}${given(`P${x.uid}`)}`,
       })),
-    ...r.pickups.nearest
+    ...r.pickups
       .filter((x) => x.kind === "heal" && x.dist < PLAN_RANGE)
       .slice(0, 2)
       .map((x) => ({ goal: { kind: "food" as const, uid: x.uid }, text: `walk to the food ${Math.round(x.dist)} away to the ${x.dir}, which heals Tibo` })),
     // The knobs can keep elite fights off the table early or at low health, which no prompt rule
     // managed: on Nightmare 2 a 1:00 elite fight cost 37 to 103 health in live games.
-    ...r.enemies.elites
-      .filter((e) => e.dist < PLAN_RANGE && r.time >= knobs().eliteFrom && r.player.hp >= knobs().eliteMinHp * r.player.maxHp)
+    ...r.elites
+      .filter((e) => e.dist < PLAN_RANGE && r.time >= knobs().eliteFrom && r.hp >= knobs().eliteMinHp * r.maxHp)
       .slice(0, 2)
       .map((e) => ({
         goal: { kind: "elite" as const, uid: e.uid },
@@ -1196,7 +1256,7 @@ function goalOptions(r: RunView): GoalOption[] {
   ];
 }
 
-type PlanAnswer = { pick?: OptionView; goal: Goal; ms: number; cards?: CardOption[]; goals: CardOption[] };
+type PlanAnswer = { pick?: Card; goal: Goal; ms: number; cards?: CardOption[]; goals: CardOption[] };
 
 class Planner {
   calls = 0;
@@ -1212,22 +1272,23 @@ class Planner {
   ) {}
 
   /** Why to plan again while a goal is under way, if anything. */
-  due(r: RunView): string | undefined {
-    const fresh = r.bosses.find((b) => !this.seenBosses.has(b.id));
+  due(r: World): string | undefined {
+    const fresh = r.bosses.find((b) => !this.seenBosses.has(b.def));
     let why: string | undefined;
     if (this.picked) why = "a card was just taken";
     else if (fresh !== undefined) why = `a boss appeared: ${fresh.name}, ${Math.round(fresh.dist)} away to the ${fresh.dir}`;
     else if (r.time - this.lastAsked >= planEvery()) why = `${planEvery()} seconds passed`;
-    for (const b of r.bosses) this.seenBosses.add(b.id);
+    for (const b of r.bosses) this.seenBosses.add(b.def);
     return why;
   }
 
   /** Picks among `options` when a choice is open, and sets the next goal. */
-  async plan(r: RunView, why: string, options?: OptionView[]): Promise<PlanAnswer> {
+  async plan(r: World, why: string, options?: Card[]): Promise<PlanAnswer> {
     this.lastAsked = r.time;
     if (options === undefined) this.picked = false;
     this.calls++;
     const b = await readBook();
+    if (b === undefined) throw new Error("the game's encyclopedia has not arrived; the bot reads it before the first decision");
     const vars = { ...blocks(r, b), why: () => why };
     const state = render(templates.planner.state, vars);
     const goals = goalOptions(r);
@@ -1237,19 +1298,11 @@ class Planner {
     // The decision API reads a choice's keys, not their descriptions: replayed picks did not change
     // at all when a note was added to the description, and Laya took a new weapon in 4 of 6 offers
     // once the key said so. So everything the model should weigh goes into the key.
-    const keys = new Map<string, OptionView>();
-    for (const o of options ?? []) {
-      const notes = [
-        cardKind(r, o),
-        ...o.combos.filter((c) => c.partnerHeld).map((c) => `pairs with your ${c.partner.name} into ${c.name}${c.ready ? " right away" : ""}`),
-        o.recommended ? "the game recommends it" : "",
-        said(b, o.type, o.id).replace(/^: /, ""),
-      ].filter(Boolean);
-      keys.set(`${o.index}: ${o.type === "other" ? cardName(o) : o.name}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`, o);
-    }
-    const kind = r.choice?.kind === "levelUp" ? "level-up" : (r.choice?.kind ?? "choice");
+    const keys = new Map<string, Card>();
+    for (const [i, o] of (options ?? []).entries()) keys.set(`${i}: ${o.text}`, o);
+    const kind = r.game.choiceQueue[0]?.kind ?? "choice";
     const question = render(templates.planner.pick, { ...vars, choice: () => kind });
-    if (options !== undefined) questions.pick = { type: "choice", instructions: question, criteria: Object.fromEntries([...keys].map(([k, o]) => [k, o.label])) };
+    if (options !== undefined) questions.pick = { type: "choice", instructions: question, criteria: Object.fromEntries([...keys].map(([k, o]) => [k, o.text])) };
     const started = performance.now();
     const answers = await decide(state, questions, PLAN_MODEL);
     const ms = Math.round(performance.now() - started);
@@ -1264,7 +1317,7 @@ class Planner {
         ? undefined
         : [...keys].map(([k, o]) => {
             const probability = answers.pick?.probabilities?.[k];
-            return { card: cardName(o), notes: k.slice(k.indexOf(": ") + 2), ...(probability === undefined ? {} : { probability }), chosen: o === pick, index: o.index };
+            return { card: o.name, notes: k.slice(k.indexOf(": ") + 2), ...(probability === undefined ? {} : { probability }), chosen: o === pick, ...("index" in o.action ? { index: o.action.index } : {}) };
           });
     const weighed: CardOption[] = goals.map((g, i) => ({ card: goalTitle(g.goal, r), notes: g.text, probability: score(i), chosen: i === best }));
     const decision: Inspect = {
@@ -1280,7 +1333,7 @@ class Planner {
       role: "planner",
       model: PLAN_MODEL,
       time: r.time,
-      text: [pick === undefined ? "" : `Take ${cardName(pick)}.`, `Goal: ${title} (${Math.round(score(best) * 100)}%).`].filter(Boolean).join(" "),
+      text: [pick === undefined ? "" : `Take ${pick.name}.`, `Goal: ${title} (${Math.round(score(best) * 100)}%).`].filter(Boolean).join(" "),
       detail: `Asked because ${why}.`,
       inspect: decision,
     });
@@ -1296,24 +1349,26 @@ class Planner {
       model: PLAN_MODEL,
       reason: why,
       goal: goalId(goal),
-      action: pick === undefined ? title : cardName(pick),
+      action: pick === undefined ? title : pick.name,
       options: cards === undefined ? odds(placed) : `${odds(cards)} | goals: ${odds(placed)}`,
       ms,
     });
     if (pick !== undefined) {
-      this.notes.picks.push(`- **${clock(r.time)}** ${kind}: took ${cardName(pick)} from ${options?.map(cardName).join(", ")}.`);
+      this.notes.picks.push(`- **${clock(r.time)}** ${kind}: took ${pick.name} from ${options?.map((o) => o.name).join(", ")}.`);
     }
     return { ...(pick === undefined ? {} : { pick }), goal, ms, ...(cards === undefined ? {} : { cards }), goals: weighed };
   }
 
   /** The run ended: its notes are written, then the coach reviews it. */
-  async finish(lastRun: NonNullable<Snapshot["lastRun"]>, last: RunView | undefined, ladder: number | undefined, healed: number) {
+  async finish(end: GameJson, last: World | undefined, ladder: number | undefined, healed: number) {
+    const lived = Math.round(end.runClock * 10) / 10;
+    const kills = Number(end.run.kills ?? 0);
     await this.notes.finish({
-      lived: lastRun.time,
-      ending: `${lastRun.time >= WIN_SECONDS ? "won (passed 20:00), then " : ""}died at ${clock(lastRun.time)}, level ${lastRun.level}, ${lastRun.kills} kills`,
+      lived,
+      ending: `${lived >= WIN_SECONDS ? "won (passed 20:00), then " : ""}died at ${clock(lived)}, level ${end.loadout.level}, ${kills} kills`,
       outcome: [
-        `Lived **${clock(lastRun.time)}** (${lastRun.time}s), level ${lastRun.level}, ${lastRun.kills} kills.`,
-        ...loop.totalsLines(loop.totalsBetween(lastRun)),
+        `Lived **${clock(lived)}** (${lived}s), level ${end.loadout.level}, ${kills} kills.`,
+        ...loop.totalsLines(loop.totalsBetween(loop.talliesOf(end))),
         `Health gained over the run, by food, regeneration and anything else: about ${healed} (the game does not say from what).`,
         ...(last === undefined ? [] : loadoutLines(last)),
         `Planner asked ${this.calls} times.`,
@@ -1324,10 +1379,10 @@ class Planner {
 
 }
 
-const loadoutLines = (r: RunView) => [
-  `Weapons: ${r.loadout.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
-  `Passives: ${r.loadout.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
-  `Items: ${r.loadout.items.map((i) => `${i.name} x${i.count}${said(book ?? new Map(), "item", i.id)}`).join("; ") || "none"}.`,
+const loadoutLines = (r: World) => [
+  `Weapons: ${r.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
+  `Passives: ${r.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
+  `Items: ${r.items.map((i) => `${i.name} x${i.count}${book === undefined ? "" : said(book, "item", i.id)}`).join("; ") || "none"}.`,
 ];
 
 // ---- Picks ---------------------------------------------------------------------------------
@@ -1335,26 +1390,27 @@ const loadoutLines = (r: RunView) => [
 // not taken again and again.
 let deadPicks: { signature: string; names: Set<string> } = { signature: "", names: new Set() };
 
-async function choose(r: RunView, planner: Planner, log: RunLog) {
-  const options = r.choice?.options ?? [];
-  if (options.length === 0) throw new Error(`a ${r.choice?.kind} choice with no options`);
-  const signature = `${r.tick}|${options.map((o) => o.name).join("|")}`;
+async function choose(r: World, planner: Planner, log: RunLog) {
+  const b = await readBook();
+  if (b === undefined) throw new Error("the game's encyclopedia has not arrived; the bot reads it before the first decision");
+  const options = cards(r, b);
+  const open = r.game.choiceQueue[0]?.kind ?? "choice";
+  if (options.length === 0) throw new Error(`a ${open} choice with nothing to take`);
+  const signature = `${r.game.tick}|${options.map((o) => o.text).join("|")}`;
   if (deadPicks.signature !== signature) deadPicks = { signature, names: new Set() };
-  const takeable = options.filter((o) => o.available && !deadPicks.names.has(o.name));
-  if (takeable.length === 0) throw new Error(`every option of this ${r.choice?.kind} was tried without closing it: ${options.map((o) => o.name).join(", ")}`);
-  const kind = r.choice?.kind === "levelUp" ? "level-up" : (r.choice?.kind ?? "choice");
+  const takeable = options.filter((o) => !deadPicks.names.has(o.text));
+  if (takeable.length === 0) throw new Error(`every option of this ${open} choice was tried without closing it: ${options.map((o) => o.name).join(", ")}`);
   let picked = takeable.length === 1 ? takeable[0] : undefined;
   if (picked === undefined) {
-    picked = (await planner.plan(r, `a ${kind} choice opened`, takeable)).pick;
+    picked = (await planner.plan(r, `a ${open} choice opened`, takeable)).pick;
     // The panel shows the odds over the cards and lands a highlight on the pick before it is taken;
     // the choice freezes the game, so the wait costs no game time.
     if (piloted) await Bun.sleep(PICK_SHOW_MS);
-  }
-  else log.write(r, { event: "pick", model: "none", reason: kind, action: cardName(picked), detail: "the only option that can be taken" });
-  if (picked === undefined) throw new Error(`no ${kind} option was picked`);
-  deadPicks.names.add(picked.name);
+  } else log.write(r, { event: "pick", model: "none", reason: open, action: picked.name, detail: "the only option that can be taken" });
+  if (picked === undefined) throw new Error(`no ${open} option was picked`);
+  deadPicks.names.add(picked.text);
   planner.picked = true;
-  return command({ type: "choose", index: picked.index });
+  return command({ type: "choose", action: picked.action });
 }
 
 let rescuedLink: string | undefined;
@@ -1376,7 +1432,7 @@ async function start(weapon = ""): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     await seedPage();
     await startRun(weapon);
-    const got = (await api<Snap>("/state")).run?.seed;
+    const got = gameSeed(await api<Snap>("/state"));
     if (got === want) break;
     if (attempt === 2) throw new Error(`asked for seed ${want} twice, the game rolled ${got ?? "nothing"}`);
     console.log(`asked for seed ${want}, the game rolled ${got ?? "nothing"}; trying once more`);
@@ -1410,6 +1466,12 @@ async function startRun(weapon = ""): Promise<void> {
 
 let recordCrash: ((e: unknown) => Promise<void>) | undefined;
 
+/** The seed of the run the tab holds, from the game's `run.seed`. */
+const gameSeed = (s: Snap) => (s.game as GameJson | undefined)?.run.seed?.toString();
+const runClock = (s: Snap) => (s.game as GameJson | undefined)?.runClock ?? 0;
+/** The difficulty as the HUD names it, such as "nightmare-3": the game's `difficulty` and, on Nightmare, its `cfg.ladder.level`. */
+const levelName = (g: GameJson) => (g.difficulty === "nightmare" ? `nightmare-${g.cfg.ladder.level}` : g.difficulty);
+
 async function main() {
   await mkdir(path.dirname(LOG), { recursive: true });
   await Bun.write(LOG, "");
@@ -1420,7 +1482,7 @@ async function main() {
   let notes: RunNotes | undefined;
   let planner: Planner | undefined;
   let runLog: RunLog | undefined;
-  let last: RunView | undefined;
+  let last: World | undefined;
   // The previous run's notes wait for its share link, which appears while the next run starts.
   let awaitingLink: { notes: RunNotes; known: string | undefined } | undefined;
   console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, planner ${PLAN_MODEL}, templates from ${BASE.source}, run logs in ${LOG_DIR}`);
@@ -1441,26 +1503,28 @@ async function main() {
   };
   const now = await api<Snap>("/state");
   // Every run the bot starts begins fresh, so a Daily always begins at tick 0 on its fixed seed.
-  let adopted = TAKEOVER && now.run !== undefined && now.screen !== "over" && now.screen !== "title";
+  let adopted = TAKEOVER && now.game !== undefined && now.screen !== "over" && now.screen !== "title";
   if (TRIAL !== undefined && !adopted) throw new Error("--trial plays the run in progress, and there is none; start a run and load a checkpoint first");
-  let trialStart: RunView | undefined;
-  const endTrial = async (end: RunView | undefined, died: NonNullable<Snapshot["lastRun"]> | undefined) => {
+  let trialStart: World | undefined;
+  const endTrial = async (end: World | undefined, died: GameJson | undefined) => {
     const start = trialStart;
     if (start === undefined || end === undefined) throw new Error("the trial ended before its first step");
-    const totals = loop.totalsBetween(died ?? end.totals, start.totals);
-    const endTime = died?.time ?? end.time;
+    const final = died ?? end.game;
+    const totals = loop.totalsBetween(loop.talliesOf(final), loop.talliesOf(start.game));
+    const endTime = final.runClock;
+    const run = (totals.run ?? {}) as Record<string, unknown>;
     const result = {
       survived: Math.round((endTime - start.time) * 10) / 10,
       died: died !== undefined,
       start: start.time,
       end: endTime,
-      hp: { start: Math.round(start.player.hp), end: died === undefined ? Math.round(end.player.hp) : 0, max: Math.round(end.player.maxHp) },
-      level: { start: start.player.level, end: died?.level ?? end.player.level },
-      kills: totals.kills,
-      damageTaken: totals.damageTaken,
+      hp: { start: Math.round(start.hp), end: died === undefined ? Math.round(end.hp) : 0, max: Math.round(end.maxHp) },
+      level: { start: start.game.loadout.level, end: final.loadout.level },
+      kills: Number(run.kills ?? 0),
+      damageTaken: (run.damageTakenBySource ?? {}) as Record<string, number>,
       totals,
-      weapons: end.loadout.weapons.map((w) => `${w.id} ${w.level}`),
-      passives: end.loadout.passives.map((p) => `${p.id} ${p.level}`),
+      weapons: final.loadout.weapons.map((w) => `${w.def} ${w.level}`),
+      passives: final.loadout.passives.map((p) => `${p.def} ${p.level}`),
       steps,
       plannerCalls: planner?.calls ?? 0,
       actionCalls: latency.length - (planner?.calls ?? 0),
@@ -1482,8 +1546,8 @@ async function main() {
   say({
     role: "system",
     tag: adopted ? "Take over" : "Start",
-    time: now.run?.time ?? 0,
-    text: `${adopted ? `Taking over the run at ${clock(now.run?.time ?? 0)}` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}`}.`,
+    time: runClock(now),
+    text: `${adopted ? `Taking over the run at ${clock(runClock(now))}` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}`}.`,
     detail: `Planner ${PLAN_MODEL}, action model ${MODEL}, templates from ${BASE.source}. Run logs: ${LOG_DIR}`,
   });
   const plan: RunPlan = { source: BASE.source, intent: INTENT, templates: BASE.templates, weapon: WEAPON };
@@ -1521,25 +1585,29 @@ async function main() {
     const s = polled.connected ? polled : await reconnected();
     await fillLink(s);
     if (s.screen === "title" || s.screen === "over") {
-      if (TRIAL !== undefined) return endTrial(last, s.lastRun ?? (last === undefined ? undefined : { time: last.time, level: last.player.level, ...last.totals }));
-      if (s.screen === "over" && s.lastRun !== undefined && runs > 0 && notes !== undefined && planner !== undefined && runLog !== undefined) {
+      const over = s.game !== undefined && (s.game as GameJson).over ? (s.game as GameJson) : undefined;
+      if (TRIAL !== undefined) return endTrial(last, over ?? last?.game);
+      if (s.screen === "over" && over !== undefined && runs > 0 && notes !== undefined && planner !== undefined && runLog !== undefined) {
         const avg = latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length);
-        console.log(`run ${runs} ended at ${s.lastRun.time}s, level ${s.lastRun.level}, ${s.lastRun.kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
-        say({ role: "system", time: s.lastRun.time, tag: "Over", text: `Run over at ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills.` });
-        console.log(`  damage taken: ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}`);
-        const total = Object.values(s.lastRun.damageTaken).reduce((a, b) => a + b, 0);
-        const lastHurt = last === undefined ? "" : Object.entries(last.player.hurtBy).map(([k, v]) => `${k} ${v}`).join(", ");
+        const lived = over.runClock;
+        const kills = Number(over.run.kills ?? 0);
+        const taken = over.run.damageTakenBySource;
+        console.log(`run ${runs} ended at ${Math.round(lived)}s, level ${over.loadout.level}, ${kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
+        say({ role: "system", time: lived, tag: "Over", text: `Run over at ${clock(lived)}, level ${over.loadout.level}, ${kills} kills.` });
+        console.log(`  damage taken: ${Object.entries(taken).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+        const total = Object.values(taken).reduce((a, b) => a + b, 0);
+        const lastHurt = last === undefined ? "" : Object.entries(last.hurtBy).map(([k, v]) => `${k} ${v}`).join(", ");
         runLog.write(last, {
           event: "run_end",
-          action: s.lastRun.time >= WIN_SECONDS ? "won, then died" : "died",
-          detail: `Tibo died at ${clock(s.lastRun.time)}, level ${s.lastRun.level}, ${s.lastRun.kills} kills; hurt in its last 3 seconds by ${lastHurt || "nothing the bot saw"}; damage taken ${Math.round(total)} in all: ${Object.entries(s.lastRun.damageTaken).map(([k, v]) => `${k} ${v}`).join(", ")}`,
+          action: lived >= WIN_SECONDS ? "won, then died" : "died",
+          detail: `Tibo died at ${clock(lived)}, level ${over.loadout.level}, ${kills} kills; hurt in its last 3 seconds by ${lastHurt || "nothing the bot saw"}; damage taken ${Math.round(total)} in all: ${Object.entries(taken).map(([k, v]) => `${k} ${Math.round(v * 10) / 10}`).join(", ")}`,
         });
-        log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty, notes: notes.id, runLog: runLog.file, ...s.lastRun, steps, plannerCalls: planner.calls, avgDecisionMs: Math.round(avg) })}\n`);
+        log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty, notes: notes.id, runLog: runLog.file, time: lived, level: over.loadout.level, kills, damageTaken: taken, killer: over.run.killer, steps, plannerCalls: planner.calls, avgDecisionMs: Math.round(avg) })}\n`);
         log.flush();
         // The run is over; a stop from here on only notes the missing review.
         const ended = notes;
         notes = undefined;
-        await planner.finish(s.lastRun, last, ladderCleared(s), runLog.healed);
+        await planner.finish(over, last, ladderCleared(s), runLog.healed);
         // The share link only exists on the run summary, and a page reload loses it, so it goes into
         // the notes now, before the review, rather than whenever the next run starts.
         const summary = await command({ type: "summary" }, 60);
@@ -1579,7 +1647,8 @@ async function main() {
       latency.length = 0;
       continue;
     }
-    const r = s.run;
+    const b = await readBook();
+    const r = b === undefined ? undefined : see(s, b);
     if (r === undefined) {
       await Bun.sleep(100);
       continue;
@@ -1588,18 +1657,18 @@ async function main() {
     piloted = s.pace !== undefined;
     const incognito = s.incognito ?? false;
     if (notes === undefined || planner === undefined || runLog === undefined) {
-      const setup: RunSetup = { started: new Date(), difficulty: r.difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: r.seed, planner: PLAN_MODEL, action: MODEL, coach: COACH_LABEL, bot: BOT_CODE };
+      const setup: RunSetup = { started: new Date(), difficulty: levelName(r.game), mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: String(r.game.run.seed), planner: PLAN_MODEL, action: MODEL, coach: COACH_LABEL, bot: BOT_CODE };
       const skip = !NOTES ? "no --notes" : adopted ? "taken over mid-run" : incognito ? "incognito" : undefined;
       const prompts = "see the coach's log";
       templates = plan.templates;
       notes = new RunNotes(setup, plan, prompts, skip === undefined);
-      const first = r.loadout.weapons[0]?.id ?? "none";
+      const first = r.weapons[0]?.id ?? "none";
       notes.started = startNote === "chosen" ? `${first} (chosen by the coach)` : `${first} (${startNote})`;
       adopted = false;
       runLog = new RunLog(notes.log);
       planner = new Planner(notes, runLog);
       resetGoals();
-      console.log(`run seed ${r.seed}${r.daily ? " (daily)" : ""}, ${skip === undefined ? "notes at the end" : `no notes (${skip})`}, templates from ${plan.source}, log ${notes.log}`);
+      console.log(`run seed ${String(r.game.run.seed)}${MODE === "daily" ? " (daily)" : ""}, ${skip === undefined ? "notes at the end" : `no notes (${skip})`}, templates from ${plan.source}, log ${notes.log}`);
     }
     last = r;
     trialStart ??= r;
@@ -1608,10 +1677,10 @@ async function main() {
       lastReport = Math.floor(r.time / 30);
       const per = (ms: number) => Math.round(ms / Math.max(1, timings.steps));
       console.log(
-        `${r.time}s hp ${Math.round(r.player.hp)}/${Math.round(r.player.maxHp)} lv ${r.player.level} enemies ${r.enemies.total} ${r.loadout.weapons.map((w) => `${w.id}:${w.level}`).join(",")} | per step: state ${per(timings.state)}ms decide ${per(timings.decide)}ms command ${per(timings.command)}ms`,
+        `${r.time}s hp ${Math.round(r.hp)}/${Math.round(r.maxHp)} lv ${r.game.loadout.level} enemies ${r.enemies.length} ${r.weapons.map((w) => `${w.id}:${w.level}`).join(",")} | per step: state ${per(timings.state)}ms decide ${per(timings.decide)}ms command ${per(timings.command)}ms`,
       );
       Object.assign(timings, { state: 0, decide: 0, command: 0, steps: 0 });
-      log.write(`${JSON.stringify({ event: "tick", time: r.time, hp: r.player.hp, level: r.player.level, enemies: r.enemies.total })}\n`);
+      log.write(`${JSON.stringify({ event: "tick", time: r.time, hp: r.hp, level: r.game.loadout.level, enemies: r.enemies.length })}\n`);
       log.flush();
     }
     steps++;

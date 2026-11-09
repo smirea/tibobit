@@ -1,3 +1,5 @@
+import type { ChoiceAction } from "./agent/protocol";
+
 // Page-world access to the running game. tibo.dog ships native ES modules, and a module URL
 // imported a second time returns the instance the game already uses, so importing the game's
 // own chunks gives live access to its classes and content tables without parsing anything.
@@ -173,7 +175,7 @@ export type Game = {
   setInput(x: number, y: number): void;
   setPaused(paused: boolean): void;
   dash(x: number, y: number): void;
-  choose(action: { type: "pick"; index: number }): void;
+  choose(action: ChoiceAction): void;
   /** Marks the run as not replayable from its inputs, so the game neither posts it nor counts it. */
   taint(): void;
 };

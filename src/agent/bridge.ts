@@ -1,4 +1,3 @@
-import type { Discovery } from "../discovery";
 import type { GameLink } from "../game";
 import type { Controller } from "./control";
 import type { CheckpointFile } from "./training";
@@ -134,7 +133,7 @@ const NOT_GRANTED =
     ? undefined
     : "Tampermonkey did not grant GM_xmlhttpRequest. Add @grant GM_xmlhttpRequest and @connect 127.0.0.1 to the installed script's header.";
 
-export function startBridge(link: GameLink, discovery: Discovery, controller: Controller): Bridge {
+export function startBridge(link: GameLink, controller: Controller): Bridge {
   let origin = initialOrigin();
   let session = 0;
   let request: { abort(): void } | undefined;
@@ -281,7 +280,7 @@ export function startBridge(link: GameLink, discovery: Discovery, controller: Co
     }
     let body;
     try {
-      body = JSON.stringify(snapshot(link, discovery, controller.statuses));
+      body = JSON.stringify(snapshot(link, controller.statuses));
     } catch (e) {
       body = JSON.stringify({ capturedAt: Date.now(), screen: "title", commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` });
     }

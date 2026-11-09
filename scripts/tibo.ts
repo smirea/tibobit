@@ -3,9 +3,6 @@ import {
   BRIDGE_ORIGIN as DEFAULT_ORIGIN,
   type CheckpointMeta,
   type CommandStatus,
-  type PairingView,
-  type Rel,
-  type RunView,
   type Snapshot,
   bridgeOrigin,
   validPort,
@@ -29,7 +26,9 @@ const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
   goto pickup <uid>               walk onto a pickup, such as a chest
       [--stay <seconds|done>] [--within <units>] [--timeout <seconds>]
   stop | pause | resume
-  choose <index>                  pick a level-up or chest option
+  choose <action> [index]         the game's own action on the open choice: pick, banish or buy with
+                                  the offer's index in game.choiceQueue[0], or reroll, skip, close,
+                                  accept, continue or endRun
   dash [dir|degrees]
   start [easy|normal|hard|nightmare|highest] [daily]   daily plays today's fixed-seed Daily; highest
                                   takes the hardest unlocked, up through the Nightmare levels
@@ -166,7 +165,7 @@ function parseArgs(args: string[]): unknown {
       };
     }
     case "choose":
-      return { type: "choose", index: num(rest[0], "index") };
+      return { type: "choose", action: rest[1] === undefined ? { type: rest[0] } : { type: rest[0], index: num(rest[1], "index") } };
     case "dash":
       return rest[0] === undefined ? { type: "dash" } : { type: "dash", dir: heading(rest[0]) };
     case "start": {

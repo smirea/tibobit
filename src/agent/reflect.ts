@@ -3,10 +3,12 @@ import type { GameLink, GameState, Table } from "../game";
 /**
  * The game's state object as the game holds it, under the game's own keys, made into JSON:
  * - a column pool (enemies, bullets, pickups and the like: one typed array per column, indexed by
- *   slot) becomes a list of its live entries, each with the pool's `uid` and every column;
+ *   slot) becomes a list of its live entries, each with the pool's `uid`, its `slot` (what the
+ *   game's own references hold, such as `me` for the player) and every column;
  * - a column whose numbers index a game table holds that entry's id instead, from the game's own
  *   lookup (an enemy's `def` is "bog-slime", a pickup's `kind` is "xp", a damage `src` is "fry-knives");
- * - a content definition (a weapon, passive, item, enemy, dog and so on) appears as its id;
+ * - a content definition (a weapon, passive, item, enemy, dog and so on) appears as its id, and a
+ *   list the game indexes like a content table (each dog breed's help in `run.dogHelp`) is keyed by id;
  * - a class's getters, such as the effective stats, appear as fields;
  * - Maps become objects, Sets and typed arrays become lists, and functions are left out.
  * Nothing is renamed and nothing is computed.
@@ -75,7 +77,11 @@ export function reflect(link: GameLink, s: GameState): Reflection {
     if (typeof v !== "object" || v === null) return v;
     const id = ids.get(v);
     if (id !== undefined) return id;
-    if (ArrayBuffer.isView(v)) return Array.from(v as unknown as ArrayLike<number>);
+    if (ArrayBuffer.isView(v)) {
+      const list = Array.from(v as unknown as ArrayLike<number>);
+      // The game counts each dog breed's help in a column indexed like its dog table.
+      return at.startsWith("run.dogHelp.") ? Object.fromEntries(list.map((n, i) => [table.dogAt(i)?.id ?? String(i), n])) : list;
+    }
     if (path.has(v)) return "(cycle)";
     path.add(v);
     try {
@@ -114,7 +120,7 @@ export function reflect(link: GameLink, s: GameState): Reflection {
     for (let n = 0; n < p.pool.count; n++) {
       const slot = p.pool.slotAt(n);
       if (slot < 0 || !p.pool.isAlive(slot)) continue;
-      const row: Record<string, unknown> = { uid: p.pool.id(slot) };
+      const row: Record<string, unknown> = { uid: p.pool.id(slot), slot };
       for (const c of columns) {
         const raw = (p[c] as unknown as ArrayLike<number>)[slot] ?? 0;
         const r = own[c] ?? resolve["*"]?.[c];
