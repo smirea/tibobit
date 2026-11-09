@@ -22,4 +22,12 @@ Live gyms nm2-live-min5 and nm2-live-min5-fryer, 300 s each, 3-4 games per arm (
 
 ## Games
 
-(none played yet)
+### L10.I1.G1: control unchanged 5:00 gym
+
+- Start: gym nm2-live-min5 (Nightmare 2 at 05:00), seed NG08BZ; 300s; plays the playbook.
+- Outcome: alive after 300.2s (game clock 10:00), health 120/120; damage taken 67 (Hot oil 38.5, enemy:blight-spore 25.8, Spore vent 2.8); 10725 kills; level 19 to 35; planner asked 124 times, action model 85; the models saw the game 32 ms late (p90 71); ended with pressure-cooker 1, tater-twirl 8, thunder-tuber 1, overgrowth 1, mash-snowball 8, root-cellar 8, hot-start 5, butter-socks 5, butter-pat 5, fertilizer 5, root-network 5, sprouting-eyes 5.
+- Damage taken 67, by source: Hot oil 38.5, enemy:blight-spore 25.8, Spore vent 2.8.
+- Damage dealt 924341, by weapon: overgrowth 740503.5, thunder-tuber 167634.7, mash-snowball 10456.3, pressure-cooker 3727.5, tater-twirl 1489.5, root-cellar 468.4, grok-bot 48.7, steam-vent 12.5.
+- Kills 10725, by weapon: overgrowth 8591, thunder-tuber 2005, mash-snowball 98, pressure-cooker 26, root-cellar 3, tater-twirl 1, grok-bot 1.
+- Bosses killed 9, elites killed 9, boss chests 18, crates bought 0, shrines used 0, items bought 0, revives used 0; gold earned 2836, spent 0.
+- Made: pressure-cooker at 07:13.
