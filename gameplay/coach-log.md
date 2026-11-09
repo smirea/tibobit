@@ -550,3 +550,51 @@ The coach gave no plan; the run plays the playbook as it stands.
 ## L6.I10: reflection (2026-11-09 08:28)
 
 The coach gave no usable reflection.
+
+## L7.I1: no usable plan (2026-11-09 10:08)
+
+The coach gave no usable reply, so this iteration played nothing.
+
+## L7.I2: no usable plan (2026-11-09 12:08)
+
+The coach gave no usable reply, so this iteration played nothing.
+
+## L7.I3: no usable plan (2026-11-09 13:18)
+
+The coach gave no usable reply, so this iteration played nothing.
+
+## L7.I4: no usable plan (2026-11-09 13:27)
+
+The coach gave no usable reply, so this iteration played nothing.
+
+## L7.I5: no usable plan (2026-11-09 13:37)
+
+The coach gave no usable reply, so this iteration played nothing.
+
+## L7.I6: no usable plan (2026-11-09 13:47)
+
+The coach gave no usable reply, so this iteration played nothing.
+
+## L7.I7: no usable plan (2026-11-09 13:57)
+
+The coach gave no usable reply, so this iteration played nothing.
+
+## L7.I8: no usable plan (2026-11-09 14:07)
+
+The coach gave no usable reply, so this iteration played nothing.
+
+## L7.I9: no usable plan (2026-11-09 14:17)
+
+The coach gave no usable reply, so this iteration played nothing.
+
+## L7.I10: rehearsal (2026-11-09 14:17)
+
+Your playbook is the one the last full run played; it lived in 0 of 5 fresh Nightmare 2 games of 300s.
+
+## L7.I10: full run (2026-11-09 15:40)
+
+The coach gave no plan; the run plays the playbook as it stands.
+
+## L7.I10: reflection (2026-11-09 17:13)
+
+The coach gave no usable reflection.
