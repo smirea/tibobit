@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | done |
 | Area | build |
-| Result | - |
+| Result | inconclusive |
 | Created | L8.I3 |
-| Updated | L8.I3 |
+| Updated | L8.I10 |
 
 ## Hypothesis
 
@@ -18,7 +18,7 @@ Two fresh live NM2 games of 300s with tater-pup and the unchanged playbook on 19
 
 ## Findings
 
-(none yet)
+Tater Pup start lived 0 of 1: s4141 died 2:45 (123 hp lost in minute 1, no evolution, 3 chests, amusing the killing blow). The s1919 game never ran because of a SecurityError. No better than Steam Vent controls. See B136.
 
 ## Games
 

@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | running |
+| Status | done |
 | Area | bosses |
-| Result | - |
+| Result | inconclusive |
 | Created | L8.I2 |
-| Updated | L8.I2 |
+| Updated | L8.I5 |
 
 ## Hypothesis
 
@@ -18,7 +18,7 @@ From nm2-live-pre-mascot-b, 120 s: unchanged playbook against boss dash knobs on
 
 ## Findings
 
-(none yet)
+L8.I2.G5 knobs: 35 damage, alive. L8.I4.G5 control: 27 damage, alive. The gym is too easy to separate the arms (B138). Closed.
 
 ## Games
 
@@ -36,3 +36,13 @@ From nm2-live-pre-mascot-b, 120 s: unchanged playbook against boss dash knobs on
 - Kills 1447, by weapon: loaded-dice 755, potato-battery 266, spud-dice 195, grok-bot 82, tater-twirl 72, tater-twister 40, hot-streak 35, steam-vent 2.
 - Bosses killed 6, elites killed 3, boss chests 9, crates bought 0, shrines used 0, items bought 0, revives used 0; gold earned 558, spent 0.
 - Made: loaded-dice at 02:34, tater-twister at 03:22.
+
+### L8.I4.G5: pre-mascot gym control
+
+- Start: gym nm2-live-pre-mascot-b (Nightmare 2 at 01:45), seed 3HM36M; 120s; plays the playbook.
+- Outcome: alive after 120.2s (game clock 03:45), health 133/134; damage taken 27 (boss:amusing 13.3, boss:beetle-queen 9.1, Spore vent 2.8, enemy:aphid 1.8); 1497 kills; level 8 to 12; planner asked 49 times, action model 83; the models saw the game 35 ms late (p90 88); ended with steam-vent 5, loaded-dice 1, spud-grid 1, tater-twister 1, sprouting-eyes 1, four-eyed-spud 1, gravy-heart 1, salt-shaker 1, root-network 1.
+- Damage taken 27, by source: boss:amusing 13.3, boss:beetle-queen 9.1, Spore vent 2.8, enemy:aphid 1.8.
+- Damage dealt 38241, by weapon: loaded-dice 22484.2, potato-battery 5510.8, tater-twister 3123.3, tater-twirl 3038.5, spud-dice 2917.8, spud-grid 1084.8, steam-vent 81.2.
+- Kills 1497, by weapon: loaded-dice 984, potato-battery 262, spud-dice 86, tater-twirl 69, spud-grid 49, tater-twister 46, steam-vent 1.
+- Bosses killed 6, elites killed 6, boss chests 12, crates bought 0, shrines used 0, items bought 0, revives used 0; gold earned 828, spent 0.
+- Made: loaded-dice at 02:05, tater-twister at 03:07, spud-grid at 03:42.
