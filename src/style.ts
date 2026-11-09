@@ -55,7 +55,7 @@ export const css = `
 .tbh-wheel:disabled, .tbh-giveback:disabled { opacity: .5; cursor: default; }
 .tbh-incognito { flex: none; padding: 2px 6px; white-space: nowrap; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; color: #a8977a; background: transparent; border: 1px dashed #6b5631; border-radius: 4px; }
 .tbh-incognito:hover { color: #f3e6c4; border-style: solid; }
-.tbh-incognito[aria-pressed="true"] { color: #f3e6c4; background: #2a2a33; border: 1px solid #8d8da8; }
+.tbh-incognito[aria-pressed="true"] { color: #3ddc84; background: rgba(61,220,132,.14); border: 1px solid #3ddc84; }
 .tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
 .tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chatbox { display: none; }
 .tbh-chatbox { border-top: 1px solid rgba(255,255,255,.08); }
