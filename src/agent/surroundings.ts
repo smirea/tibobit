@@ -3,6 +3,26 @@ import { DIRECTIONS, type Direction, type Surroundings } from "./protocol";
 
 // Volleys, attack zones and hazards farther than this from Tibo are left out.
 const REACH = 300;
+// Enemies this close count as on Tibo, for standing still.
+const NEAR = 60;
+const HURT_WINDOW_TICKS = 180;
+
+// Damage taken by source at recent ticks, to say what hurt Tibo lately.
+let hurtHistory: { tick: number; totals: Map<string, number> }[] = [];
+
+function recentHurt(s: GameState): Record<string, number> {
+  const totals = new Map(s.run.damageTakenBySource);
+  if (hurtHistory.length > 0 && (hurtHistory.at(-1)?.tick ?? 0) > s.tick) hurtHistory = [];
+  hurtHistory.push({ tick: s.tick, totals });
+  while (hurtHistory.length > 1 && (hurtHistory[1]?.tick ?? 0) <= s.tick - HURT_WINDOW_TICKS) hurtHistory.shift();
+  const before = hurtHistory[0]?.totals ?? new Map<string, number>();
+  const out: Record<string, number> = {};
+  for (const [source, total] of totals) {
+    const delta = total - (before.get(source) ?? 0);
+    if (delta >= 0.5) out[source] = round(delta);
+  }
+  return out;
+}
 const PATH_SAMPLES = [0.25, 0.5, 0.75, 1];
 
 export function directionOf(dx: number, dy: number): Direction {
@@ -42,10 +62,12 @@ export function surroundings(link: GameLink, s: GameState, seconds: number, rows
 
   const byDirection = Object.fromEntries(DIRECTIONS.map((d) => [d, 0])) as Record<Direction, number>;
   let onScreen = 0;
+  let near = 0;
   for (const i of alive(s.enemies)) {
     if ((s.enemies.flags[i] ?? 0) & hidden) continue;
     const dx = (s.enemies.x[i] ?? 0) - px;
     const dy = (s.enemies.y[i] ?? 0) - py;
+    if (Math.hypot(dx, dy) <= NEAR) near++;
     if (Math.abs(dx) > halfW || Math.abs(dy) > halfH) continue;
     onScreen++;
     byDirection[directionOf(dx, dy)]++;
@@ -155,5 +177,5 @@ export function surroundings(link: GameLink, s: GameState, seconds: number, rows
   }
   items.sort((a, z) => a.dist - z.dist);
 
-  return { seconds, enemies: { onScreen, byDirection }, elites, bullets, volleys, attacks, hazards: { underfoot, byDirection: hazardPaths }, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
+  return { seconds, hurtBy: recentHurt(s), enemies: { onScreen, near, byDirection }, elites, bullets, volleys, attacks, hazards: { underfoot, byDirection: hazardPaths }, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
 }

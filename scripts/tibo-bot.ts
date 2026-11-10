@@ -8,8 +8,9 @@
 import path from "node:path";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type ChoiceAction, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type CardOption, type Encyclopedia, type Forecast, type GameMode, type Inspect, ladderCleared, type MoveOption, type PilotPace, type Snapshot } from "../src/agent/protocol";
-import { type Book, type GameJson, type Pickup, type Sector, type Spot, type World, line, pairings, readBook as bookOf, see } from "./world";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type ChoiceAction, type ChoiceOption, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type DirectionView, type CardOption, type Encyclopedia, type GameMode, type Inspect, ladderCleared, type MoveOption, type PilotPace, type State } from "../src/agent/protocol";
+import { type Book, line, readBook as bookOf } from "./book";
+import { type Chest, type Sector, type Spot, type World, see } from "./world";
 import * as loop from "./gameplay";
 import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "./gameplay";
 
@@ -76,7 +77,7 @@ const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.rep
  * `pace` is the panel's plan and action intervals, read every step so they can change mid-run, and
  * sent only to a bot the panel started.
  */
-type Snap = Snapshot & { connected: boolean; ageMs: number; pace?: PilotPace; incognito?: boolean };
+type Snap = State;
 /** Seconds between planner calls while a goal is under way, and between steps. */
 let pace: PilotPace = { planEvery: PLAN_EVERY, actEvery: STEP };
 /** Whether the panel started this bot, which someone is watching. */
@@ -203,9 +204,9 @@ async function decide(state: string, questions: Record<string, Question>, model 
 }
 
 // ---- The run -------------------------------------------------------------------------------
-// The live state, plus what the bot keeps beyond it: the game's rules (charge times, crate prices),
-// its run tallies (logs and results) and the browser's storage (the Nightmare ladder).
-const STATE = "/state?raw=cfg,run,counters,storage";
+// The live view, plus what the bot keeps beyond it, under the game's keys: its run tallies (logs and
+// results), the browser's storage (the Nightmare ladder), and the clock and level for a run that ended.
+const STATE = "/state?raw=run,counters,storage,runClock,over,loadout.level,loadout.shrineTotals";
 const MODE: GameMode = MODE_ARG === "current" ? ((await api<Snap>(STATE)).mode ?? "daily") : MODE_ARG;
 const MODE_NAME = MODE === "daily" ? "daily" : "world";
 const WIN_SECONDS = 1200;
@@ -265,17 +266,10 @@ class RunNotes {
 }
 
 const pct = (part: number, whole: number) => Math.round((100 * part) / Math.max(1, whole));
-/** A damage source ("enemy:<id>", "boss:<id>" or a ground name such as "Hot oil") with the game's name for it when one is in sight. */
-function gameName(b: Book, source: string): string {
-  const [kind, id = ""] = source.split(":");
-  const name = kind === "enemy" || kind === "boss" ? line(b, kind, id) : undefined;
-  return name === undefined ? source : `${name} (${source})`;
-}
-
 /** A record as "key value, key value", in the game's own keys. */
 const fields = (o: Record<string, unknown>) => Object.entries(o).map(([k, v]) => `${k} ${typeof v === "object" ? JSON.stringify(v) : v}`).join(", ");
-const onScreen = (r: World) => r.surroundings.enemies.onScreen;
-const dashCharges = (r: World) => r.game.player.find((x) => x.slot === r.game.me)?.dashCharges ?? 0;
+const onScreen = (r: World) => r.view.world.enemiesOnScreen;
+const dashCharges = (r: World) => r.view.tibo.dash.charges;
 
 // ---- Run log -------------------------------------------------------------------------------
 // One CSV row per model call and per goal that starts or ends, with the player's state at that
@@ -341,9 +335,9 @@ class RunLog {
     this.healed += gained;
     if (r !== undefined) this.hp = r.hp;
     const at = (x: { dist: number; dir: string }) => `${Math.round(x.dist)} ${x.dir}`;
-    const l = r?.game.loadout;
+    const t = r?.view.tibo;
     const state: Partial<Record<(typeof LOG_COLUMNS)[number], string | number>> =
-      r === undefined || l === undefined
+      r === undefined || t === undefined
         ? {}
         : {
             time: clock(r.time),
@@ -352,23 +346,23 @@ class RunLog {
             max_hp: Math.round(r.maxHp),
             hp_lost: lost,
             hp_gained: gained,
-            level: l.level,
-            xp_pct: pct(l.xp, l.xpNext),
-            gold: Math.floor(l.gold),
+            level: t.level.level,
+            xp_pct: pct(t.level.xp, t.level.next),
+            gold: t.gold,
             x: Math.round(r.x),
             y: Math.round(r.y),
-            dash: r.game.player.find((x) => x.slot === r.game.me)?.dashCharges ?? 0,
+            dash: t.dash.charges,
             enemies: onScreen(r),
-            bosses: r.bosses.map((b) => `${b.name} (${b.def}) ${at(b)} ${pct(b.hp, b.maxHp)}% of ${Math.round(b.maxHp)}`).join("; "),
-            dealt: Math.round(Object.values(r.game.run.damageBySource).reduce((a, b) => a + b, 0)),
-            elites: r.game.run.elitesKilled,
-            elite_list: r.elites.slice(0, 3).map((e) => `${e.uid} ${e.name} (${e.def}) ${Math.round(e.hp)}/${Math.round(e.maxHp)} ${at(e)}`).join("; "),
+            bosses: r.bosses.map((b) => `${b.name} (${b.type}) ${at(b)} ${pct(b.hp, b.maxHp)}% of ${Math.round(b.maxHp)}`).join("; "),
+            dealt: Math.round(Object.values(r.run.damageBySource).reduce((a, b) => a + b, 0)),
+            elites: r.run.elitesKilled,
+            elite_list: r.elites.slice(0, 3).map((e) => `${e.id} ${e.name} (${e.type}) ${Math.round(e.hp)}/${Math.round(e.maxHp)} ${at(e)}`).join("; "),
             hurt_by: Object.entries(r.hurtBy).map(([k, v]) => `${k} ${v}`).join("; "),
             standing_on: spotLine(r) ?? "",
             underfoot: groundSources(r).join("; "),
             chests: r.chests.slice(0, 3).map(at).join("; "),
             food: r.food.slice(0, 2).map(at).join("; "),
-            pois: r.spots.filter((x) => x.chargeNeeded > 0).slice(0, 4).map((x) => `${x.name} ${at(x)}`).join("; "),
+            pois: r.spots.filter((x) => x.chargeSeconds > 0).slice(0, 4).map((x) => `${x.name} ${at(x)}`).join("; "),
             weapons: r.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join("; "),
             passives: r.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join("; "),
             items: r.items.map((i) => `${i.name} x${i.count}`).join("; "),
@@ -425,8 +419,8 @@ const said = (b: Book, kind: string, id: string) => {
   return d === undefined ? "" : `: ${d.replace(/\s+/g, " ").trim()}`;
 };
 
-/** Ground damage sources (the game's names, such as "Hot oil") that standing still would take now, by the forecast. */
-const groundSources = (r: World) => Object.keys(r.forecast?.moves.still.bySource ?? {}).filter((s) => !s.includes(":"));
+/** The hazards and attack zones Tibo stands in now, by the game's kinds. */
+const groundSources = (r: World) => r.view.directions.still?.enters ?? [];
 
 // ---- Goals ---------------------------------------------------------------------------------
 // The planner sets goals, things to collect or places to explore for, by the ids it is shown.
@@ -511,40 +505,52 @@ function goalId(g: Goal): string {
   }
 }
 
-const onChest = (c: Pickup) => c.dist <= ON_CHEST;
+const onChest = (c: Chest) => c.dir === "still";
+/** A spot's description: the game's line for its kind, or for a variety place. */
+const spotSaid = (type: string) => (book === undefined ? "" : (line(book, "poi", type, "desc") ?? line(book, "varietyPlace", type, "desc") ?? ""));
 // The name alone hides what a spot does: standing in a Beetle Nest wakes an elite.
-const poiWhat = (p: Spot) => (p.description === "" ? "" : ` (${p.description.replace(/\.$/, "").replace(/\. /g, "; ").toLowerCase()})`);
-/** What a shop spot costs against the gold Tibo holds, or "" for a spot that costs nothing. */
-const priceWords = (p: Spot, gold: number) =>
-  p.price !== undefined ? `; it costs ${p.price} gold now, and Tibo has ${gold}` : p.prices !== undefined ? `; its items cost ${p.prices.join(", ")} gold by rarity, and Tibo has ${gold}` : "";
+const poiWhat = (p: Spot) => {
+  const d = spotSaid(p.type);
+  return d === "" ? "" : ` (${d.replace(/\.$/, "").replace(/\. /g, "; ").toLowerCase()})`;
+};
+/** What a shop spot costs against the gold Tibo holds, from the game's prices, or "" for a spot that costs nothing. */
+const priceWords = (p: Spot, r: World) => {
+  const { prices } = r.view.world;
+  const gold = r.view.tibo.gold;
+  if (p.type === "paidChest") return `; it costs ${prices.crate} gold now, and Tibo has ${gold}`;
+  if (p.type === "vendor") return `; its items cost ${prices.vendor.join(", ")} gold by rarity, and Tibo has ${gold}`;
+  if (p.type === "taterSlots") return `; a spin costs ${prices.slots} gold, and Tibo has ${gold}`;
+  if (p.type === "dogKennel") return `; its levels cost ${prices.kennel.join(", ")} gold, and Tibo has ${gold}`;
+  return "";
+};
 
 /** Where Tibo stands, as "on a chest, 1 of 3 seconds into opening it", or undefined when on nothing. */
 function spotLine(r: World): string | undefined {
   const chest = r.chests.find(onChest);
-  if (chest !== undefined) return `on a chest, ${chest.charged} of ${chest.chargeNeeded ?? 1} seconds into opening it`;
+  if (chest !== undefined) return `on a chest, ${chest.charged} of ${chest.chargeSeconds} seconds into opening it`;
   const inside = r.spots.find((p) => p.inside);
   if (inside === undefined) return undefined;
-  return `inside the ${inside.name}${poiWhat(inside)}${inside.chargeNeeded > 0 ? `, charged ${inside.charged} of ${inside.chargeNeeded} seconds` : ""}${priceWords(inside, r.game.loadout.gold)}`;
+  return `inside the ${inside.name}${poiWhat(inside)}${inside.chargeSeconds > 0 ? `, charged ${inside.charged} of ${inside.chargeSeconds} seconds` : ""}${priceWords(inside, r)}`;
 }
 
-type Located = { dist: number; dir: Direction; arrived: boolean; charging: number; progress: string; name: string };
+type Located = { dist: number; dir: Direction | "still"; arrived: boolean; charging: number; progress: string; name: string };
 
 function locate(r: World, g: TargetGoal): Located | undefined {
   if (g.kind === "poi") {
-    const p = r.spots.find((x) => x.uid === g.uid);
-    return p === undefined ? undefined : { dist: p.dist, dir: p.dir, arrived: p.inside, charging: p.chargeNeeded - p.charged, progress: `${p.charged} of ${p.chargeNeeded}s charged`, name: `the ${p.name}` };
+    const p = r.spots.find((x) => x.id === g.uid);
+    return p === undefined ? undefined : { dist: p.dist, dir: p.dir, arrived: p.inside, charging: p.chargeSeconds - p.charged, progress: `${p.charged} of ${p.chargeSeconds}s charged`, name: `the ${p.name}` };
   }
   if (g.kind === "chest") {
-    const c = r.chests.find((x) => x.uid === g.uid);
+    const c = r.chests.find((x) => x.id === g.uid);
     return c === undefined
       ? undefined
-      : { dist: c.dist, dir: c.dir, arrived: onChest(c), charging: (c.chargeNeeded ?? 1) - c.charged, progress: `${c.charged} of ${c.chargeNeeded ?? 1}s opened`, name: "the chest" };
+      : { dist: c.dist, dir: c.dir, arrived: onChest(c), charging: c.chargeSeconds - c.charged, progress: `${c.charged} of ${c.chargeSeconds}s opened`, name: "the chest" };
   }
   if (g.kind === "elite") {
-    const e = r.elites.find((x) => x.uid === g.uid);
+    const e = r.elites.find((x) => x.id === g.uid);
     return e === undefined ? undefined : { dist: e.dist, dir: e.dir, arrived: e.dist <= ELITE_REACH, charging: 0, progress: `${e.hp} health left, ${Math.round(e.dist)} away to the ${e.dir}`, name: `the ${e.name}` };
   }
-  const f = r.pickups.find((x) => x.uid === g.uid);
+  const f = r.food.find((x) => x.id === g.uid);
   return f === undefined ? undefined : { dist: f.dist, dir: f.dir, arrived: false, charging: 0, progress: "", name: "the food" };
 }
 
@@ -557,11 +563,11 @@ function goalTitle(g: Goal, r: World): string {
     case "chest":
       return "Open the chest";
     case "poi":
-      return `Charge the ${r.spots.find((p) => p.uid === g.uid)?.name ?? "spot"}`;
+      return `Charge the ${r.spots.find((p) => p.id === g.uid)?.name ?? "spot"}`;
     case "food":
       return "Eat the food";
     case "elite":
-      return `Fight the ${r.elites.find((e) => e.uid === g.uid)?.name ?? "elite"}`;
+      return `Fight the ${r.elites.find((e) => e.id === g.uid)?.name ?? "elite"}`;
     case "explore":
       return `Explore ${g.dir}`;
     case "evade":
@@ -600,7 +606,7 @@ function goalTag(g: Goal, r: World): ActionTag {
     case "chest":
       return "Loot";
     case "poi": {
-      const kind = r.spots.find((p) => p.uid === g.uid)?.kind;
+      const kind = r.spots.find((p) => p.id === g.uid)?.type;
       return (kind === undefined ? undefined : SPOT_TAGS[kind]) ?? "Spot";
     }
     case "food":
@@ -624,7 +630,7 @@ function aimAt(p: Pursuit, r: World): Aim | Ended {
       const t = locate(r, g);
       if (t === undefined) return p.seen ? { done: TARGET_DONE[g.kind], success: true } : { done: "it is not there", success: false };
       p.seen = true;
-      return { heading: t.arrived ? "stay" : t.dir, left: t.dist + t.charging * GOAL_SPEED, progress: t.arrived ? t.progress : `${Math.round(t.dist)} away to the ${t.dir}`, to: g.kind === "poi" ? { poi: g.uid } : { pickup: g.uid } };
+      return { heading: t.arrived || t.dir === "still" ? "stay" : t.dir, left: t.dist + t.charging * GOAL_SPEED, progress: t.arrived ? t.progress : `${Math.round(t.dist)} away to the ${t.dir}`, to: g.kind === "poi" ? { poi: g.uid } : { pickup: g.uid } };
     }
     case "elite": {
       const t = locate(r, g);
@@ -632,10 +638,10 @@ function aimAt(p: Pursuit, r: World): Aim | Ended {
       if (t === undefined) return p.seen ? { done: TARGET_DONE.elite, success: true } : { done: "it is not there", success: false };
       p.seen = true;
       // Within reach the action model picks every step, as when evading: hold the elite there without touching it.
-      return t.arrived ? { progress: t.progress } : { heading: t.dir, left: t.dist, progress: t.progress };
+      return t.arrived || t.dir === "still" ? { progress: t.progress } : { heading: t.dir, left: t.dist, progress: t.progress };
     }
     case "explore": {
-      const found = r.chests.find((c) => !p.known.has(`C${c.uid}`) && c.dist < PLAN_RANGE);
+      const found = r.chests.find((c) => !p.known.has(`C${c.id}`) && c.dist < PLAN_RANGE);
       if (found !== undefined) return { done: `found a chest ${Math.round(found.dist)} away to the ${found.dir}`, success: true };
       const walked = Math.hypot(r.x - p.origin.x, r.y - p.origin.y);
       if (walked >= knobs().exploreDistance) return { done: `walked ${knobs().exploreDistance} units and found nothing new`, success: true };
@@ -724,13 +730,13 @@ function stuckWords(p: Pursuit, r: World, aim: Aim): string {
   const seconds = knobs().stuckSeconds;
   const off = p.steppedOff === 0 ? "" : `; the action model stepped off it ${plural(p.steppedOff, "time")} to dodge`;
   if (aim.heading !== "stay") return `no closer for ${seconds} seconds${off}`;
-  const spot = p.goal.kind === "poi" ? r.spots.find((x) => x.uid === (p.goal as TargetGoal).uid) : undefined;
-  return `standing on it charged nothing for ${seconds} seconds${spot === undefined ? "" : priceWords(spot, r.game.loadout.gold)}${off}`;
+  const spot = p.goal.kind === "poi" ? r.spots.find((x) => x.id === (p.goal as TargetGoal).uid) : undefined;
+  return `standing on it charged nothing for ${seconds} seconds${spot === undefined ? "" : priceWords(spot, r)}${off}`;
 }
 
 /** One step toward the current goal: walk on while it is safe, else ask the action model. */
 async function pursue(s: Snap, r: World, log: RunLog, planner: Planner) {
-  for (const c of r.chests) everListed.add(`C${c.uid}`);
+  for (const c of r.chests) everListed.add(`C${c.id}`);
   const gained = log.loadoutChange(r);
   if (gained !== undefined) {
     log.write(r, { event: "loadout", action: gained, ...(pursuit === undefined ? {} : { goal: pursuit.id }) });
@@ -779,9 +785,6 @@ async function walkOn(p: Pursuit, r: World, aim: Aim, status: CommandStatus | un
 // ---- Action model --------------------------------------------------------------------------
 const plural = (n: number, one: string) => `${n} ${n === 1 ? one : one.replace(/y$/, "ie")}${n === 1 ? "" : "s"}`;
 
-/** A damage source in the game's words: the enemy's or boss's English name, else the game's own key, such as "Hot oil". */
-const sourceWords = (source: string) => (book === undefined ? source : gameName(book, source));
-
 // Health samples by game time, to tell the planner whether Tibo is bleeding.
 const healthHistory: { time: number; hp: number }[] = [];
 
@@ -804,17 +807,13 @@ function hurtWords(share: number): string {
   return "get very badly hurt";
 }
 
-type MoveForecast = Forecast["moves"]["still"];
-const forecastFor = (r: World, heading: Direction | "stay") => r.forecast?.moves[heading === "stay" ? "still" : heading];
+const forecastFor = (r: World, heading: Direction | "stay"): DirectionView | undefined => r.view.directions[heading === "stay" ? "still" : heading];
 
-function outlook(r: World, f: MoveForecast): string {
-  const sources = Object.entries(f.bySource)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 2)
-    .map(([s]) => sourceWords(s));
-  const within = `within ${r.forecast?.seconds ?? knobs().forecastSeconds} seconds`;
+function outlook(r: World, f: DirectionView): string {
+  const sources = f.damageFrom ?? [];
+  const within = `within ${r.view.directions.horizonMilliseconds / 1000} seconds`;
   if (f.dead) return `Tibo would die ${within}${sources.length === 0 ? "" : `, killed by ${sources.join(" and ")}`}`;
-  const share = Math.round((100 * f.damage) / r.maxHp);
+  const share = Math.round((100 * f.estimatedDamage) / r.maxHp);
   if (share < 1) return `Tibo takes no damage ${within}`;
   return `Tibo would ${hurtWords(share)} ${within}, by ${sources.join(" and ")}`;
 }
@@ -847,7 +846,7 @@ function describe(r: World, s: Sector, goal: Direction | "stay" | undefined): st
 // "Stand still" must carry the threats around Tibo too, or it reads as the safest move in a swarm.
 function standing(r: World, goal: Direction | "stay" | undefined): string {
   const crowd = onScreen(r) > 0 ? ` with ${plural(onScreen(r), "enemy")} on screen` : "";
-  const still = r.forecast?.moves.still;
+  const still = r.view.directions.still;
   const forecast = still === undefined ? "" : `, where ${outlook(r, still).replace(/^Tibo /, "it ")}`;
   const spot = spotLine(r);
   const purpose = goal === "stay" ? ", which is what the goal needs" : goal === undefined ? "" : ", no closer to the goal";
@@ -857,7 +856,7 @@ function standing(r: World, goal: Direction | "stay" | undefined): string {
 /** What a move costs over the forecast's horizon as a share of max health, from the game's own simulation. */
 function moveCost(r: World, heading: Direction | "stay"): number | undefined {
   const f = forecastFor(r, heading);
-  return f === undefined ? undefined : f.dead ? Number.POSITIVE_INFINITY : f.damage / r.maxHp;
+  return f === undefined ? undefined : f.dead ? Number.POSITIVE_INFINITY : f.estimatedDamage / r.maxHp;
 }
 
 function cheapestMove(r: World): number | undefined {
@@ -883,8 +882,8 @@ function goalWords(p: Pursuit, aim: Aim): string {
 
 /** A dash charge, a dash template, and an enemy or bullet close enough that dashing could matter. */
 function dashWorthAsking(r: World): boolean {
-  const still = r.forecast?.moves.still;
-  return templates.action.dash.trim() !== "" && dashCharges(r) > 0 && (r.surroundings.bullets.length > 0 || (still !== undefined && (still.dead || still.damage > 0)));
+  const still = r.view.directions.still;
+  return templates.action.dash.trim() !== "" && dashCharges(r) > 0 && (r.view.attacks.bullets.length > 0 || (still !== undefined && (still.dead === true || still.estimatedDamage > 0)));
 }
 
 /** How sure the action model must be to dash: lower while a boss is close, if the knobs say so. */
@@ -956,7 +955,7 @@ async function steer(r: World, p: Pursuit, aim: Aim, log: RunLog, why: string) {
   const ruledOut = Object.keys(offered).length - Object.keys(moves).length;
   const forecast = (k: string) => {
     const f = forecastFor(r, k === "stay" ? "stay" : (k as Direction));
-    return f === undefined ? undefined : f.dead ? "dead" : f.damage === 0 ? "no damage" : `-${Math.round(f.damage)} hp`;
+    return f === undefined ? undefined : f.dead ? "dead" : f.estimatedDamage === 0 ? "no damage" : `-${Math.round(f.estimatedDamage)} hp`;
   };
   const weighed: MoveOption[] = Object.entries(offered).map(([k, description]) => {
     const f = forecast(k);
@@ -1018,143 +1017,88 @@ function slotWords(r: World, type: string, id: string): string {
   return type;
 }
 
-/** An offer in the game's words: a weapon, passive or item by its English name and description, anything else by its own fields. */
-function offerCard(r: World, b: Book, o: Record<string, unknown>, action: ChoiceAction): Card {
-  const ref = (o.item ?? o) as Record<string, unknown>;
-  const type = typeof ref.type === "string" ? ref.type : o.item !== undefined ? "item" : undefined;
-  const id = typeof ref.id === "string" ? ref.id : undefined;
-  const rest = Object.fromEntries(Object.entries(o).filter(([k, v]) => k !== "item" && k !== "type" && k !== "id" && (typeof v !== "object" || v === null)));
-  if (type !== undefined && id !== undefined && (type === "weapon" || type === "passive" || type === "item")) {
-    const key = `${type}:${id}` as const;
-    const level = typeof o.level === "number" ? o.level : 1;
+/** The open choice's options as the planner weighs them: each the game's own action, with what the view says of it. */
+function cards(r: World): Card[] {
+  return (r.view.choice?.options ?? []).map((o: ChoiceOption) => {
+    const { action, name, description, type, id, pairs, ...rest } = o as ChoiceOption & { type?: string; id?: string; pairs?: string[] };
     const notes = [
-      ...(type === "item" ? [] : [slotWords(r, type, id)]),
-      ...pairings(b, r.game, key, level)
-        .filter((c) => c.partnerHeld)
-        .map((c) => `pairs with your ${c.partner} into ${c.name}${c.ready ? " right away" : ""}`),
-      said(b, type, id).replace(/^: /, ""),
+      ...(type !== undefined && id !== undefined && (type === "weapon" || type === "passive") ? [slotWords(r, type, id)] : []),
+      ...(pairs ?? []).map((p) => `pairs ${p}`),
+      ...(description === undefined || description === "" ? [] : [description]),
       ...(Object.keys(rest).length === 0 ? [] : [fields(rest)]),
-    ].filter(Boolean);
-    const name = line(b, type, id) ?? id;
+    ];
     return { action, name, notes, text: `${name}${notes.length === 0 ? "" : ` (${notes.join("; ")})`}` };
-  }
-  const name = typeof o.label === "string" ? o.label : (id ?? fields(rest));
-  return { action, name, notes: [fields(rest)], text: `${name} (${fields(rest)})` };
-}
-
-/** Everything the game lets Tibo do on the open choice, by its kind, as the game's `choose` takes it. */
-function cards(r: World, b: Book): Card[] {
-  const c = r.game.choiceQueue[0];
-  if (c === undefined) return [];
-  const l = r.game.loadout;
-  const plain = (type: "reroll" | "skip" | "close" | "accept" | "continue" | "endRun", name: string): Card => ({ action: { type }, name, notes: [], text: name });
-  const listed = (list: unknown, act: "pick" | "buy") =>
-    (Array.isArray(list) ? (list as Record<string, unknown>[]) : []).flatMap((o, index) => (o.sold === true ? [] : [offerCard(r, b, o, { type: act, index })]));
-  switch (c.kind) {
-    case "levelUp":
-      return [...listed(c.offers, "pick"), ...(l.rerolls > 0 ? [plain("reroll", `Reroll (${l.rerolls} left)`)] : []), ...(l.skips > 0 ? [plain("skip", `Skip (${l.skips} left)`)] : [])];
-    case "chest":
-    case "item":
-      return [plain("continue", `Continue (the game shows: ${fields(Object.fromEntries(Object.entries(c).filter(([k]) => k !== "kind")))})`)];
-    case "win":
-      return [plain("continue", "Continue the run past the win"), plain("endRun", "End the run as a winner")];
-    case "curseShrine":
-      return [plain("accept", `Accept (${fields(Object.fromEntries(Object.entries(c).filter(([k]) => k !== "kind" && k !== "poiId")))})`), plain("close", "Leave it")];
-    case "vendor":
-      return [...listed(c.stock, "buy"), plain("close", "Leave the shop")];
-    case "dogSwap":
-      return [...r.game.pets.map((p, index) => ({ action: { type: "pick" as const, index }, name: `Swap ${line(b, "dog", p.breed) ?? p.breed} for the new dog`, notes: [], text: `Swap ${line(b, "dog", p.breed) ?? p.breed} (level ${p.level}) for the new dog` })), plain("close", "Keep the pack as it is")];
-    case "bigUpdate":
-      return [...listed((c.variant as { offers?: unknown } | undefined)?.offers, "pick"), plain("close", "Leave it")];
-    default:
-      return [...listed(c.offers ?? c.stock, "pick"), plain("close", "Leave it")];
-  }
+  });
 }
 
 /** Every state block a template may use (see BLOCKS in scripts/gameplay.ts), rendered only when used. */
 function blocks(r: World, b: Book): Record<BlockName, () => string> {
-  const g = r.game;
-  const l = g.loadout;
-  const owned = (kind: string, xs: { id: string; name: string; level: number; max: number }[]) => xs.map((x) => `\n  - ${x.name} ${x.level}/${x.max}${said(b, kind, x.id)}`).join("") || " none";
-  const nonzero = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => typeof v === "number" && v !== 0));
+  const v_ = r.view;
+  const t = v_.tibo;
+  const w = v_.world;
+  const owned = (xs: { name: string; level: number; max: number; description: string }[]) => xs.map((x) => `\n  - ${x.name} ${x.level}/${x.max}${x.description === "" ? "" : `: ${x.description.replace(/\s+/g, " ").trim()}`}`).join("") || " none";
   const hp = pct(r.hp, r.maxHp);
   const v: Record<Exclude<BlockName, "state">, () => string> = {
     time: () => clock(r.time),
     difficulty: () => difficulty,
     mode: () => MODE_NAME,
     health: () => `Health ${Math.round(r.hp)}/${Math.round(r.maxHp)} (${hp}%${healthTrend(r)})${hp < 40 ? ", which is low" : ""}.`,
-    level: () => `Level ${l.level}, ${pct(l.xp, l.xpNext)}% of the way to the next.`,
-    gold: () => `Gold ${Math.floor(l.gold)}.`,
-    dash: () => `Dash charges ${dashCharges(r)}.`,
-    weapons: () => `Weapons (${r.weapons.length} of 6 slots):${owned("weapon", r.weapons)}`,
-    passives: () => `Passives (${r.passives.length} of 6 slots):${owned("passive", r.passives)}`,
-    items: () => `Items:${r.items.map((i) => `\n  - ${i.name} x${i.count}${said(b, "item", i.id)}`).join("") || " none"}`,
-    banished: () => `Banished this run: ${l.banished.join(", ") || "nothing"}.`,
-    recipes: () => `Recipes in reach: ${r.combos.map((c) => `${c.name} (${c.parts.map((x) => `${x.name} ${x.state}${x.have === undefined ? "" : ` ${x.have}/${x.max}`}`).join(" + ")})`).join("; ") || "none"}.`,
-    evolutions: () => {
-      const ready = r.combos.filter((c) => c.ready && c.combo.recipe.kind !== "union").map((c) => c.name);
-      return ready.length === 0 ? "No recipe is complete yet." : `The next chest opened evolves ${ready.join(" and ")}.`;
-    },
-    standing_on: () => `Tibo stands ${spotLine(r) ?? "on no chest or spot"}.${groundSources(r).length === 0 ? "" : ` Standing still takes damage from: ${groundSources(r).join(", ")}.`}`,
-    hurt_by: () => `Hurt in the last 3 seconds by: ${Object.entries(r.hurtBy).map(([k, n]) => `${gameName(b, k)} ${n}`).join(", ") || "nothing"}.`,
-    bosses: () => `Bosses: ${r.bosses.map((x) => `${x.name} (${x.def}) ${Math.round(x.dist)} away to the ${x.dir}, ${pct(x.hp, x.maxHp)}% health`).join("; ") || "none"}.`,
+    level: () => `Level ${t.level.level}, ${pct(t.level.xp, t.level.next)}% of the way to the next.`,
+    gold: () => `Gold ${t.gold}.`,
+    dash: () => `Dash charges ${t.dash.charges} of ${t.dash.max}.`,
+    weapons: () => `Weapons (${r.weapons.length} of 6 slots):${owned(r.weapons)}`,
+    passives: () => `Passives (${r.passives.length} of 6 slots):${owned(r.passives)}`,
+    items: () => `Items:${r.items.map((i) => `\n  - ${i.name} x${i.count}${i.description === "" ? "" : `: ${i.description}`}`).join("") || " none"}`,
+    banished: () => `Banished this run: ${t.banished.join(", ") || "nothing"}.`,
+    recipes: () => `Recipes in reach: ${t.recipes.join("; ") || "none"}.`,
+    evolutions: () => (t.evolves.length === 0 ? "No recipe is complete yet." : `The next chest opened evolves ${t.evolves.join(" and ")}.`),
+    standing_on: () => `Tibo stands ${spotLine(r) ?? "on no chest or spot"}.${groundSources(r).length === 0 ? "" : ` Underfoot: ${groundSources(r).join(", ")}.`}`,
+    hurt_by: () => `Hurt in the last 3 seconds by: ${fields(r.hurtBy) || "nothing"}.`,
+    bosses: () => `Bosses: ${r.bosses.map((x) => `${x.name} (${x.type}) ${Math.round(x.dist)} away to the ${x.dir}, ${pct(x.hp, x.maxHp)}% health`).join("; ") || "none"}.`,
     enemies: () => {
       const crowd = [...r.sectors].sort((a, z) => z.enemies - a.enemies);
       return `Enemies: ${onScreen(r)} on screen. Most to the ${crowd[0]?.dir} (${crowd[0]?.enemies}), fewest to the ${crowd.at(-1)?.dir} (${crowd.at(-1)?.enemies}).`;
     },
     current_goal: () => `Current goal: ${pursuit === undefined ? "none" : `${pursuit.title}, since ${clock(pursuit.since)}`}.`,
     recent_goals: () => `Recent goals: ${outcomes.slice(-6).map((o) => `${clock(o.time)} ${o.title}: ${o.outcome}`).join("; ") || "none yet"}.`,
-    stats: () => {
-      const { values: _, ...stats } = l.stats;
-      return `loadout.stats: ${fields(stats)}. loadout.totals: ${fields(nonzero(l.totals)) || "none"}. loadout.shrineTotals: ${fields(nonzero(l.shrineTotals)) || "none"}.`;
-    },
-    resources: () => `loadout: rerolls ${l.rerolls}, skips ${l.skips}, banishes ${l.banishes}, cursesTaken ${l.cursesTaken}, revivesUsed ${l.revivesUsed}; loadout.stats.revivals ${l.stats.revivals}.`,
+    stats: () => `Stats: ${fields(t.stats)}. Added by shrines: ${fields(t.shrineTotals) || "nothing"}.`,
+    resources: () => `Rerolls ${t.rerolls}, skips ${t.skips}, banishes ${t.banishes}, revives ${t.revives}; curses ${w.curses}, which add ${w.extraElites} elites and ${w.extraBosses} bosses.`,
     spots: () => {
       if (r.spots.length === 0) return "Spots: none on the loaded map.";
       return `Spots on the loaded map, nearest first:${r.spots
-        .map((x) => `\n  - ${x.name} (${x.kind}) ${Math.round(x.dist)} away to the ${x.dir}${x.description === "" ? "" : `: ${x.description}`} Charged ${x.charged} of ${x.chargeNeeded} s, radius ${x.radius}${x.price === undefined ? "" : `, price ${x.price} gold`}${x.prices === undefined ? "" : `, item prices by rarity ${x.prices.join(", ")} gold`}.`)
+        .map((x) => `\n  - ${x.name} (${x.type}) ${x.inside ? "under Tibo" : `${Math.round(x.dist)} away to the ${x.dir}`}${poiWhat(x)} Charged ${x.charged} of ${x.chargeSeconds} s${priceWords(x, r)}.`)
         .join("")}`;
     },
-    dogs: () => {
-      if (g.pets.length === 0) return "Dogs: none.";
-      const helped = (breed: string) => Object.entries(g.run.dogHelp).flatMap(([help, by]) => (by[breed] ? [`${help} ${Math.round(by[breed] * 10) / 10}`] : [])).join(", ");
-      return `Dogs:${g.pets
-        .map((x) => {
-          const d = b.dogs.get(x.breed) ?? {};
-          const facts = Object.entries(d).filter(([k]) => !["id", "name", "desc", "breed"].includes(k));
-          const did = helped(x.breed);
-          return `\n  - ${line(b, "dog", x.breed) ?? x.breed}${typeof d.breed === "string" ? ` (${d.breed})` : ""} level ${x.level}${typeof d.desc === "string" ? `: ${d.desc}` : ""} The game's numbers: ${facts.map(([k, val]) => `${k} ${JSON.stringify(val)}`).join(", ")}.${did === "" ? "" : ` run.dogHelp: ${did}.`}`;
-        })
-        .join("")}`;
-    },
-    pickups: () => {
-      const p = r.surroundings.pickups;
-      return `Pickups on the ground by kind: ${fields(p.counts) || "none"}; xp worth ${p.value.xp} and gold worth ${p.value.gold} in all. Nearest of the rest: ${r.pickups.slice(0, 10).map((x) => `${x.kind} worth ${Math.round(x.value * 10) / 10} ${Math.round(x.dist)} away to the ${x.dir}`).join("; ") || "none"}.`;
-    },
-    buffs: () => {
-      const timers = Object.entries({ ...(g as unknown as Record<string, unknown>), ...((g as unknown as { moreVariety?: Record<string, unknown> }).moreVariety ?? {}) }).filter(
-        (e): e is [string, number] => e[0].endsWith("Until") && typeof e[1] === "number" && e[1] > g.time,
-      );
-      return `Timed boosts: ${timers.map(([k, until]) => `${k} ${Math.round(until - g.time)} s left`).join(", ") || "none"}.`;
-    },
-    schedule: () =>
-      `Coming up: ${g.waves.rows
-        .filter((w) => w.minute * 60 > r.time && (w.boss !== undefined || w.elite === true || (w.events?.length ?? 0) > 0))
-        .map((w) => `minute ${w.minute}: ${[...(w.boss === undefined ? [] : [`boss ${line(b, "boss", w.boss) ?? w.boss} (${w.boss})`]), ...(w.elite ? ["an elite"] : []), ...(w.events ?? []).map((e) => `event ${line(b, "event", e) ?? e} (${e})`)].join(", ")}`)
-        .join("; ") || "nothing scheduled"}.`,
+    dogs: () =>
+      t.dogs.length === 0
+        ? "Dogs: none."
+        : `Dogs:${t.dogs
+            .map((d) => {
+              const def = b.dogs.get(d.id) ?? {};
+              const facts = Object.entries(def).filter(([k]) => !["id", "name", "desc", "breed"].includes(k));
+              return `\n  - ${d.name}${typeof def.breed === "string" ? ` (${def.breed})` : ""} level ${d.level} of ${d.max}${d.description === "" ? "" : `: ${d.description}`} The game's numbers: ${facts.map(([k, val]) => `${k} ${JSON.stringify(val)}`).join(", ")}.${Object.keys(d.helped).length === 0 ? "" : ` So far: ${fields(d.helped)}.`}`;
+            })
+            .join("")}`,
+    pickups: () =>
+      `On the ground: xp worth ${w.ground.xp} and gold worth ${w.ground.gold}. Chests: ${r.chests.map((x) => `${Math.round(x.dist)} ${x.dir}`).join("; ") || "none"}. Food: ${r.food.map((x) => `${Math.round(x.dist)} ${x.dir}`).join("; ") || "none"}. Other pickups: ${r.pickups.map((x) => `${x.type} ${Math.round(x.dist)} ${x.dir}`).join("; ") || "none"}.`,
+    buffs: () => `Timed boosts: ${w.boosts.map((x) => `${x.name} ${x.endsIn} s left`).join(", ") || "none"}.`,
+    schedule: () => `Coming up: ${w.upcoming.map((x) => `${clock(x.at)} ${x.text}`).join("; ") || "nothing scheduled"}.`,
     hazards: () => {
-      const a = r.surroundings;
-      const paths = Object.entries(a.hazards.byDirection).map(([dir, kinds]) => `${dir}: ${kinds?.join(", ")}`);
-      return `Within ${a.seconds} s: underfoot ${a.hazards.underfoot.join(", ") || "nothing"}; walking into ${paths.join("; ") || "nothing"}. Attacks near: ${a.attacks.map((x) => `${x.kind} (${x.shape}) ${Math.round(x.dist)} away to the ${x.dir}${x.inside ? ", Tibo is inside" : ""}${x.landsIn === undefined ? "" : `, lands in ${x.landsIn} s`}${x.enters.length === 0 ? "" : `, walking ${x.enters.join(" or ")} enters it`}`).join("; ") || "none"}. Bullets that would hit a Tibo standing still: ${a.bullets.map((x) => `from the ${x.from} in ${x.in} s for ${x.damage}`).join("; ") || "none"}.`;
+      const a = v_.attacks;
+      const paths = DIRECTIONS.flatMap((d) => (v_.directions[d]?.enters === undefined ? [] : [`${d}: ${v_.directions[d]?.enters?.join(", ")}`]));
+      return `Within ${v_.directions.horizonMilliseconds / 1000} s: underfoot ${groundSources(r).join(", ") || "nothing"}; walking into ${paths.join("; ") || "nothing"}. Attacks near: ${a.zones.map((x) => `${x.kind} (${x.shape}) ${x.distance} away to the ${x.direction}${x.inside ? ", Tibo is inside" : ""}${x.landsIn === undefined ? "" : `, lands in ${x.landsIn} s`}${x.enters.length === 0 ? "" : `, walking ${x.enters.join(" or ")} enters it`}`).join("; ") || "none"}. Bullets that would hit a Tibo standing still: ${a.bullets.map((x) => `from the ${x.from} in ${x.in} s for ${x.damage}`).join("; ") || "none"}.`;
     },
-    events: () => `Recent game events: ${r.events.slice(-10).map((e) => `${typeof e.time === "number" ? clock(e.time) : "?"} ${JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => k !== "time")))}`).join("; ") || "none"}.`,
-    elites: () => `Elites alive: ${r.elites.map((e) => `${e.name} (${e.def}) ${Math.round(e.hp)}/${Math.round(e.maxHp)} hp, damage ${Math.round(e.damage * 10) / 10}, ${Math.round(e.dist)} away to the ${e.dir}`).join("; ") || "none"}.`,
-    counters: () => `What the game has counted this run: counters ${fields(nonzero(g.counters))}; run ${fields(nonzero(g.run))}.`,
+    events: () => `Recent game events: ${w.events.map((e) => `${clock(e.at)} ${e.text}`).join("; ") || "none"}.`,
+    elites: () => `Elites alive: ${r.elites.map((e) => `${e.name} (${e.type}) ${e.hp}/${e.maxHp} hp, ${Math.round(e.dist)} away to the ${e.dir}`).join("; ") || "none"}.`,
+    counters: () => {
+      const nonzero = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, x]) => typeof x === "number" && x !== 0));
+      return `What the game has counted this run: counters ${fields(nonzero(r.counters))}; run ${fields(nonzero(r.run))}.`;
+    },
     weapon_damage: () => {
-      const dealt = g.run.damageBySource;
+      const dealt = r.run.damageBySource;
       const minutes = Math.max(r.time, 1) / 60;
       const held = [...r.weapons].sort((a, z) => (dealt[z.id] ?? 0) - (dealt[a.id] ?? 0));
-      return `Damage dealt so far by weapon: ${held.map((w) => `${w.name} ${Math.round(dealt[w.id] ?? 0)} (${Math.round((dealt[w.id] ?? 0) / minutes)} a minute)`).join(", ") || "no weapon"}.`;
+      return `Damage dealt so far by weapon: ${held.map((x) => `${x.name} ${Math.round(dealt[x.id] ?? 0)} (${Math.round((dealt[x.id] ?? 0) / minutes)} a minute)`).join(", ") || "no weapon"}.`;
     },
   };
   const state = () =>
@@ -1163,7 +1107,7 @@ function blocks(r: World, b: Book): Record<BlockName, () => string> {
       v.weapons(),
       v.passives(),
       v.items(),
-      ...(l.banished.length === 0 ? [] : [v.banished()]),
+      ...(t.banished.length === 0 ? [] : [v.banished()]),
       v.recipes(),
       v.evolutions(),
       v.standing_on(),
@@ -1191,34 +1135,34 @@ function goalOptions(r: World): GoalOption[] {
     const last = [...outcomes].reverse().find((o) => o.id === id && !o.success);
     return until === undefined || until <= r.time || last === undefined ? "" : `; Tibo gave up on it at ${clock(last.time)} because ${last.outcome}`;
   };
-  const ready = r.combos.filter((c) => c.ready && c.combo.recipe.kind !== "union").map((c) => c.name);
+  const ready = r.view.tibo.evolves;
   return [
     ...r.chests
       .filter((c) => c.dist < PLAN_RANGE)
       .slice(0, 4)
       .map((c) => ({
-        goal: { kind: "chest" as const, uid: c.uid },
-        text: `${onChest(c) ? "stay on the chest Tibo stands on" : `walk to the chest ${Math.round(c.dist)} away to the ${c.dir} and stand on it`} for ${c.chargeNeeded ?? 1} seconds to open it, which gives a free pick${ready.length === 0 ? "" : ` and evolves ${ready.join(" and ")}`}${given(`C${c.uid}`)}`,
+        goal: { kind: "chest" as const, uid: c.id },
+        text: `${onChest(c) ? "stay on the chest Tibo stands on" : `walk to the chest ${Math.round(c.dist)} away to the ${c.dir} and stand on it`} for ${c.chargeSeconds} seconds to open it, which gives a free pick${ready.length === 0 ? "" : ` and evolves ${ready.join(" and ")}`}${given(`C${c.id}`)}`,
       })),
     ...r.spots
-      .filter((x) => x.chargeNeeded > 0 && x.dist < PLAN_RANGE)
+      .filter((x) => x.chargeSeconds > 0 && x.dist < PLAN_RANGE)
       .slice(0, 6)
       .map((x) => ({
-        goal: { kind: "poi" as const, uid: x.uid },
-        text: `${x.inside ? `stay inside the ${x.name}` : `walk to the ${x.name} ${Math.round(x.dist)} away to the ${x.dir} and stand inside it`} for ${x.chargeNeeded} seconds${x.description === "" ? "" : ` (${x.description.replace(/\.$/, "")})`}${priceWords(x, r.game.loadout.gold)}${given(`P${x.uid}`)}`,
+        goal: { kind: "poi" as const, uid: x.id },
+        text: `${x.inside ? `stay inside the ${x.name}` : `walk to the ${x.name} ${Math.round(x.dist)} away to the ${x.dir} and stand inside it`} for ${x.chargeSeconds} seconds${spotSaid(x.type) === "" ? "" : ` (${spotSaid(x.type).replace(/\.$/, "")})`}${priceWords(x, r)}${given(`P${x.id}`)}`,
       })),
-    ...r.pickups
-      .filter((x) => x.kind === "heal" && x.dist < PLAN_RANGE)
+    ...r.food
+      .filter((x) => x.dist < PLAN_RANGE)
       .slice(0, 2)
-      .map((x) => ({ goal: { kind: "food" as const, uid: x.uid }, text: `walk to the food ${Math.round(x.dist)} away to the ${x.dir}, which heals Tibo` })),
+      .map((x) => ({ goal: { kind: "food" as const, uid: x.id }, text: `walk to the food ${Math.round(x.dist)} away to the ${x.dir}, which heals Tibo` })),
     // The knobs can keep elite fights off the table early or at low health, which no prompt rule
     // managed: on Nightmare 2 a 1:00 elite fight cost 37 to 103 health in live games.
     ...r.elites
       .filter((e) => e.dist < PLAN_RANGE && r.time >= knobs().eliteFrom && r.hp >= knobs().eliteMinHp * r.maxHp)
       .slice(0, 2)
       .map((e) => ({
-        goal: { kind: "elite" as const, uid: e.uid },
-        text: `fight the ${e.name} elite ${Math.round(e.dist)} away to the ${e.dir} (${e.hp} health left): keep it within reach of Tibo's weapons for up to ${knobs().eliteSeconds} seconds until it dies, which drops a chest${given(`E${e.uid}`)}`,
+        goal: { kind: "elite" as const, uid: e.id },
+        text: `fight the ${e.name} elite ${Math.round(e.dist)} away to the ${e.dir} (${e.hp} health left): keep it within reach of Tibo's weapons for up to ${knobs().eliteSeconds} seconds until it dies, which drops a chest${given(`E${e.id}`)}`,
       })),
     ...r.sectors.map((s) => ({
       goal: { kind: "explore" as const, dir: s.dir },
@@ -1245,12 +1189,12 @@ class Planner {
 
   /** Why to plan again while a goal is under way, if anything. */
   due(r: World): string | undefined {
-    const fresh = r.bosses.find((b) => !this.seenBosses.has(b.def));
+    const fresh = r.bosses.find((b) => !this.seenBosses.has(b.type));
     let why: string | undefined;
     if (this.picked) why = "a card was just taken";
     else if (fresh !== undefined) why = `a boss appeared: ${fresh.name}, ${Math.round(fresh.dist)} away to the ${fresh.dir}`;
     else if (r.time - this.lastAsked >= planEvery()) why = `${planEvery()} seconds passed`;
-    for (const b of r.bosses) this.seenBosses.add(b.def);
+    for (const b of r.bosses) this.seenBosses.add(b.type);
     return why;
   }
 
@@ -1272,7 +1216,7 @@ class Planner {
     // once the key said so. So everything the model should weigh goes into the key.
     const keys = new Map<string, Card>();
     for (const [i, o] of (options ?? []).entries()) keys.set(`${i}: ${o.text}`, o);
-    const kind = r.game.choiceQueue[0]?.kind ?? "choice";
+    const kind = r.view.choice?.kind ?? "choice";
     const question = render(templates.planner.pick, { ...vars, choice: () => kind });
     if (options !== undefined) questions.pick = { type: "choice", instructions: question, criteria: Object.fromEntries([...keys].map(([k, o]) => [k, o.text])) };
     const started = performance.now();
@@ -1332,7 +1276,7 @@ class Planner {
   }
 
   /** The run ended: its notes are written, then the coach reviews it. */
-  async finish(end: GameJson, last: World | undefined, ladder: number | undefined, healed: number) {
+  async finish(end: EndJson, last: World | undefined, ladder: number | undefined, healed: number) {
     const lived = Math.round(end.runClock * 10) / 10;
     const kills = Number(end.run.kills ?? 0);
     await this.notes.finish({
@@ -1365,10 +1309,10 @@ let deadPicks: { signature: string; names: Set<string> } = { signature: "", name
 async function choose(r: World, planner: Planner, log: RunLog) {
   const b = await readBook();
   if (b === undefined) throw new Error("the game's encyclopedia has not arrived; the bot reads it before the first decision");
-  const options = cards(r, b);
-  const open = r.game.choiceQueue[0]?.kind ?? "choice";
+  const options = cards(r);
+  const open = r.view.choice?.kind ?? "choice";
   if (options.length === 0) throw new Error(`a ${open} choice with nothing to take`);
-  const signature = `${r.game.tick}|${options.map((o) => o.text).join("|")}`;
+  const signature = `${r.time}|${options.map((o) => o.text).join("|")}`;
   if (deadPicks.signature !== signature) deadPicks = { signature, names: new Set() };
   const takeable = options.filter((o) => !deadPicks.names.has(o.text));
   if (takeable.length === 0) throw new Error(`every option of this ${open} choice was tried without closing it: ${options.map((o) => o.name).join(", ")}`);
@@ -1438,11 +1382,12 @@ async function startRun(weapon = ""): Promise<void> {
 
 let recordCrash: ((e: unknown) => Promise<void>) | undefined;
 
+/** What the game holds of a run the bot needs once it is over, when the live view is gone, under the game's keys. */
+type EndJson = { runClock: number; over: boolean; run: World["run"]; counters: Record<string, number>; loadout: { level: number; shrineTotals: Record<string, number> } };
+const ended = (s: Snap) => s.game as EndJson | undefined;
 /** The seed of the run the tab holds, from the game's `run.seed`. */
-const gameSeed = (s: Snap) => (s.game as GameJson | undefined)?.run.seed?.toString();
-const runClock = (s: Snap) => (s.game as GameJson | undefined)?.runClock ?? 0;
-/** The difficulty as the HUD names it, such as "nightmare-3": the game's `difficulty` and, on Nightmare, its `cfg.ladder.level`. */
-const levelName = (g: GameJson) => (g.difficulty === "nightmare" ? `nightmare-${g.cfg.ladder.level}` : g.difficulty);
+const gameSeed = (s: Snap) => ended(s)?.run.seed?.toString();
+const runClock = (s: Snap) => ended(s)?.runClock ?? 0;
 
 async function main() {
   await mkdir(path.dirname(LOG), { recursive: true });
@@ -1475,15 +1420,15 @@ async function main() {
   };
   const now = await api<Snap>(STATE);
   // Every run the bot starts begins fresh, so a Daily always begins at tick 0 on its fixed seed.
-  let adopted = TAKEOVER && now.game !== undefined && now.screen !== "over" && now.screen !== "title";
+  let adopted = TAKEOVER && now.tibo !== undefined && now.screen !== "over" && now.screen !== "title";
   if (TRIAL !== undefined && !adopted) throw new Error("--trial plays the run in progress, and there is none; start a run and load a checkpoint first");
   let trialStart: World | undefined;
-  const endTrial = async (end: World | undefined, died: GameJson | undefined) => {
+  const endTrial = async (end: World | undefined, died: EndJson | undefined) => {
     const start = trialStart;
     if (start === undefined || end === undefined) throw new Error("the trial ended before its first step");
-    const final = died ?? end.game;
-    const totals = loop.totalsBetween(loop.talliesOf(final), loop.talliesOf(start.game));
-    const endTime = final.runClock;
+    const tallies = (r: World) => ({ run: r.run, counters: r.counters, loadout: { shrineTotals: r.view.tibo.shrineTotals } });
+    const totals = loop.totalsBetween(loop.talliesOf(died ?? tallies(end)), loop.talliesOf(tallies(start)));
+    const endTime = died?.runClock ?? end.time;
     const run = (totals.run ?? {}) as Record<string, unknown>;
     const result = {
       survived: Math.round((endTime - start.time) * 10) / 10,
@@ -1491,12 +1436,12 @@ async function main() {
       start: start.time,
       end: endTime,
       hp: { start: Math.round(start.hp), end: died === undefined ? Math.round(end.hp) : 0, max: Math.round(end.maxHp) },
-      level: { start: start.game.loadout.level, end: final.loadout.level },
+      level: { start: start.view.tibo.level.level, end: died?.loadout.level ?? end.view.tibo.level.level },
       kills: Number(run.kills ?? 0),
       damageTaken: (run.damageTakenBySource ?? {}) as Record<string, number>,
       totals,
-      weapons: final.loadout.weapons.map((w) => `${w.def} ${w.level}`),
-      passives: final.loadout.passives.map((p) => `${p.def} ${p.level}`),
+      weapons: end.weapons.map((w) => `${w.id} ${w.level}`),
+      passives: end.passives.map((p) => `${p.id} ${p.level}`),
       steps,
       plannerCalls: planner?.calls ?? 0,
       actionCalls: latency.length - (planner?.calls ?? 0),
@@ -1557,8 +1502,8 @@ async function main() {
     const s = polled.connected ? polled : await reconnected();
     await fillLink(s);
     if (s.screen === "title" || s.screen === "over") {
-      const over = s.game !== undefined && (s.game as GameJson).over ? (s.game as GameJson) : undefined;
-      if (TRIAL !== undefined) return endTrial(last, over ?? last?.game);
+      const over = ended(s)?.over === true ? ended(s) : undefined;
+      if (TRIAL !== undefined) return endTrial(last, over ?? (last === undefined ? undefined : { runClock: last.time, over: true, run: last.run, counters: last.counters, loadout: { level: last.view.tibo.level.level, shrineTotals: last.view.tibo.shrineTotals } }));
       if (s.screen === "over" && over !== undefined && runs > 0 && notes !== undefined && planner !== undefined && runLog !== undefined) {
         const avg = latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length);
         const lived = over.runClock;
@@ -1620,7 +1565,7 @@ async function main() {
       continue;
     }
     const b = await readBook();
-    const r = b === undefined ? undefined : see(s, b);
+    const r = b === undefined ? undefined : see(s);
     if (r === undefined) {
       await Bun.sleep(100);
       continue;
@@ -1629,7 +1574,7 @@ async function main() {
     piloted = s.pace !== undefined;
     const incognito = s.incognito ?? false;
     if (notes === undefined || planner === undefined || runLog === undefined) {
-      const setup: RunSetup = { started: new Date(), difficulty: levelName(r.game), mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: String(r.game.run.seed), planner: PLAN_MODEL, action: MODEL, coach: COACH_LABEL, bot: BOT_CODE };
+      const setup: RunSetup = { started: new Date(), difficulty: r.view.world.difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: String(r.run.seed), planner: PLAN_MODEL, action: MODEL, coach: COACH_LABEL, bot: BOT_CODE };
       const skip = !NOTES ? "no --notes" : adopted ? "taken over mid-run" : incognito ? "incognito" : undefined;
       const prompts = "see the coach's log";
       templates = plan.templates;
@@ -1640,7 +1585,7 @@ async function main() {
       runLog = new RunLog(notes.log);
       planner = new Planner(notes, runLog);
       resetGoals();
-      console.log(`run seed ${String(r.game.run.seed)}${MODE === "daily" ? " (daily)" : ""}, ${skip === undefined ? "notes at the end" : `no notes (${skip})`}, templates from ${plan.source}, log ${notes.log}`);
+      console.log(`run seed ${String(r.run.seed)}${MODE === "daily" ? " (daily)" : ""}, ${skip === undefined ? "notes at the end" : `no notes (${skip})`}, templates from ${plan.source}, log ${notes.log}`);
     }
     last = r;
     trialStart ??= r;
@@ -1649,10 +1594,10 @@ async function main() {
       lastReport = Math.floor(r.time / 30);
       const per = (ms: number) => Math.round(ms / Math.max(1, timings.steps));
       console.log(
-        `${r.time}s hp ${Math.round(r.hp)}/${Math.round(r.maxHp)} lv ${r.game.loadout.level} enemies on screen ${onScreen(r)} ${r.weapons.map((w) => `${w.id}:${w.level}`).join(",")} | per step: state ${per(timings.state)}ms decide ${per(timings.decide)}ms command ${per(timings.command)}ms`,
+        `${r.time}s hp ${Math.round(r.hp)}/${Math.round(r.maxHp)} lv ${r.view.tibo.level.level} enemies on screen ${onScreen(r)} ${r.weapons.map((w) => `${w.id}:${w.level}`).join(",")} | per step: state ${per(timings.state)}ms decide ${per(timings.decide)}ms command ${per(timings.command)}ms`,
       );
       Object.assign(timings, { state: 0, decide: 0, command: 0, steps: 0 });
-      log.write(`${JSON.stringify({ event: "tick", time: r.time, hp: r.hp, level: r.game.loadout.level, enemies: onScreen(r) })}\n`);
+      log.write(`${JSON.stringify({ event: "tick", time: r.time, hp: r.hp, level: r.view.tibo.level.level, enemies: onScreen(r) })}\n`);
       log.flush();
     }
     steps++;

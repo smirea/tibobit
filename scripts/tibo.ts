@@ -3,27 +3,25 @@ import {
   BRIDGE_ORIGIN as DEFAULT_ORIGIN,
   type CheckpointMeta,
   type CommandStatus,
-  type Snapshot,
+  type State,
   bridgeOrigin,
   validPort,
 } from "../src/agent/protocol";
 
 const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
 
-  state [path] [--format text|json] [--raw=<groups>]
-                                  the snapshot: \`game\` is the game's state object under its own keys
-                                  (src/agent/reflect.ts says how it is made into JSON), \`surroundings\`
-                                  and \`forecast\` say what is around Tibo and what each move would cost,
-                                  plus the screen, the game's localStorage and the commands. A path such
-                                  as game.loadout or surroundings shows only that part. text is an
-                                  indented tree, with a list of entries as a table; json is it all on
-                                  one line.
-                                  The game state holds only what a live game needs (LIVE_GAME in
-                                  src/agent/protocol.ts). --raw adds game state paths left out, such as
-                                  enemies, pickups, bullets, zones, world.activeHazards, run, counters or
-                                  cfg, or storage, or all. They are large and mostly noise for play, and
-                                  surroundings and forecast already say what in them matters. Ask for
-                                  one only to look into something those cannot show.
+  state [path] [--format text|json] [--raw=<paths>]
+                                  the game as a live game needs it: time, screen, world, tibo, each
+                                  direction (enemies, the damage the game's own simulation says it
+                                  costs over horizonMilliseconds, and what lies that way by id and
+                                  type), attacks and the open choice (LiveView in
+                                  src/agent/protocol.ts). A path such as tibo or directions.left shows
+                                  only that part; text reads as m:ss and hp/max, json is it all.
+                                  --raw adds the game's own state under game, by its own keys:
+                                  enemies, pickups, bullets, zones, world.activeHazards, run, counters,
+                                  cfg and the like, or storage, surroundings, forecast, or all. It is
+                                  large and mostly noise for play; the view already says what in it
+                                  matters. Ask for it only to look into something the view cannot show.
   watch [path] [--raw=<groups>]   the text state, refreshed 4 times a second
   encyclopedia [section]          JSON of the game's content: weapons, passives, items, recipes, enemies,
                                   bosses, dogs, pois, events, botHelps, biomes, glossary, rules
@@ -54,7 +52,7 @@ training ground:
 Commands wait until they finish (except move without seconds); add --no-wait to return at once.
 The agent server defaults to $TIBO_SERVER, then ${DEFAULT_ORIGIN}; --port picks another one on 127.0.0.1.`;
 
-type Snap = Snapshot & { connected: boolean; ageMs: number };
+type Snap = State;
 
 let server = DEFAULT_ORIGIN;
 
@@ -141,8 +139,95 @@ function stateRoute(words: string[]): string {
   return raw === undefined ? "/state" : `/state?raw=${encodeURIComponent(raw)}`;
 }
 
+const mmss = (seconds: number) => clock(seconds);
+const said = (name: string, description?: string) => (description === undefined || description === "" ? name : `${name}: ${description.replace(/\s+/g, " ").trim()}`);
+
+/** The live view as a person or a model reads it: times as m:ss, health as hp/max, a line per thing. */
+function display(s: Snap): Record<string, unknown> {
+  const { connected: _c, ageMs: _a, capturedAt: _t, headless: _h, gameBuild: _g, commands, pace: _p, incognito: _i, time, world, tibo, directions, attacks, choice, ...rest } = s;
+  const out: Record<string, unknown> = {};
+  if (time !== undefined) out.time = mmss(time);
+  Object.assign(out, rest);
+  if (world !== undefined)
+    out.world = {
+      ...world,
+      winAt: mmss(world.winAt),
+      biome: world.biome.name,
+      ...(world.landmark === undefined ? {} : { landmark: `${world.landmark.name}${world.landmark.event === undefined ? "" : `, event ${world.landmark.event}`}` }),
+      upcoming: world.upcoming.map((u) => `${mmss(u.at)} ${u.text}`),
+      boosts: world.boosts.map((b) => `${b.name} ${b.endsIn}s left`),
+      events: world.events.map((e) => `${mmss(e.at)} ${e.text}`),
+    };
+  if (tibo !== undefined)
+    out.tibo = {
+      life: `${tibo.life.hp}/${tibo.life.max}`,
+      level: `${tibo.level.level} (${tibo.level.xp}/${tibo.level.next} xp)`,
+      gold: tibo.gold,
+      dash: `${tibo.dash.charges}/${tibo.dash.max}${tibo.dash.readyIn > 0 ? `, next in ${tibo.dash.readyIn}s` : ""}`,
+      position: `${tibo.position.x}, ${tibo.position.y}`,
+      ...(Object.keys(tibo.status).length === 0 ? {} : { status: tibo.status }),
+      rerolls: tibo.rerolls,
+      skips: tibo.skips,
+      banishes: tibo.banishes,
+      ...(tibo.banished.length === 0 ? {} : { banished: tibo.banished }),
+      revives: tibo.revives,
+      weapons: tibo.weapons.map((w) => said(`${w.name} ${w.level}/${w.max}`, w.description)),
+      passives: tibo.passives.map((p) => said(`${p.name} ${p.level}/${p.max}`, p.description)),
+      items: tibo.items.map((i) => said(`${i.name} x${i.count}`, i.description)),
+      dogs: tibo.dogs.map((d) => `${said(`${d.name} ${d.level}/${d.max}`, d.description)}${Object.keys(d.helped).length === 0 ? "" : ` (${Object.entries(d.helped).map(([k, v]) => `${k} ${v}`).join(", ")})`}`),
+      stats: tibo.stats,
+      shrineTotals: tibo.shrineTotals,
+      evolves: tibo.evolves,
+      recipes: tibo.recipes,
+      hurtBy: tibo.hurtBy,
+    };
+  if (directions !== undefined) {
+    const { horizonMilliseconds, ...ways } = directions;
+    out.directions = {
+      horizonMilliseconds,
+      ...Object.fromEntries(
+        Object.entries(ways).map(([dir, d]) => {
+          if (d === undefined) return [dir, ""];
+          const head = [`enemies ${d.enemies}`, `damage ${d.estimatedDamage}${d.dead ? " (dead)" : ""}${d.damageFrom === undefined ? "" : ` from ${d.damageFrom.join(", ")}`}`, ...(d.bullets === undefined ? [] : [`bullets ${d.bullets}`]), ...(d.enters === undefined ? [] : [`enters ${d.enters.join(", ")}`])].join(", ");
+          const aims = [
+            ...(d.bosses ?? []).map((x) => `boss ${x.name} #${x.id} ${x.distance} away, ${x.hp}/${x.maxHp} hp`),
+            ...(d.elites ?? []).map((x) => `elite ${x.name} #${x.id} ${x.distance} away, ${x.hp}/${x.maxHp} hp`),
+            ...(d.chests ?? []).map((x) => `chest #${x.id} ${x.distance} away, ${x.charged}/${x.chargeSeconds}s`),
+            ...(d.food ?? []).map((x) => `food #${x.id} ${x.distance} away`),
+            ...(d.spots ?? []).map((x) => `${x.name} (${x.type}) #${x.id} ${x.distance} away, ${x.charged}/${x.chargeSeconds}s`),
+            ...(d.pickups ?? []).map((x) => `${x.type} #${x.id} ${x.distance} away`),
+          ];
+          return [dir, aims.length === 0 ? head : [head, ...aims]];
+        }),
+      ),
+    };
+  }
+  if (attacks !== undefined)
+    out.attacks = {
+      bullets: attacks.bullets.map((b) => `from ${b.from} in ${b.in}s, ${b.damage} damage`),
+      zones: attacks.zones.map((z) => `${z.kind} (${z.shape}) ${z.distance} ${z.direction}${z.inside ? ", Tibo inside" : ""}${z.landsIn === undefined ? "" : `, lands in ${z.landsIn}s`}${z.enters.length === 0 ? "" : `, enters walking ${z.enters.join(" ")}`}`),
+      volleys: attacks.volleys.map((v) => `${v.distance} ${v.direction}, fires in ${v.firesIn}s, ${v.count} x ${v.bursts}, ${v.damage} damage`),
+    };
+  if (choice !== undefined) {
+    const { kind, options, ...about } = choice;
+    out.choice = {
+      kind,
+      ...about,
+      options: options.map((o) => {
+        const { action, name, description, ...more } = o;
+        const act = "index" in action ? `${action.type} ${action.index}` : action.type;
+        const extra = Object.entries(more).map(([k, v]) => `${k} ${Array.isArray(v) ? v.join("; ") : v}`);
+        return `[${act}] ${said(name, description)}${extra.length === 0 ? "" : ` (${extra.join(", ")})`}`;
+      }),
+    };
+  }
+  const running = commands.filter((c) => c.state === "running");
+  if (running.length > 0) out.commands = running.map((c) => JSON.stringify(c.command));
+  return out;
+}
+
 function render(s: Snap, path: string | undefined): string {
-  const lines = tree(pick(s, path));
+  const lines = tree(path === undefined ? display(s) : pick(s, path));
   if (!s.connected) lines.unshift("the tibo.dog tab is not connected");
   return lines.join("\n");
 }

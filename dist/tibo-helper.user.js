@@ -376,6 +376,25 @@
 
   // src/agent/surroundings.ts
   var REACH = 300;
+  var NEAR = 60;
+  var HURT_WINDOW_TICKS = 180;
+  var hurtHistory = [];
+  function recentHurt(s) {
+    const totals = new Map(s.run.damageTakenBySource);
+    if (hurtHistory.length > 0 && (hurtHistory.at(-1)?.tick ?? 0) > s.tick)
+      hurtHistory = [];
+    hurtHistory.push({ tick: s.tick, totals });
+    while (hurtHistory.length > 1 && (hurtHistory[1]?.tick ?? 0) <= s.tick - HURT_WINDOW_TICKS)
+      hurtHistory.shift();
+    const before = hurtHistory[0]?.totals ?? new Map;
+    const out = {};
+    for (const [source, total] of totals) {
+      const delta = total - (before.get(source) ?? 0);
+      if (delta >= 0.5)
+        out[source] = round(delta);
+    }
+    return out;
+  }
   var PATH_SAMPLES = [0.25, 0.5, 0.75, 1];
   function directionOf(dx, dy) {
     const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
@@ -406,11 +425,14 @@
     const hidden = enums?.enemyFlags.Hidden ?? 0;
     const byDirection = Object.fromEntries(DIRECTIONS.map((d) => [d, 0]));
     let onScreen = 0;
+    let near = 0;
     for (const i of alive(s.enemies)) {
       if ((s.enemies.flags[i] ?? 0) & hidden)
         continue;
       const dx = (s.enemies.x[i] ?? 0) - px;
       const dy = (s.enemies.y[i] ?? 0) - py;
+      if (Math.hypot(dx, dy) <= NEAR)
+        near++;
       if (Math.abs(dx) > halfW || Math.abs(dy) > halfH)
         continue;
       onScreen++;
@@ -518,7 +540,7 @@
         items.push({ ...p, ...bearing(dx, dy) });
     }
     items.sort((a, z) => a.dist - z.dist);
-    return { seconds, enemies: { onScreen, byDirection }, elites, bullets, volleys, attacks, hazards: { underfoot, byDirection: hazardPaths }, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
+    return { seconds, hurtBy: recentHurt(s), enemies: { onScreen, near, byDirection }, elites, bullets, volleys, attacks, hazards: { underfoot, byDirection: hazardPaths }, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
   }
 
   // src/agent/snapshot.ts

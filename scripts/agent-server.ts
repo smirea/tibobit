@@ -2,7 +2,9 @@
 import { mkdir, readdir, rename } from "node:fs/promises";
 import path from "node:path";
 import type { ServerWebSocket, Subprocess } from "bun";
-import { BRIDGE_PORT, CHECKPOINT_NAME, liveView, parseRaw, type CheckpointMeta, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, DEFAULT_SETTINGS, type PilotChange, type PilotSettings, parseChatLine, parseCommand, parsePilotChange, trimChat } from "../src/agent/protocol";
+import { type Book, readBook } from "./book";
+import { liveView } from "./view";
+import { BRIDGE_PORT, CHECKPOINT_NAME, type LiveView, parseRaw, rawParts, type State, type CheckpointMeta, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, DEFAULT_SETTINGS, type PilotChange, type PilotSettings, parseChatLine, parseCommand, parsePilotChange, trimChat } from "../src/agent/protocol";
 
 const KEEPALIVE_MS = 5_000;
 const option = (name: string, fallback: string) => {
@@ -26,7 +28,9 @@ async function checkpoints(): Promise<CheckpointMeta[]> {
 // --pilot "<tibo-bot.ts flags>", such as --pilot "--model laya@q8_0" for LM Studio.
 const PILOT_ARGS = option("pilot", "--decider openrouter --model typesafe/jev-1.14-20261014 --mode current --difficulty nightmare").split(/\s+/).filter(Boolean);
 
-let latest: { snapshot: Snapshot } | undefined;
+let latest: { snapshot: Snapshot; view?: LiveView } | undefined;
+/** The game's content for building the live view; rebuilt whenever the page sends its encyclopedia. */
+let content: Book | undefined;
 let book: Encyclopedia | undefined;
 let page: ReadableStreamDefaultController<Uint8Array> | undefined;
 // Which tab holds the stream, so that tab can take it back when its old stream outlives a reconnect.
@@ -111,13 +115,14 @@ async function jsonBody(req: Request): Promise<unknown> {
   return req.json();
 }
 
-/** The latest snapshot for a client, with only the raw groups it asked for. */
-function state(raw: string[] = []) {
+/** The latest state for a client: the live view, and the raw parts it asked for. */
+function state(raw: string[] = []): State | undefined {
   if (latest === undefined) return undefined;
+  const { game: _, surroundings: _s, forecast: _f, storage: _st, gameEvents: _e, ...meta } = latest.snapshot;
   // The settings tell a running bot, every step, how often to plan and act and whether to keep
   // notes. Only a bot the panel started follows them; one started by hand keeps its own flags.
   const settings: Partial<PilotSettings> = pilot.state === "off" ? {} : { pace: pilot.pace, incognito: pilot.incognito };
-  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, ...settings, ...liveView(latest.snapshot, raw) };
+  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, ...settings, ...meta, ...latest.view, ...rawParts(latest.snapshot, raw) };
 }
 
 function statusOf(id: number): CommandStatus | undefined {
@@ -163,10 +168,9 @@ function errorResponse(e: unknown, status = 400) {
 
 const HELP = `tibo.dog agent server
 
-GET  /state          latest snapshot: what of the game state a live game needs (LIVE_GAME in
-                     src/agent/protocol.ts), surroundings and forecast; ?raw=enemies,cfg,run,world.activeHazards,
-                     storage or all adds game state paths left out. They are large and mostly noise for play:
-                     read surroundings and forecast first
+GET  /state          the game as a live game needs it (LiveView in src/agent/protocol.ts), the screen and the
+                     commands; ?raw=enemies,cfg,run,world.activeHazards,storage,surroundings,forecast or all adds
+                     the game's own state under \`game\`. It is large and mostly noise for play: read the view first
 WS   /ws?raw=...     pushes every snapshot, raw groups as for /state; send a JSON command to run it
 GET  /encyclopedia   every weapon, passive, item, recipe, enemy, boss, point of interest and biome
 POST /command        JSON command, see src/agent/protocol.ts; add ?wait=1 to block until it finishes
@@ -238,7 +242,9 @@ const server = Bun.serve<{ raw: string[] }>({
           );
         }
         case "POST /bridge/state": {
-          latest = { snapshot: (await req.json()) as Snapshot };
+          const snapshot = (await req.json()) as Snapshot;
+          const view = content === undefined ? undefined : liveView(snapshot, content);
+          latest = { snapshot, ...(view === undefined ? {} : { view }) };
           for (const done of [...waiters]) done();
           for (const ws of sockets) {
             try {
@@ -251,6 +257,7 @@ const server = Bun.serve<{ raw: string[] }>({
         }
         case "POST /bridge/encyclopedia":
           book = (await req.json()) as Encyclopedia;
+          content = readBook(book);
           console.log(`encyclopedia: ${book.weapons.length} weapons, ${book.passives.length} passives, ${book.items.length} items, ${book.dogs.length} dogs, ${book.pois.length} pois`);
           return new Response(null, { status: 204 });
         case "GET /state": {

@@ -4,7 +4,7 @@
 // time (tibo-bot.ts --trial). A gym is built the same way and saved at its time.
 import path from "node:path";
 import { closeSync, mkdirSync, openSync } from "node:fs";
-import type { CheckpointMeta, CommandStatus, LoadoutSpec, Snapshot } from "../src/agent/protocol";
+import type { CheckpointMeta, CommandStatus, LoadoutSpec, State } from "../src/agent/protocol";
 import { type Gym, type Templates, type Totals, clock, runStats } from "./gameplay";
 
 const ROOT = path.join(import.meta.dir, "..");
@@ -52,7 +52,7 @@ export type GameSpec = {
 
 export type GameResult = { spec: GameSpec; seed: string; difficulty: string; result?: TrialResult; stats?: string; savedGym?: CheckpointMeta; error?: string };
 
-type Snap = Snapshot & { connected: boolean };
+type Snap = State;
 
 /** A random Open World seed, as the game rolls them, that is not the evaluation seed. */
 export function freshSeed(evalSeed: string): string {
@@ -158,7 +158,7 @@ export class Slot {
     return status;
   }
 
-  /** The snapshot, with the game state paths in `raw` beyond what a live game needs (see LIVE_GAME); `run` holds the seed. */
+  /** The state, with the game's own state paths in `raw` (`run` holds the seed). */
   state = (raw = "run") => this.api<Snap>(`/state?raw=${raw}`);
 
   async connected(limitMs: number): Promise<Snap> {
@@ -311,7 +311,7 @@ export class Slot {
       // Played in stages, each saved: a death replays that stage from its start (the models choose
       // differently each time) rather than the whole game from 0:00.
       const stage = `gym-${gym.name}-stage`;
-      let time = ((await this.state()).game as { runClock?: number } | undefined)?.runClock ?? 0;
+      let time = (await this.state()).time ?? 0;
       while (time < gym.at - 1) {
         await this.command({ type: "checkpoint", op: "save", name: stage });
         const seconds = Math.min(GYM_STAGE_SECONDS, Math.ceil(gym.at - time));
