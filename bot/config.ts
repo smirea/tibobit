@@ -93,3 +93,6 @@ export const TAKEOVER = TRIAL !== undefined || has("takeover");
 export const RELOAD = option("reload", `${headlessOrigin(HEADLESS_PORT)}/reload`);
 
 export const LOG = option("log", path.join(RUNS, `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
+
+// One CSV row per model call and per goal that starts or ends goes to a file in this folder, outside the repo.
+export const LOG_DIR = option("log-dir", "/tmp/tibobit");

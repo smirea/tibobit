@@ -1,14 +1,13 @@
 import path from "node:path";
-import { book, groundSources, pct, said, spotLine } from "../phrasing";
+import { groundSources, pct, said, spotLine } from "../phrasing";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { option } from "../config";
 import type { World } from "../world";
 import { clock } from "../../clock";
-const csvField = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+import { bossCell, changeCell, changesCell, eliteCell, hurtCell, listCell, placeCell } from "./cells";
+import { csvField } from "../../csv";
 
 // One CSV row per model call and per goal that starts or ends, with the player's state at that
 // moment, so a run can be read back decision by decision. The post-run review reads it.
-export const LOG_DIR = option("log-dir", "/tmp/tibobit");
 
 // Numbers first and free text last, so a reader splitting on commas gets the numbers right.
 const LOG_COLUMNS = [
@@ -71,7 +70,7 @@ export class RunLog {
     const gained = r === undefined || this.hp === undefined ? 0 : Math.max(0, Math.round(r.hp - this.hp));
     this.healed += gained;
     if (r !== undefined) this.hp = r.hp;
-    const at = (x: { dist: number; dir: string }) => `${Math.round(x.dist)} ${x.dir}`;
+    const at = placeCell.encode;
     const t = r?.view.tibo;
     const state: Partial<Record<(typeof LOG_COLUMNS)[number], string | number>> =
       r === undefined || t === undefined
@@ -90,19 +89,19 @@ export class RunLog {
             y: Math.round(r.y),
             dash: t.dash.charges,
             enemies: r.view.world.enemiesOnScreen,
-            bosses: r.bosses.map((b) => `${b.name} (${b.type}) ${at(b)} ${pct(b.hp, b.maxHp)}% of ${Math.round(b.maxHp)}`).join("; "),
+            bosses: listCell.encode(r.bosses.map(bossCell.encode)),
             dealt: Math.round(Object.values(r.run.damageBySource).reduce((a, b) => a + b, 0)),
             elites: r.run.elitesKilled,
-            elite_list: r.elites.slice(0, 3).map((e) => `${e.id} ${e.name} (${e.type}) ${Math.round(e.hp)}/${Math.round(e.maxHp)} ${at(e)}`).join("; "),
-            hurt_by: Object.entries(r.hurtBy).map(([k, v]) => `${k} ${v}`).join("; "),
+            elite_list: listCell.encode(r.elites.slice(0, 3).map(eliteCell.encode)),
+            hurt_by: listCell.encode(Object.entries(r.hurtBy).map(hurtCell.encode)),
             standing_on: spotLine(r) ?? "",
-            underfoot: groundSources(r).join("; "),
-            chests: r.chests.slice(0, 3).map(at).join("; "),
-            food: r.food.slice(0, 2).map(at).join("; "),
-            pois: r.spots.filter((x) => x.chargeSeconds > 0).slice(0, 4).map((x) => `${x.name} ${at(x)}`).join("; "),
-            weapons: r.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join("; "),
-            passives: r.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join("; "),
-            items: r.items.map((i) => `${i.name} x${i.count}`).join("; "),
+            underfoot: listCell.encode(groundSources(r)),
+            chests: listCell.encode(r.chests.slice(0, 3).map(at)),
+            food: listCell.encode(r.food.slice(0, 2).map(at)),
+            pois: listCell.encode(r.spots.filter((x) => x.chargeSeconds > 0).slice(0, 4).map((x) => `${x.name} ${at(x)}`)),
+            weapons: listCell.encode(r.weapons.map((w) => `${w.name} ${w.level}/${w.max}`)),
+            passives: listCell.encode(r.passives.map((w) => `${w.name} ${w.level}/${w.max}`)),
+            items: listCell.encode(r.items.map((i) => `${i.name} x${i.count}`)),
           };
     const values = { ...state, ...row, wall: new Date().toISOString().slice(11, 19) } as Record<string, string | number | undefined>;
     appendFileSync(this.file, `${LOG_COLUMNS.map((c) => csvField(String(values[c] ?? ""))).join(",")}\n`);
@@ -121,15 +120,15 @@ export class RunLog {
   loadoutChange(r: World): string | undefined {
     const now = new Map([...r.weapons, ...r.passives].map((x) => [x.name, `${x.level}/${x.max}`] as [string, string]));
     // A new item carries the game's description, so a review can tell what it should have changed.
-    const itemSaid = new Map(r.items.map((i) => [i.name, book === undefined ? "" : said(book, "item", i.id).replace(/^: (.*)$/, " ($1)")] as [string, string]));
+    const itemSaid = new Map(r.items.map((i) => [i.name, said(r.book, "item", i.id).replace(/^: (.*)$/, " ($1)")] as [string, string]));
     for (const i of r.items) now.set(i.name, `x${i.count}`);
     const before = this.held;
     this.held = now;
     if (before === undefined) return undefined;
     const changes = [
-      ...[...now].filter(([k, v]) => before.get(k) !== v).map(([k, v]) => (before.has(k) ? `${k} ${before.get(k)} to ${v}` : `${k} ${v} new${itemSaid.get(k) ?? ""}`)),
-      ...[...before.keys()].filter((k) => !now.has(k)).map((k) => `${k} gone`),
+      ...[...now].filter(([k, v]) => before.get(k) !== v).map(([k, v]) => changeCell.encode({ name: k, now: v, ...(before.has(k) ? { before: before.get(k) } : { said: itemSaid.get(k) }) })),
+      ...[...before.keys()].filter((k) => !now.has(k)).map((k) => changeCell.encode({ name: k })),
     ];
-    return changes.length === 0 ? undefined : changes.join(", ");
+    return changes.length === 0 ? undefined : changesCell.encode(changes);
   }
 }

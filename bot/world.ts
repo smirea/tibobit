@@ -3,6 +3,7 @@
 // for with `raw` to write its logs and results.
 import type { Aim, DirectionView, LiveView, LoadoutItem, State } from "../protocol/view";
 import { type Direction, DIRECTIONS } from "../protocol/geometry";
+import type { Book } from "../game/book";
 
 /** Where a target is: its distance, and the way to walk to it, or "still" when Tibo stands on or in it. */
 type Placed = { dist: number; dir: Direction | "still" };
@@ -17,6 +18,8 @@ export type Sector = { dir: Direction; enemies: number; bullets: number };
 type RunJson = Record<string, unknown> & { seed: string; kills: number; killer: string; damageTakenBySource: Record<string, number>; damageBySource: Record<string, number>; elitesKilled: number };
 
 export type World = {
+  /** The game's content: names and descriptions by the game's ids. */
+  book: Book;
   state: State;
   view: LiveView;
   run: RunJson;
@@ -40,7 +43,7 @@ export type World = {
   dps: number;
 };
 
-export function see(s: State): World | undefined {
+export function see(s: State, book: Book): World | undefined {
   const { time, tibo, directions } = s;
   const run = s.game?.run as RunJson | undefined;
   if (time === undefined || tibo === undefined || directions === undefined || s.world === undefined || s.attacks === undefined || run === undefined) return undefined;
@@ -53,6 +56,7 @@ export function see(s: State): World | undefined {
       })
       .sort((a, z) => a.dist - z.dist);
   return {
+    book,
     state: s,
     view,
     run,

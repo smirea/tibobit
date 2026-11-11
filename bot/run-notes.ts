@@ -2,7 +2,7 @@ import path from "node:path";
 import { keyNumbers, runStats } from "./run-log/reader";
 import { NOTES_DIR, notesName, renderNotes, type RunEnd, runId, type RunPlan, type RunSetup } from "./notes";
 import { existsSync } from "node:fs";
-import { LOG_DIR } from "./run-log/writer";
+import { LOG_DIR } from "./config";
 
 /** The run's notes, written to gameplay/notes when the run ends; bot/notes.ts has the format. */
 export class RunNotes {

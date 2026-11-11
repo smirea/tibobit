@@ -4,7 +4,7 @@
 // one question each; the most promising becomes the goal. It is asked when a goal ends, at every
 // choice, when a boss appears, and every pace.planEvery seconds, so a better goal can take over.
 
-import { book, onChest, plural, priceWords, readBook, said, spotSaid } from "./phrasing";
+import { onChest, plural, priceWords, said, spotSaid } from "./phrasing";
 import { knobs, planEvery, templates } from "./run-templates";
 import { blocks, type Card, cards } from "./blocks";
 import { WIN_SECONDS } from "./run-context";
@@ -13,13 +13,14 @@ import { RunNotes } from "./run-notes";
 import { command, PICK_SHOW_MS, piloted, say } from "./server";
 import { decide, type Question } from "./decider";
 import { talliesOf, totalsBetween, totalsLines } from "./tallies";
-import { giveUps, type Goal, goalId, goalTitle, locate, outcomes, setGoal } from "./goals";
+import { giveUps, type Goal, goalId, goalTitle, locate, outcomes, pursuit, setGoal } from "./goals";
 import { render } from "./templates";
 import type { CardOption, Inspect } from "../protocol/pilot";
 import { PLAN_RANGE } from "./limits";
 import type { EndJson, World } from "./world";
 import { RunLog } from "./run-log/writer";
 import { clock } from "../clock";
+import { UNANSWERED } from "./run-log/cells";
 
 type GoalOption = { goal: Goal; text: string };
 
@@ -44,7 +45,7 @@ function goalOptions(r: World): GoalOption[] {
       .slice(0, 6)
       .map((x) => ({
         goal: { kind: "poi" as const, uid: x.id },
-        text: `${x.inside ? `stay inside the ${x.name}` : `walk to the ${x.name} ${Math.round(x.dist)} away to the ${x.dir} and stand inside it`} for ${x.chargeSeconds} seconds${spotSaid(x.type) === "" ? "" : ` (${spotSaid(x.type).replace(/\.$/, "")})`}${priceWords(x, r)}${given(`P${x.id}`)}`,
+        text: `${x.inside ? `stay inside the ${x.name}` : `walk to the ${x.name} ${Math.round(x.dist)} away to the ${x.dir} and stand inside it`} for ${x.chargeSeconds} seconds${spotSaid(r.book, x.type) === "" ? "" : ` (${spotSaid(r.book, x.type).replace(/\.$/, "")})`}${priceWords(x, r)}${given(`P${x.id}`)}`,
       })),
     ...r.food
       .filter((x) => x.dist < PLAN_RANGE)
@@ -98,9 +99,7 @@ export class Planner {
     this.lastAsked = r.time;
     if (options === undefined) this.picked = false;
     this.calls++;
-    const b = await readBook();
-    if (b === undefined) throw new Error("the game's encyclopedia has not arrived; the bot reads it before the first decision");
-    const vars = { ...blocks(r, b), why: () => why };
+    const vars = { ...blocks(r, r.book), why: () => why };
     const state = render(templates.planner.state, vars);
     const goals = goalOptions(r);
     const questions: Record<string, Question> = {};
@@ -115,8 +114,14 @@ export class Planner {
     const question = render(templates.planner.pick, { ...vars, choice: () => kind });
     if (options !== undefined) questions.pick = { type: "choice", instructions: question, criteria: Object.fromEntries([...keys].map(([k, o]) => [k, o.text])) };
     const started = performance.now();
-    const answers = await decide(state, questions, PLAN_MODEL);
+    const answers = await decide(state, questions, PLAN_MODEL, options !== undefined);
     const ms = Math.round(performance.now() - started);
+    if (answers === undefined) {
+      // The goal under way stands; with none, Tibo keeps away from enemies until the planner is asked again.
+      if (pursuit === undefined) setGoal({ kind: "evade" }, r, this.log, { kind: "plan", prompt: state, goals: [] });
+      this.log.write(r, { event: "plan", model: PLAN_MODEL, reason: `${why}; the planner ${UNANSWERED}`, goal: pursuit?.id ?? "", action: "kept the goal", ms });
+      return { goal: pursuit?.goal ?? { kind: "evade" }, ms, goals: [] };
+    }
 
     const score = (i: number) => answers[`goal:${i}`]?.noul ?? 0;
     const best = goals.map((_, i) => i).sort((x, y) => score(y) - score(x))[0] ?? goals.length - 1;
@@ -193,7 +198,7 @@ export class Planner {
 export const loadoutLines = (r: World) => [
   `Weapons: ${r.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
   `Passives: ${r.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
-  `Items: ${r.items.map((i) => `${i.name} x${i.count}${book === undefined ? "" : said(book, "item", i.id)}`).join("; ") || "none"}.`,
+  `Items: ${r.items.map((i) => `${i.name} x${i.count}${said(r.book, "item", i.id)}`).join("; ") || "none"}.`,
 ];
 
 // Picks that did nothing (an item Tibo cannot afford, say) for the choice now open, so they are
@@ -201,8 +206,6 @@ export const loadoutLines = (r: World) => [
 let deadPicks: { signature: string; names: Set<string> } = { signature: "", names: new Set() };
 
 export async function choose(r: World, planner: Planner, log: RunLog) {
-  const b = await readBook();
-  if (b === undefined) throw new Error("the game's encyclopedia has not arrived; the bot reads it before the first decision");
   const options = cards(r);
   const open = r.view.choice?.kind ?? "choice";
   if (options.length === 0) throw new Error(`a ${open} choice with nothing to take`);

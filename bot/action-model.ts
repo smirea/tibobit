@@ -12,6 +12,7 @@ import { stateVars } from "./blocks";
 import { RunLog } from "./run-log/writer";
 import type { MoveOption } from "../protocol/pilot";
 import { noteModelStep } from "./forecast-lag";
+import { dashCell, UNANSWERED } from "./run-log/cells";
 
 // Words, not percentages: on 50 replayed states Laya picked a move within 2% of the least
 // damaging one 90% of the time with these words, 80% with "would lose N%", and 38% when the
@@ -116,9 +117,10 @@ export async function dashOnTheWay(r: World, p: Pursuit, heading: Direction, log
   const vars = stateVars(r, { goal: goalWords(p, { heading, progress: "" }) });
   const started = performance.now();
   const answers = await decide(render(templates.action.state, vars), { dash: { type: "noul", instructions: render(templates.action.dash, vars) } });
+  if (answers === undefined) return;
   const odds = answers.dash?.noul ?? 0;
   if (odds <= dashBar(r)) return;
-  log.write(r, { event: "move", model: MODEL, goal: p.id, action: `dash ${heading}`, reason: "the page was walking to the goal, and the action model said to dash", detail: `dash asked on a walked step: ${Math.round(odds * 100)}%, dashed`, ms: Math.round(performance.now() - started) });
+  log.write(r, { event: "move", model: MODEL, goal: p.id, action: `dash ${heading}`, reason: "the page was walking to the goal, and the action model said to dash", detail: dashCell.encode(odds, true), ms: Math.round(performance.now() - started) });
   await command({ type: "dash", dir: heading });
 }
 
@@ -149,13 +151,19 @@ export async function steer(r: World, p: Pursuit, aim: Course, log: RunLog, why:
   const canDash = dashWorthAsking(r);
   if (canDash) questions.dash = { type: "noul", instructions: render(templates.action.dash, vars) };
   const started = performance.now();
-  const answers = await decide(state, questions);
+  const answered = await decide(state, questions);
+  const answers = answered ?? {};
   const ms = Math.round(performance.now() - started);
-  noteModelStep(ms);
+  // A step the model never answered says nothing about how long its answers take.
+  if (answered !== undefined) noteModelStep(ms);
   const risk = (k: string) => answers[k]?.noul ?? 1;
   const safest = Math.min(...Object.keys(moves).map(risk));
   const safe = Object.keys(moves).filter((k) => risk(k) <= safest + knobs().safeMargin && (risk(k) < SAFE_ENOUGH || risk(k) === safest));
-  const choice = safe.sort((x, y) => (answers[`useful:${y}`]?.noul ?? 0) - (answers[`useful:${x}`]?.noul ?? 0) || risk(x) - risk(y))[0] ?? "stay";
+  // Without an answer, the forecast's cheapest move stands in for the model's.
+  const choice =
+    answered === undefined
+      ? (Object.keys(moves).sort((x, y) => (cost(x) ?? 0) - (cost(y) ?? 0))[0] ?? "stay")
+      : (safe.sort((x, y) => (answers[`useful:${y}`]?.noul ?? 0) - (answers[`useful:${x}`]?.noul ?? 0) || risk(x) - risk(y))[0] ?? "stay");
   const dir = (DIRECTIONS as readonly string[]).includes(choice) ? (choice as Direction) : undefined;
   const dash = dir !== undefined && (answers.dash?.noul ?? 0) > dashBar(r);
   if (aim.heading === "stay" && dir !== undefined) p.steppedOff++;
@@ -166,7 +174,7 @@ export async function steer(r: World, p: Pursuit, aim: Course, log: RunLog, why:
         ? "dash not asked: no charge"
         : !canDash
           ? "dash not asked: nothing close"
-          : `dash asked: ${Math.round((answers.dash?.noul ?? 0) * 100)}%${dash ? ", dashed" : ""}`;
+          : dashCell.encode(answers.dash?.noul ?? 0, dash);
   const ruledOut = Object.keys(offered).length - Object.keys(moves).length;
   const forecast = (k: string) => {
     const f = forecastFor(r, k === "stay" ? "stay" : (k as Direction));
@@ -204,7 +212,7 @@ export async function steer(r: World, p: Pursuit, aim: Course, log: RunLog, why:
   log.write(r, {
     event: "move",
     model: MODEL,
-    reason: why,
+    reason: answered === undefined ? `${why}; the action model ${UNANSWERED}, so the forecast's cheapest move stands in` : why,
     goal: p.id,
     action: move,
     options: weighed.map((w) => `${w.move} ${w.forecast ?? "?"} hurt ${w.hurt ?? "-"} useful ${w.useful === undefined ? "-" : Math.round(w.useful * 100)}%${w.outcome === "ruled out" ? " (ruled out)" : ""}`).join("; "),

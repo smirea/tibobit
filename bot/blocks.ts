@@ -1,4 +1,4 @@
-import { book, fields, groundSources, pct, poiWhat, priceWords, spotLine } from "./phrasing";
+import { fields, groundSources, pct, poiWhat, priceWords, spotLine } from "./phrasing";
 import { difficulty, MODE_NAME } from "./run-context";
 import type { BlockName } from "./templates";
 import type { ChoiceAction } from "../protocol/commands";
@@ -69,7 +69,7 @@ export function blocks(r: World, b: Book): Record<BlockName, () => string> {
     spots: () => {
       if (r.spots.length === 0) return "Spots: none on the loaded map.";
       return `Spots on the loaded map, nearest first:${r.spots
-        .map((x) => `\n  - ${x.name} (${x.type}) ${x.inside ? "under Tibo" : `${Math.round(x.dist)} away to the ${x.dir}`}${poiWhat(x)} Charged ${x.charged} of ${x.chargeSeconds} s${priceWords(x, r)}.`)
+        .map((x) => `\n  - ${x.name} (${x.type}) ${x.inside ? "under Tibo" : `${Math.round(x.dist)} away to the ${x.dir}`}${poiWhat(r.book, x)} Charged ${x.charged} of ${x.chargeSeconds} s${priceWords(x, r)}.`)
         .join("")}`;
     },
     dogs: () =>
@@ -125,8 +125,7 @@ export function blocks(r: World, b: Book): Record<BlockName, () => string> {
 
 /** The values a template is rendered with: the state blocks and the slot's own, such as {{goal}}. */
 export function stateVars(r: World, extra: Record<string, string>): Record<string, () => string> {
-  if (book === undefined) throw new Error("the game's encyclopedia has not arrived; the bot reads it before the first decision");
-  return { ...blocks(r, book), ...Object.fromEntries(Object.entries(extra).map(([k, x]) => [k, () => x])) };
+  return { ...blocks(r, r.book), ...Object.fromEntries(Object.entries(extra).map(([k, x]) => [k, () => x])) };
 }
 
 // Health samples by game time, to tell the planner whether Tibo is bleeding.

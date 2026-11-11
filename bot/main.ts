@@ -10,22 +10,23 @@ import { ladderCleared, type State } from "../protocol/view";
 import { type EndJson, see, type World } from "./world";
 import type { RunPlan, RunSetup } from "./notes";
 import { talliesOf, totalsBetween } from "./tallies";
-import { readBook } from "./phrasing";
 import { command, followPanel, pace, RAW, say, server, timed, timings } from "./server";
 import { BOT_CODE, difficulty, MODE, MODE_NAME, setDifficulty, WIN_SECONDS } from "./run-context";
-import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RUN_COUNT, STEP, TAKEOVER, TRIAL, TRIAL_RESULT, WEAPON } from "./config";
+import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG, LOG_DIR, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RUN_COUNT, STEP, TAKEOVER, TRIAL, TRIAL_RESULT, WEAPON } from "./config";
 import { RunNotes } from "./run-notes";
 import { setTemplates } from "./run-templates";
 import { choose, loadoutLines, Planner } from "./planner";
 import { beginStep, forgetMode, modelSteered, modeSet, setMode, tellLag } from "./forecast-lag";
 import { pursue } from "./pursue";
 import { latency, snapshotAges } from "./decider";
-import { LOG_DIR, RunLog } from "./run-log/writer";
+import { RunLog } from "./run-log/writer";
 import { pursuit, resetGoals } from "./goals";
 import { clock } from "../clock";
 import type { TrialResult } from "./trial-result";
+import { type Book, bookFrom } from "../game/book";
 
 // The first run plays this Open World seed in a freshly reloaded tab, or the bot stops rather than play another.
+let book: Book | undefined;
 let SEED = option("seed", "").toUpperCase();
 
 let rescuedLink: string | undefined;
@@ -257,8 +258,9 @@ async function main() {
       latency.length = 0;
       continue;
     }
-    const b = await readBook();
-    const r = b === undefined ? undefined : see(s);
+    // The page sends the encyclopedia a moment after it connects; nothing is decided before it arrives.
+    book ??= await server.encyclopedia().then(bookFrom, () => undefined);
+    const r = book === undefined ? undefined : see(s, book);
     if (r === undefined) {
       await Bun.sleep(100);
       continue;

@@ -1,26 +1,10 @@
 import type { Chest, Spot, World } from "./world";
-import { server } from "./server";
-import { type Book, bookFrom, line } from "../game/book";
+import { type Book, line } from "../game/book";
 
 export const pct = (part: number, whole: number) => Math.round((100 * part) / Math.max(1, whole));
 
 /** A record as "key value, key value", in the game's own keys. */
 export const fields = (o: Record<string, unknown>) => Object.entries(o).map(([k, v]) => `${k} ${typeof v === "object" ? JSON.stringify(v) : v}`).join(", ");
-
-// The planner reads the game's own description of every card it holds or is offered.
-export let book: Book | undefined;
-
-export async function readBook(): Promise<Book | undefined> {
-  if (book !== undefined) return book;
-  try {
-    book = bookFrom(await server.encyclopedia());
-    return book;
-  } catch (e) {
-    // Asked again next time: the page sends the encyclopedia a moment after it connects.
-    console.error("no encyclopedia yet:", e instanceof Error ? e.message : e);
-    return undefined;
-  }
-}
 
 /** The game's description of a weapon, passive, item or the like, as ": <text>", or "". */
 export const said = (b: Book, kind: string, id: string) => {
@@ -34,11 +18,11 @@ export const groundSources = (r: World) => r.view.directions.still?.enters ?? []
 export const onChest = (c: Chest) => c.dir === "still";
 
 /** A spot's description: the game's line for its kind, or for a variety place. */
-export const spotSaid = (type: string) => (book === undefined ? "" : (line(book, "poi", type, "desc") ?? line(book, "varietyPlace", type, "desc") ?? ""));
+export const spotSaid = (book: Book, type: string) => line(book, "poi", type, "desc") ?? line(book, "varietyPlace", type, "desc") ?? "";
 
 // The name alone hides what a spot does: standing in a Beetle Nest wakes an elite.
-export const poiWhat = (p: Spot) => {
-  const d = spotSaid(p.type);
+export const poiWhat = (book: Book, p: Spot) => {
+  const d = spotSaid(book, p.type);
   return d === "" ? "" : ` (${d.replace(/\.$/, "").replace(/\. /g, "; ").toLowerCase()})`;
 };
 
@@ -59,7 +43,7 @@ export function spotLine(r: World): string | undefined {
   if (chest !== undefined) return `on a chest, ${chest.charged} of ${chest.chargeSeconds} seconds into opening it`;
   const inside = r.spots.find((p) => p.inside);
   if (inside === undefined) return undefined;
-  return `inside the ${inside.name}${poiWhat(inside)}${inside.chargeSeconds > 0 ? `, charged ${inside.charged} of ${inside.chargeSeconds} seconds` : ""}${priceWords(inside, r)}`;
+  return `inside the ${inside.name}${poiWhat(r.book, inside)}${inside.chargeSeconds > 0 ? `, charged ${inside.charged} of ${inside.chargeSeconds} seconds` : ""}${priceWords(inside, r)}`;
 }
 
 export const plural = (n: number, one: string) => `${n} ${n === 1 ? one : one.replace(/y$/, "ie")}${n === 1 ? "" : "s"}`;

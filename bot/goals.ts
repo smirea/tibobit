@@ -12,6 +12,7 @@ import type { CommandStatus } from "../protocol/commands";
 import type { World } from "./world";
 import { say } from "./server";
 import { RunLog } from "./run-log/writer";
+import { goalCell } from "./run-log/cells";
 
 export type Goal = { kind: "chest" | "poi" | "food" | "elite"; uid: number } | { kind: "explore"; dir: Direction } | { kind: "evade" };
 
@@ -76,22 +77,7 @@ export function resetGoals() {
   everListed.clear();
 }
 
-export function goalId(g: Goal): string {
-  switch (g.kind) {
-    case "chest":
-      return `C${g.uid}`;
-    case "poi":
-      return `P${g.uid}`;
-    case "food":
-      return `F${g.uid}`;
-    case "elite":
-      return `E${g.uid}`;
-    case "explore":
-      return `explore ${g.dir}`;
-    default:
-      return g.kind;
-  }
-}
+export const goalId = (g: Goal): string => goalCell.encode(g);
 
 type Located = { dist: number; dir: Direction | "still"; arrived: boolean; charging: number; progress: string; name: string };
 
