@@ -4,7 +4,7 @@
 import { today, upsert, withLock } from "./lock";
 import { BELIEF_COLUMNS, type BeliefRow, BELIEFS, readBeliefs, stampBeliefs } from "./beliefs";
 import { AREAS, type Experiment, EXPERIMENT_NAME, EXPERIMENT_RESULTS, EXPERIMENT_STATUSES, EXPERIMENT_TEXT, experimentFile, parseExperiment, readExperiments, writeExperiment } from "./experiments";
-import { checkTable, writeTable } from "./csv";
+import { checkTable, writeTable } from "./tables";
 import { INFRA_COLUMNS, readInfra } from "./infra";
 import { BELIEFS_CSV, INFRA_CSV } from "./paths";
 import { type Checked, isText } from "../../protocol/parse";

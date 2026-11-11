@@ -6,7 +6,7 @@ import { checkPromptPart, promptLoss, splitPrompts } from "./store/coach-prompts
 import { checkTemplates, DEFAULT_TEMPLATES, LOCKSTEP_CRUTCH } from "../bot/templates";
 import { type Experiment, hasFreshGames, overdueAreas, parseExperiment, renderExperiment } from "./store/experiments";
 import { notesName, notesTemplates, renderNotes, type RunSetup, withReview } from "../bot/notes";
-import { parseCsv } from "./store/csv";
+import { parseCsv } from "../csv";
 import { stateFromLog } from "./store/coach-log";
 import { totalsBetween, totalsLines } from "../bot/tallies";
 import { upsert } from "./store/lock";

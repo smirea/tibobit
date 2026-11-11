@@ -1,13 +1,13 @@
-import { type Combo, comboProgress, combosUsing, idOf, type Key, type Kind, type Loadout, nameOf, type Part, partner, partState, readLoadout, relevantCombos, unpaired } from "../combos/catalog";
+import { type Combo, comboProgress, combosUsing, idOf, type Key, type Kind, type Loadout, nameOf, type Part, partner, partState, readLoadout, relevantCombos, unpaired } from "../../game/catalog";
 import type { Bridge } from "../agent/bridge";
 import { validPort } from "../../protocol/address";
 import { chatBox } from "../pilot/feed";
 import { type Data, liveData } from "../combos/live";
 import type { Discovery } from "../combos/discovery";
-import type { GameLink } from "../game/link";
-import type { IconSheet } from "../game/types";
+import type { GameLink } from "../link/game-link";
+import type { IconSheet } from "../../game/types";
 import { css } from "./style";
-import { inRun, PANEL_ID } from "../game/screen";
+import { inRun, PANEL_ID } from "../link/screen";
 
 type View = { d: Data; discovery: Discovery; icons: IconSheet | undefined; loadout: Loadout; banished: ReadonlySet<string> };
 

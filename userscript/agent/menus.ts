@@ -3,7 +3,7 @@
  * "nightmare-3". "highest" steps up while the game allows: to Nightmare, then up its levels, which
  * unlock as the profile plays them.
  */
-import { button, byTestId, locked, press, wait } from "../game/screen";
+import { button, byTestId, locked, press, wait } from "../link/screen";
 
 export async function pickDifficulty(difficulty: string): Promise<string> {
   if (difficulty === "highest") {

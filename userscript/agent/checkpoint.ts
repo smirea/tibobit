@@ -1,8 +1,8 @@
-import type { Game, GameState } from "../game/types";
-import type { GameLink } from "../game/link";
+import type { Game, GameState } from "../../game/types";
+import type { GameLink } from "../link/game-link";
 import type { CheckpointMeta } from "../../protocol/commands";
 import { TICKS_PER_SECOND } from "../../protocol/geometry";
-import { isRuleModule } from "../game/clone";
+import { isRuleModule } from "../link/clone";
 import { pick, WEAPON_SLOTS } from "./loadout";
 
 type Encoded = number | string | boolean | null | { u: 1 } | { n: string } | { b: string } | { s: string } | { r: number };

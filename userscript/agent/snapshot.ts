@@ -1,5 +1,5 @@
-import type { GameLink } from "../game/link";
-import { inRun, modeScreen, pauseMenuOpen } from "../game/screen";
+import type { GameLink } from "../link/game-link";
+import { inRun, modeScreen, pauseMenuOpen } from "../link/screen";
 import type { CommandStatus } from "../../protocol/commands";
 import type { Forecast, Snapshot } from "../../protocol/snapshot";
 import { reflect } from "./reflect";

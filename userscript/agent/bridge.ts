@@ -1,4 +1,4 @@
-import type { GameLink } from "../game/link";
+import type { GameLink } from "../link/game-link";
 import type { CheckpointStore, Controller } from "./control";
 import type { CheckpointFile } from "./checkpoint";
 import { encyclopedia } from "./encyclopedia";
@@ -6,7 +6,7 @@ import { Forecaster } from "./forecast";
 import { BRIDGE_PORT, bridgeOrigin, validPort } from "../../protocol/address";
 import { type ChatMessage, DEFAULT_SETTINGS, type PageLine, parsePilotChange, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../../protocol/pilot";
 import { parseCommand } from "../../protocol/commands";
-import { inRun } from "../game/screen";
+import { inRun } from "../link/screen";
 import { snapshot } from "./snapshot";
 
 const PORT_KEY = "tibobit.bridgePort";

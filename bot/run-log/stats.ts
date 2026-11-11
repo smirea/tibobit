@@ -1,7 +1,7 @@
 // The numbers every review used to work out from the raw log by hand: health by minute and what
 // took it, when bosses and the first chest came, how goals ended, what Tibo gained, and dashes.
 
-import { csvField, parseCsv } from "../../rsi/store/csv";
+import { csvField, parseCsv } from "../../csv";
 
 export const goalKind = (id: string) => (id.startsWith("C") ? "chest" : id.startsWith("P") ? "spot" : id.startsWith("F") ? "food" : /^E\d/.test(id) ? "elite" : id.split(" ")[0] || "?");
 

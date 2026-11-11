@@ -1,4 +1,4 @@
-import type { Content, Enums, GameEvent } from "./types";
+import type { Content, Enums, GameEvent } from "../../game/types";
 
 export const SIM_CHUNK = /\/assets\/sim-[\w-]+\.js$/;
 export const BOOT_CHUNK = /\/assets\/boot-[\w-]+\.js$/;

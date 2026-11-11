@@ -1,5 +1,5 @@
 /** A target that stays put as Tibo moves. */
-import type { Enums, GameState } from "../game/types";
+import type { Enums, GameState } from "../../game/types";
 import { STILL } from "../../protocol/geometry";
 import type { Target } from "../../protocol/commands";
 

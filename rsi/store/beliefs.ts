@@ -2,7 +2,7 @@
 // it is good (worth doing), bad (worth avoiding) or a plain fact. Experiments are questions;
 // beliefs are the answers that survived them, kept so a rewritten prompt cannot quietly drop one.
 import { BELIEFS_CSV } from "./paths";
-import { type CsvTable, readTable } from "./csv";
+import { type CsvTable, readTable } from "./tables";
 
 export const BELIEF_COLUMNS = ["id", "about", "verdict", "claim", "confidence", "status", "evidence", "experiments", "created", "updated"] as const;
 

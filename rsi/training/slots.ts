@@ -4,16 +4,16 @@
 // time (tibo-bot.ts --trial). A gym is built the same way and saved at its time.
 import path from "node:path";
 import { closeSync, mkdirSync, openSync } from "node:fs";
-import { ENTRY, ROOT } from "../paths";
-import type { CheckpointMeta, Command, CommandStatus, LoadoutSpec } from "../protocol/commands";
-import type { State } from "../protocol/view";
-import { clock } from "../format";
-import type { Gym } from "../rsi/store/gyms";
-import { runStats } from "../bot/run-log/stats";
-import type { Templates } from "../bot/templates";
-import type { Totals } from "../bot/tallies";
-import { AgentServer } from "../agent-server/client";
-import { bridgeOrigin } from "../protocol/address";
+import { ENTRY, ROOT } from "../../paths";
+import type { CheckpointMeta, Command, CommandStatus, LoadoutSpec } from "../../protocol/commands";
+import type { State } from "../../protocol/view";
+import { clock } from "../../format";
+import type { Gym } from "../store/gyms";
+import { runStats } from "../../bot/run-log/stats";
+import type { Templates } from "../../bot/templates";
+import type { Totals } from "../../bot/tallies";
+import { AgentServer } from "../../agent-server/client";
+import { bridgeOrigin } from "../../protocol/address";
 
 export const DECISION_MODEL = "typesafe/jev-1.14-20261014";
 const GYM_STAGE_SECONDS = 300;

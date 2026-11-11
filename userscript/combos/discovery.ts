@@ -1,4 +1,4 @@
-import type { Key, Kind, Loadout } from "./catalog";
+import type { Key, Kind, Loadout } from "../../game/catalog";
 
 const DISCOVERY_KEY = "tibo.discovery.v1";
 const EVOLUTIONS_KEY = "tibo.evolutions.v1";

@@ -1,4 +1,4 @@
-import type { Content, GameState, Messages } from "../game/types";
+import type { Content, GameState, Messages } from "./types";
 
 export type Kind = "weapon" | "passive" | "item";
 export type Key = `${Kind}:${string}`;

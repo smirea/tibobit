@@ -1,7 +1,7 @@
 import type { LoadoutSpec } from "../../protocol/commands";
-import { maxWeaponLevel } from "../combos/catalog";
-import type { Game } from "../game/types";
-import { GameLink } from "../game/link";
+import { maxWeaponLevel } from "../../game/catalog";
+import type { Game } from "../../game/types";
+import { GameLink } from "../link/game-link";
 
 /** The game's weapon slots; passives have as many. */
 export const WEAPON_SLOTS = 6;

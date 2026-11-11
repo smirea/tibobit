@@ -1,6 +1,6 @@
-import { buildCatalog, type Catalog, type Combo, toCombo } from "./catalog";
-import type { Content } from "../game/types";
-import type { GameLink } from "../game/link";
+import { buildCatalog, type Catalog, type Combo, toCombo } from "../../game/catalog";
+import type { Content } from "../../game/types";
+import type { GameLink } from "../link/game-link";
 
 export type Data = { catalog: Catalog; combos: Combo[] };
 

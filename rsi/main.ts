@@ -20,7 +20,7 @@ import { type Gym, GYM_NAME, gymLine, readGyms, updateGyms } from "./store/gyms"
 import { type Playbook, readPlaybook, writePlaybook } from "../bot/playbook";
 import { checkPromptPart, PROMPT_TITLES, type PromptKey, promptLoss, readPrompts, writePrompts } from "./store/coach-prompts";
 import { checkTemplates, type Templates } from "../bot/templates";
-import { DECISION_MODEL, freshSeed, type GameResult, type GameSpec, onSlots, Slot, type Start } from "../training/slots";
+import { DECISION_MODEL, freshSeed, type GameResult, type GameSpec, onSlots, Slot, type Start } from "./training/slots";
 import type { Encyclopedia } from "../protocol/snapshot";
 import { botFacts, catalog } from "./coach-facts";
 import { applyEdits, checkEdits, EDITS_CONTRACT, type LoopEdits, readTables, type Tables } from "./store/edits";

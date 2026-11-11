@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import type { ServerWebSocket } from "bun";
-import { type Book, readBook } from "./book";
+import { type Book, readBook } from "../game/book";
 import { liveView } from "./live-view";
 import { BRIDGE_PORT } from "../protocol/address";
 import { type CommandStatus, parseCommand } from "../protocol/commands";

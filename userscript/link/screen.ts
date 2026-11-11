@@ -1,5 +1,5 @@
 import type { GameMode } from "../../protocol/commands";
-import { GameLink } from "./link";
+import { GameLink } from "./game-link";
 
 export const PANEL_ID = "tibo-helper";
 /** Everything this script adds to the page: the panel, and the port box and overlays outside it. */

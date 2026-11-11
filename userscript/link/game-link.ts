@@ -1,5 +1,5 @@
 import { assertContent, BOOT_CHUNK, ENGLISH_CHUNK, findEnums, findGameClass, importBinding, isRecord, localAt, SIM_CHUNK } from "./chunks";
-import type { Content, Enums, Game, GameEvent, GameState, IconFrame, IconPage, IconSheet, InPool, Messages, Steer, Table } from "./types";
+import type { Content, Enums, Game, GameEvent, GameState, IconFrame, IconPage, IconSheet, InPool, Messages, Steer, Table } from "../../game/types";
 import { cloneState, isRuleModule, NO_RECORDER, reachable } from "./clone";
 
 // Page-world access to the running game. tibo.dog ships native ES modules, and a module URL

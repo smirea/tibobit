@@ -1,11 +1,11 @@
-import type { Game, GameState } from "../game/types";
-import type { GameLink } from "../game/link";
+import type { Game, GameState } from "../../game/types";
+import type { GameLink } from "../link/game-link";
 import type { Command, CommandStatus, Envelope, GameMode } from "../../protocol/commands";
 import { STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
-import { button, inRun, modeScreen, press, until, wait } from "../game/screen";
+import { button, inRun, modeScreen, press, until, wait } from "../link/screen";
 import { type CheckpointFile, Checkpoints } from "./checkpoint";
 import { pickDifficulty, pickWeapon } from "./menus";
-import { anchored, type Place, place, toward } from "./steering";
+import { anchored, place, type Place, toward } from "./steering";
 import { applyLoadout } from "./loadout";
 import { clearSeed, requestSeed } from "./seed";
 import { Forecaster } from "./forecast";

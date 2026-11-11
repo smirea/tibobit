@@ -1,6 +1,6 @@
-import type { Game, GameState } from "../game/types";
-import type { GameLink } from "../game/link";
-import { anchored, type Place, place, toward } from "./steering";
+import type { Game, GameState } from "../../game/types";
+import type { GameLink } from "../link/game-link";
+import { anchored, place, type Place, toward } from "./steering";
 import { type Direction, directionOf, DIRECTIONS, STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
 import type { Ahead, Forecast, Routes } from "../../protocol/snapshot";
 import { threats } from "./surroundings";

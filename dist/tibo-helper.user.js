@@ -130,6 +130,10 @@
   var CHOICE_ACTIONS = ["pick", "banish", "buy", "reroll", "skip", "close", "accept", "continue", "endRun"];
   var CHECKPOINT_NAME = /^[\w.@-]{1,100}$/;
   var SEED = /^[0-9A-Z]{1,7}$/;
+  var GAME_MODES = ["openWorld", "daily"];
+  var DIFFICULTIES = ["easy", "normal", "hard", "nightmare", "highest"];
+  var isDifficulty = (v) => DIFFICULTIES.includes(v);
+  var isGameMode = (v) => GAME_MODES.includes(v);
   function heading(v, what) {
     if (typeof v === "number" && Number.isFinite(v))
       return v;
@@ -239,11 +243,11 @@
         return c.dir === undefined ? { type: "dash" } : { type: "dash", dir: heading(c.dir, "dir") };
       case "start": {
         const d = c.difficulty;
-        if (d !== undefined && d !== "easy" && d !== "normal" && d !== "hard" && d !== "nightmare" && d !== "highest")
-          fail("difficulty must be easy, normal, hard, nightmare or highest");
+        if (d !== undefined && !isDifficulty(d))
+          fail(`difficulty must be one of ${DIFFICULTIES.join(", ")}`);
         const m = c.mode;
-        if (m !== undefined && m !== "openWorld" && m !== "daily")
-          fail("mode must be openWorld or daily");
+        if (m !== undefined && !isGameMode(m))
+          fail(`mode must be one of ${GAME_MODES.join(", ")}`);
         const w = c.weapon;
         if (w !== undefined && (typeof w !== "string" || !/^[a-z0-9-]+$/.test(w)))
           fail("weapon must be a weapon id such as deep-fryer");
@@ -274,7 +278,7 @@
     }
   }
 
-  // userscript/game/screen.ts
+  // userscript/link/screen.ts
   var PANEL_ID = "tibo-helper";
   var OURS = `#${PANEL_ID}, [class*='tbh-']`;
   function button(label) {
@@ -942,7 +946,7 @@
     };
   }
 
-  // userscript/game/clone.ts
+  // userscript/link/clone.ts
   var NO_RECORDER = { step() {}, choose() {}, dash() {}, taint() {}, log() {} };
   function cloneState(root, shared) {
     const memo = new Map;
@@ -1006,7 +1010,7 @@
   }
   var isRuleModule = (v) => typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).length > 0 && Object.values(v).every((x) => typeof x === "function");
 
-  // userscript/combos/catalog.ts
+  // game/catalog.ts
   function titleCase(id) {
     return id.replace(/(^|-)(\w)/g, (_, dash, c) => `${dash ? " " : ""}${c.toUpperCase()}`);
   }
@@ -1919,7 +1923,7 @@
     }
   }
 
-  // userscript/game/chunks.ts
+  // userscript/link/chunks.ts
   var SIM_CHUNK = /\/assets\/sim-[\w-]+\.js$/;
   var BOOT_CHUNK = /\/assets\/boot-[\w-]+\.js$/;
   var ENGLISH_CHUNK = /\/assets\/i18n-en-[\w.-]+\.js$/;
@@ -1986,7 +1990,7 @@
         throw new Error(`content registry has no ${key} list`);
   }
 
-  // userscript/game/link.ts
+  // userscript/link/game-link.ts
   var KEEP_EVENTS = 40;
   var NOISY_EVENTS = new Set(["playerHit", "hitStop", "dodge", "dashed", "block", "throttle", "reelStop", "dogAbility", "bossLanding"]);
 

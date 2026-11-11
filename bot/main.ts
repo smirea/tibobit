@@ -14,7 +14,7 @@ import type { ActionTag, CardOption, ChatLine, GoalResult, Inspect, MoveOption, 
 import { type ChoiceAction, type Command, type CommandStatus, DIFFICULTIES, type Difficulty, type GameMode, isDifficulty } from "../protocol/commands";
 import { type ChoiceOption, type DirectionView, ladderCleared, type State } from "../protocol/view";
 import { type Direction, DIRECTIONS } from "../protocol/geometry";
-import { type Book, readBook as bookOf, line } from "../agent-server/book";
+import { type Book, readBook as bookOf, line } from "../game/book";
 import { type Chest, type Sector, see, type Spot, type World } from "./world";
 import { type BlockName, checkTemplates, DEFAULT_TEMPLATES, type Knobs, render, type Templates } from "./templates";
 import { NOTES_DIR, notesName, renderNotes, type RunEnd, runId, type RunPlan, type RunSetup } from "./notes";
