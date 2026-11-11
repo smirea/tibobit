@@ -2,7 +2,7 @@
 // took it, when bosses and the first chest came, how goals ended, what Tibo gained, and dashes.
 
 import { csvField, parseCsv } from "../../csv";
-import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, heldCell, hurtCell, listCell, LOG_COLUMNS, type LoggedRow, statsCell, UNANSWERED, weighedCell } from "./cells";
+import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, heldCell, hurtCell, listCell, LOG_COLUMNS, type LoggedRow, numbersCell, type RunCount, UNANSWERED, weighedCell } from "./cells";
 
 const goalKind = goalCell.kind;
 
@@ -13,6 +13,14 @@ function rowsOf(csv: string): LoggedRow[] | undefined {
   const [header = [], ...cells] = parseCsv(csv);
   if (header[0] !== LOG_COLUMNS[0]) return undefined;
   return cells.map((r) => Object.fromEntries(LOG_COLUMNS.map((column) => [column, r[header.indexOf(column)] ?? ""])) as LoggedRow);
+}
+
+/** The row at each rise of one of the game's own run counts during the logged game, such as every chest opened. */
+function rises(live: LoggedRow[], count: RunCount): LoggedRow[] {
+  const out: LoggedRow[] = [];
+  let before = numbersCell.decode(live[0]?.counts)[count] ?? 0;
+  for (const r of live) for (const now = numbersCell.decode(r.counts)[count] ?? before; before < now; before++) out.push(r);
+  return out;
 }
 
 /** A Markdown summary of a run from its CSV log. */
@@ -89,8 +97,8 @@ export function runStats(csv: string): string {
     i = j + 1;
   }
   const firstChest = live.find((r) => (r.chests ?? "") !== "")?.time;
-  // Only Tibo opens chests, so a chest goal that finishes is a chest opened.
-  const opened = rows.filter((r) => r.event === "goal" && r.action === "done" && goalKind(r.goal ?? "") === "chest");
+  const opened = rises(live, "bossChests");
+  const times = (count: RunCount) => rises(live, count).map((r) => r.time).join(", ") || "none";
   const atTwo = live.filter((r) => num(r.seconds) <= 120).at(-1) ?? lastRow;
   const byTwo = num(lastRow.seconds) >= 120 ? "By 2:00" : `By the end at ${lastRow.time ?? "?"}`;
   const openedByTwo = opened.filter((r) => num(r.seconds) <= 120).length;
@@ -124,7 +132,8 @@ export function runStats(csv: string): string {
     "",
     `- Bosses first seen: ${[...seenBoss].map(([k, t]) => `${k} at ${t}`).join("; ") || "none"}.`,
     `- Bosses alive at ${lastRow.time ?? "the end"}, each a separate boss with its own health: ${bossesAtEnd.join("; ") || "none"}.`,
-    `- ${byTwo}: damage dealt ${num(atTwo.dealt)}, elites killed ${num(atTwo.elites)}, chests opened ${openedByTwo}. Chests opened in the whole game: ${opened.length}, the first at ${opened[0]?.time ?? "never"}.`,
+    `- ${byTwo}: damage dealt ${num(atTwo.dealt)}, elites killed ${num(atTwo.elites)}, chests opened ${openedByTwo}. Chests opened in the whole game: ${opened.length}.`,
+    `- By the game's own counts: chests opened at ${times("bossChests")}; Potato Crates bought at ${times("paidChests")}; elites killed at ${times("elitesKilled")}; bosses killed at ${times("bossesKilled")}; shrines used at ${times("shrinesUsed")}.`,
     `- Elites first seen: ${elitesSeen.join(" | ") || "none"}.`,
     `- Bursts of 40+ health lost within 3 s, hit by hit: ${bursts.join(" | ") || "none"}.`,
     `- First chest listed: ${firstChest ?? "never"}. First time under 25% health: ${low ?? "never"}.`,
@@ -173,7 +182,7 @@ export function buildOverTime(csv: string): string[] {
   const at = (r: LoggedRow) => Number(r.seconds);
   const marks = BUILD_MARKS.filter((mark) => at(first) <= mark && mark < at(last)).flatMap((mark) => live.filter((r) => at(r) <= mark).at(-1) ?? []);
   return [...marks, last].map((r) => {
-    const stats = statsCell.decode(r.stats);
+    const stats = numbersCell.decode(r.stats);
     return `${r.time} level ${r.level}, ${BUILD_STATS.map((name) => `${name} ${stats[name] ?? "?"}`).join(", ")}, ${[...listCell.decode(r.weapons), ...listCell.decode(r.passives)].join(", ")}`;
   });
 }
@@ -243,7 +252,7 @@ export function economy(csv: string): string {
     if (name !== undefined) used.set(name, (used.get(name) ?? 0) + 1);
   }
   const seen = new Set(live.flatMap((r) => listCell.decode(r.chests).map(chestCell.uid)));
-  const opened = rows.filter((r) => r.event === "goal" && r.action === "done" && goalKind(r.goal ?? "") === "chest").length;
+  const opened = rises(live, "bossChests").length;
   const byCount = (m: Map<string, number>) => [...m].sort((a, z) => z[1] - a[1]).map(([k, v]) => `${k} ${Math.round(v)}`).join(", ");
   return `gold held at the end ${live.at(-1)?.gold ?? "?"}, spent ${Math.round(total)}${total > 0 ? ` (${byCount(spent)})` : ""}; spots charged and used: ${byCount(used) || "none"}; chests seen ${seen.size}, opened ${opened}`;
 }
@@ -259,12 +268,13 @@ export function keyNumbers(csv: string): string {
   if (rows === undefined) return "(no numbers: the log is damaged)";
   const at = (r: LoggedRow) => Number(r.seconds) || 0;
   const listed = rows.find((r) => (r.chests ?? "") !== "")?.time ?? "never";
-  const opened = rows.filter((r) => r.event === "goal" && goalKind(r.goal ?? "") === "chest" && r.action === "done" && at(r) <= 150).length;
+  const live = rows.filter((r) => r.seconds !== "");
+  const opened = rises(live, "bossChests").filter((r) => at(r) <= 150).length;
   const evolution = rows.find((r) => r.event === "loadout" && changesCell.decode(r.action).some(changeCell.evolution))?.time ?? "none";
   const level = [...rows].reverse().find((r) => r.seconds !== "" && at(r) <= 180)?.level ?? "?";
   const elite = (r: LoggedRow) => r.event === "goal" && goalKind(r.goal ?? "") === "elite" && at(r) <= 180;
   const fought = rows.filter((r) => elite(r) && r.action === "start").length;
-  const killed = rows.filter((r) => elite(r) && r.action === "done").length;
+  const killed = rises(live, "elitesKilled").filter((r) => at(r) <= 180).length;
   return `first chest listed ${listed}; ${opened} chests opened by 2:30; ${fought} elite fights and ${killed} elites killed by 3:00; first evolution ${evolution}; level ${level} at 3:00`;
 }
 

@@ -15,8 +15,8 @@ import { talliesOf, totalsBetween, totalsLines } from "./tallies";
 import { giveUps, type Goal, goalId, goalTitle, locate, outcomes, pursuit, setGoal } from "./goals";
 import { render } from "./templates";
 import { type CardOption, type Inspect, PICK_SHOW_MS } from "../protocol/pilot";
-import { GOAL_OPTIONS, PLAN_RANGE } from "./limits";
-import type { EndJson, World } from "./world";
+import { GOAL_OPTIONS, HURT_SECONDS, PLAN_RANGE } from "./limits";
+import { type EndJson, recentLoss, type World } from "./world";
 import { RunLog } from "./run-log/writer";
 import { clock } from "../clock";
 import { UNANSWERED, weighedCell } from "./run-log/cells";
@@ -88,6 +88,7 @@ export class Planner {
     let why: string | undefined;
     if (this.picked) why = "a card was just taken";
     else if (fresh !== undefined) why = `a boss appeared: ${fresh.name}, ${Math.round(fresh.dist)} away to the ${fresh.dir}`;
+    else if (knobs().planOnHurt > 0 && recentLoss(r) >= knobs().planOnHurt * r.maxHp && r.time - this.lastAsked >= HURT_SECONDS) why = `Tibo lost ${Math.round(recentLoss(r))} health in the last ${HURT_SECONDS} seconds`;
     else if (r.time - this.lastAsked >= planEvery()) why = `${planEvery()} seconds passed`;
     for (const b of r.bosses) this.seenBosses.add(b.type);
     return why;

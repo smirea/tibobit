@@ -2,6 +2,7 @@
 // `{{name}}` takes a piece of the game state, which the bot renders only when a template uses it.
 
 import type { Checked } from "../protocol/parse";
+import { GIVE_UP_SECONDS, HURT_SECONDS } from "./limits";
 
 /** State blocks every template may use. The bot renders each from the live game. */
 export const BLOCKS = {
@@ -55,7 +56,7 @@ export const SLOTS = {
 
 export type TemplateSlot = keyof typeof SLOTS;
 
-export type Knobs = { exploreDistance: number; evadeSeconds: number; stuckSeconds: number; extraDamage: number; safeMargin: number; distrustSeconds: number; distrustBossRange: number; planEvery: number; eliteSeconds: number; bossOfferRange: number; dashThreshold: number; bossDashThreshold: number; bossDashRange: number; eliteFrom: number; eliteMinHp: number; forecastSeconds: number; autopilot: number };
+export type Knobs = { exploreDistance: number; evadeSeconds: number; stuckSeconds: number; extraDamage: number; safeMargin: number; distrustSeconds: number; distrustBossRange: number; planEvery: number; eliteSeconds: number; bossOfferRange: number; dashThreshold: number; bossDashThreshold: number; bossDashRange: number; eliteFrom: number; eliteMinHp: number; forecastSeconds: number; autopilot: number; holdAbortHurt: number; planOnHurt: number };
 
 export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: string }> = {
   exploreDistance: { min: 100, max: 1500, about: "units an explore goal walks before it ends; it also ends at the first chest never listed before" },
@@ -75,6 +76,8 @@ export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: strin
   bossDashRange: { min: 0, max: 600, about: "while a boss is within this many units, bossDashThreshold applies; 0 never" },
   eliteFrom: { min: 0, max: 1200, about: "game seconds before which no fight-the-elite goal is offered, so the planner cannot pick one; 0 offers them from the start" },
   eliteMinHp: { min: 0, max: 1, about: "share of max health below which no fight-the-elite goal is offered; 0 offers them at any health" },
+  holdAbortHurt: { min: 0, max: 0.5, about: `share of max health lost within the last ${HURT_SECONDS} seconds at which a goal that holds Tibo in place ends as given up and the planner is asked: standing on a chest, a shrine or another spot, or keeping an elite within reach. The target is then not offered again for ${GIVE_UP_SECONDS} seconds, like any goal given up. 0 never ends a goal this way` },
+  planOnHurt: { min: 0, max: 0.5, about: `share of max health lost within the last ${HURT_SECONDS} seconds at which the planner is asked at once, whatever planEvery says, and at most once in ${HURT_SECONDS} seconds; the goal under way goes on unless the planner picks another. 0 never asks for this` },
 };
 
 
@@ -98,7 +101,7 @@ export const DEFAULT_TEMPLATES: Templates = {
     useful: "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
     dash: "Is Tibo about to be hit or surrounded, so a quick dash away would save it?",
   },
-  knobs: { exploreDistance: 300, evadeSeconds: 8, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1, distrustSeconds: 0, distrustBossRange: 0, planEvery: 5, eliteSeconds: 20, bossOfferRange: 0, dashThreshold: 0.5, bossDashThreshold: 0.5, bossDashRange: 0, eliteFrom: 0, eliteMinHp: 0, forecastSeconds: 0.5, autopilot: 0 },
+  knobs: { exploreDistance: 300, evadeSeconds: 8, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1, distrustSeconds: 0, distrustBossRange: 0, planEvery: 5, eliteSeconds: 20, bossOfferRange: 0, dashThreshold: 0.5, bossDashThreshold: 0.5, bossDashRange: 0, eliteFrom: 0, eliteMinHp: 0, forecastSeconds: 0.5, autopilot: 0, holdAbortHurt: 0, planOnHurt: 0 },
 };
 
 export const STATE_LIMIT = 8000;

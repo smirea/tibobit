@@ -41,6 +41,7 @@ export const LOG_COLUMNS = [
   "elite_list",
   "spot",
   "stats",
+  "counts",
 ] as const;
 type LogColumn = (typeof LOG_COLUMNS)[number];
 /** A row as it is read back: every column as text, "" when the row left it out. */
@@ -60,8 +61,12 @@ export const heldCell = {
   },
 };
 
-/** The effective stats by the game's own names: `maxHp 150; armor 12; damageMult 1.12`. */
-export const statsCell = {
+/** The game's own counts of a run so far, by their keys in its `run` object; `bossChests` is every chest Tibo opened, `paidChests` every Potato Crate bought. */
+export const RUN_COUNTS = ["bossChests", "paidChests", "elitesKilled", "bossesKilled", "shrinesUsed"] as const;
+export type RunCount = (typeof RUN_COUNTS)[number];
+
+/** Numbers by the game's own names, as the stats and the counts columns hold them: `maxHp 150; armor 12; damageMult 1.12`. */
+export const numbersCell = {
   encode: (stats: Record<string, number>) => listCell.encode(Object.entries(stats).map(([name, value]) => `${name} ${Math.round(value * 1000) / 1000}`)),
   decode: (cell: string | undefined): Record<string, number> => Object.fromEntries(listCell.decode(cell).map((part) => [part.slice(0, part.lastIndexOf(" ")), Number(part.slice(part.lastIndexOf(" ") + 1))])),
 };

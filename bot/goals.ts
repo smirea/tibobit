@@ -4,12 +4,12 @@
 // only the goal and what each move costs. A goal ends when it is used up, reached, stuck or late.
 
 import { knobs } from "./run-templates";
-import { GIVE_UP_SECONDS, PLAN_RANGE } from "./limits";
+import { GIVE_UP_SECONDS, HURT_SECONDS, PLAN_RANGE } from "./limits";
 import { onChest, plural, priceWords } from "./phrasing";
 import type { ActionTag, GoalResult, Inspect } from "../protocol/pilot";
 import type { Direction } from "../protocol/geometry";
 import type { CommandStatus } from "../protocol/commands";
-import type { World } from "./world";
+import { recentLoss, type World } from "./world";
 import { say } from "./server";
 import { RunLog } from "./run-log/writer";
 import { goalCell, goalTitleCell } from "./run-log/cells";
@@ -251,6 +251,9 @@ export function ending(p: Pursuit, r: World, aim: Course | Ended, status: Comman
   // reached), end without saying how the goal went; the next step's look at the target tells.
   if (status?.state === "failed" && status.failure !== "timeout" && status.failure !== "targetGone") return { done: `the game said: ${status.detail ?? "failed"}`, success: false };
   if (r.time > p.deadline) return { done: `still not done after ${Math.round(r.time - p.since)} seconds`, success: false };
+  const held = aim.heading === "stay" || (p.goal.kind === "elite" && aim.heading === undefined);
+  const lost = recentLoss(r);
+  if (held && knobs().holdAbortHurt > 0 && lost >= knobs().holdAbortHurt * r.maxHp) return { done: `left it: Tibo lost ${Math.round(lost)} health in ${HURT_SECONDS} seconds while this goal kept it in place`, success: false };
   if (aim.left === undefined) return undefined;
   if (aim.left < p.best.left - 1) p.best = { left: aim.left, time: r.time };
   else if (r.time - p.best.time > knobs().stuckSeconds)
