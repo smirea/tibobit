@@ -896,8 +896,8 @@ async function commit(state: loop.CoachState, notesFile: string | undefined) {
 const next = (await ladder()) + 1;
 await loop.updateGyms((gyms) => {
   for (const g of standardGyms(next)) if (!gyms.some((x) => x.name === g.name)) gyms.push(g);
-  // A build the loop was running when it stopped never finished.
-  for (const g of gyms) if (g.status === "building") g.status = "pending";
+  // A build the loop was running when it stopped never finished, and one of the loop's own that failed gets another try.
+  for (const g of gyms) if (g.status === "building" || (g.status === "failed" && g.coach === "loop")) g.status = "pending";
 });
 let state = await loop.readCoachState();
 for (let played = 0; played < LOOPS && !stopping; played++) {

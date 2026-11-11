@@ -121,6 +121,12 @@ export class Slot {
   private async startGame() {
     this.headless = this.spawn("headless.ts", ["--bridge", String(this.serverPort), "--port", String(this.gamePort), "--profile", this.profile], path.join(this.logs, `${this.name}-headless.log`));
     await this.connected(90_000);
+    // The page reaches the agent server before the headless game serves its own API, which /eval needs.
+    const end = Date.now() + 90_000;
+    while (!(await this.evaluate("true").then(() => true, () => false))) {
+      if (Date.now() > end) throw new Error(`${this.name}: the headless game never served ${this.game}`);
+      await Bun.sleep(250);
+    }
   }
 
   /** Restarts the headless game, which loads the newest userscript and game build. */
@@ -185,7 +191,7 @@ export class Slot {
     let first: string;
     try {
       const picked = await this.freshOnce(seed, difficulty, weapon);
-      const got = gameSeed(await this.state());
+      const got = await this.startedSeed();
       if (got === seed) return picked;
       first = `the game rolled seed ${got ?? "nothing"}`;
     } catch (e) {
@@ -196,9 +202,19 @@ export class Slot {
     // A tab left on an error page, or stuck on a screen, only recovers when it is opened again.
     await this.restartGame();
     const again = await this.freshOnce(seed, difficulty, weapon);
-    const second = gameSeed(await this.state());
+    const second = await this.startedSeed();
     if (second !== seed) throw new Error(`asked for seed ${seed} twice: ${first}, then the game rolled ${second ?? "nothing"}`);
     return again;
+  }
+
+  /** The seed of the run just started; the snapshot that holds it can come a moment after the start command is done. */
+  private async startedSeed(): Promise<string | undefined> {
+    for (let waited = 0; waited < 5000; waited += 250) {
+      const seed = gameSeed(await this.state());
+      if (seed !== undefined) return seed;
+      await Bun.sleep(250);
+    }
+    return undefined;
   }
 
   private async freshOnce(seed: string, difficulty: number, weapon: string): Promise<string> {
