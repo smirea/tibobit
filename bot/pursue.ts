@@ -17,8 +17,11 @@ function distrustReason(r: World): string | undefined {
   return boss === undefined ? undefined : `the forecast was not trusted: the ${boss.name} boss is ${Math.round(boss.dist)} away`;
 }
 
-/** One step toward the current goal: walk on while it is safe, else ask the action model. */
-export async function pursue(s: State, r: World, log: RunLog, planner: Planner) {
+/**
+ * One step toward the current goal: walk on while it is safe, else ask the action model. `direct`
+ * sets the next goal when there is none: the planner's choice, or what the panel's machine asks for.
+ */
+export async function pursue(s: State, r: World, log: RunLog, planner: Planner, direct: (r: World, why: string) => Promise<unknown> | void) {
   for (const c of r.chests) everListed.add(goalId({ kind: "chest", uid: c.id }));
   const gained = log.loadoutChange(r);
   if (gained !== undefined) {
@@ -26,9 +29,9 @@ export async function pursue(s: State, r: World, log: RunLog, planner: Planner) 
     if (!planner.picked) planner.notes.picks.push(`- **${clock(r.time)}** gained without a pick (a chest or other): ${gained}.`);
   }
   for (let starts = 0; ; starts++) {
-    if (pursuit === undefined) await planner.plan(r, outcomes.length === 0 ? "the run started" : "the last goal ended");
+    if (pursuit === undefined) await direct(r, outcomes.length === 0 ? "the run started" : "the last goal ended");
     const p = pursuit as Pursuit | undefined;
-    if (p === undefined) throw new Error("the planner set no goal");
+    if (p === undefined) throw new Error("no goal was set");
     if (p.goal.kind === "dash") {
       const dashed = await command({ type: "dash", dir: p.goal.dir });
       finish(r, log, dashed.state === "done" ? `dashed ${p.goal.dir}` : `the game said: ${dashed.detail ?? dashed.state}`, dashed.state === "done" ? "done" : "failed");

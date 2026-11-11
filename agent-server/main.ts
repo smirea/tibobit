@@ -7,7 +7,9 @@ import { type CommandStatus, parseCommand } from "../protocol/commands";
 import { type LiveView, RAW_TOP, type Settled, type State } from "../protocol/view";
 import { parseRaw, rawParts } from "./raw";
 import { type PageLine, parsePilotChange, type PilotChange } from "../protocol/pilot";
-import { driveErrors } from "../bot/drive";
+import { loadoutErrors } from "../bot/drive";
+import { spotKinds } from "../bot/machine-input";
+import { buildMachine, checkBuilder, REQUEST_LIMIT } from "./machine-builder";
 import type { Encyclopedia, Snapshot } from "../protocol/snapshot";
 import { listCheckpoints, readCheckpoint, saveCheckpoint } from "./checkpoints";
 import { Pilot } from "./pilot";
@@ -24,7 +26,11 @@ const WAIT_LIMIT_MS = 120_000;
 // --pilot "<the bot's flags>", such as --pilot "--model laya@q8_0" for LM Studio.
 const PILOT_ARGS: BotArgs = process.argv.includes("--pilot") ? parseBotArgs(option("pilot", "").split(/\s+/).filter(Boolean)) : { ...JEV, mode: "current", difficulty: "nightmare" };
 
+checkBuilder();
+
 let latest: { snapshot: Snapshot; view?: LiveView } | undefined;
+/** One machine is built at a time: each is a model call of a minute or more. */
+let building = false;
 /** The game's book for building the live view; rebuilt whenever the page sends its encyclopedia. */
 let book: Book | undefined;
 let encyclopedia: Encyclopedia | undefined;
@@ -35,6 +41,9 @@ let nextId = 1;
 const sockets = new Set<ServerWebSocket<{ raw: string[] }>>();
 const waiters = new Set<() => void>();
 const encoder = new TextEncoder();
+
+/** The game's kinds of spot, once the page has sent its encyclopedia. */
+const kinds = () => (book === undefined ? undefined : new Set(spotKinds(book).map((k) => k.kind)));
 
 const toPage = (line: PageLine) => page?.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
 const pilot = new Pilot(localOrigin(PORT), PILOT_ARGS, toPage);
@@ -105,12 +114,14 @@ GET  /state          the game as a live game needs it (LiveView in protocol/view
 WS   /ws?raw=...     pushes every snapshot, raw groups as for /state; send a JSON command to run it
 GET  /encyclopedia   every weapon, passive, item, recipe, enemy, boss, point of interest and biome
 POST /command        JSON command, see protocol/commands.ts; add ?wait=1 to block until it finishes
-POST /pilot          {"drive": {...}} sets the Full Self Driving instructions (protocol/drive.ts), {"on": true}
-                     starts the bot for the tab with them, {"on": false} stops it
+POST /pilot          {"drive": {"machine", "loadout"}} sets Full Self Driving's state machine and picker question
+                     (protocol/drive.ts), {"on": true} starts the bot for the tab with them, {"on": false} stops it
+POST /pilot/machine  {"prompt": "..."} has Opus 5.5 write a state machine from the request, through the claude CLI;
+                     answers {"machine": {...}} (protocol/machine.ts), which can take a minute or more
 GET  /checkpoints    the saved checkpoints' summaries, oldest first (see the checkpoint command)
 POST /pilot/say      the bot's chat line for the panel: {"role": "planner" | "action" | "system", "text", "detail"?, "model"?, "time"?}
-POST /pilot/state    the game state the bot last rendered, for the panel: {"time", "blocks": {"health": "...", ...}};
-                     GET returns it
+POST /pilot/state    the game as the bot last read it, for the panel: {"time", "state", "input", "blocks"}
+                     (StatePreview in protocol/pilot.ts); GET returns it
 `;
 
 const server = Bun.serve<{ raw: string[] }>({
@@ -211,14 +222,34 @@ const server = Bun.serve<{ raw: string[] }>({
         case "POST /pilot": {
           let change: PilotChange;
           try {
-            change = parsePilotChange(await jsonBody(req));
-            const errors = change.drive === undefined ? [] : driveErrors(change.drive);
-            if (errors.length > 0) throw new Error(`the drive cannot be played: ${errors.map((e) => `${typeof e.field === "number" ? `step ${e.field + 1}` : e.field}: ${e.message}`).join("; ")}`);
+            change = parsePilotChange(await jsonBody(req), kinds());
+            const errors = change.drive === undefined ? [] : loadoutErrors(change.drive.loadout);
+            if (errors.length > 0) throw new Error(`the loadout cannot be played: ${errors.join("; ")}`);
             pilot.change(change);
           } catch (e) {
             return errorResponse(e);
           }
           return Response.json(pilot.state);
+        }
+        case "POST /pilot/machine": {
+          let request: string;
+          try {
+            const { prompt } = ((await jsonBody(req)) ?? {}) as { prompt?: unknown };
+            if (typeof prompt !== "string" || prompt.trim() === "") throw new Error('send {"prompt": "what the machine should do"}');
+            if (prompt.length > REQUEST_LIMIT) throw new Error(`the prompt is ${prompt.length} characters; keep it under ${REQUEST_LIMIT}`);
+            request = prompt;
+          } catch (e) {
+            return errorResponse(e);
+          }
+          if (building) return errorResponse("a machine is already being built; wait for it", 409);
+          building = true;
+          try {
+            return Response.json({ machine: await buildMachine(request, book === undefined ? undefined : spotKinds(book)) });
+          } catch (e) {
+            return errorResponse(e, 502);
+          } finally {
+            building = false;
+          }
         }
         case "POST /pilot/say":
           try {
@@ -228,7 +259,7 @@ const server = Bun.serve<{ raw: string[] }>({
           }
           return new Response(null, { status: 204 });
         case "GET /pilot/state":
-          return pilot.shown === undefined ? errorResponse("the bot has rendered no state yet; let Full Self Driving plan once", 404) : Response.json(pilot.shown);
+          return pilot.shown === undefined ? errorResponse("the bot has shown no state yet; let Full Self Driving drive for a moment", 404) : Response.json(pilot.shown);
         case "POST /pilot/state":
           try {
             pilot.preview(await jsonBody(req));

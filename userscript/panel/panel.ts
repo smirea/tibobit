@@ -17,16 +17,7 @@ import { connectionRow } from "./connection";
 import { annotateCard, offerKey } from "./card-notes";
 import { fsdPopup, type GameControl } from "../fsd/popup";
 import { worldEntities } from "../fsd/entities";
-
-/**
- * The game reads keys on the window, so typing a port would otherwise steer or pick cards. This has
- * to run at document-start, before the game's own listeners, to see the keys first.
- */
-export function guardPanelKeys() {
-  for (const type of ["keydown", "keyup", "keypress"]) {
-    window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest(`#${PANEL_ID}, .tbh-fsd`) !== null && e.stopImmediatePropagation(), true);
-  }
-}
+import { machineOverlay } from "../fsd/machine-overlay";
 
 function mount(chat: HTMLElement, footer: HTMLElement): { panel: HTMLElement; content: HTMLElement } {
   for (const css of [panelCss, connectionCss, spritesCss, cardNotesCss]) addStyle(css);
@@ -39,7 +30,7 @@ function mount(chat: HTMLElement, footer: HTMLElement): { panel: HTMLElement; co
   return { panel, content };
 }
 
-/** The run as the Full Self Driving popup needs it: paused while the instructions are open. */
+/** The run as the Full Self Driving popup needs it: paused while the popup is open. */
 function gameControl(link: GameLink): GameControl {
   return {
     pause() {
@@ -52,13 +43,13 @@ function gameControl(link: GameLink): GameControl {
     resume() {
       if (inRun(link)) link.game?.setPaused(false);
     },
-    time: () => (link.game !== undefined && inRun(link) ? link.game.state.runClock : undefined),
     entities: () => worldEntities(link),
   };
 }
 
 export function startPanel(link: GameLink, discovery: Discovery, bridge: Bridge) {
   const fsd = fsdPopup(bridge.pilot, gameControl(link));
+  machineOverlay(bridge.pilot, () => worldEntities(link));
   const { panel, content } = mount(botFeed(bridge.pilot, fsd.open), connectionRow(bridge, fsd.open));
   // While the bot plays, its chat takes the corner and the combos fold to their header.
   let collapsedBefore: boolean | undefined;

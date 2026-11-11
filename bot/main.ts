@@ -8,7 +8,7 @@ import { ladderCleared, type State } from "../protocol/view";
 import { type EndJson, see, type World } from "./world";
 import type { RunPlan, RunSetup } from "./notes";
 import { talliesOf, totalsBetween } from "./tallies";
-import { command, drive, followPanel, piloted, RAW, say, server, showState, timed, timings } from "./server";
+import { command, drive, followPanel, RAW, say, server, timed, timings } from "./server";
 import { BOT_CODE, MODE, MODE_NAME, setDifficulty } from "./run-context";
 import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG_DIR, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RESULT, RUN_COUNT, STEP, TAKEOVER, TRIAL, WEAPON } from "./config";
 import { RunNotes } from "./run-notes";
@@ -20,8 +20,7 @@ import { latency, snapshotAges } from "./decider";
 import { RunLog } from "./run-log/writer";
 import { pursuit, resetGoals } from "./goals";
 import { driveTemplates } from "./drive";
-import { activeStep } from "../protocol/drive";
-import { renderBlocks } from "./blocks";
+import { MachineDriver } from "./machine-driver";
 import { clock } from "../clock";
 import type { TrialResult } from "./trial-result";
 import { type Book, bookFrom } from "../game/book";
@@ -94,6 +93,8 @@ async function main() {
   let steps = 0;
   let notes: RunNotes | undefined;
   let planner: Planner | undefined;
+  /** The panel's state machine, which sets the goals under Full Self Driving instead of the planner. */
+  let driver: MachineDriver | undefined;
   let runLog: RunLog | undefined;
   let last: World | undefined;
   let shownPaused = false;
@@ -159,22 +160,11 @@ async function main() {
     tag: adopted ? "Take over" : "Start",
     time: runClock(now),
     text: `${adopted ? `Taking over the run at ${clock(runClock(now))}` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}`}.`,
-    detail: drive === undefined ? `Planner ${PLAN_MODEL}, action model ${MODEL}, templates from ${BASE.source}. Run logs: ${LOG_DIR}` : `Full Self Driving: planner ${PLAN_MODEL} on your instructions, the autopilot steps. Run logs: ${LOG_DIR}`,
+    detail: drive === undefined ? `Planner ${PLAN_MODEL}, action model ${MODEL}, templates from ${BASE.source}. Run logs: ${LOG_DIR}` : `Full Self Driving: your state machine sets the goals, the autopilot steps, and ${PLAN_MODEL} picks the cards. Run logs: ${LOG_DIR}`,
   });
   const plan: RunPlan = { source: drive === undefined ? BASE.source : "Full Self Driving", intent: INTENT, templates: BASE.templates, weapon: WEAPON };
-  /** The Full Self Driving instructions the planner was last given, and the step of them then in effect. */
-  let told: { key: string; step: number } | undefined;
-  /** Gives the planner the panel's instructions as they stand, and has it run again when they change. */
-  const follow = (r: World, p: Planner) => {
-    if (drive === undefined) return;
-    const step = activeStep(drive.steps, r.time);
-    const templates = driveTemplates(drive, step);
-    const key = JSON.stringify(templates.planner);
-    if (key === told?.key) return;
-    if (told !== undefined) p.retold = step !== told.step ? `the instructions for ${clock(drive.steps[step]?.at ?? 0)} took effect` : "the instructions were edited";
-    told = { key, step };
-    setTemplates(templates);
-  };
+  /** The loadout question the picker's templates were last made from. */
+  let loadout: string | undefined;
   const prepareAndStart = () => start(WEAPON);
   if (!adopted) await prepareAndStart();
   runs = 1;
@@ -282,7 +272,8 @@ async function main() {
       const setup: RunSetup = { started: new Date(), difficulty: r.view.world.difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: String(r.run.seed), planner: PLAN_MODEL, action: MODEL, coach: COACH_LABEL, bot: BOT_CODE };
       const skip = !NOTES ? "no --notes" : adopted ? "taken over mid-run" : undefined;
       setTemplates(plan.templates);
-      told = undefined;
+      loadout = undefined;
+      driver = drive === undefined ? undefined : new MachineDriver();
       notes = new RunNotes(setup, plan, skip === undefined);
       const first = r.weapons[0]?.id ?? "none";
       notes.started = startNote === "chosen" ? `${first} (chosen by the coach)` : `${first} (${startNote})`;
@@ -292,7 +283,11 @@ async function main() {
       resetGoals();
       console.log(`run seed ${String(r.run.seed)}${MODE === "daily" ? " (daily)" : ""}, ${skip === undefined ? "notes at the end" : `no notes (${skip})`}, templates from ${plan.source}, log ${notes.log}`);
     }
-    follow(r, planner);
+    // The panel's loadout question can change mid-run.
+    if (drive !== undefined && drive.loadout !== loadout) {
+      loadout = drive.loadout;
+      setTemplates(driveTemplates(drive));
+    }
     last = r;
     trialStart ??= r;
     if (TRIAL !== undefined && r.time - trialStart.time >= TRIAL) return endTrial(r, undefined);
@@ -309,8 +304,8 @@ async function main() {
     if (!modeSet) await setMode();
     // Live, the bot never pauses the game itself, so a pause is the player's: the models wait for it.
     if (s.screen === "paused") {
-      // The panel pauses the game while its instructions are open, and lists the state to embed.
-      if (piloted && !shownPaused) showState(r.time, renderBlocks(r));
+      // The panel pauses the game while its popup is open, and lists the state as it is then.
+      if (!shownPaused) driver?.show(r);
       shownPaused = true;
       await Bun.sleep(250);
       continue;
@@ -321,10 +316,15 @@ async function main() {
     snapshotAges.push(s.ageMs);
     await tellLag(s.ageMs);
     if (s.screen === "choice") await choose(r, planner, runLog);
-    else {
-      const why = pursuit === undefined ? undefined : planner.due(r);
-      if (why !== undefined) await planner.plan(r, why);
-      await pursue(s, r, runLog, planner);
+    else if (driver !== undefined) {
+      const [machine, log] = [driver, runLog];
+      machine.step(r, log);
+      await pursue(s, r, log, planner, (now) => machine.direct(now, log));
+      planner.picked = false;
+    } else {
+      const [asked, why] = [planner, pursuit === undefined ? undefined : planner.due(r)];
+      if (why !== undefined) await asked.plan(r, why);
+      await pursue(s, r, runLog, asked, (now, reason) => asked.plan(now, reason));
     }
     // A move the action model chose was decided from a state already a few hundred ms old, so the
     // next one starts as soon as it lands; the page walks the cheap steps on its own anyway.

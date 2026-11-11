@@ -14,7 +14,7 @@ import { say } from "./server";
 import { RunLog } from "./run-log/writer";
 import { goalCell, goalTitleCell, hurtLeaveCell, targetCell } from "./run-log/cells";
 
-/** `pickup` is something the game drops on the ground other than xp, gold, chests and food, such as a magnet. `still` lasts until the planner picks another goal. */
+/** `pickup` is something the game drops on the ground other than xp, gold, chests and food, such as a magnet. `still` lasts until another goal takes over. */
 export type Goal = { kind: "chest" | "poi" | "food" | "elite" | "pickup"; uid: number } | { kind: "explore" | "dash"; dir: Direction } | { kind: "evade" } | { kind: "still" };
 
 type TargetGoal = Extract<Goal, { uid: number }>;
@@ -192,7 +192,7 @@ export function aimAt(p: Pursuit, r: World): Course | Ended {
     case "dash":
       return { heading: g.dir, progress: `dashing ${g.dir}` };
     case "still":
-      return { heading: "stay", progress: `standing still for ${Math.round(age)}s, until the planner picks another goal` };
+      return { heading: "stay", progress: `standing still for ${Math.round(age)}s` };
   }
 }
 
@@ -243,10 +243,10 @@ export function finish(r: World, log: RunLog, outcome: string, result: GoalResul
   say({ role: "action", model: "goal", time: r.time, text: `${p.title}: ${RESULT_WORDS[result]}`, tag: p.tag, result, detail: `${outcome} · ${Math.round(r.time - p.since)}s`, inspect: p.decision });
 }
 
-/** The planner's goal takes over, unless it is the one already under way. */
-export function setGoal(goal: Goal, r: World, log: RunLog, decision: Inspect) {
+/** The goal takes over, unless it is the one already under way. `dropping` says why the one under way ends. */
+export function setGoal(goal: Goal, r: World, log: RunLog, decision: Inspect, dropping = "the planner chose another goal") {
   if (pursuit?.id === goalId(goal)) return;
-  if (pursuit !== undefined) finish(r, log, "the planner chose another goal", "dropped");
+  if (pursuit !== undefined) finish(r, log, dropping, "dropped");
   begin(goal, r, log, decision);
 }
 

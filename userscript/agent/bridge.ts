@@ -5,6 +5,7 @@ import { encyclopedia } from "./encyclopedia";
 import { Forecaster } from "./forecast";
 import { BRIDGE_ORIGIN_GLOBAL, BRIDGE_PORT, localOrigin, validPort } from "../../protocol/address";
 import type { PageLine } from "../../protocol/pilot";
+import type { Machine } from "../../protocol/machine";
 import { parseCommand } from "../../protocol/commands";
 import { inRun } from "../link/screen";
 import { snapshot } from "./snapshot";
@@ -57,6 +58,8 @@ const RUN_INTERVAL_MS = 33;
 // and sending them takes at most this share of the page's time, which the game's own ticks share.
 const SNAPSHOT_SHARE = 0.1;
 const CHECKPOINT_TIMEOUT_MS = 120_000;
+// The server gives the model three tries of up to three minutes each.
+const BUILD_TIMEOUT_MS = 600_000;
 const IDLE_INTERVAL_MS = 500;
 const RECONNECT_MS = 3000;
 const MAX_IN_FLIGHT = 4;
@@ -85,6 +88,25 @@ function post(origin: string, path: string, body: unknown): Promise<boolean> {
       onload: (r) => resolve(r.status < 300),
       onerror: () => resolve(false),
       ontimeout: () => resolve(false),
+    }),
+  );
+}
+
+/** Asks the server's builder for a machine; rejects with the server's own words when it has none. */
+function buildMachine(origin: string, prompt: string): Promise<Machine> {
+  return new Promise((resolve, reject) =>
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: `${origin}/pilot/machine`,
+      data: JSON.stringify({ prompt }),
+      headers: { "content-type": "application/json" },
+      timeout: BUILD_TIMEOUT_MS,
+      onload: (r) => {
+        if (r.status >= 300) return reject(new Error(refusal(r, origin)));
+        resolve((JSON.parse(r.responseText ?? String(r.response ?? "")) as { machine: Machine }).machine);
+      },
+      onerror: () => reject(new Error(`the agent server on ${origin} did not answer`)),
+      ontimeout: () => reject(new Error("the builder took more than 10 minutes")),
     }),
   );
 }
@@ -129,7 +151,7 @@ export function startBridge(link: GameLink, controller: Controller, forecaster: 
   const notify = () => {
     for (const listener of listeners) listener();
   };
-  const pilot = new Pilot({ connected: () => connected, origin: () => origin, ask: (change) => post(origin, "/pilot", change) }, () => controller.release());
+  const pilot = new Pilot({ connected: () => connected, origin: () => origin, ask: (change) => post(origin, "/pilot", change), build: (prompt) => buildMachine(origin, prompt) }, () => controller.release());
   let inFlight = 0;
   let lastPush = 0;
   let screen: Snapshot["screen"] = "title";

@@ -5,13 +5,13 @@ import type { Drive } from "../protocol/drive";
 import { type BotArgs, botArgv } from "../bot/args";
 
 /**
- * Full Self Driving: the bot this server starts for its tab, the instructions it plays by, and what
- * it says in the panel. The page sends its instructions whenever it connects or they change.
+ * Full Self Driving: the bot this server starts for its tab, the machine and loadout it plays by, and
+ * what it says in the panel. The page sends its drive whenever it connects or it changes.
  */
 export class Pilot {
   state: PilotState = { state: "off" };
   drive: Drive | undefined;
-  /** The game state as the bot last rendered it, which the panel lists for embedding. */
+  /** The game as the bot last read it and the state its machine was in, which the panel shows. */
   shown: StatePreview | undefined;
   readonly chat: ChatMessage[] = [];
   private nextChatId = 1;
@@ -52,7 +52,7 @@ export class Pilot {
 
   change({ on, drive }: PilotChange) {
     if (drive !== undefined) this.drive = drive;
-    if (on === true && this.drive === undefined) throw new Error("Full Self Driving needs instructions first: send a drive");
+    if (on === true && this.drive === undefined) throw new Error("Full Self Driving needs a machine first: send a drive");
     if (on === true) this.start();
     if (on === false) this.stop();
   }

@@ -34,8 +34,8 @@ function actionTile(m: ChatMessage): HTMLElement {
 }
 
 /**
- * The bot's models while it plays: its latest plan pinned at the top, and the latest actions under
- * it, newest first. Hovering either shows what the model was asked and what it weighed.
+ * The bot while it plays: the machine's state or the picker's latest card pinned at the top, and
+ * the latest actions under it, newest first. Hovering either shows what led to it.
  */
 export function botFeed(pilot: Pilot, openFsd: (from: HTMLElement) => void): HTMLElement {
   addStyle(feedCss);
@@ -44,7 +44,7 @@ export function botFeed(pilot: Pilot, openFsd: (from: HTMLElement) => void): HTM
   giveBack.addEventListener("click", () => pilot.stop());
   const instructions = h("button", "tbh-fsd-open", "FSD");
   instructions.type = "button";
-  instructions.title = "Edit the Full Self Driving instructions (pauses the game)";
+  instructions.title = "Open Full Self Driving's machine and loadout (pauses the game)";
   instructions.addEventListener("click", () => openFsd(instructions));
   const tools = h("div", "tbh-chat-tools", giveBack, instructions);
 
@@ -66,9 +66,9 @@ export function botFeed(pilot: Pilot, openFsd: (from: HTMLElement) => void): HTM
     if (latest !== shownPlan || latest === undefined) {
       shownPlan = latest;
       plan.replaceChildren(
-        h("span", "tbh-plan-label", "Plan"),
+        h("span", "tbh-plan-label", latest === undefined || latest.model === "machine" ? "State" : "Pick"),
         ...(latest?.time === undefined ? [] : [h("span", "tbh-row-time", clock(latest.time))]),
-        h("span", "tbh-plan-text", latest === undefined ? "Waiting for the planner…" : arrowed(latest.text)),
+        h("span", "tbh-plan-text", latest === undefined ? "Waiting for the machine…" : arrowed(latest.text)),
         ...(latest?.stream === undefined ? [] : [h("div", "tbh-plan-stream", h("span", "", latest.stream, h("b", "tbh-cursor", "▍")))]),
       );
       plan.classList.toggle("tbh-row-inspectable", latest !== undefined);

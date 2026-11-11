@@ -2,15 +2,15 @@
 // its template asks for, which the coach wrote for this run with the game knowledge in it. It
 // picks every level-up, chest and shrine option, and weighs every goal Tibo could take on next,
 // one question each; the most promising becomes the goal. It is asked when a goal ends, at every
-// choice, when a boss appears, when its instructions change, and every planEvery() seconds, so a
-// better goal can take over.
+// choice, when a boss appears, and every planEvery() seconds, so a
+// better goal can take over. Under Full Self Driving it only picks: the panel's state machine sets the goals.
 
 import { onChest, plural, priceWords, said, spotSaid } from "./phrasing";
 import { knobs, planEvery, templates } from "./run-templates";
-import { blocks, type Card, cards, renderBlocks } from "./blocks";
+import { blocks, type Card, cards } from "./blocks";
 import { PLAN_MODEL } from "./config";
 import { RunNotes } from "./run-notes";
-import { command, drive, piloted, say, showState } from "./server";
+import { command, drive, piloted, say } from "./server";
 import { decide, type Question } from "./decider";
 import { talliesOf, totalsBetween, totalsLines } from "./tallies";
 import { giveUps, type Goal, goalId, goalTitle, locate, outcomes, pursuit, setGoal } from "./goals";
@@ -64,34 +64,16 @@ function goalOptions(r: World): GoalOption[] {
       goal: { kind: "explore" as const, dir: s.dir },
       text: `explore ${s.dir}: walk ${knobs().exploreDistance} units that way, stopping at the first new chest, toward ${plural(s.enemies, "enemy")} on screen that way`,
     })),
-    ...(drive === undefined ? [{ goal: { kind: "evade" as const }, text: `keep away from enemies for ${knobs().evadeSeconds} seconds` }] : fsdOptions(r)),
+    { goal: { kind: "evade" as const }, text: `keep away from enemies for ${knobs().evadeSeconds} seconds` },
   ];
 }
 
-/** Full Self Driving's goals beyond the loop's: magnets on the ground, standing still, and a dash each way while Tibo has a charge. */
-function fsdOptions(r: World): GoalOption[] {
-  const charges = r.view.tibo.dash.charges;
-  return [
-    ...r.pickups
-      .filter((x) => x.type === "magnet" && x.dist < PLAN_RANGE)
-      .slice(0, GOAL_OPTIONS.magnets)
-      .map((x) => ({ goal: { kind: "pickup" as const, uid: x.id }, text: `walk to the magnet ${Math.round(x.dist)} away to the ${x.dir} and pick it up` })),
-    { goal: { kind: "still" }, text: "stand still where Tibo is until the planner picks another goal, stepping aside only when standing would cost more health than moving" },
-    ...(charges === 0 ? [] : r.sectors.map((s) => ({ goal: { kind: "dash" as const, dir: s.dir }, text: `dash ${s.dir} at once, a quick burst that way, using one of Tibo's ${charges} dash charges; ${plural(s.enemies, "enemy")} on screen that way` }))),
-  ];
-}
-
-/** What Tibo does when the planner gives no answer and no goal is under way. */
-const idle = (): Goal => (drive === undefined ? { kind: "evade" } : { kind: "still" });
-
-type PlanAnswer = { pick?: Card; goal: Goal; ms: number; cards?: CardOption[]; goals: CardOption[] };
+type PlanAnswer = { pick?: Card; ms: number; cards?: CardOption[]; goals: CardOption[] };
 
 export class Planner {
   calls = 0;
   /** A card was just taken, so the goal is planned again with it in hand. */
   picked = false;
-  /** Why the planner's instructions changed since it last ran, if they did. */
-  retold: string | undefined;
   private lastAsked = Number.NEGATIVE_INFINITY;
   /** Bosses already planned for, by id: each new one gets a plan the moment it shows up. */
   private seenBosses = new Set<string>();
@@ -105,8 +87,7 @@ export class Planner {
   due(r: World): string | undefined {
     const fresh = r.bosses.find((b) => !this.seenBosses.has(b.type));
     let why: string | undefined;
-    if (this.retold !== undefined) why = this.retold;
-    else if (this.picked) why = "a card was just taken";
+    if (this.picked) why = "a card was just taken";
     else if (fresh !== undefined) why = `a boss appeared: ${fresh.name}, ${Math.round(fresh.dist)} away to the ${fresh.dir}`;
     else if (knobs().planOnHurt > 0 && recentLoss(r) >= knobs().planOnHurt * r.maxHp && r.time - this.lastAsked >= HURT_SECONDS) why = `Tibo lost ${Math.round(recentLoss(r))} health in the last ${HURT_SECONDS} seconds`;
     else if (r.time - this.lastAsked >= planEvery()) why = `${planEvery()} seconds passed`;
@@ -117,13 +98,12 @@ export class Planner {
   /** Picks among `options` when a choice is open, and sets the next goal. */
   async plan(r: World, why: string, options?: Card[]): Promise<PlanAnswer> {
     this.lastAsked = r.time;
-    this.retold = undefined;
     if (options === undefined) this.picked = false;
     this.calls++;
-    if (piloted) showState(r.time, renderBlocks(r));
     const vars = { ...blocks(r, r.book), why: () => why };
     const state = render(templates.planner.state, vars);
-    const goals = goalOptions(r);
+    // Under Full Self Driving the panel's machine sets the goals, and the planner only picks cards.
+    const goals = drive === undefined ? goalOptions(r) : [];
     const questions: Record<string, Question> = {};
     const goalQuestion = (text: string) => render(templates.planner.goal, { ...vars, goal: () => text });
     for (const [i, g] of goals.entries()) questions[`goal:${i}`] = { type: "noul", instructions: goalQuestion(g.text) };
@@ -140,14 +120,14 @@ export class Planner {
     const ms = Math.round(performance.now() - started);
     if (answers === undefined) {
       // The goal under way stands; with none, Tibo idles until the planner is asked again.
-      if (pursuit === undefined) setGoal(idle(), r, this.log, { kind: "plan", prompt: state, goals: [] });
+      if (pursuit === undefined && drive === undefined) setGoal({ kind: "evade" }, r, this.log, { kind: "plan", prompt: state, goals: [] });
       this.log.write(r, { event: "plan", model: PLAN_MODEL, reason: `${why}; the planner ${UNANSWERED}`, goal: pursuit?.id ?? "", action: "kept the goal", ms });
-      return { goal: pursuit?.goal ?? idle(), ms, goals: [] };
+      return { ms, goals: [] };
     }
 
     const score = (i: number) => answers[`goal:${i}`]?.noul ?? 0;
-    const best = goals.map((_, i) => i).sort((x, y) => score(y) - score(x))[0] ?? goals.length - 1;
-    const goal = goals[best]?.goal ?? idle();
+    const best = goals.map((_, i) => i).sort((x, y) => score(y) - score(x))[0] ?? -1;
+    const goal = goals[best]?.goal;
     const pickKey = answers.pick?.choice;
     const pick = options === undefined ? undefined : (keys.get(pickKey ?? "") ?? [...keys].find(([k]) => k.split(":")[0] === (pickKey ?? "").split(":")[0])?.[1] ?? options[0]);
     const cards: CardOption[] | undefined =
@@ -160,18 +140,18 @@ export class Planner {
     const weighed: CardOption[] = goals.map((g, i) => ({ card: goalTitle(g.goal, r), notes: g.text, probability: score(i), chosen: i === best }));
     const decision: Inspect = {
       kind: "plan",
-      prompt: [state, ...(options === undefined ? [] : [question]), `For each goal: ${goalQuestion("…")}`].join("\n\n"),
+      prompt: [state, ...(options === undefined ? [] : [question]), ...(goal === undefined ? [] : [`For each goal: ${goalQuestion("…")}`])].join("\n\n"),
       ...(cards === undefined ? {} : { choices: cards }),
       goals: weighed,
     };
-    setGoal(goal, r, this.log, decision);
+    if (goal !== undefined) setGoal(goal, r, this.log, decision);
 
-    const title = goalTitle(goal, r);
+    const title = goal === undefined ? undefined : goalTitle(goal, r);
     say({
       role: "planner",
       model: PLAN_MODEL,
       time: r.time,
-      text: [pick === undefined ? "" : `Take ${pick.name}.`, `Goal: ${title} (${Math.round(score(best) * 100)}%).`].filter(Boolean).join(" "),
+      text: [pick === undefined ? "" : `Take ${pick.name}.`, title === undefined ? "" : `Goal: ${title} (${Math.round(score(best) * 100)}%).`].filter(Boolean).join(" "),
       detail: `Asked because ${why}.`,
       inspect: decision,
     });
@@ -185,15 +165,15 @@ export class Planner {
       event: pick === undefined ? "plan" : "pick",
       model: PLAN_MODEL,
       reason: why,
-      goal: goalId(goal),
-      action: pick === undefined ? title : pick.name,
+      goal: goal === undefined ? (pursuit?.id ?? "") : goalId(goal),
+      action: pick === undefined ? (title ?? "") : pick.name,
       options: weighedCell.encode(placed, cards),
       ms,
     });
     if (pick !== undefined) {
       this.notes.picks.push(`- **${clock(r.time)}** ${kind}: took ${pick.name} from ${options?.map((o) => o.name).join(", ")}.`);
     }
-    return { ...(pick === undefined ? {} : { pick }), goal, ms, ...(cards === undefined ? {} : { cards }), goals: weighed };
+    return { ...(pick === undefined ? {} : { pick }), ms, ...(cards === undefined ? {} : { cards }), goals: weighed };
   }
 
   /** The run ended: its notes are written. */

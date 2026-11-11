@@ -1,21 +1,29 @@
 import { type ChatMessage, type PilotChange, type PilotState, type StatePreview, trimChat } from "../../protocol/pilot";
 import { checkDraft, type Draft, type DraftCheck, loadDraft, saveDraft } from "../fsd/draft";
+import { type Machine, parseMachine } from "../../protocol/machine";
 
-/** The agent server as the pilot needs it: whether it is connected, where, and a way to ask it for a change, which resolves to whether it took it. */
-type PilotServer = { connected(): boolean; origin(): string; ask(change: PilotChange): Promise<boolean> };
+/**
+ * The agent server as the pilot needs it: whether it is connected, where, a way to ask it for a
+ * change, which resolves to whether it took it, and its machine builder, which rejects with why.
+ */
+type PilotServer = { connected(): boolean; origin(): string; ask(change: PilotChange): Promise<boolean>; build(prompt: string): Promise<Machine> };
 
-// Typing streams the instructions to a bot that is driving; this keeps it to a request per pause.
+// Typing streams the loadout to a bot that is driving; this keeps it to a request per pause.
 const SEND_AFTER_MS = 400;
 
 /**
- * Full Self Driving as this page knows it: the instructions written in this browser, whether the
- * server's bot drives this tab with them, what the bot says, and the state it last rendered.
+ * Full Self Driving as this page knows it: the machine and loadout kept in this browser, whether the
+ * server's bot drives this tab with them, what the bot says, and the game as it last read it.
  */
 export class Pilot {
   private current: PilotState = { state: "off" };
   private written = loadDraft();
   private checked = checkDraft(this.written);
   private shown: StatePreview | undefined;
+  /** Whether `shown` came from the bot driving now, so its machine state is the one in effect. */
+  private live = false;
+  private build: { since: number } | undefined;
+  private buildProblem: string | undefined;
   private messages: ChatMessage[] = [];
   private listeners = new Set<() => void>();
   private sending: ReturnType<typeof setTimeout> | undefined;
@@ -42,9 +50,45 @@ export class Pilot {
     return this.server.connected();
   }
 
-  /** The game state as the bot last rendered it, if it has. */
+  /** The game as the bot last read it, if it has; it may be from an earlier run. */
   preview(): StatePreview | undefined {
     return this.shown;
+  }
+
+  /** The state the driving bot's machine is in, and for how many game seconds. */
+  active(): { state: string; seconds: number } | undefined {
+    return this.current.state !== "off" && this.live && this.shown !== undefined ? { state: this.shown.state, seconds: this.shown.input.stateSeconds } : undefined;
+  }
+
+  /** When the machine being built was asked for, if one is. */
+  building(): number | undefined {
+    return this.build?.since;
+  }
+
+  /** Why the last build gave no machine, until the next one starts. */
+  buildError(): string | undefined {
+    return this.buildProblem;
+  }
+
+  /** Has the server's builder write a machine from the prompt as written. It replaces the one kept here, and the one a driving bot runs. */
+  buildMachine() {
+    const prompt = this.written.prompt;
+    if (this.build !== undefined || prompt.trim() === "" || !this.server.connected()) return;
+    this.build = { since: Date.now() };
+    this.buildProblem = undefined;
+    this.notify();
+    void this.server
+      .build(prompt)
+      .then(
+        (machine) => this.edit({ ...this.written, machine: parseMachine(machine), builtFrom: prompt }),
+        (e: unknown) => {
+          this.buildProblem = e instanceof Error ? e.message : String(e);
+        },
+      )
+      .finally(() => {
+        this.build = undefined;
+        this.notify();
+      });
   }
 
   /** The bot's chat, oldest first; a message that is sent again keeps its id and position. */
@@ -60,7 +104,7 @@ export class Pilot {
     for (const listener of this.listeners) listener();
   }
 
-  /** Keeps the instructions in this browser, and hands them to the server once they check, so a driving bot follows them. */
+  /** Keeps the draft in this browser, and hands its drive to the server once it checks, so a driving bot follows it. */
   edit(next: Draft) {
     this.written = next;
     this.checked = checkDraft(next);
@@ -71,7 +115,7 @@ export class Pilot {
     this.notify();
   }
 
-  /** Starts driving with the instructions as written; false when they do not check yet. */
+  /** Starts driving with the machine and loadout as they are; false when the loadout does not check yet. */
   engage(): boolean {
     const drive = this.checked.drive;
     if (drive === undefined) return false;
@@ -84,7 +128,7 @@ export class Pilot {
     this.ask({ on: false });
   }
 
-  /** A server has connected: it replays its chat from the start, and this browser's instructions go up, so they survive its restarts. */
+  /** A server has connected: it replays its chat from the start, and this browser's drive goes up, so it survives the server's restarts. */
   hello() {
     this.messages.length = 0;
     const drive = this.checked.drive;
@@ -97,7 +141,10 @@ export class Pilot {
     // The bot leaves the game paused at its own speed between steps.
     if (this.current.state !== "off" && next.state === "off") this.release();
     // Each time the bot takes the wheel its chat starts empty, as the server's does.
-    if (this.current.state === "off" && next.state === "on") this.messages.length = 0;
+    if (this.current.state === "off" && next.state === "on") {
+      this.messages.length = 0;
+      this.live = false;
+    }
     this.current = next;
     this.notify();
   }
@@ -117,6 +164,7 @@ export class Pilot {
 
   see(preview: StatePreview) {
     this.shown = preview;
+    this.live = this.current.state !== "off";
     this.notify();
   }
 

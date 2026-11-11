@@ -13,5 +13,8 @@
     "playwright-core": "1.59",
     "typescript": "^7.0.2"
   },
-  "version": "1.15.0"
+  "version": "1.15.0",
+  "dependencies": {
+    "xstate": "^5.33.4"
+  }
 }
