@@ -1,4 +1,5 @@
-import type { GameLink, GameState, Table } from "../game";
+import type { GameLink } from "../game/link";
+import type { GameState, Table } from "../game/types";
 
 /**
  * The game's state object as the game holds it, under the game's own keys, made into JSON:

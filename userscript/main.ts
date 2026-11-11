@@ -1,9 +1,9 @@
 import { startBridge } from "./agent/bridge";
 import { Controller } from "./agent/control";
-import { Discovery } from "./discovery";
-import { GameLink } from "./game";
-import { guardPanelKeys, startHelper } from "./helper";
-import { startPickShow } from "./pickShow";
+import { Discovery } from "./combos/discovery";
+import { GameLink } from "./game/link";
+import { guardPanelKeys, startHelper } from "./panel/panel";
+import { startPickShow } from "./pilot/pick-overlay";
 import { installSeedHook } from "./agent/training";
 
 installSeedHook();

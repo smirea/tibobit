@@ -1,4 +1,4 @@
-import type { GameLink } from "../game";
+import type { GameLink } from "../game/link";
 import type { Encyclopedia } from "../../protocol/snapshot";
 
 function plain(value: unknown): unknown {

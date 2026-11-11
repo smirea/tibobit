@@ -1,4 +1,5 @@
-import type { Game, GameLink, GameState } from "../game";
+import type { Game, GameState } from "../game/types";
+import type { GameLink } from "../game/link";
 import type { CheckpointMeta, LoadoutSpec } from "../../protocol/commands";
 import { TICKS_PER_SECOND } from "../../protocol/geometry";
 

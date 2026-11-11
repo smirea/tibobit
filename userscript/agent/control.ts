@@ -1,7 +1,8 @@
-import type { Game, GameLink, GameState } from "../game";
+import type { Game, GameState } from "../game/types";
+import type { GameLink } from "../game/link";
 import type { Command, CommandStatus, Envelope, GameMode, Target } from "../../protocol/commands";
 import { STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
-import { button, modeScreen } from "./menu";
+import { button, modeScreen } from "../game/screen";
 import { inRun } from "./snapshot";
 import { type CheckpointFile, SEED_KEY, Training } from "./training";
 

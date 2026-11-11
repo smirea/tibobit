@@ -1,4 +1,5 @@
-import type { GameLink, GameState } from "../game";
+import type { GameLink } from "../game/link";
+import type { GameState } from "../game/types";
 import { type Direction, directionOf, DIRECTIONS, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
 import type { Surroundings, Threats } from "../../protocol/snapshot";
 

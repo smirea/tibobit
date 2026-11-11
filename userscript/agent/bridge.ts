@@ -1,8 +1,8 @@
-import type { GameLink } from "../game";
+import type { GameLink } from "../game/link";
 import type { Controller } from "./control";
 import type { CheckpointFile } from "./training";
 import { encyclopedia } from "./encyclopedia";
-import { Foresight } from "./foresight";
+import { Foresight } from "./forecast";
 import { BRIDGE_PORT, bridgeOrigin, validPort } from "../../protocol/address";
 import { type ChatMessage, DEFAULT_SETTINGS, type PageLine, parsePilotChange, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../../protocol/pilot";
 import { parseCommand } from "../../protocol/commands";

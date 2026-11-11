@@ -1,4 +1,5 @@
-import type { Game, GameLink, GameState } from "../game";
+import type { Game, GameState } from "../game/types";
+import type { GameLink } from "../game/link";
 import { type Controller, toward } from "./control";
 import { type Direction, directionOf, DIRECTIONS, STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
 import type { Ahead, Forecast, Routes } from "../../protocol/snapshot";
