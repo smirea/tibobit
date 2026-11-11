@@ -2,24 +2,32 @@
 // took it, when bosses and the first chest came, how goals ended, what Tibo gained, and dashes.
 
 import { csvField, parseCsv } from "../../csv";
-import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, hurtCell, listCell, UNANSWERED, weighedCell } from "./cells";
+import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, hurtCell, listCell, LOG_COLUMNS, type LoggedRow, UNANSWERED, weighedCell } from "./cells";
 
 const goalKind = goalCell.kind;
 
+const BLANK = Object.fromEntries(LOG_COLUMNS.map((column) => [column, ""])) as LoggedRow;
+
+/** The log's rows by column name, or undefined when the text does not start with the log's header. */
+function rowsOf(csv: string): LoggedRow[] | undefined {
+  const [header = [], ...cells] = parseCsv(csv);
+  if (header[0] !== LOG_COLUMNS[0]) return undefined;
+  return cells.map((r) => Object.fromEntries(LOG_COLUMNS.map((column) => [column, r[header.indexOf(column)] ?? ""])) as LoggedRow);
+}
+
 /** A Markdown summary of a run from its CSV log. */
 export function runStats(csv: string): string {
-  const [header = [], ...cells] = parseCsv(csv);
-  if (header[0] !== "time") return `(no stats: the log is damaged, its first line is not the header but ${JSON.stringify((header.join(",")).slice(0, 80))})`;
-  const rows = cells.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])) as Record<string, string>);
+  const rows = rowsOf(csv);
+  if (rows === undefined) return `(no stats: the log is damaged, its first line is not the header but ${JSON.stringify(csv.slice(0, 80))})`;
   const live = rows.filter((r) => r.seconds !== "");
   if (live.length === 0) return "(no log rows)";
   const num = (v: string | undefined) => Number(v) || 0;
-  const minutes = new Map<number, Record<string, string>[]>();
+  const minutes = new Map<number, LoggedRow[]>();
   for (const r of live) {
     const m = Math.floor(num(r.seconds) / 60);
     minutes.set(m, [...(minutes.get(m) ?? []), r]);
   }
-  const sources = (rs: Record<string, string>[]) => {
+  const sources = (rs: LoggedRow[]) => {
     const tally = new Map<string, number>();
     for (const r of rs)
       for (const [name, amount] of listCell.decode(r.hurt_by).map(hurtCell.decode)) tally.set(name, (tally.get(name) ?? 0) + amount);
@@ -30,7 +38,7 @@ export function runStats(csv: string): string {
     `| Minute | Health at the end | Lost | Gained | Damage dealt | Level | Enemies | Hurt most by |`,
     `| --- | --- | --- | --- | --- | --- | --- | --- |`,
     ...[...minutes].map(([m, rs]) => {
-      const last = rs.at(-1) ?? {};
+      const last = rs.at(-1) ?? BLANK;
       const lost = rs.reduce((a, r) => a + num(r.hp_lost), 0);
       const gained = rs.reduce((a, r) => a + num(r.hp_gained), 0);
       const dealt = num(last.dealt) - dealtBefore;
@@ -45,7 +53,7 @@ export function runStats(csv: string): string {
       if (!seenBoss.has(name)) seenBoss.set(name, r.time ?? "?");
     }
   // Every entry is its own boss with its own health, even when several share an id and a spot.
-  const lastRow = live.at(-1) ?? {};
+  const lastRow = live.at(-1) ?? BLANK;
   const bossesAtEnd = listCell.decode(lastRow.bosses).map((cell) => {
     const b = bossCell.decode(cell);
     return b === undefined ? cell : `${b.name} at ${b.percent}% of ${b.maxHp}`;
@@ -109,7 +117,7 @@ export function runStats(csv: string): string {
       return `${r.time} (dash score ${score ?? "?"}%, health ${Math.round((100 * num(r.hp)) / Math.max(1, num(r.max_hp)))}%, ${num(r.enemies)} enemies on screen, ${Number.isFinite(boss) ? `a boss ${boss} away` : "no boss"})`;
     });
   const calls = (e: string) => rows.filter((r) => r.event === e);
-  const meanMs = (rs: Record<string, string>[]) => Math.round(rs.reduce((a, r) => a + num(r.ms), 0) / Math.max(1, rs.length));
+  const meanMs = (rs: LoggedRow[]) => Math.round(rs.reduce((a, r) => a + num(r.ms), 0) / Math.max(1, rs.length));
   const low = live.find((r) => num(r.hp) > 0 && num(r.hp) / Math.max(1, num(r.max_hp)) < 0.25)?.time;
   return [
     ...table,
@@ -130,10 +138,6 @@ export function runStats(csv: string): string {
   ].join("\n");
 }
 
-const rowsOf = (csv: string) => {
-  const [header = [], ...cells] = parseCsv(csv);
-  return header[0] !== "time" ? undefined : cells.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])) as Record<string, string>);
-};
 const rated = (o: { card: string; percent?: number }) => `${o.card} ${o.percent === undefined ? "?" : o.percent}%`;
 
 /**
@@ -155,7 +159,7 @@ export function picks(csv: string): string[] {
  * Every time the planner's goal changed, one line each: when, the goal it chose with its rating,
  * and the two options it rated next. Plans that kept the goal under way are left out.
  */
-export function goalChanges(csv: string): string[] {
+function goalChanges(csv: string): string[] {
   const out: string[] = [];
   let goal: string | undefined;
   for (const r of (rowsOf(csv) ?? []).filter((x) => x.event === "plan" || x.event === "pick")) {
@@ -173,9 +177,8 @@ export function goalChanges(csv: string): string[] {
  * and the chests seen on the map against the chests opened.
  */
 export function economy(csv: string): string {
-  const [header = [], ...cells] = parseCsv(csv);
-  if (header[0] !== "time") return "(no numbers: the log is damaged)";
-  const rows = cells.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])) as Record<string, string>);
+  const rows = rowsOf(csv);
+  if (rows === undefined) return "(no numbers: the log is damaged)";
   const live = rows.filter((r) => r.seconds !== "");
   const titles = new Map(rows.filter((r) => r.event === "goal" && r.action === "start").map((r) => [r.goal ?? "", goalTitleCell.spotName(r.detail)]));
   // Gold goes when a shop's choice is taken, a moment after Tibo stood in the shop. The spend counts for the spot his goal was after, else for the last spot he stood in within 5 seconds.
@@ -206,15 +209,14 @@ export function economy(csv: string): string {
  * nine Open World runs, the three that passed 15:00 had opened three or four chests by 2:15.
  */
 export function keyNumbers(csv: string): string {
-  const [header = [], ...cells] = parseCsv(csv);
-  if (header[0] !== "time") return "(no numbers: the log is damaged)";
-  const rows = cells.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])) as Record<string, string>);
-  const at = (r: Record<string, string>) => Number(r.seconds) || 0;
+  const rows = rowsOf(csv);
+  if (rows === undefined) return "(no numbers: the log is damaged)";
+  const at = (r: LoggedRow) => Number(r.seconds) || 0;
   const listed = rows.find((r) => (r.chests ?? "") !== "")?.time ?? "never";
   const opened = rows.filter((r) => r.event === "goal" && goalKind(r.goal ?? "") === "chest" && r.action === "done" && at(r) <= 150).length;
   const evolution = rows.find((r) => r.event === "loadout" && changesCell.decode(r.action).some(changeCell.evolution))?.time ?? "none";
   const level = [...rows].reverse().find((r) => r.seconds !== "" && at(r) <= 180)?.level ?? "?";
-  const elite = (r: Record<string, string>) => r.event === "goal" && goalKind(r.goal ?? "") === "elite" && at(r) <= 180;
+  const elite = (r: LoggedRow) => r.event === "goal" && goalKind(r.goal ?? "") === "elite" && at(r) <= 180;
   const fought = rows.filter((r) => elite(r) && r.action === "start").length;
   const killed = rows.filter((r) => elite(r) && r.action === "done").length;
   return `first chest listed ${listed}; ${opened} chests opened by 2:30; ${fought} elite fights and ${killed} elites killed by 3:00; first evolution ${evolution}; level ${level} at 3:00`;

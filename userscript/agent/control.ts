@@ -171,8 +171,6 @@ export class Controller {
     this.finish(status, "done", `${Math.round(game.state.runClock * 10) / 10}s`);
   }
 
-  // Only forward buttons: the summary sits right after the death screens, and anything else
-  // ("Try Grok Bot", "Main menu") would leave it before its link is read.
   private steer(game: Game): { x: number; y: number } | undefined {
     const active = this.active;
     if (active === undefined) return undefined;

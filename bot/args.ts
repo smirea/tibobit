@@ -25,8 +25,6 @@ const FLAGS = {
   "log-dir": "value",
   step: "value",
   "plan-every": "value",
-  lockstep: "switch",
-  speed: "value",
 } as const;
 
 type Flag = keyof typeof FLAGS;

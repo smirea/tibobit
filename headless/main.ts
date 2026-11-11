@@ -5,7 +5,7 @@
 import { readdirSync } from "node:fs";
 import { USERSCRIPT } from "../paths";
 import { chromium } from "playwright-core";
-import { HEADLESS_PORT } from "../protocol/address";
+import { BRIDGE_ORIGIN_GLOBAL, HEADLESS_PORT, localOrigin } from "../protocol/address";
 import os from "node:os";
 import path from "node:path";
 
@@ -63,7 +63,7 @@ const context =
   profile === ""
     ? await (await chromium.launch(launch)).newContext(contextOptions)
     : await chromium.launchPersistentContext(path.resolve(profile), { ...launch, ...contextOptions });
-const target = bridge === "" ? "" : `window.__tiboBridgeOrigin = "http://127.0.0.1:${Number(bridge)}";`;
+const target = bridge === "" ? "" : `window.${BRIDGE_ORIGIN_GLOBAL} = "${localOrigin(Number(bridge))}";`;
 await context.addInitScript({ content: `${target}\n${shim}\n${await userscript.text()}` });
 const page = context.pages()[0] ?? (await context.newPage());
 // tibo.dog polls /version.json and reloads itself onto a new build, which drops the run in
@@ -114,7 +114,7 @@ Bun.serve({
 });
 await page.goto("https://tibo.dog/");
 
-console.log(`tibo.dog running headless at ${width}x${height}; screenshots at http://127.0.0.1:${port}/screenshot`);
+console.log(`tibo.dog running headless at ${width}x${height}; screenshots at ${localOrigin(port)}/screenshot`);
 
 const shutdown = async () => {
   await (context.browser() ?? context).close();

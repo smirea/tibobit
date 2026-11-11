@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { bridgeOrigin, BRIDGE_ORIGIN as DEFAULT_ORIGIN, validPort } from "../protocol/address";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, localOrigin, validPort } from "../protocol/address";
 import { parseCommand } from "../protocol/commands";
 import type { State } from "../protocol/view";
 import { AgentServer, Unreachable } from "../agent-server/client";
@@ -63,7 +63,7 @@ function serverFrom(args: string[]): string {
   }
   if (!wantsPort) return process.env.TIBO_SERVER ?? DEFAULT_ORIGIN;
   if (!validPort(Number(port))) throw new Error(`--port must be a number from 1 to 65535, got ${port ?? "nothing"}`);
-  return bridgeOrigin(Number(port));
+  return localOrigin(Number(port));
 }
 
 /** The agent server, with a hint on how to start it when nothing answers. */

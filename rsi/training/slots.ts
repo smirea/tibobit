@@ -5,19 +5,19 @@
 import path from "node:path";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { ENTRY, ROOT } from "../../paths";
-import type { CheckpointMeta, Command, CommandStatus, LoadoutSpec } from "../../protocol/commands";
+import { type CheckpointMeta, type Command, type CommandStatus, type LoadoutSpec, playedOn } from "../../protocol/commands";
 import type { State } from "../../protocol/view";
 import { clockPadded } from "../../clock";
 import type { Gym } from "../store/gyms";
 import { economy, picks, runStats } from "../../bot/run-log/reader";
 import type { Templates } from "../../bot/templates";
 import { AgentServer } from "../../agent-server/client";
-import { bridgeOrigin } from "../../protocol/address";
+import { localOrigin } from "../../protocol/address";
 import type { TrialResult } from "../../bot/trial-result";
 import { botArgv, JEV } from "../../bot/args";
 
-const GYM_STAGE_SECONDS = 300;
-const GYM_STAGE_TRIES = 3;
+export const GYM_STAGE_SECONDS = 300;
+export const GYM_STAGE_TRIES = 3;
 
 export type Start = { gym: string } | { fresh: { difficulty: number; weapon: string; seed?: string } };
 
@@ -74,8 +74,8 @@ export class Slot {
     readonly profile: string,
     readonly logs: string,
   ) {
-    this.agent = new AgentServer(bridgeOrigin(serverPort));
-    this.game = `http://127.0.0.1:${gamePort}`;
+    this.agent = new AgentServer(localOrigin(serverPort));
+    this.game = localOrigin(gamePort);
   }
 
   static async open(name: string, profile: string, logs: string): Promise<Slot> {
@@ -203,7 +203,7 @@ export class Slot {
     const started = lacking ? await this.command({ type: "start", mode: "openWorld", difficulty: "highest" }) : offered;
     if (lacking) await this.command({ type: "loadout", weapons: [{ id: weapon, level: 1 }], passives: [], items: [] });
     const picked = started.detail ?? "";
-    if (picked !== `nightmare-${difficulty}`) throw new Error(`asked for Nightmare ${difficulty}, the game started ${picked}`);
+    if (picked !== playedOn("nightmare", difficulty)) throw new Error(`asked for Nightmare ${difficulty}, the game started ${picked}`);
     return picked;
   }
 
@@ -272,7 +272,7 @@ export class Slot {
         if (gym === undefined) throw new Error(`no gym ${name}`);
         const ready = await this.loadGym(gym, build);
         seed = ready.seed;
-        difficulty = `nightmare-${ready.difficulty}`;
+        difficulty = playedOn("nightmare", ready.difficulty);
       } else {
         seed = spec.from.fresh.seed ?? freshSeed(evalSeed);
         if (seed.toUpperCase() === evalSeed.toUpperCase()) throw new Error("the evaluation seed is kept for full runs");

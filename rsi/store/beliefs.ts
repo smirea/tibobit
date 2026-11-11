@@ -10,11 +10,9 @@ export type BeliefRow = Record<(typeof BELIEF_COLUMNS)[number], string>;
 
 export const BELIEFS: CsvTable<typeof BELIEF_COLUMNS> = {
   name: "beliefs",
-  file: BELIEFS_CSV,
   columns: BELIEF_COLUMNS,
   required: ["id", "claim", "evidence"],
   enums: { about: ["game", "planner", "action", "coach"], verdict: ["good", "bad", "fact"], confidence: ["lead", "likely", "confirmed"], status: ["held", "recheck", "disproved"] },
-  retire: "status disproved",
   stamps: ["created", "updated"],
 };
 

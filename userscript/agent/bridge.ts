@@ -3,12 +3,13 @@ import type { CheckpointStore, Controller } from "./control";
 import type { CheckpointFile } from "./checkpoint";
 import { encyclopedia } from "./encyclopedia";
 import { Forecaster } from "./forecast";
-import { BRIDGE_PORT, bridgeOrigin, validPort } from "../../protocol/address";
+import { BRIDGE_ORIGIN_GLOBAL, BRIDGE_PORT, localOrigin, validPort } from "../../protocol/address";
 import type { PageLine } from "../../protocol/pilot";
 import { parseCommand } from "../../protocol/commands";
 import { inRun } from "../link/screen";
 import { snapshot } from "./snapshot";
 import { Pilot } from "../pilot/pilot";
+import type { Snapshot } from "../../protocol/snapshot";
 
 const PORT_KEY = "tibobit.bridgePort";
 function savedPort(): number | undefined {
@@ -22,7 +23,7 @@ function savedPort(): number | undefined {
 
 // The headless runner can point a page at another server, so several games can run side by side.
 function initialOrigin(): string {
-  return (globalThis as { __tiboBridgeOrigin?: string }).__tiboBridgeOrigin ?? bridgeOrigin(savedPort() ?? BRIDGE_PORT);
+  return (globalThis as { [BRIDGE_ORIGIN_GLOBAL]?: string })[BRIDGE_ORIGIN_GLOBAL] ?? localOrigin(savedPort() ?? BRIDGE_PORT);
 }
 
 type BridgeStatus = { port: number; state: "connected" | "connecting"; error: string | undefined };
@@ -106,11 +107,6 @@ function gmCall(method: "GET" | "POST", url: string, body?: string): Promise<str
   );
 }
 
-/**
- * Connects to the local agent server. Commands arrive over one long streamed response, which
- * delivers in a couple of milliseconds; snapshots go up as POSTs, which Tampermonkey takes
- * about 80ms to deliver, so several stay in flight to keep the server's copy fresh.
- */
 // Tampermonkey grants this only from the installed script's own header, never from a @require'd
 // file, so a local-dev wrapper with "@grant none" leaves it undefined.
 const NOT_GRANTED =
@@ -118,6 +114,11 @@ const NOT_GRANTED =
     ? undefined
     : "Tampermonkey did not grant GM_xmlhttpRequest. Add @grant GM_xmlhttpRequest and @connect 127.0.0.1 to the installed script's header.";
 
+/**
+ * Connects to the local agent server. Commands arrive over one long streamed response, which
+ * delivers in a couple of milliseconds; snapshots go up as POSTs, which Tampermonkey takes
+ * about 80ms to deliver, so several stay in flight to keep the server's copy fresh.
+ */
 export function startBridge(link: GameLink, controller: Controller, forecaster: Forecaster): Bridge {
   let origin = initialOrigin();
   let session = 0;
@@ -131,6 +132,7 @@ export function startBridge(link: GameLink, controller: Controller, forecaster: 
   const pilot = new Pilot({ connected: () => connected, origin: () => origin, ask: (change) => post(origin, "/pilot", change) }, () => controller.release());
   let inFlight = 0;
   let lastPush = 0;
+  let screen: Snapshot["screen"] = "title";
   let snapshotMs = 0;
   // The English text loads only when a run starts, after the content tables, so the encyclopedia
   // goes up again each time more of it has arrived: -1 means not sent to this server yet.
@@ -244,9 +246,12 @@ export function startBridge(link: GameLink, controller: Controller, forecaster: 
       // A paused game's forecast is made on the spot; counted as the snapshot's cost it would space the next ones seconds apart.
       const forecast = forecaster.read();
       built = performance.now();
-      body = JSON.stringify(snapshot(link, controller.statuses, forecast, forecaster.seconds));
+      const made = snapshot(link, controller.statuses, forecast, forecaster.seconds);
+      screen = made.screen;
+      body = JSON.stringify(made);
     } catch (e) {
-      body = JSON.stringify({ capturedAt: Date.now(), screen: "title", commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` });
+      // The game is where it was: a client that read another screen here would take the run for over.
+      body = JSON.stringify({ capturedAt: Date.now(), screen, commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` } satisfies Snapshot);
     }
     snapshotMs = performance.now() - built;
     inFlight++;
@@ -262,7 +267,7 @@ export function startBridge(link: GameLink, controller: Controller, forecaster: 
       try {
         localStorage.setItem(PORT_KEY, String(port));
       } catch {}
-      origin = bridgeOrigin(port);
+      origin = localOrigin(port);
       connected = false;
       error = NOT_GRANTED;
       request?.abort();

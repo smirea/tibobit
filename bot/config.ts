@@ -1,7 +1,7 @@
 import { DIFFICULTIES, type Difficulty, type GameMode, isDifficulty, isGameMode } from "../protocol/commands";
 import { checkTemplates, DEFAULT_TEMPLATES, type Templates } from "./templates";
 import { readPlaybook } from "./playbook";
-import { BRIDGE_ORIGIN, HEADLESS_PORT, headlessOrigin } from "../protocol/address";
+import { BRIDGE_ORIGIN, HEADLESS_PORT, localOrigin } from "../protocol/address";
 import { parseBotArgs } from "./args";
 const given = parseBotArgs(process.argv.slice(2));
 
@@ -70,8 +70,6 @@ export const MODE_ARG: GameMode | "current" = (() => {
   return mode;
 })();
 
-const CRUTCH = "lockstep is a crutch: it pauses the game while the models think, which no player can do. Every game plays live, as a person plays it. Do not enable it.";
-if (has("lockstep") || has("speed")) throw new Error(CRUTCH);
 
 // Notes are for full runs only: --notes writes one to gameplay/notes when the run ends, under
 // --coach-label, with --intent as its plan. Templates come from --templates (a JSON file with any of
@@ -89,7 +87,7 @@ export const WEAPON = has("weapon") ? option("weapon", "") : (BASE.weapon ?? "")
 export const TAKEOVER = TRIAL !== undefined || has("takeover");
 
 // The headless game's own API reloads the tab; "" keeps the bot from ever reloading, as in a person's browser.
-export const RELOAD = option("reload", `${headlessOrigin(HEADLESS_PORT)}/reload`);
+export const RELOAD = option("reload", `${localOrigin(HEADLESS_PORT)}/reload`);
 
 
 // One CSV row per model call and per goal that starts or ends goes to a file in this folder, outside the repo.

@@ -3,51 +3,12 @@ import { groundSources, pct, said, spotLine } from "../phrasing";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import type { World } from "../world";
 import { clock } from "../../clock";
-import { bossCell, changeCell, changesCell, chestCell, eliteCell, hurtCell, listCell, placeCell } from "./cells";
+import { bossCell, changeCell, changesCell, chestCell, eliteCell, hurtCell, listCell, LOG_COLUMNS, placeCell } from "./cells";
 import { csvField } from "../../csv";
 
 // One CSV row per model call and per goal that starts or ends, with the player's state at that
 // moment, so a run can be read back decision by decision. The post-run review reads it.
 
-// Numbers first and free text last, so a reader splitting on commas gets the numbers right.
-const LOG_COLUMNS = [
-  "time",
-  "seconds",
-  "wall",
-  "event",
-  "model",
-  "ms",
-  "hp",
-  "max_hp",
-  "hp_lost",
-  "hp_gained",
-  "level",
-  "xp_pct",
-  "gold",
-  "x",
-  "y",
-  "dash",
-  "enemies",
-  "goal",
-  "action",
-  "reason",
-  "detail",
-  "bosses",
-  "hurt_by",
-  "standing_on",
-  "underfoot",
-  "chests",
-  "food",
-  "pois",
-  "weapons",
-  "passives",
-  "items",
-  "options",
-  "dealt",
-  "elites",
-  "elite_list",
-  "spot",
-] as const;
 
 /** `walk`: the page walked Tibo toward its goal without asking a model, and Tibo lost health on the way. `loadout`: what Tibo holds changed. */
 type LogEvent = "plan" | "pick" | "move" | "walk" | "goal" | "loadout" | "run_end";

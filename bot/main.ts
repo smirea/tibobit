@@ -23,8 +23,8 @@ import { clock } from "../clock";
 import type { TrialResult } from "./trial-result";
 import { type Book, bookFrom } from "../game/book";
 
-// The first run plays this Open World seed in a freshly reloaded tab, or the bot stops rather than play another.
 let book: Book | undefined;
+// The first run plays this Open World seed in a freshly reloaded tab, or the bot stops rather than play another.
 let SEED = option("seed", "").toUpperCase();
 
 let rescuedLink: string | undefined;

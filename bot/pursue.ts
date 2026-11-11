@@ -1,4 +1,4 @@
-import { aimAt, type Course, distrusted, ending, everListed, finish, outcomes, pursuit, type Pursuit, setDistrust } from "./goals";
+import { aimAt, type Course, distrusted, ending, everListed, finish, goalId, outcomes, type Pursuit, pursuit, setDistrust } from "./goals";
 import { knobs } from "./run-templates";
 import { cheapestMove, dashOnTheWay, dashWorthAsking, moveCost, steer } from "./action-model";
 import type { Command, CommandStatus } from "../protocol/commands";
@@ -19,7 +19,7 @@ function distrustReason(r: World): string | undefined {
 
 /** One step toward the current goal: walk on while it is safe, else ask the action model. */
 export async function pursue(s: State, r: World, log: RunLog, planner: Planner) {
-  for (const c of r.chests) everListed.add(`C${c.id}`);
+  for (const c of r.chests) everListed.add(goalId({ kind: "chest", uid: c.id }));
   const gained = log.loadoutChange(r);
   if (gained !== undefined) {
     log.write(r, { event: "loadout", action: gained, ...(pursuit === undefined ? {} : { goal: pursuit.id }) });

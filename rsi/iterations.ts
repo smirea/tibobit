@@ -23,11 +23,11 @@ import { stopping } from "./stop";
 import { logForPrompt } from "../bot/run-log/reader";
 import { botArgv, JEV } from "../bot/args";
 import type { NotedRun } from "../bot/trial-result";
+import { nightmareLevel } from "../protocol/commands";
 type ExperimentReply = { summary: string; edits: LoopEdits; games: GameSpec[]; gyms: GymRequest; playbook?: Playbook };
 
 export async function experimentIteration(state: CoachState) {
   const tag = tagOf(state);
-  const stamp = tagOf(state);
   const playbook = await readPlaybook();
   const instructions = (await readPrompts()).experiments;
   const prompt = [
@@ -50,9 +50,9 @@ export async function experimentIteration(state: CoachState) {
     const edits = checkEdits(raw, before);
     if ("errors" in edits) errors.push(...edits.errors);
     if (!isText(raw.summary)) errors.push("summary must be a short paragraph");
-    const gyms = checkGyms(raw.gyms, gymsBefore, stamp, errors);
+    const gyms = checkGyms(raw.gyms, gymsBefore, tag, errors);
     const after = afterEdits(before, "value" in edits ? edits.value : undefined);
-    const pb = checkPlaybook(raw.playbook, playbook, stamp, after.experiments, errors);
+    const pb = checkPlaybook(raw.playbook, playbook, tag, after.experiments, errors);
     const experiments = new Set(after.experiments.map((e) => e.name));
     const games = checkGames(raw.games, { playbook: pb ?? playbook, gyms: [...gymsBefore, ...gyms.build], experiments, tag }, errors);
     const overdue = overdueAreas(after.experiments, state.loop);
@@ -74,7 +74,7 @@ export async function experimentIteration(state: CoachState) {
     await appendLog(state, "no usable plan", "The coach gave no usable reply, so this iteration played nothing.");
     return;
   }
-  const done = await applyEdits(reply.edits, stamp);
+  const done = await applyEdits(reply.edits, tag);
   if (reply.playbook !== undefined) {
     await writePlaybook(reply.playbook);
     done.push("the playbook");
@@ -107,8 +107,8 @@ export async function experimentIteration(state: CoachState) {
       status: "ready",
       purpose: save.purpose,
       coach: "coach",
-      created: stamp,
-      difficulty: Number(r.difficulty.split("-")[1] ?? 0),
+      created: tag,
+      difficulty: nightmareLevel(r.difficulty),
       at: Math.round(end),
       weapon: "fresh" in start ? start.fresh.weapon : "",
       ...(r.spec.loadout === undefined ? {} : { loadout: r.spec.loadout }),
@@ -186,7 +186,6 @@ async function rehearse(state: CoachState, playbook: Playbook): Promise<Rehearsa
 
 export async function fullRun(state: CoachState): Promise<NotedRun | undefined> {
   const tag = tagOf(state);
-  const stamp = tagOf(state);
   const instructions = (await readPrompts()).fullRun;
   const rehearsal = await rehearse(state, await readPlaybook());
   if (stopping) return undefined;
@@ -219,7 +218,7 @@ export async function fullRun(state: CoachState): Promise<NotedRun | undefined> 
     if (errors.length > 0 || !("value" in edits)) return { errors };
     return { value: { summary: String(raw.summary), intent: String(raw.intent), edits: edits.value } };
   });
-  if (reply !== undefined) await applyEdits(reply.edits, stamp);
+  if (reply !== undefined) await applyEdits(reply.edits, tag);
   const final = await readPlaybook();
   const intent = reply?.intent ?? "The coach gave no plan; the run plays the playbook as it stands.";
   await appendLog(state, "full run", reply?.summary ?? intent);
@@ -250,8 +249,8 @@ export async function fullRun(state: CoachState): Promise<NotedRun | undefined> 
 type ReflectReply = { review: string; summary: string; edits: LoopEdits; prompts: Partial<Record<PromptKey, string>>; gyms: GymRequest; playbook?: Playbook };
 
 export async function reflect(state: CoachState, notesFile: string | undefined) {
-  const tag = `${tagOf(state)}.reflect`;
   const stamp = tagOf(state);
+  const tag = `${stamp}.reflect`;
   const playbook = await readPlaybook();
   const keys = Object.keys(PROMPT_TITLES) as PromptKey[];
   const prompts = await readPrompts();

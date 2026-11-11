@@ -55,11 +55,12 @@
 
   // protocol/address.ts
   var BRIDGE_PORT = 7357;
-  var bridgeOrigin = (port) => `http://127.0.0.1:${port}`;
-  var BRIDGE_ORIGIN = bridgeOrigin(BRIDGE_PORT);
+  var localOrigin = (port) => `http://127.0.0.1:${port}`;
+  var BRIDGE_ORIGIN = localOrigin(BRIDGE_PORT);
   function validPort(port) {
     return Number.isInteger(port) && port >= 1 && port <= 65535;
   }
+  var BRIDGE_ORIGIN_GLOBAL = "__tiboBridgeOrigin";
 
   // protocol/geometry.ts
   var TICKS_PER_SECOND = 60;
@@ -99,6 +100,7 @@
   var GAME_MODES = ["openWorld", "daily"];
   var DIFFICULTIES = ["easy", "normal", "hard", "nightmare", "highest"];
   var isDifficulty = (v) => DIFFICULTIES.includes(v);
+  var playedOn = (difficulty, nightmareLevel) => difficulty === "nightmare" && nightmareLevel !== undefined ? `nightmare-${nightmareLevel}` : difficulty;
   var isGameMode = (v) => GAME_MODES.includes(v);
   function heading(v, what) {
     if (typeof v === "number" && Number.isFinite(v))
@@ -618,6 +620,14 @@
   var DEFAULT_PACE = { planEvery: 5, actEvery: 0.3 };
   var PACE_LIMITS = { planEvery: { min: 0.5, max: 300, step: 0.5 }, actEvery: { min: 0.1, max: 5, step: 0.1 } };
   var DEFAULT_SETTINGS = { pace: DEFAULT_PACE, incognito: false };
+  function snapPace(key, seconds) {
+    const { min, max, step } = PACE_LIMITS[key];
+    return Number((Math.round(Math.min(max, Math.max(min, seconds)) / step) * step).toFixed(1));
+  }
+  var applyChange = (settings, change) => ({
+    pace: { planEvery: change.planEvery ?? settings.pace.planEvery, actEvery: change.actEvery ?? settings.pace.actEvery },
+    incognito: change.incognito ?? settings.incognito
+  });
   function parsePilotChange(input) {
     const c = input ?? {};
     const change = {};
@@ -631,11 +641,11 @@
     for (const key of ["planEvery", "actEvery"]) {
       if (c[key] === undefined)
         continue;
-      const { min, max, step } = PACE_LIMITS[key];
+      const { min, max } = PACE_LIMITS[key];
       const v = num(c[key], key);
       if (v < min || v > max)
         fail(`${key} must be from ${min} to ${max} seconds`);
-      change[key] = Number((Math.round(v / step) * step).toFixed(1));
+      change[key] = snapPace(key, v);
     }
     if (Object.keys(change).length === 0)
       fail('send {"on": true|false}, {"incognito": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
@@ -663,11 +673,7 @@
   var SETTINGS_KEY = "tibobit.pilotSettings";
   function savedSettings() {
     try {
-      const c = parsePilotChange(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null"));
-      return {
-        pace: { planEvery: c.planEvery ?? DEFAULT_SETTINGS.pace.planEvery, actEvery: c.actEvery ?? DEFAULT_SETTINGS.pace.actEvery },
-        incognito: c.incognito ?? DEFAULT_SETTINGS.incognito
-      };
+      return applyChange(DEFAULT_SETTINGS, parsePilotChange(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null")));
     } catch {
       return DEFAULT_SETTINGS;
     }
@@ -726,8 +732,7 @@
     set(change) {
       const { on, ...rest } = change;
       if (Object.keys(rest).length > 0) {
-        const now = this.settings;
-        this.settings = { pace: { planEvery: rest.planEvery ?? now.pace.planEvery, actEvery: rest.actEvery ?? now.pace.actEvery }, incognito: rest.incognito ?? now.incognito };
+        this.settings = applyChange(this.settings, rest);
         this.current = { ...this.current, ...this.settings };
         try {
           localStorage.setItem(SETTINGS_KEY, JSON.stringify(asChange(this.settings)));
@@ -756,7 +761,7 @@
     }
   }
   function initialOrigin() {
-    return globalThis.__tiboBridgeOrigin ?? bridgeOrigin(savedPort() ?? BRIDGE_PORT);
+    return globalThis[BRIDGE_ORIGIN_GLOBAL] ?? localOrigin(savedPort() ?? BRIDGE_PORT);
   }
   var RUN_INTERVAL_MS = 33;
   var SNAPSHOT_SHARE = 0.1;
@@ -819,6 +824,7 @@
     const pilot = new Pilot({ connected: () => connected, origin: () => origin, ask: (change) => post(origin, "/pilot", change) }, () => controller.release());
     let inFlight = 0;
     let lastPush = 0;
+    let screen = "title";
     let snapshotMs = 0;
     let sentWithMessages = -1;
     const store = {
@@ -938,9 +944,11 @@
       try {
         const forecast = forecaster.read();
         built = performance.now();
-        body = JSON.stringify(snapshot(link, controller.statuses, forecast, forecaster.seconds));
+        const made = snapshot(link, controller.statuses, forecast, forecaster.seconds);
+        screen = made.screen;
+        body = JSON.stringify(made);
       } catch (e) {
-        body = JSON.stringify({ capturedAt: Date.now(), screen: "title", commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` });
+        body = JSON.stringify({ capturedAt: Date.now(), screen, commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` });
       }
       snapshotMs = performance.now() - built;
       inFlight++;
@@ -955,7 +963,7 @@
         try {
           localStorage.setItem(PORT_KEY, String(port));
         } catch {}
-        origin = bridgeOrigin(port);
+        origin = localOrigin(port);
         connected = false;
         error = NOT_GRANTED;
         request?.abort();
@@ -1564,7 +1572,7 @@
     if (chosen === undefined)
       throw new Error("no difficulty is picked on the mode screen");
     const level = chosen === "nightmare" ? byTestId("nightmare-level")?.textContent?.match(/\d+/)?.[0] : undefined;
-    return level === undefined ? chosen : `${chosen}-${level}`;
+    return playedOn(chosen, level);
   }
   async function pickWeapon(id) {
     byTestId("start-pick-row")?.click();
@@ -2621,7 +2629,7 @@
         const v = Number(input.value);
         if (!Number.isFinite(v) || input.value === "")
           return;
-        const clamped = Number(Math.min(max, Math.max(min, Math.round(v / step) * step)).toFixed(1));
+        const clamped = snapPace(key, v);
         input.value = String(clamped);
         pilot.set({ [key]: clamped });
       });

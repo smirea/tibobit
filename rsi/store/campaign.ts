@@ -1,9 +1,14 @@
 import path from "node:path";
 import { NOTES_DIR, notesField, notesFiles, readNotesName } from "../../bot/notes";
 import { clock } from "../../clock";
+import { nightmareLevel } from "../../protocol/commands";
 
 /** A finished run as the ladder sees it, read from its notes file name and header. */
 type RunRecord = { name: string; coach: string; difficulty: string; level: number; mode: string; lived: number; won: boolean; text: string };
+
+/** How a full run's notes name the coach that planned it, and the coach's model read back from that. */
+export const coachLabel = (model: string) => `coach ${model}`;
+const coachOf = (label: string) => label.replace(/^coach /, "");
 
 async function runRecords(): Promise<RunRecord[]> {
   const out: RunRecord[] = [];
@@ -12,7 +17,7 @@ async function runRecords(): Promise<RunRecord[]> {
     if (run === undefined) continue;
     const text = await Bun.file(path.join(NOTES_DIR, name)).text();
     const { difficulty } = run;
-    out.push({ name, coach: (notesField(text, "Coach") ?? "?").split(" ")[0] ?? "?", difficulty, level: Number(difficulty.match(/^nightmare-(\d+)$/)?.[1] ?? 0), mode: run.mode, lived: run.lived, won: (notesField(text, "Ending") ?? "").startsWith("won"), text });
+    out.push({ name, coach: coachOf(notesField(text, "Coach") ?? "?"), difficulty, level: nightmareLevel(difficulty), mode: run.mode, lived: run.lived, won: (notesField(text, "Ending") ?? "").startsWith("won"), text });
   }
   return out;
 }

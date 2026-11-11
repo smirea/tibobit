@@ -6,6 +6,7 @@ import type { Aim, ChoiceOption, DirectionView, LiveView, LoadoutItem } from "..
 import { type Direction, directionOf, DIRECTIONS, TICKS_PER_SECOND } from "../protocol/geometry";
 import type { Snapshot } from "../protocol/snapshot";
 import { type Book, line, pairings } from "../game/book";
+import { playedOn } from "../protocol/commands";
 
 type Row = { uid: number; slot: number; x: number; y: number };
 type Owned = { def: string; level: number };
@@ -277,7 +278,7 @@ export function liveView(s: Snapshot, b: Book): LiveView | undefined {
   return {
     time: round(g.runClock),
     world: {
-      difficulty: g.difficulty === "nightmare" ? `nightmare-${g.cfg.ladder.level}` : g.difficulty,
+      difficulty: playedOn(g.difficulty, g.cfg.ladder.level),
       winAt: g.cfg.win.timeSec,
       biome: { id: g.currentBiome, name: line(b, "biome", g.currentBiome) ?? g.currentBiome },
       ...(g.currentLandmark === null

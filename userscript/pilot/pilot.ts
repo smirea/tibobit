@@ -1,15 +1,11 @@
-import { type ChatMessage, DEFAULT_SETTINGS, parsePilotChange, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../../protocol/pilot";
+import { applyChange, type ChatMessage, DEFAULT_SETTINGS, parsePilotChange, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../../protocol/pilot";
 
 const SETTINGS_KEY = "tibobit.pilotSettings";
 
 /** The bot settings chosen in this browser; the page sends them to every server it connects to. */
 function savedSettings(): PilotSettings {
   try {
-    const c = parsePilotChange(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null"));
-    return {
-      pace: { planEvery: c.planEvery ?? DEFAULT_SETTINGS.pace.planEvery, actEvery: c.actEvery ?? DEFAULT_SETTINGS.pace.actEvery },
-      incognito: c.incognito ?? DEFAULT_SETTINGS.incognito,
-    };
+    return applyChange(DEFAULT_SETTINGS, parsePilotChange(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null")));
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -87,8 +83,7 @@ export class Pilot {
   set(change: PilotChange) {
     const { on, ...rest } = change;
     if (Object.keys(rest).length > 0) {
-      const now = this.settings;
-      this.settings = { pace: { planEvery: rest.planEvery ?? now.pace.planEvery, actEvery: rest.actEvery ?? now.pace.actEvery }, incognito: rest.incognito ?? now.incognito };
+      this.settings = applyChange(this.settings, rest);
       this.current = { ...this.current, ...this.settings };
       try {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(asChange(this.settings)));

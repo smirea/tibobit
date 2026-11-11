@@ -22,6 +22,18 @@ export type PilotState = PilotSettings & { state: "off" | "on" | "stopping"; det
 export type PilotChange = { on?: boolean; incognito?: boolean } & Partial<PilotPace>;
 
 /** Validates a change to the pilot from the panel or a script; throws with a message a caller can act on. */
+/** A pace on its grid: inside its limits and a whole number of its steps. */
+export function snapPace(key: keyof PilotPace, seconds: number): number {
+  const { min, max, step } = PACE_LIMITS[key];
+  return Number((Math.round(Math.min(max, Math.max(min, seconds)) / step) * step).toFixed(1));
+}
+
+/** The settings with a change's pace and incognito over them; `on` is not a setting. */
+export const applyChange = (settings: PilotSettings, change: PilotChange): PilotSettings => ({
+  pace: { planEvery: change.planEvery ?? settings.pace.planEvery, actEvery: change.actEvery ?? settings.pace.actEvery },
+  incognito: change.incognito ?? settings.incognito,
+});
+
 export function parsePilotChange(input: unknown): PilotChange {
   const c = (input ?? {}) as Record<string, unknown>;
   const change: PilotChange = {};
@@ -32,18 +44,18 @@ export function parsePilotChange(input: unknown): PilotChange {
   }
   for (const key of ["planEvery", "actEvery"] as const) {
     if (c[key] === undefined) continue;
-    const { min, max, step } = PACE_LIMITS[key];
+    const { min, max } = PACE_LIMITS[key];
     const v = num(c[key], key);
     if (v < min || v > max) fail(`${key} must be from ${min} to ${max} seconds`);
-    change[key] = Number((Math.round(v / step) * step).toFixed(1));
+    change[key] = snapPace(key, v);
   }
   if (Object.keys(change).length === 0) fail('send {"on": true|false}, {"incognito": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
   return change;
 }
-/** One move the action model weighed: the game's own forecast, the model's scores, and what became of it. */
 /** How long the bot shows its pick on a choice before taking the card, for someone watching. */
 export const PICK_SHOW_MS = 2000;
 
+/** One move the action model weighed: the game's own forecast, the model's scores, and what became of it. */
 export type MoveOption = {
   move: Direction | "still";
   description: string;
@@ -66,11 +78,6 @@ export type Inspect =
   | { kind: "moves"; situation: string; questions?: string[]; moves: MoveOption[]; dash?: { odds: number; above: number } }
   | { kind: "cards"; situation: string; question: string; cards: CardOption[] };
 /**
- * What the bot says; the server stamps it into a ChatMessage. A line with a `key` replaces the
- * earlier message with that key, which is how a planner message streams: `stream` holds its
- * reasoning so far until the final text replaces it.
- */
-/**
  * What a non-step action is, which picks its tile's icon in the panel (userscript/pilot/icons.ts). A new tag
  * needs an icon there before it type-checks.
  */
@@ -83,6 +90,11 @@ export type ActionTag = (typeof ACTION_TAGS)[number];
 /** How a goal ended; `dropped` means the planner chose another goal first. */
 const GOAL_RESULTS = ["done", "failed", "dropped"] as const;
 export type GoalResult = (typeof GOAL_RESULTS)[number];
+/**
+ * What the bot says; the server stamps it into a ChatMessage. A line with a `key` replaces the
+ * earlier message with that key, which is how a planner message streams: `stream` holds its
+ * reasoning so far until the final text replaces it.
+ */
 export type ChatLine = { role: PilotRole; text: string; tag?: ActionTag; result?: GoalResult; detail?: string; model?: string; time?: number; key?: string; stream?: string; inspect?: Inspect };
 export type ChatMessage = ChatLine & { id: number; at: number };
 

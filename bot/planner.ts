@@ -15,7 +15,7 @@ import { talliesOf, totalsBetween, totalsLines } from "./tallies";
 import { giveUps, type Goal, goalId, goalTitle, locate, outcomes, pursuit, setGoal } from "./goals";
 import { render } from "./templates";
 import { type CardOption, type Inspect, PICK_SHOW_MS } from "../protocol/pilot";
-import { PLAN_RANGE } from "./limits";
+import { GOAL_OPTIONS, PLAN_RANGE } from "./limits";
 import type { EndJson, World } from "./world";
 import { RunLog } from "./run-log/writer";
 import { clock } from "../clock";
@@ -34,30 +34,30 @@ function goalOptions(r: World): GoalOption[] {
   return [
     ...r.chests
       .filter((c) => c.dist < PLAN_RANGE)
-      .slice(0, 4)
+      .slice(0, GOAL_OPTIONS.chests)
       .map((c) => ({
         goal: { kind: "chest" as const, uid: c.id },
-        text: `${onChest(c) ? "stay on the chest Tibo stands on" : `walk to the chest ${Math.round(c.dist)} away to the ${c.dir} and stand on it`} for ${c.chargeSeconds} seconds to open it, which gives a free pick${ready.length === 0 ? "" : ` and evolves ${ready.join(" and ")}`}${given(`C${c.id}`)}`,
+        text: `${onChest(c) ? "stay on the chest Tibo stands on" : `walk to the chest ${Math.round(c.dist)} away to the ${c.dir} and stand on it`} for ${c.chargeSeconds} seconds to open it, which gives a free pick${ready.length === 0 ? "" : ` and evolves ${ready.join(" and ")}`}${given(goalId({ kind: "chest", uid: c.id }))}`,
       })),
     ...r.spots
       .filter((x) => x.chargeSeconds > 0 && x.dist < PLAN_RANGE)
-      .slice(0, 6)
+      .slice(0, GOAL_OPTIONS.spots)
       .map((x) => ({
         goal: { kind: "poi" as const, uid: x.id },
-        text: `${x.inside ? `stay inside the ${x.name}` : `walk to the ${x.name} ${Math.round(x.dist)} away to the ${x.dir} and stand inside it`} for ${x.chargeSeconds} seconds${spotSaid(r.book, x.type) === "" ? "" : ` (${spotSaid(r.book, x.type).replace(/\.$/, "")})`}${priceWords(x, r)}${given(`P${x.id}`)}`,
+        text: `${x.inside ? `stay inside the ${x.name}` : `walk to the ${x.name} ${Math.round(x.dist)} away to the ${x.dir} and stand inside it`} for ${x.chargeSeconds} seconds${spotSaid(r.book, x.type) === "" ? "" : ` (${spotSaid(r.book, x.type).replace(/\.$/, "")})`}${priceWords(x, r)}${given(goalId({ kind: "poi", uid: x.id }))}`,
       })),
     ...r.food
       .filter((x) => x.dist < PLAN_RANGE)
-      .slice(0, 2)
+      .slice(0, GOAL_OPTIONS.food)
       .map((x) => ({ goal: { kind: "food" as const, uid: x.id }, text: `walk to the food ${Math.round(x.dist)} away to the ${x.dir}, which heals Tibo` })),
     // The knobs can keep elite fights off the table early or at low health, which no prompt rule
     // managed: on Nightmare 2 a 1:00 elite fight cost 37 to 103 health in live games.
     ...r.elites
       .filter((e) => e.dist < PLAN_RANGE && r.time >= knobs().eliteFrom && r.hp >= knobs().eliteMinHp * r.maxHp)
-      .slice(0, 2)
+      .slice(0, GOAL_OPTIONS.elites)
       .map((e) => ({
         goal: { kind: "elite" as const, uid: e.id },
-        text: `fight the ${e.name} elite ${Math.round(e.dist)} away to the ${e.dir} (${e.hp} health left): keep it within reach of Tibo's weapons for up to ${knobs().eliteSeconds} seconds until it dies, which drops a chest${given(`E${e.id}`)}`,
+        text: `fight the ${e.name} elite ${Math.round(e.dist)} away to the ${e.dir} (${e.hp} health left): keep it within reach of Tibo's weapons for up to ${knobs().eliteSeconds} seconds until it dies, which drops a chest${given(goalId({ kind: "elite", uid: e.id }))}`,
       })),
     ...r.sectors.map((s) => ({
       goal: { kind: "explore" as const, dir: s.dir },

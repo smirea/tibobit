@@ -1,5 +1,6 @@
 import { timed } from "./server";
 import { DECIDER, DECIDER_KEY, MODEL } from "./config";
+import { LIVE_ANSWER_MS } from "./limits";
 
 export type Question =
   | { type: "choice"; instructions: string; criteria: Record<string, string | null> }
@@ -17,9 +18,6 @@ export const snapshotAges: number[] = [];
 // lands, and the state it was asked about is gone. An answer takes about a quarter of a second,
 // but over the loop's first 63 games one call in 220 took more than 3 seconds and the worst took
 // 59. An answer this late is given up on, and the next step asks afresh about the game as it is then.
-const LIVE_ANSWER_MS = 1200;
-/** How many decisions asked while the game ran were given up on, for the run's end summary. */
-const unanswered = { count: 0 };
 
 /**
  * Asks the decision model. `frozen` says the game is stopped on a choice, where a slow answer costs
@@ -32,7 +30,6 @@ export async function decide(state: string, questions: Record<string, Question>,
   let json: { answers?: Record<string, Answer>; error?: unknown } | undefined;
   const headers: Record<string, string> = { "content-type": "application/json", ...(DECIDER_KEY === undefined ? {} : { authorization: `Bearer ${DECIDER_KEY}` }) };
   const giveUp = () => {
-    unanswered.count++;
     latency.push(performance.now() - started);
     return undefined;
   };

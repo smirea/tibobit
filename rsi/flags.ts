@@ -1,5 +1,6 @@
 import { MAX_GAMES } from "./rules";
 import { checkHarness, type HarnessName } from "./coach/harnesses";
+import { coachLabel } from "./store/campaign";
 
 const USAGE = `usage: rsi/main.ts [--coach claude:<model>@<effort>] [--loops <n>] [--slots <n>] [--eval-seed <seed>]
 
@@ -50,4 +51,4 @@ export const COMMITTER = `${model ?? harness}${effort === undefined ? "" : `@${e
 if (Bun.which("gai") === null) throw new Error("committing gameplay/ needs gai on PATH");
 
 // The notes of a full run name the coach and the model that coached it, which can change over time.
-export const COACH_LABEL = `coach ${COMMITTER}`;
+export const COACH_LABEL = coachLabel(COMMITTER);

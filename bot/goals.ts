@@ -55,9 +55,6 @@ const GOAL_SPEED = 45;
 
 const GOAL_SLACK = 10;
 
-// A goto that runs out its time, and food collected on touch ("gone" before the goto counts it as
-// reached), end without saying how the goal went; the next step's look at the target tells.
-
 export let pursuit: Pursuit | undefined;
 
 export const outcomes: Outcome[] = [];
@@ -186,7 +183,7 @@ export function aimAt(p: Pursuit, r: World): Course | Ended {
       return t.arrived || t.dir === "still" ? { progress: t.progress } : { heading: t.dir, left: t.dist, progress: t.progress };
     }
     case "explore": {
-      const found = r.chests.find((c) => !p.known.has(`C${c.id}`) && c.dist < PLAN_RANGE);
+      const found = r.chests.find((c) => !p.known.has(goalId({ kind: "chest", uid: c.id })) && c.dist < PLAN_RANGE);
       if (found !== undefined) return { done: `found a chest ${Math.round(found.dist)} away to the ${found.dir}`, success: true };
       const walked = Math.hypot(r.x - p.origin.x, r.y - p.origin.y);
       if (walked >= knobs().exploreDistance) return { done: `walked ${knobs().exploreDistance} units and found nothing new`, success: true };
@@ -250,6 +247,8 @@ export function setGoal(goal: Goal, r: World, log: RunLog, decision: Inspect) {
 export function ending(p: Pursuit, r: World, aim: Course | Ended, status: CommandStatus | undefined): Ended | undefined {
   if ("done" in aim) return aim;
   if (status?.command.type === "goto" && status.state === "done") return { done: TARGET_DONE[(p.goal as TargetGoal).kind], success: true };
+  // A goto that runs out its time, and food collected on touch (gone before the goto counts it as
+  // reached), end without saying how the goal went; the next step's look at the target tells.
   if (status?.state === "failed" && status.failure !== "timeout" && status.failure !== "targetGone") return { done: `the game said: ${status.detail ?? "failed"}`, success: false };
   if (r.time > p.deadline) return { done: `still not done after ${Math.round(r.time - p.since)} seconds`, success: false };
   if (aim.left === undefined) return undefined;

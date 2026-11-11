@@ -1,6 +1,6 @@
 import type { Subprocess } from "bun";
 import { ENTRY, ROOT } from "../paths";
-import { type ChatMessage, DEFAULT_SETTINGS, type PageLine, parseChatLine, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../protocol/pilot";
+import { applyChange, type ChatMessage, DEFAULT_SETTINGS, type PageLine, parseChatLine, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../protocol/pilot";
 import { type BotArgs, botArgv } from "../bot/args";
 
 /**
@@ -41,10 +41,8 @@ export class Pilot {
     this.toPage({ pilot: this.state });
   }
 
-  change({ on, planEvery, actEvery, incognito }: PilotChange) {
-    const now = this.state;
-    if (planEvery !== undefined || actEvery !== undefined || incognito !== undefined)
-      this.set({ ...now, incognito: incognito ?? now.incognito, pace: { planEvery: planEvery ?? now.pace.planEvery, actEvery: actEvery ?? now.pace.actEvery } });
+  change({ on, ...rest }: PilotChange) {
+    if (Object.keys(rest).length > 0) this.set({ ...this.state, ...applyChange(this.state, rest) });
     if (on === true) this.start();
     if (on === false) this.stop();
   }

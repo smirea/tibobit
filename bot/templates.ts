@@ -76,7 +76,6 @@ export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: strin
   eliteMinHp: { min: 0, max: 1, about: "share of max health below which no fight-the-elite goal is offered; 0 offers them at any health" },
 };
 
-const LOCKSTEP_CRUTCH = "knobs.lockstep is a crutch and is not to be enabled: it paused the game while the models thought, which no player can do. Every game plays live, as a person plays it.";
 
 export type Templates = { planner: { state: string; goal: string; pick: string }; action: { state: string; hurt: string; useful: string; dash: string }; knobs: Knobs };
 
@@ -153,10 +152,6 @@ export function checkTemplates(raw: { planner?: unknown; action?: unknown; knobs
     if (typeof raw.knobs !== "object" || raw.knobs === null) errors.push("knobs must be an object");
     else
       for (const [k, v] of Object.entries(raw.knobs)) {
-        if (k === "lockstep") {
-          if (v !== 0) errors.push(LOCKSTEP_CRUTCH);
-          continue;
-        }
         const range = KNOBS[k as keyof Knobs];
         if (range === undefined) errors.push(`knobs.${k} is not a knob; the knobs are ${Object.keys(KNOBS).join(", ")}`);
         else if (typeof v !== "number" || !(v >= range.min && v <= range.max)) errors.push(`knobs.${k} must be a number from ${range.min} to ${range.max}`);

@@ -1,6 +1,6 @@
 import { css as feedCss } from "./feed.css";
 import { ACTION_ICONS, moveIcon, NOTE_ICON, RESULT_ICONS, svgIcon } from "./icons";
-import { type ChatMessage, PACE_LIMITS, type PilotPace } from "../../protocol/pilot";
+import { type ChatMessage, PACE_LIMITS, type PilotPace, snapPace } from "../../protocol/pilot";
 import type { Direction } from "../../protocol/geometry";
 import { Pilot } from "./pilot";
 import { addStyle, h } from "../panel/dom";
@@ -49,7 +49,7 @@ export function botFeed(pilot: Pilot): HTMLElement {
     input.addEventListener("change", () => {
       const v = Number(input.value);
       if (!Number.isFinite(v) || input.value === "") return;
-      const clamped = Number(Math.min(max, Math.max(min, Math.round(v / step) * step)).toFixed(1));
+      const clamped = snapPace(key, v);
       input.value = String(clamped);
       pilot.set({ [key]: clamped });
     });

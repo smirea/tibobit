@@ -2,9 +2,9 @@
 import type { ServerWebSocket } from "bun";
 import { type Book, bookFrom } from "../game/book";
 import { liveView } from "./live-view";
-import { BRIDGE_PORT } from "../protocol/address";
+import { BRIDGE_PORT, localOrigin } from "../protocol/address";
 import { type CommandStatus, parseCommand } from "../protocol/commands";
-import type { LiveView, Settled, State } from "../protocol/view";
+import { type LiveView, RAW_TOP, type Settled, type State } from "../protocol/view";
 import { parseRaw, rawParts } from "./raw";
 import { type PageLine, parsePilotChange, type PilotChange, type PilotSettings } from "../protocol/pilot";
 import type { Encyclopedia, Snapshot } from "../protocol/snapshot";
@@ -36,7 +36,7 @@ const waiters = new Set<() => void>();
 const encoder = new TextEncoder();
 
 const toPage = (line: PageLine) => page?.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
-const pilot = new Pilot(`http://127.0.0.1:${PORT}`, PILOT_ARGS, toPage);
+const pilot = new Pilot(localOrigin(PORT), PILOT_ARGS, toPage);
 
 // A JSON content type forces a CORS preflight, which this server never answers, so another
 // website open in the browser cannot start the bot with a plain form post.
@@ -48,7 +48,7 @@ async function jsonBody(req: Request): Promise<unknown> {
 /** The latest state for a client: the live view, and the raw parts it asked for. */
 function state(raw: string[] = []): State | undefined {
   if (latest === undefined) return undefined;
-  const { game: _, surroundings: _s, forecast: _f, storage: _st, gameEvents: _e, ...meta } = latest.snapshot;
+  const meta = Object.fromEntries(Object.entries(latest.snapshot).filter(([key]) => key !== "game" && !(RAW_TOP as readonly string[]).includes(key))) as Omit<Snapshot, "game" | (typeof RAW_TOP)[number]>;
   // The settings tell a running bot, every step, how often to plan and act and whether to keep
   // notes. Only a bot the panel started follows them; one started by hand keeps its own flags.
   const settings: Partial<PilotSettings> = pilot.state.state === "off" ? {} : { pace: pilot.state.pace, incognito: pilot.state.incognito };

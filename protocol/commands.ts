@@ -130,6 +130,11 @@ export type GameMode = (typeof GAME_MODES)[number];
 export const DIFFICULTIES = ["easy", "normal", "hard", "nightmare", "highest"] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
 export const isDifficulty = (v: unknown): v is Difficulty => (DIFFICULTIES as readonly unknown[]).includes(v);
+/** What a run plays on, as the start command reports it and the view shows it: the difficulty, with the Nightmare ladder level after it, such as "nightmare-3". */
+export const playedOn = (difficulty: string, nightmareLevel: number | string | undefined) => (difficulty === "nightmare" && nightmareLevel !== undefined ? `nightmare-${nightmareLevel}` : difficulty);
+/** The Nightmare ladder level of a run, or 0 for one on another difficulty. */
+export const nightmareLevel = (playedOn: string) => Number(playedOn.match(/^nightmare-(\d+)$/)?.[1] ?? 0);
+
 export const isGameMode = (v: unknown): v is GameMode => (GAME_MODES as readonly unknown[]).includes(v);
 
 function heading(v: unknown, what: string): Heading {

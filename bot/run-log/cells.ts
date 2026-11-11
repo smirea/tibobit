@@ -1,5 +1,49 @@
-// The cells of the run log that are read back, each written and parsed here, so the writer and
-// the readers cannot drift apart. A cell that holds several things joins them with "; ".
+// The run log: one CSV row per model call and per goal that starts or ends, with the player's state
+// at that moment. Its columns are named here, and so is every cell that is read back, each written
+// and parsed in one place, so the writer and the readers cannot drift apart. A cell that holds
+// several things joins them with "; ".
+
+export const LOG_COLUMNS = [
+  "time",
+  "seconds",
+  "wall",
+  "event",
+  "model",
+  "ms",
+  "hp",
+  "max_hp",
+  "hp_lost",
+  "hp_gained",
+  "level",
+  "xp_pct",
+  "gold",
+  "x",
+  "y",
+  "dash",
+  "enemies",
+  "goal",
+  "action",
+  "reason",
+  "detail",
+  "bosses",
+  "hurt_by",
+  "standing_on",
+  "underfoot",
+  "chests",
+  "food",
+  "pois",
+  "weapons",
+  "passives",
+  "items",
+  "options",
+  "dealt",
+  "elites",
+  "elite_list",
+  "spot",
+] as const;
+type LogColumn = (typeof LOG_COLUMNS)[number];
+/** A row as it is read back: every column as text, "" when the row left it out. */
+export type LoggedRow = Record<LogColumn, string>;
 
 export const listCell = {
   encode: (parts: string[]) => parts.join("; "),
@@ -80,7 +124,7 @@ export const UNANSWERED = "did not answer in time";
 
 type Rated = { card: string; probability?: number };
 /** The options of one question with the model's odds for each: `Peeler 61%; Root Cellar 30%; Grab Bag ?%`. */
-export const oddsCell = {
+const oddsCell = {
   encode: (options: Rated[]) => options.map((o) => `${o.card} ${o.probability === undefined ? "?" : Math.round(o.probability * 100)}%`).join("; "),
   decode: (text: string | undefined) =>
     (text ?? "").split("; ").filter(Boolean).map((part) => {

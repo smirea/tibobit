@@ -1,5 +1,5 @@
 import { button, inRun, modeScreen } from "../link/screen";
-import { CommandFailure, type GameMode } from "../../protocol/commands";
+import { CommandFailure, type GameMode, playedOn } from "../../protocol/commands";
 import { GameLink } from "../link/game-link";
 import { clearSeed } from "./seed";
 
@@ -24,7 +24,7 @@ async function pickDifficulty(difficulty: string): Promise<string> {
   const chosen = document.querySelector<HTMLElement>('.run-picker-chip[aria-pressed="true"]')?.dataset.level;
   if (chosen === undefined) throw new Error("no difficulty is picked on the mode screen");
   const level = chosen === "nightmare" ? byTestId("nightmare-level")?.textContent?.match(/\d+/)?.[0] : undefined;
-  return level === undefined ? chosen : `${chosen}-${level}`;
+  return playedOn(chosen, level);
 }
 
 /** Picks the starting weapon on the mode screen, or fails naming the ones the game offers. */
@@ -43,7 +43,11 @@ async function pickWeapon(id: string) {
   if (now !== id) throw new Error(`picked starting weapon ${id}, but the start screen shows ${now ?? "nothing"}`);
 }
 
-/** Walks a finished run's end screens until its summary shows the share link. */
+/**
+ * Walks a finished run's end screens until its summary shows the share link. Only forward buttons
+ * are pressed: the summary sits right after the death screens, and anything else ("Try Grok Bot",
+ * "Main menu") would leave it before its link is read.
+ */
 export async function showSummary(link: GameLink) {
   if (inRun(link)) throw new Error("the run is still going");
   const before = link.runLink;
