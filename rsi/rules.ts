@@ -5,9 +5,12 @@ export const EXPERIMENT_ITERATIONS = 9;
 /** The iteration after the experiments, which plays the full run. */
 export const FULL_RUN_ITERATION = EXPERIMENT_ITERATIONS + 1;
 
-export const MAX_GAMES = 5;
+export const MAX_GAMES = 10;
 
 export const MAX_GAME_SECONDS = 300;
+
+/** The game time one iteration's training games may add up to: ten games of four minutes, or five of five. */
+export const MAX_ITERATION_SECONDS = 2400;
 
 export const MAX_NEW_GYMS = 3;
 

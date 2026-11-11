@@ -2,7 +2,7 @@ import { type Gym, GYM_NAME } from "./store/gyms";
 import { checkTemplates, type Templates } from "../bot/templates";
 import { IDS } from "./session";
 import { WORDING_ONLY, wordsChanged } from "./wording";
-import { GOAL_LEVEL, MAX_GAME_SECONDS, MAX_GAMES, MAX_GYM_SECONDS, MAX_NEW_GYMS } from "./rules";
+import { GOAL_LEVEL, MAX_GAME_SECONDS, MAX_GAMES, MAX_GYM_SECONDS, MAX_ITERATION_SECONDS, MAX_NEW_GYMS } from "./rules";
 import type { Playbook } from "../bot/playbook";
 import { EVAL_SEED } from "./flags";
 import { type Held, untried } from "./store/held";
@@ -111,6 +111,8 @@ export function checkGames(raw: unknown, ctx: { playbook: Playbook; gyms: Gym[];
     errors.push(`games must be an array of 1 to ${MAX_GAMES} games`);
     return [];
   }
+  const total = (raw as Record<string, unknown>[]).reduce((sum, g) => sum + (Number(g?.seconds) || 0), 0);
+  if (total > MAX_ITERATION_SECONDS) errors.push(`the games add up to ${total} s of game time; an iteration plays at most ${MAX_ITERATION_SECONDS} s`);
   const out: GameSpec[] = [];
   const saved = new Set<string>();
   for (const [i, g] of (raw as Record<string, unknown>[]).entries()) {

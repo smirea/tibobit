@@ -1,12 +1,12 @@
 import path from "node:path";
 import { campaign, latestNotes } from "../store/campaign";
-import { coachSpec } from "../flags";
+import { coachSpec, SLOT_COUNT } from "../flags";
 import { BOOK, gameBuilds, IDS, ladder, LOGS, main, OFFERED } from "../session";
 import { coverage, readExperiments, renderExperiment } from "../store/experiments";
 import { heldCoverage, readHeld } from "../store/held";
 import { BELIEFS_CSV, COACH_LOG, INFRA_CSV } from "../store/paths";
 import { type GameResult, GYM_STAGE_SECONDS, GYM_STAGE_TRIES } from "../training/slots";
-import { EXPERIMENT_ITERATIONS, FULL_RUN_ITERATION, GOAL_LEVEL, MAX_GAME_SECONDS, MAX_GAMES, MAX_GYM_SECONDS, MAX_NEW_GYMS } from "../rules";
+import { EXPERIMENT_ITERATIONS, FULL_RUN_ITERATION, GOAL_LEVEL, MAX_GAME_SECONDS, MAX_GAMES, MAX_GYM_SECONDS, MAX_ITERATION_SECONDS, MAX_NEW_GYMS } from "../rules";
 import type { Playbook } from "../../bot/playbook";
 import { BLOCKS, KNOBS, QUESTION_LIMIT, SLOTS, STATE_LIMIT, type TemplateSlot } from "../../bot/templates";
 import { gymLine, readGyms } from "../store/gyms";
@@ -26,7 +26,7 @@ export function editableFiles(phase: "experiments" | "fullRun" | "reflect"): str
       ? "- **your playbook**: settled by the rehearsal above; the full run plays it, and it changes only in an experiment iteration or the reflection, on evidence."
       : "- **your playbook** (`playbook`): the templates the planner and the action model play with, their knobs, and the starting weapon. Training games play it with each game's changes; the full run plays it as it stands. It changes only on evidence: confirmed experiments with games from 0:00 on fresh seeds.",
     ...(phase === "experiments"
-      ? [`- **games** (\`games\`): up to ${MAX_GAMES} training games this iteration, played side by side.`, "- **gyms.jsonl** (`gyms`): saved game states to build or retire."]
+      ? [`- **games** (\`games\`): up to ${MAX_GAMES} training games this iteration, ${SLOT_COUNT} at a time.`, "- **gyms.jsonl** (`gyms`): saved game states to build or retire."]
       : phase === "reflect"
         ? ["- **the full run's notes** (`review`): your review, written into the notes file.", "- **your prompts** (`prompts`): the three parts of coach.md (# Experiments, # Full run, # Reflect), which you rewrite from what this loop taught you about how you work.", "- **gyms.jsonl** (`gyms`)."]
         : []),
@@ -36,7 +36,7 @@ export function editableFiles(phase: "experiments" | "fullRun" | "reflect"): str
   ].join("\n");
 }
 
-export const GAMES_CONTRACT = `"games": 1 to ${MAX_GAMES} training games, played side by side, each {"experiment": the name of the experiment it serves (one that exists or that this reply adds), "label": a few words, "from": {"gym": a gym's name} or {"fresh": {"difficulty": Nightmare level 1 to ${GOAL_LEVEL}, "weapon": a base weapon id or "random", "seed": optional, to give several fresh games the same map}}, "loadout": optional, replaces the whole build when the game starts: {"weapons": [{"id", "level"}], "passives": [{"id", "level"}], "items": [{"id", "count"}], "gold", "hp": a number or "full", "shrineTotals": optional, what Spud Shrines have added, by the game's stat names as a game's tallies list them (maxHp, might and the like); a stat left out keeps what the run has} with ids from the encyclopedia, "seconds": 10 to ${MAX_GAME_SECONDS} of game time, "changes": optional {"planner", "action", "knobs"} over your playbook (only the keys that change), "saveGym": optional {"name", "purpose"} to keep the state the game ends in as a gym, if Tibo lives}. A game from a gym replays the same game state each time, so two games from one gym differ only in what the models chose; fresh games with the same seed share a map. Fresh games never get the evaluation seed.`;
+export const GAMES_CONTRACT = `"games": 1 to ${MAX_GAMES} training games of at most ${MAX_ITERATION_SECONDS} s of game time in all, played ${SLOT_COUNT} at a time, each {"experiment": the name of the experiment it serves (one that exists or that this reply adds), "label": a few words, "from": {"gym": a gym's name} or {"fresh": {"difficulty": Nightmare level 1 to ${GOAL_LEVEL}, "weapon": a base weapon id or "random", "seed": optional, to give several fresh games the same map}}, "loadout": optional, replaces the whole build when the game starts: {"weapons": [{"id", "level"}], "passives": [{"id", "level"}], "items": [{"id", "count"}], "gold", "hp": a number or "full", "shrineTotals": optional, what Spud Shrines have added, by the game's stat names as a game's tallies list them (maxHp, might and the like); a stat left out keeps what the run has} with ids from the encyclopedia, "seconds": 10 to ${MAX_GAME_SECONDS} of game time, "changes": optional {"planner", "action", "knobs"} over your playbook (only the keys that change), "saveGym": optional {"name", "purpose"} to keep the state the game ends in as a gym, if Tibo lives}. A game from a gym replays the same game state each time, so two games from one gym differ only in what the models chose; fresh games with the same seed share a map. Fresh games never get the evaluation seed.`;
 
 export const GYMS_CONTRACT = `"gyms": gyms to build or retire: {"name": kebab-case, "purpose": what it lets you test, "difficulty": 1 to ${GOAL_LEVEL}, "at": game seconds 0 to ${MAX_GYM_SECONDS} to save it at, "weapon": a base weapon id or "random", "loadout": optional, swapped in at 0:00} is built before this iteration's games by playing a fresh game with your playbook to that time, in ${GYM_STAGE_SECONDS / 60}-minute stages: a death replays that stage from its start, up to ${GYM_STAGE_TRIES} times (a loadout helps for late gyms), at most ${MAX_NEW_GYMS} per reply; {"name", "retire": true} retires one.`;
 
