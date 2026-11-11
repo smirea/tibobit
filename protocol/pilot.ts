@@ -1,6 +1,7 @@
 // The bot at the wheel: its settings, and the lines it shows in the panel.
 import type { Envelope } from "./commands";
 import { fail, num } from "./parse";
+import type { Direction } from "./geometry";
 
 /**
  * "Grok take the wheel": the agent server runs the bot (bot/main.ts) for the tab, and the bot's
@@ -40,12 +41,15 @@ export function parsePilotChange(input: unknown): PilotChange {
   return change;
 }
 /** One move the action model weighed: the game's own forecast, the model's scores, and what became of it. */
+/** How long the bot shows its pick on a choice before taking the card, for someone watching. */
+export const PICK_SHOW_MS = 2000;
+
 export type MoveOption = {
-  move: string;
+  move: Direction | "still";
   description: string;
-  /** Health the sim forecast says this move costs over its horizon, or "dead". */
-  forecast?: string;
-  /** The model's 0-4 hurt score and 0-1 usefulness; absent for a move ruled out before asking. */
+  /** What the sim forecast says this move costs over its horizon: the health lost, and whether Tibo dies. */
+  forecast?: { damage: number; dead: boolean };
+  /** How badly the model says the move would hurt and how useful it is for the goal, each from 0 to 1; absent for a move ruled out before asking. */
   hurt?: number;
   useful?: number;
   outcome: "chosen" | "safe" | "risky" | "ruled out";
@@ -59,7 +63,7 @@ export type CardOption = { card: string; notes: string; probability?: number; ch
 export type Inspect =
   | { kind: "prompt"; prompt: string; reasoning?: string; reply?: string }
   | { kind: "plan"; prompt: string; choices?: CardOption[]; goals: CardOption[] }
-  | { kind: "moves"; situation: string; questions?: string[]; moves: MoveOption[]; dash?: number }
+  | { kind: "moves"; situation: string; questions?: string[]; moves: MoveOption[]; dash?: { odds: number; above: number } }
   | { kind: "cards"; situation: string; question: string; cards: CardOption[] };
 /**
  * What the bot says; the server stamps it into a ChatMessage. A line with a `key` replaces the

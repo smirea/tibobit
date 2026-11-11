@@ -1,4 +1,5 @@
 import type { ActionTag, GoalResult } from "../../protocol/pilot";
+import { type Direction, DIRECTIONS } from "../../protocol/geometry";
 
 /** One stroke of a 24x24 icon: a path drawn in the tile's colour, or filled with it. */
 type Stroke = string | { fill: string };
@@ -64,7 +65,6 @@ export const ACTION_ICONS: Record<ActionTag, Icon> = {
 export const NOTE_ICON: Icon = ["M4 5h16v11H9l-4 4v-4H4z", "M8 9h8M8 12h5"];
 const STILL_ICON: Icon = [ring(12, 12, 3.5)];
 const ARROW_ICON: Icon = ["M4 12h15", "M13 6l6 6-6 6"];
-const DIRECTION_TURNS: Record<string, number> = { right: 0, "down-right": 45, down: 90, "down-left": 135, left: 180, "up-left": 225, up: 270, "up-right": 315 };
 export const RESULT_ICONS: Record<GoalResult, Icon> = { done: ["M5 12.5l4.5 4.5L19 7.5"], failed: ["M6 6l12 12M18 6 6 18"], dropped: ["M6 12h12"] };
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -90,7 +90,7 @@ export function svgIcon(icon: Icon, className: string, turn = 0): SVGSVGElement 
 }
 
 /** A step's arrow, turned to its compass direction; a dot for standing still. */
-export function moveIcon(move: string, className: string): SVGSVGElement {
-  const turn = DIRECTION_TURNS[move];
-  return turn === undefined ? svgIcon(STILL_ICON, className) : svgIcon(ARROW_ICON, className, turn);
+/** An arrow turned to the move's direction (DIRECTIONS go clockwise from right, 45 degrees apart), or a ring for standing still. */
+export function moveIcon(move: Direction | "still", className: string): SVGSVGElement {
+  return move === "still" ? svgIcon(STILL_ICON, className) : svgIcon(ARROW_ICON, className, DIRECTIONS.indexOf(move) * 45);
 }

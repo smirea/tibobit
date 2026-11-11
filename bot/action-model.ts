@@ -178,14 +178,14 @@ export async function steer(r: World, p: Pursuit, aim: Course, log: RunLog, why:
   const ruledOut = Object.keys(offered).length - Object.keys(moves).length;
   const forecast = (k: string) => {
     const f = forecastFor(r, k === "stay" ? "stay" : (k as Direction));
-    return f === undefined ? undefined : f.dead ? "dead" : f.estimatedDamage === 0 ? "no damage" : `-${Math.round(f.estimatedDamage)} hp`;
+    return f === undefined ? undefined : { damage: f.estimatedDamage, dead: f.dead === true };
   };
   const weighed: MoveOption[] = Object.entries(offered).map(([k, description]) => {
     const f = forecast(k);
-    const hurt = answers[k]?.score;
+    const hurt = answers[k]?.noul;
     const useful = answers[`useful:${k}`]?.noul;
     return {
-      move: k === "stay" ? "stand still" : k,
+      move: k === "stay" ? "still" : (k as Direction),
       description,
       ...(f === undefined ? {} : { forecast: f }),
       ...(hurt === undefined ? {} : { hurt }),
@@ -205,7 +205,7 @@ export async function steer(r: World, p: Pursuit, aim: Course, log: RunLog, why:
       situation: state,
       questions: [`For each move: ${ask(templates.action.hurt, "<the move>")} (${HURT_SCALE.join(", ")})`, `For each move: ${ask(templates.action.useful, "<the move>")}`, ...(canDash ? [render(templates.action.dash, vars)] : [])],
       moves: weighed,
-      ...(answers.dash?.noul === undefined ? {} : { dash: answers.dash.noul }),
+      ...(answers.dash?.noul === undefined ? {} : { dash: { odds: answers.dash.noul, above: dashBar(r) } }),
     },
     detail: [`for: ${p.title}`, `Tibo ${HURT_SCALE[Math.round(answers[choice]?.score ?? 0)] ?? "?"}`, ...(ruledOut > 0 ? [`${ruledOut} costlier ${ruledOut === 1 ? "move" : "moves"} ruled out`] : [])].join(" · "),
   });

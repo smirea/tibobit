@@ -9,7 +9,6 @@ export let pace: PilotPace = { planEvery: PLAN_EVERY, actEvery: STEP };
 /** Whether the panel started this bot, which someone is watching. */
 export let piloted = false;
 
-export const PICK_SHOW_MS = 2000;
 
 let chatQueue = Promise.resolve();
 

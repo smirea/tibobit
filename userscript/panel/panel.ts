@@ -2,7 +2,7 @@ import { type Combo, comboProgress, combosUsing, idOf, type Key, type Kind, type
 import type { Bridge } from "../agent/bridge";
 import { validPort } from "../../protocol/address";
 import { botFeed } from "../pilot/feed";
-import { runCombos, type RunCombos } from "../combos/run-combos";
+import { type RunCombos, runCombos } from "../combos/run-combos";
 import type { Discovery } from "../combos/discovery";
 import type { GameLink } from "../link/game-link";
 import type { IconSheet } from "../../game/types";

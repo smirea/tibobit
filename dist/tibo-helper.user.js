@@ -96,6 +96,7 @@
       fail('send {"on": true|false}, {"incognito": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
     return change;
   }
+  var PICK_SHOW_MS = 2000;
   var ACTION_TAGS = [
     ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
     ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
@@ -2268,7 +2269,6 @@
   var NOTE_ICON = ["M4 5h16v11H9l-4 4v-4H4z", "M8 9h8M8 12h5"];
   var STILL_ICON = [ring(12, 12, 3.5)];
   var ARROW_ICON = ["M4 12h15", "M13 6l6 6-6 6"];
-  var DIRECTION_TURNS = { right: 0, "down-right": 45, down: 90, "down-left": 135, left: 180, "up-left": 225, up: 270, "up-right": 315 };
   var RESULT_ICONS = { done: ["M5 12.5l4.5 4.5L19 7.5"], failed: ["M6 6l12 12M18 6 6 18"], dropped: ["M6 12h12"] };
   var SVG = "http://www.w3.org/2000/svg";
   function svgIcon(icon, className, turn = 0) {
@@ -2293,8 +2293,7 @@
     return svg;
   }
   function moveIcon(move, className) {
-    const turn = DIRECTION_TURNS[move];
-    return turn === undefined ? svgIcon(STILL_ICON, className) : svgIcon(ARROW_ICON, className, turn);
+    return move === "still" ? svgIcon(STILL_ICON, className) : svgIcon(ARROW_ICON, className, DIRECTIONS.indexOf(move) * 45);
   }
 
   // userscript/pilot/feed.ts
@@ -2304,8 +2303,11 @@
   var clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
   var fine = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
   var percent = (v) => `${Math.round(v * 100)}%`;
-  var ARROWS = { right: "→", "down-right": "↘", down: "↓", "down-left": "↙", left: "←", "up-left": "↖", up: "↑", "up-right": "↗", "stand still": "•" };
-  var arrowed = (text) => text.replace(/(?<![\w-])(up-right|up-left|down-right|down-left|right|left|up|down)(?![\w-])/g, (d) => ARROWS[d] ?? d);
+  var costly = (f) => f.dead || f.damage > 0;
+  var ARROW_GLYPHS = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"];
+  var ARROWS = { ...Object.fromEntries(DIRECTIONS.map((d, i) => [d, ARROW_GLYPHS[i]])), still: "•" };
+  var DIRECTION_WORDS = new RegExp(`(?<![\\w-])(${[...DIRECTIONS].sort((a, z) => z.length - a.length).join("|")})(?![\\w-])`, "g");
+  var arrowed = (text) => text.replace(DIRECTION_WORDS, (d) => ARROWS[d] ?? d);
   function h(tag, className, ...children) {
     const el = document.createElement(tag);
     el.className = className;
@@ -2348,10 +2350,10 @@
           folded("Prompt", inspect.prompt)
         ];
       case "moves": {
-        const rows = inspect.moves.map((m) => h("div", `tbh-opt tbh-opt-${m.outcome.replace(" ", "-")}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name tbh-opt-arrow", ARROWS[m.move] ?? m.move), h("span", "tbh-opt-outcome", m.outcome), h("span", "tbh-opt-scores", ...m.forecast === undefined ? [] : [h("span", `tbh-chip${m.forecast === "no damage" ? " tbh-chip-ok" : ""}`, m.forecast)], ...m.hurt === undefined ? [] : [meter(`hurt ${m.hurt.toFixed(1)}/4`, m.hurt / 4, "tbh-meter-hurt")], ...m.useful === undefined ? [] : [meter(`useful ${percent(m.useful)}`, m.useful, "tbh-meter-useful")])), h("div", "tbh-opt-desc", m.description)));
+        const rows = inspect.moves.map((m) => h("div", `tbh-opt tbh-opt-${m.outcome.replace(" ", "-")}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name tbh-opt-arrow", ARROWS[m.move]), h("span", "tbh-opt-outcome", m.outcome), h("span", "tbh-opt-scores", ...m.forecast === undefined ? [] : [h("span", `tbh-chip${costly(m.forecast) ? "" : " tbh-chip-ok"}`, m.forecast.dead ? "dead" : costly(m.forecast) ? `-${Math.round(m.forecast.damage)} hp` : "no damage")], ...m.hurt === undefined ? [] : [meter(`hurt ${percent(m.hurt)}`, m.hurt, "tbh-meter-hurt")], ...m.useful === undefined ? [] : [meter(`useful ${percent(m.useful)}`, m.useful, "tbh-meter-useful")])), h("div", "tbh-opt-desc", m.description)));
         return [
           ...words,
-          section("Moves", ...rows, ...inspect.dash === undefined ? [] : [h("div", "tbh-opt-desc", `Dash to escape? ${percent(inspect.dash)} (dashes above 50%)`)]),
+          section("Moves", ...rows, ...inspect.dash === undefined ? [] : [h("div", "tbh-opt-desc", `Dash to escape? ${percent(inspect.dash.odds)} (dashes above ${percent(inspect.dash.above)})`)]),
           section("Prompt", pre([inspect.situation, ...inspect.questions ?? []].join(`
 
 `)))
@@ -2464,7 +2466,7 @@
     if (m.role !== "action" || m.inspect?.kind !== "moves")
       return;
     const chosen = m.inspect.moves.find((x) => x.outcome === "chosen");
-    return { move: chosen?.move ?? "stand still", hurt: chosen?.forecast !== undefined && chosen.forecast !== "no damage", dash: m.tag === "Dash" };
+    return { move: chosen?.move ?? "still", hurt: chosen?.forecast !== undefined && costly(chosen.forecast), dash: m.tag === "Dash" };
   }
   function actionTile(m) {
     const s = step(m);
@@ -3093,7 +3095,7 @@
   }
 
   // userscript/pilot/pick-overlay.ts
-  var SHOW_MS = 1500;
+  var SHOW_MS = PICK_SHOW_MS - 500;
   var ARRIVE_MS = 700;
   var FRESH_MS = 8000;
   function el(className, text = "") {

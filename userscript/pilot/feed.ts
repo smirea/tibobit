@@ -1,6 +1,7 @@
 import type { Bridge } from "../agent/bridge";
 import { ACTION_ICONS, moveIcon, NOTE_ICON, RESULT_ICONS, svgIcon } from "./icons";
 import { type CardOption, type ChatMessage, type Inspect, PACE_LIMITS, type PilotPace, type PilotRole } from "../../protocol/pilot";
+import { type Direction, DIRECTIONS } from "../../protocol/geometry";
 
 const ROLE_LABELS: Record<PilotRole, string> = { planner: "Plan", action: "Action", system: "Bot" };
 const HIDE_DELAY_MS = 200;
@@ -11,9 +12,13 @@ const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.fl
 /** Game time to a tenth of a second, as 01:23.4. */
 const fine = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
 const percent = (v: number) => `${Math.round(v * 100)}%`;
-const ARROWS: Record<string, string> = { right: "→", "down-right": "↘", down: "↓", "down-left": "↙", left: "←", "up-left": "↖", up: "↑", "up-right": "↗", "stand still": "•" };
-// A move or goal title names a direction in words ("Explore up-right"); the panel shows the arrow.
-const arrowed = (text: string) => text.replace(/(?<![\w-])(up-right|up-left|down-right|down-left|right|left|up|down)(?![\w-])/g, (d) => ARROWS[d] ?? d);
+const costly = (f: { damage: number; dead: boolean }) => f.dead || f.damage > 0;
+// One arrow per direction, in the order of DIRECTIONS; standing still is a dot.
+const ARROW_GLYPHS = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"];
+const ARROWS: Record<Direction | "still", string> = { ...(Object.fromEntries(DIRECTIONS.map((d, i) => [d, ARROW_GLYPHS[i]])) as Record<Direction, string>), still: "•" };
+// A move or goal title names a direction in words ("Explore up-right"); the panel shows the arrow. Longer names first, so "up-right" is not read as "up".
+const DIRECTION_WORDS = new RegExp(`(?<![\\w-])(${[...DIRECTIONS].sort((a, z) => z.length - a.length).join("|")})(?![\\w-])`, "g");
+const arrowed = (text: string) => text.replace(DIRECTION_WORDS, (d) => ARROWS[d as Direction] ?? d);
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
@@ -83,13 +88,13 @@ function inspectBody(m: ChatMessage): Node[] {
           h(
             "div",
             "tbh-opt-head",
-            h("span", "tbh-opt-name tbh-opt-arrow", ARROWS[m.move] ?? m.move),
+            h("span", "tbh-opt-name tbh-opt-arrow", ARROWS[m.move]),
             h("span", "tbh-opt-outcome", m.outcome),
             h(
               "span",
               "tbh-opt-scores",
-              ...(m.forecast === undefined ? [] : [h("span", `tbh-chip${m.forecast === "no damage" ? " tbh-chip-ok" : ""}`, m.forecast)]),
-              ...(m.hurt === undefined ? [] : [meter(`hurt ${m.hurt.toFixed(1)}/4`, m.hurt / 4, "tbh-meter-hurt")]),
+              ...(m.forecast === undefined ? [] : [h("span", `tbh-chip${costly(m.forecast) ? "" : " tbh-chip-ok"}`, m.forecast.dead ? "dead" : costly(m.forecast) ? `-${Math.round(m.forecast.damage)} hp` : "no damage")]),
+              ...(m.hurt === undefined ? [] : [meter(`hurt ${percent(m.hurt)}`, m.hurt, "tbh-meter-hurt")]),
               ...(m.useful === undefined ? [] : [meter(`useful ${percent(m.useful)}`, m.useful, "tbh-meter-useful")]),
             ),
           ),
@@ -98,7 +103,7 @@ function inspectBody(m: ChatMessage): Node[] {
       );
       return [
         ...words,
-        section("Moves", ...rows, ...(inspect.dash === undefined ? [] : [h("div", "tbh-opt-desc", `Dash to escape? ${percent(inspect.dash)} (dashes above 50%)`)])),
+        section("Moves", ...rows, ...(inspect.dash === undefined ? [] : [h("div", "tbh-opt-desc", `Dash to escape? ${percent(inspect.dash.odds)} (dashes above ${percent(inspect.dash.above)})`)])),
         section("Prompt", pre([inspect.situation, ...(inspect.questions ?? [])].join("\n\n"))),
       ];
     }
@@ -234,10 +239,10 @@ function inspector(panel: () => HTMLElement, messages: () => readonly ChatMessag
 const FLOW_TILES = 60;
 
 /** A step the action model chose, as the move it took; undefined for anything else. */
-function step(m: ChatMessage): { move: string; hurt: boolean; dash: boolean } | undefined {
+function step(m: ChatMessage): { move: Direction | "still"; hurt: boolean; dash: boolean } | undefined {
   if (m.role !== "action" || m.inspect?.kind !== "moves") return undefined;
   const chosen = m.inspect.moves.find((x) => x.outcome === "chosen");
-  return { move: chosen?.move ?? "stand still", hurt: chosen?.forecast !== undefined && chosen.forecast !== "no damage", dash: m.tag === "Dash" };
+  return { move: chosen?.move ?? "still", hurt: chosen?.forecast !== undefined && costly(chosen.forecast), dash: m.tag === "Dash" };
 }
 
 /**

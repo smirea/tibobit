@@ -1,10 +1,10 @@
 import type { Bridge } from "../agent/bridge";
-import type { CardOption, ChatMessage } from "../../protocol/pilot";
+import { type CardOption, type ChatMessage, PICK_SHOW_MS } from "../../protocol/pilot";
 import { choiceCards } from "../link/screen";
 import { moveIcon } from "./icons";
 
-// The bot waits 2 seconds (PICK_SHOW_MS in bot/server.ts) before taking the card; the pick glows a little before that.
-const SHOW_MS = 1500;
+// The bot waits PICK_SHOW_MS before taking the card; the pick glows until a little before that.
+const SHOW_MS = PICK_SHOW_MS - 500;
 // The arrow glides in from the first card's edge to the pick, then bobs there.
 const ARRIVE_MS = 700;
 // A pick message older than this belongs to an earlier choice. Its age counts from when the server
