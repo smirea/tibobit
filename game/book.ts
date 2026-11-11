@@ -12,7 +12,7 @@ export type Book = {
   dogs: Map<string, Record<string, unknown>>;
 };
 
-export function readBook(e: Encyclopedia): Book {
+export function bookFrom(e: Encyclopedia): Book {
   type Def = { id: string; tier?: string } & Record<string, unknown>;
   const weapons = e.weapons as Def[];
   const items = e.items as Def[];

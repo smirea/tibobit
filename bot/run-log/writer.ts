@@ -1,0 +1,134 @@
+import path from "node:path";
+import { book, clock, groundSources, onScreen, pct, said, spotLine } from "../words";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { option } from "../flags";
+import type { World } from "../world";
+export const csvField = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+// One CSV row per model call and per goal that starts or ends, with the player's state at that
+// moment, so a run can be read back decision by decision. The post-run review reads it.
+export const LOG_DIR = option("log-dir", "/tmp/tibobit");
+
+// Numbers first and free text last, so a reader splitting on commas gets the numbers right.
+export const LOG_COLUMNS = [
+  "time",
+  "seconds",
+  "wall",
+  "event",
+  "model",
+  "ms",
+  "hp",
+  "max_hp",
+  "hp_lost",
+  "hp_gained",
+  "level",
+  "xp_pct",
+  "gold",
+  "x",
+  "y",
+  "dash",
+  "enemies",
+  "goal",
+  "action",
+  "reason",
+  "detail",
+  "bosses",
+  "hurt_by",
+  "standing_on",
+  "underfoot",
+  "chests",
+  "food",
+  "pois",
+  "weapons",
+  "passives",
+  "items",
+  "options",
+  "dealt",
+  "elites",
+  "elite_list",
+] as const;
+
+/** `walk`: the page walked Tibo toward its goal without asking a model, and Tibo lost health on the way. `loadout`: what Tibo holds changed. */
+export type LogEvent = "plan" | "pick" | "move" | "walk" | "goal" | "loadout" | "run_end";
+
+export type LogRow = { event: LogEvent; model?: string; reason?: string; goal?: string; action?: string; options?: string; detail?: string; ms?: number };
+
+export class RunLog {
+  /** Health at the previous row, for `hp_lost` and `hp_gained`. */
+  private hp: number | undefined;
+  /** Health gained between rows over the run: the game counts healing only in total, not by source. */
+  healed = 0;
+  private held: Map<string, string> | undefined;
+  constructor(readonly file: string) {
+    mkdirSync(path.dirname(file), { recursive: true });
+    // Never over another run's log: two runs with one id would truncate each other's.
+    writeFileSync(file, `${LOG_COLUMNS.join(",")}\n`, { flag: "wx" });
+  }
+
+  write(r: World | undefined, row: LogRow) {
+    const lost = r === undefined || this.hp === undefined ? "" : String(Math.max(0, Math.round(this.hp - r.hp)));
+    const gained = r === undefined || this.hp === undefined ? 0 : Math.max(0, Math.round(r.hp - this.hp));
+    this.healed += gained;
+    if (r !== undefined) this.hp = r.hp;
+    const at = (x: { dist: number; dir: string }) => `${Math.round(x.dist)} ${x.dir}`;
+    const t = r?.view.tibo;
+    const state: Partial<Record<(typeof LOG_COLUMNS)[number], string | number>> =
+      r === undefined || t === undefined
+        ? {}
+        : {
+            time: clock(r.time),
+            seconds: Math.round(r.time * 10) / 10,
+            hp: Math.round(r.hp),
+            max_hp: Math.round(r.maxHp),
+            hp_lost: lost,
+            hp_gained: gained,
+            level: t.level.level,
+            xp_pct: pct(t.level.xp, t.level.next),
+            gold: t.gold,
+            x: Math.round(r.x),
+            y: Math.round(r.y),
+            dash: t.dash.charges,
+            enemies: onScreen(r),
+            bosses: r.bosses.map((b) => `${b.name} (${b.type}) ${at(b)} ${pct(b.hp, b.maxHp)}% of ${Math.round(b.maxHp)}`).join("; "),
+            dealt: Math.round(Object.values(r.run.damageBySource).reduce((a, b) => a + b, 0)),
+            elites: r.run.elitesKilled,
+            elite_list: r.elites.slice(0, 3).map((e) => `${e.id} ${e.name} (${e.type}) ${Math.round(e.hp)}/${Math.round(e.maxHp)} ${at(e)}`).join("; "),
+            hurt_by: Object.entries(r.hurtBy).map(([k, v]) => `${k} ${v}`).join("; "),
+            standing_on: spotLine(r) ?? "",
+            underfoot: groundSources(r).join("; "),
+            chests: r.chests.slice(0, 3).map(at).join("; "),
+            food: r.food.slice(0, 2).map(at).join("; "),
+            pois: r.spots.filter((x) => x.chargeSeconds > 0).slice(0, 4).map((x) => `${x.name} ${at(x)}`).join("; "),
+            weapons: r.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join("; "),
+            passives: r.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join("; "),
+            items: r.items.map((i) => `${i.name} x${i.count}`).join("; "),
+          };
+    const values = { ...state, ...row, wall: new Date().toISOString().slice(11, 19) } as Record<string, string | number | undefined>;
+    appendFileSync(this.file, `${LOG_COLUMNS.map((c) => csvField(String(values[c] ?? ""))).join(",")}\n`);
+  }
+
+  /** Health lost since the last row. */
+  lostSince(r: World): number {
+    return this.hp === undefined ? 0 : Math.max(0, this.hp - r.hp);
+  }
+
+  /**
+   * What Tibo holds now against the last call, such as "Root Spikes 3/8 to 7/8, Taproot Eruption
+   * new", or undefined when nothing changed. Chests hand out their rewards without a choice, so
+   * this is the only record of what a chest gave.
+   */
+  loadoutChange(r: World): string | undefined {
+    const now = new Map([...r.weapons, ...r.passives].map((x) => [x.name, `${x.level}/${x.max}`] as [string, string]));
+    // A new item carries the game's description, so a review can tell what it should have changed.
+    const itemSaid = new Map(r.items.map((i) => [i.name, book === undefined ? "" : said(book, "item", i.id).replace(/^: (.*)$/, " ($1)")] as [string, string]));
+    for (const i of r.items) now.set(i.name, `x${i.count}`);
+    const before = this.held;
+    this.held = now;
+    if (before === undefined) return undefined;
+    const changes = [
+      ...[...now].filter(([k, v]) => before.get(k) !== v).map(([k, v]) => (before.has(k) ? `${k} ${before.get(k)} to ${v}` : `${k} ${v} new${itemSaid.get(k) ?? ""}`)),
+      ...[...before.keys()].filter((k) => !now.has(k)).map((k) => `${k} gone`),
+    ];
+    return changes.length === 0 ? undefined : changes.join(", ");
+  }
+}

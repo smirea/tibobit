@@ -76,3 +76,6 @@ export function see(s: State): World | undefined {
     dps: tibo.dps,
   };
 }
+
+/** What the game keeps of a run that ended, read with `raw`. */
+export type EndJson = { runClock: number; over: boolean; run: World["run"]; counters: Record<string, number>; loadout: { level: number; shrineTotals: Record<string, number> } };

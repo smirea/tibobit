@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import type { ServerWebSocket } from "bun";
-import { type Book, readBook } from "../game/book";
+import { type Book, bookFrom } from "../game/book";
 import { liveView } from "./live-view";
 import { BRIDGE_PORT } from "../protocol/address";
 import { type CommandStatus, parseCommand } from "../protocol/commands";
@@ -188,7 +188,7 @@ const server = Bun.serve<{ raw: string[] }>({
         }
         case "POST /bridge/encyclopedia":
           book = (await req.json()) as Encyclopedia;
-          content = readBook(book);
+          content = bookFrom(book);
           console.log(`encyclopedia: ${book.weapons.length} weapons, ${book.passives.length} passives, ${book.items.length} items, ${book.dogs.length} dogs, ${book.pois.length} pois`);
           return new Response(null, { status: 204 });
         case "GET /state": {
