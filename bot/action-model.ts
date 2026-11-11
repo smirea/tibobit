@@ -13,6 +13,7 @@ import { RunLog } from "./run-log/writer";
 import type { MoveOption } from "../protocol/pilot";
 import { noteModelStep } from "./forecast-lag";
 import { dashCell, movesCell, UNANSWERED } from "./run-log/cells";
+import { nearestToGoal } from "./autopilot";
 
 // Words, not percentages: on 50 replayed states Laya picked a move within 2% of the least
 // damaging one 90% of the time with these words, 80% with "would lose N%", and 38% when the
@@ -124,7 +125,7 @@ export async function dashOnTheWay(r: World, p: Pursuit, heading: Direction, log
   await command({ type: "dash", dir: heading });
 }
 
-/** The way to the goal costs more than the safest move: the action model picks this step. */
+/** The way to the goal costs more than the safest move: the action model picks this step, or with the autopilot knob the forecast does. */
 export async function steer(r: World, p: Pursuit, aim: Course, log: RunLog, why: string) {
   const goal = goalWords(p, aim);
   const moves: Record<string, string> = {};
@@ -151,7 +152,8 @@ export async function steer(r: World, p: Pursuit, aim: Course, log: RunLog, why:
   const canDash = dashWorthAsking(r);
   if (canDash) questions.dash = { type: "noul", instructions: render(templates.action.dash, vars) };
   const started = performance.now();
-  const answered = await decide(state, questions);
+  const auto = knobs().autopilot >= 0.5;
+  const answered = auto ? undefined : await decide(state, questions);
   const answers = answered ?? {};
   const ms = Math.round(performance.now() - started);
   // A step the model never answered says nothing about how long its answers take.
@@ -160,15 +162,17 @@ export async function steer(r: World, p: Pursuit, aim: Course, log: RunLog, why:
   const safest = Math.min(...Object.keys(moves).map(risk));
   const safe = Object.keys(moves).filter((k) => risk(k) <= safest + knobs().safeMargin && (risk(k) < SAFE_ENOUGH || risk(k) === safest));
   // Without an answer, the forecast's cheapest move stands in for the model's.
-  const choice =
-    answered === undefined
+  const choice = auto
+    ? nearestToGoal(Object.keys(moves), aim.heading, cost)
+    : answered === undefined
       ? (Object.keys(moves).sort((x, y) => (cost(x) ?? 0) - (cost(y) ?? 0))[0] ?? "stay")
       : (safe.sort((x, y) => (answers[`useful:${y}`]?.noul ?? 0) - (answers[`useful:${x}`]?.noul ?? 0) || risk(x) - risk(y))[0] ?? "stay");
   const dir = (DIRECTIONS as readonly string[]).includes(choice) ? (choice as Direction) : undefined;
   const dash = dir !== undefined && (answers.dash?.noul ?? 0) > dashBar(r);
   if (aim.heading === "stay" && dir !== undefined) p.steppedOff++;
-  const dashWhy =
-    templates.action.dash.trim() === ""
+  const dashWhy = auto
+    ? "dash not asked: autopilot never dashes"
+    : templates.action.dash.trim() === ""
       ? "dash not asked: the template is empty"
       : r.view.tibo.dash.charges === 0
         ? "dash not asked: no charge"
@@ -211,8 +215,8 @@ export async function steer(r: World, p: Pursuit, aim: Course, log: RunLog, why:
   });
   log.write(r, {
     event: "move",
-    model: MODEL,
-    reason: answered === undefined ? `${why}; the action model ${UNANSWERED}, so the forecast's cheapest move stands in` : why,
+    model: auto ? "autopilot" : MODEL,
+    reason: auto ? `${why}; autopilot took the move the forecast allows that is nearest the way to the goal` : answered === undefined ? `${why}; the action model ${UNANSWERED}, so the forecast's cheapest move stands in` : why,
     goal: p.id,
     action: move,
     options: movesCell.encode(weighed.map((w) => ({ ...w, hurt: w.hurt === undefined ? undefined : Math.round(w.hurt * (HURT_SCALE.length - 1)), ruledOut: w.outcome === "ruled out" }))),

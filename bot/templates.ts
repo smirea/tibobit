@@ -55,7 +55,7 @@ export const SLOTS = {
 
 export type TemplateSlot = keyof typeof SLOTS;
 
-export type Knobs = { exploreDistance: number; evadeSeconds: number; stuckSeconds: number; extraDamage: number; safeMargin: number; distrustSeconds: number; distrustBossRange: number; planEvery: number; eliteSeconds: number; bossOfferRange: number; dashThreshold: number; bossDashThreshold: number; bossDashRange: number; eliteFrom: number; eliteMinHp: number; forecastSeconds: number };
+export type Knobs = { exploreDistance: number; evadeSeconds: number; stuckSeconds: number; extraDamage: number; safeMargin: number; distrustSeconds: number; distrustBossRange: number; planEvery: number; eliteSeconds: number; bossOfferRange: number; dashThreshold: number; bossDashThreshold: number; bossDashRange: number; eliteFrom: number; eliteMinHp: number; forecastSeconds: number; autopilot: number };
 
 export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: string }> = {
   exploreDistance: { min: 100, max: 1500, about: "units an explore goal walks before it ends; it also ends at the first chest never listed before" },
@@ -67,6 +67,7 @@ export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: strin
   bossOfferRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is offered every move, even those the one-second forecast prices above extraDamage, since boss attacks are not in that forecast; 0 keeps the usual rule" },
   eliteSeconds: { min: 5, max: 60, about: "seconds a fight-the-elite goal lasts at most: Tibo heads for the elite and keeps it within reach of its weapons until it dies" },
   forecastSeconds: { min: 0.1, max: 2, about: "how far ahead the game's own simulation prices each move, and how far surroundings look for bullets that would hit, attacks and hazards on each path, in seconds; the action model weighs moves by what they cost over this horizon" },
+  autopilot: { min: 0, max: 1, about: "1 takes every step without the action model: of the moves the forecast allows (those within extraDamage of the cheapest), Tibo takes the one nearest the way to the goal, and of two as near the cheaper; it never dashes and no action template is used. 0 asks the action model, as before. In the loop manager's own gym tests at minute 10, a mover that read only the forecast's prices lost no more health per trip than either action-model format, and it answers at once" },
   planEvery: { min: 1, max: 60, about: "seconds between planner calls while a goal is under way (it is also asked whenever a goal ends, a choice opens, a card is taken or a boss appears); short re-plans switch goals often, long ones let a goal finish. A person watching in the panel sets this instead" },
   distrustBossRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is asked about every step, since boss attacks from afar are not in the one-second forecast; 0 turns it off" },
   dashThreshold: { min: 0.05, max: 0.95, about: "how sure the action model's answer to action.dash must be (a probability) for Tibo to dash; lower dashes more often" },
@@ -97,7 +98,7 @@ export const DEFAULT_TEMPLATES: Templates = {
     useful: "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
     dash: "Is Tibo about to be hit or surrounded, so a quick dash away would save it?",
   },
-  knobs: { exploreDistance: 300, evadeSeconds: 8, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1, distrustSeconds: 0, distrustBossRange: 0, planEvery: 5, eliteSeconds: 20, bossOfferRange: 0, dashThreshold: 0.5, bossDashThreshold: 0.5, bossDashRange: 0, eliteFrom: 0, eliteMinHp: 0, forecastSeconds: 0.5 },
+  knobs: { exploreDistance: 300, evadeSeconds: 8, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1, distrustSeconds: 0, distrustBossRange: 0, planEvery: 5, eliteSeconds: 20, bossOfferRange: 0, dashThreshold: 0.5, bossDashThreshold: 0.5, bossDashRange: 0, eliteFrom: 0, eliteMinHp: 0, forecastSeconds: 0.5, autopilot: 0 },
 };
 
 export const STATE_LIMIT = 8000;

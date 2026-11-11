@@ -1,4 +1,4 @@
-import { aimAt, type Course, distrusted, ending, everListed, finish, goalId, outcomes, type Pursuit, pursuit, setDistrust } from "./goals";
+import { aimAt, type Course, distrusted, ending, everListed, finish, goalId, outcomes, pursuit, type Pursuit, setDistrust } from "./goals";
 import { knobs } from "./run-templates";
 import { cheapestMove, dashOnTheWay, dashWorthAsking, moveCost, steer } from "./action-model";
 import type { Command, CommandStatus } from "../protocol/commands";

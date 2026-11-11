@@ -1,7 +1,7 @@
 import { readLoadout } from "../../game/catalog";
 import type { Bridge } from "../agent/bridge";
 import { botFeed } from "../pilot/feed";
-import { runCombos, type RunCombos } from "../combos/run-combos";
+import { type RunCombos, runCombos } from "../combos/run-combos";
 import type { Discovery } from "../combos/discovery";
 import type { GameLink } from "../link/game-link";
 import type { IconSheet } from "../../game/types";
