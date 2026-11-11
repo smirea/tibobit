@@ -9,7 +9,6 @@ export const MODE: GameMode = MODE_ARG === "current" ? ((await server.state(RAW)
 
 export const MODE_NAME = MODE === "daily" ? "daily" : "world";
 
-export const WIN_SECONDS = 1200;
 
 // Read once at startup: the code this process runs, whatever is committed while it plays.
 export const BOT_CODE = (() => {

@@ -106,12 +106,6 @@ export class Slot {
   private async startGame() {
     this.headless = this.spawn(ENTRY.headless, ["--bridge", String(this.serverPort), "--port", String(this.gamePort), "--profile", this.profile], path.join(this.logs, `${this.name}-headless.log`));
     await this.connected(90_000);
-    // The page reaches the agent server before the headless game serves its own API, which /eval needs.
-    const end = Date.now() + 90_000;
-    while (!(await this.evaluate("true").then(() => true, () => false))) {
-      if (Date.now() > end) throw new Error(`${this.name}: the headless game never served ${this.game}`);
-      await Bun.sleep(250);
-    }
   }
 
   /** Restarts the headless game, which loads the newest userscript and game build. */

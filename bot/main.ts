@@ -4,15 +4,13 @@
 // and sets short-term goals) and acts (steps around danger on the way to the goal). The file removes
 // only options the game itself rules out: cards Tibo cannot take, and moves the game's own
 // simulation says cost clearly more health over its horizon (the forecastSeconds knob) than the cheapest one.
-import path from "node:path";
-import { mkdir } from "node:fs/promises";
 import { ladderCleared, type State } from "../protocol/view";
 import { type EndJson, see, type World } from "./world";
 import type { RunPlan, RunSetup } from "./notes";
 import { talliesOf, totalsBetween } from "./tallies";
 import { command, followPanel, pace, RAW, say, server, timed, timings } from "./server";
-import { BOT_CODE, difficulty, MODE, MODE_NAME, setDifficulty, WIN_SECONDS } from "./run-context";
-import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG, LOG_DIR, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RESULT, RUN_COUNT, STEP, TAKEOVER, TRIAL, WEAPON } from "./config";
+import { BOT_CODE, MODE, MODE_NAME, setDifficulty } from "./run-context";
+import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG_DIR, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RESULT, RUN_COUNT, STEP, TAKEOVER, TRIAL, WEAPON } from "./config";
 import { RunNotes } from "./run-notes";
 import { setTemplates } from "./run-templates";
 import { choose, loadoutLines, Planner } from "./planner";
@@ -88,9 +86,6 @@ const gameSeed = (s: State) => ended(s)?.run.seed?.toString();
 const runClock = (s: State) => ended(s)?.runClock ?? 0;
 
 async function main() {
-  await mkdir(path.dirname(LOG), { recursive: true });
-  await Bun.write(LOG, "");
-  const log = Bun.file(LOG).writer();
   let runs = 0;
   let lastReport = -1;
   let steps = 0;
@@ -201,6 +196,7 @@ async function main() {
       if (s.screen === "over" && over !== undefined && runs > 0 && notes !== undefined && planner !== undefined && runLog !== undefined) {
         const avg = latency.reduce((x, y) => x + y, 0) / Math.max(1, latency.length);
         const lived = over.runClock;
+        const won = last !== undefined && lived >= last.view.world.winAt;
         const kills = Number(over.run.kills ?? 0);
         const taken = over.run.damageTakenBySource;
         console.log(`run ${runs} ended at ${Math.round(lived)}s, level ${over.loadout.level}, ${kills} kills, ${steps} steps, ${Math.round(avg)}ms per decision`);
@@ -210,11 +206,9 @@ async function main() {
         const lastHurt = last === undefined ? "" : Object.entries(last.hurtBy).map(([k, v]) => `${k} ${v}`).join(", ");
         runLog.write(last, {
           event: "run_end",
-          action: lived >= WIN_SECONDS ? "won, then died" : "died",
+          action: won ? "won, then died" : "died",
           detail: `Tibo died at ${clock(lived)}, level ${over.loadout.level}, ${kills} kills; hurt in its last 3 seconds by ${lastHurt || "nothing the bot saw"}; damage taken ${Math.round(total)} in all: ${Object.entries(taken).map(([k, v]) => `${k} ${Math.round(v * 10) / 10}`).join(", ")}`,
         });
-        log.write(`${JSON.stringify({ event: "end", model: MODEL, mode: MODE, difficulty, notes: notes.id, runLog: runLog.file, time: lived, level: over.loadout.level, kills, damageTaken: taken, killer: over.run.killer, steps, plannerCalls: planner.calls, avgDecisionMs: Math.round(avg) })}\n`);
-        log.flush();
         // The run is over; a stop from here on only notes the missing review.
         const ended = notes;
         notes = undefined;
@@ -290,8 +284,6 @@ async function main() {
         `${r.time}s hp ${Math.round(r.hp)}/${Math.round(r.maxHp)} lv ${r.view.tibo.level.level} enemies on screen ${r.view.world.enemiesOnScreen} ${r.weapons.map((w) => `${w.id}:${w.level}`).join(",")} | per step: state ${per(timings.state)}ms decide ${per(timings.decide)}ms command ${per(timings.command)}ms`,
       );
       Object.assign(timings, { state: 0, decide: 0, command: 0, steps: 0 });
-      log.write(`${JSON.stringify({ event: "tick", time: r.time, hp: r.hp, level: r.view.tibo.level.level, enemies: r.view.world.enemiesOnScreen })}\n`);
-      log.flush();
     }
     steps++;
     timings.steps++;

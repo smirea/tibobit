@@ -23,7 +23,6 @@ const FLAGS = {
   intent: "value",
   takeover: "switch",
   "log-dir": "value",
-  log: "value",
   step: "value",
   "plan-every": "value",
   lockstep: "switch",

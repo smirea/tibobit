@@ -1,10 +1,8 @@
-import { RUNS } from "../paths";
 import { DIFFICULTIES, type Difficulty, type GameMode, isDifficulty, isGameMode } from "../protocol/commands";
 import { checkTemplates, DEFAULT_TEMPLATES, type Templates } from "./templates";
 import { readPlaybook } from "./playbook";
 import { BRIDGE_ORIGIN, HEADLESS_PORT, headlessOrigin } from "../protocol/address";
 import { parseBotArgs } from "./args";
-import path from "node:path";
 const given = parseBotArgs(process.argv.slice(2));
 
 /** Whether a flag was given. */
@@ -93,7 +91,6 @@ export const TAKEOVER = TRIAL !== undefined || has("takeover");
 // The headless game's own API reloads the tab; "" keeps the bot from ever reloading, as in a person's browser.
 export const RELOAD = option("reload", `${headlessOrigin(HEADLESS_PORT)}/reload`);
 
-export const LOG = option("log", path.join(RUNS, `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
 
 // One CSV row per model call and per goal that starts or ends goes to a file in this folder, outside the repo.
 export const LOG_DIR = option("log-dir", "/tmp/tibobit");

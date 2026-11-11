@@ -80,8 +80,7 @@ page.on("pageerror", (e) => console.error("page error:", String(e)));
 page.on("console", (m) => {
   if (m.type() === "error" && !m.text().includes("Failed to load resource")) console.error("console:", m.text().slice(0, 300));
 });
-await page.goto("https://tibo.dog/");
-
+// Served before the page loads, so whoever started this can reach it as soon as the page has connected to the agent server.
 Bun.serve({
   hostname: "127.0.0.1",
   port,
@@ -113,6 +112,8 @@ Bun.serve({
     return new Response("GET /screenshot, GET /reload, POST /click <selector>, POST /hover <selector> or POST /eval <expression>\n", { status: 404 });
   },
 });
+await page.goto("https://tibo.dog/");
+
 console.log(`tibo.dog running headless at ${width}x${height}; screenshots at http://127.0.0.1:${port}/screenshot`);
 
 const shutdown = async () => {

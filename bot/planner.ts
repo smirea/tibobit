@@ -7,7 +7,6 @@
 import { onChest, plural, priceWords, said, spotSaid } from "./phrasing";
 import { knobs, planEvery, templates } from "./run-templates";
 import { blocks, type Card, cards } from "./blocks";
-import { WIN_SECONDS } from "./run-context";
 import { PLAN_MODEL } from "./config";
 import { RunNotes } from "./run-notes";
 import { command, piloted, say } from "./server";
@@ -180,7 +179,7 @@ export class Planner {
     const kills = Number(end.run.kills ?? 0);
     await this.notes.finish({
       lived,
-      ending: `${lived >= WIN_SECONDS ? "won (passed 20:00), then " : ""}died at ${clock(lived)}, level ${end.loadout.level}, ${kills} kills`,
+      ending: `${last !== undefined && lived >= last.view.world.winAt ? `won (passed ${clock(last.view.world.winAt)}), then ` : ""}died at ${clock(lived)}, level ${end.loadout.level}, ${kills} kills`,
       outcome: [
         `Lived **${clock(lived)}** (${lived}s), level ${end.loadout.level}, ${kills} kills.`,
         ...totalsLines(totalsBetween(talliesOf(end))),
