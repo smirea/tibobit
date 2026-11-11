@@ -1,21 +1,22 @@
 import path from "node:path";
-import { afterEdits, checkGames, checkGyms, checkPlaybook, explores, type GymRequest, unexplored } from "./checks";
-import { editableFiles, facts, gameEntry, GAMES_CONTRACT, GYMS_CONTRACT, type LastGames, outcome, PLAYBOOK_CONTRACT } from "./coach/prompt";
+import { checkGames, checkGyms, checkPlaybook, explores, type GymRequest, unexplored } from "./checks";
+import { editableFiles, facts, GAMES_CONTRACT, GYMS_CONTRACT, type LastGames, PLAYBOOK_CONTRACT } from "./coach/prompt";
+import { gameEntry, gameLoops, outcome } from "./store/games";
 import { readHeld, recordHeld } from "./store/held";
 import type { Templates } from "../bot/templates";
 import { NOTES_DIR, notesField, notesFiles, notesTemplates, withReview } from "../bot/notes";
 import { IDS, ladder, LOGS, main, playGame, refreshGames, slots } from "./session";
 import { freshSeed, type GameResult, type GameSpec, onSlots } from "./training/slots";
 import { ask, NO_TOOLS } from "./coach/ask";
-import { applyEdits, checkEdits, EDITS_CONTRACT, type LoopEdits, readTables } from "./store/edits";
+import { afterEdits, applyEdits, checkEdits, EDITS_CONTRACT, type LoopEdits, readTables } from "./store/edits";
 import { type Playbook, readPlaybook, writePlaybook } from "../bot/playbook";
 import { COACH_LABEL, EVAL_SEED } from "./flags";
-import { appendLog, type CoachState, stampOf, tagOf } from "./store/coach-log";
+import { appendLog, type CoachState, REFLECTION, tagOf } from "./store/coach-log";
 import { isText } from "../protocol/parse";
 import { EXPLORE_GAMES, EXPLORE_PER_ITERATION, MAX_GAME_SECONDS, PROMPT_LIMIT } from "./rules";
-import { type Gym, readGyms, updateGyms } from "./store/gyms";
+import { type Gym, readGyms, updateGyms, upsertGym } from "./store/gyms";
 import { checkPromptPart, PROMPT_TITLES, type PromptKey, promptLoss, readPrompts, writePrompts } from "./store/coach-prompts";
-import { addGames, gameLoops, overdueAreas } from "./store/experiments";
+import { addGames, overdueAreas } from "./store/experiments";
 import { ENTRY, ROOT } from "../paths";
 import { buildClaimed, buildGym, claimPending } from "./gym-builds";
 import { stopping } from "./stop";
@@ -25,7 +26,7 @@ type ExperimentReply = { summary: string; edits: LoopEdits; games: GameSpec[]; g
 
 export async function experimentIteration(state: CoachState) {
   const tag = tagOf(state);
-  const stamp = stampOf(state);
+  const stamp = tagOf(state);
   const playbook = await readPlaybook();
   const instructions = (await readPrompts()).experiments;
   const prompt = [
@@ -79,11 +80,7 @@ export async function experimentIteration(state: CoachState) {
   }
   await updateGyms((gyms) => {
     for (const name of reply.gyms.retire) for (const g of gyms) if (g.name === name) g.status = "retired";
-    for (const g of reply.gyms.build) {
-      const at = gyms.findIndex((x) => x.name === g.name);
-      if (at >= 0) gyms[at] = g;
-      else gyms.push(g);
-    }
+    for (const g of reply.gyms.build) upsertGym(gyms, g);
   });
   console.log(`${tag}: ${reply.summary}\n  changed ${done.join(", ") || "nothing"}; ${reply.games.length} games`);
   const templates = (await readPlaybook()).templates;
@@ -126,11 +123,7 @@ export async function experimentIteration(state: CoachState) {
       templates: r.spec.templates,
       checkpoint: r.savedGym,
     };
-    await updateGyms((all) => {
-      const at = all.findIndex((x) => x.name === gym.name);
-      if (at >= 0) all[at] = gym;
-      else all.push(gym);
-    });
+    await updateGyms((all) => upsertGym(all, gym));
   }
   const usedGyms = new Set(results.flatMap((r) => ("gym" in r.spec.from && r.error === undefined ? [r.spec.from.gym] : [])));
   if (usedGyms.size > 0)
@@ -190,7 +183,7 @@ async function rehearse(state: CoachState, playbook: Playbook): Promise<Rehearsa
   const theirs = results.filter((r) => r.spec.label !== "your playbook");
   const reverted = !same && baseline !== undefined && livedOf(mine) < livedOf(theirs);
   if (reverted && baseline !== undefined)
-    await writePlaybook({ templates: baseline.templates, weapon: baseline.weapon, updated: stampOf(state), why: `set back by the loop before the full run: on the same ${seeds.length} fresh seeds the candidate lived in ${livedOf(mine)} games and the last full run's playbook (${baseline.from}) in ${livedOf(theirs)}` });
+    await writePlaybook({ templates: baseline.templates, weapon: baseline.weapon, updated: tagOf(state), why: `set back by the loop before the full run: on the same ${seeds.length} fresh seeds the candidate lived in ${livedOf(mine)} games and the last full run's playbook (${baseline.from}) in ${livedOf(theirs)}` });
   const verdict = same
     ? `Your playbook is the one the last full run played; it lived in ${livedOf(mine)} of ${mine.length} fresh Nightmare ${level} games of ${MAX_GAME_SECONDS}s.`
     : `On the same ${seeds.length} fresh Nightmare ${level} seeds, your playbook lived in ${livedOf(mine)} games and the last full run's in ${livedOf(theirs)}. ${reverted ? "Yours did worse, so the loop set it back to the last full run's playbook, which the full run will play." : "Yours did no worse, so the full run plays it."}`;
@@ -200,7 +193,7 @@ async function rehearse(state: CoachState, playbook: Playbook): Promise<Rehearsa
 
 export async function fullRun(state: CoachState): Promise<string | undefined> {
   const tag = tagOf(state);
-  const stamp = stampOf(state);
+  const stamp = tagOf(state);
   const instructions = (await readPrompts()).fullRun;
   const rehearsal = await rehearse(state, await readPlaybook());
   if (stopping) return undefined;
@@ -266,7 +259,7 @@ type ReflectReply = { review: string; summary: string; edits: LoopEdits; prompts
 
 export async function reflect(state: CoachState, notesFile: string | undefined) {
   const tag = `${tagOf(state)}.reflect`;
-  const stamp = stampOf(state);
+  const stamp = tagOf(state);
   const playbook = await readPlaybook();
   const keys = Object.keys(PROMPT_TITLES) as PromptKey[];
   const prompts = await readPrompts();
@@ -322,7 +315,7 @@ export async function reflect(state: CoachState, notesFile: string | undefined) 
     return { value: { review: String(raw.review), summary: String(raw.summary), edits: edits.value, prompts: rewrites, gyms, ...(pb === undefined ? {} : { playbook: pb }) } };
   });
   if (reply === undefined) {
-    await appendLog(state, "reflection", "The coach gave no usable reflection.");
+    await appendLog(state, REFLECTION, "The coach gave no usable reflection.");
     return;
   }
   await applyEdits(reply.edits, stamp);
@@ -330,9 +323,9 @@ export async function reflect(state: CoachState, notesFile: string | undefined) 
   if (Object.keys(reply.prompts).length > 0) await writePrompts({ ...prompts, ...reply.prompts });
   await updateGyms((gyms) => {
     for (const name of reply.gyms.retire) for (const g of gyms) if (g.name === name) g.status = "retired";
-    gyms.push(...reply.gyms.build.filter((g) => !gyms.some((x) => x.name === g.name)));
+    for (const g of reply.gyms.build) upsertGym(gyms, g);
   });
   if (notesFile !== undefined) await Bun.write(notesFile, withReview(await Bun.file(notesFile).text(), reply.review));
   const rewrote = Object.keys(reply.prompts).map((k) => `coach.md # ${PROMPT_TITLES[k as PromptKey]}`);
-  await appendLog(state, "reflection", `${reply.summary}${rewrote.length === 0 ? "" : `\n\nRewrote ${rewrote.join(", ")}.`}`);
+  await appendLog(state, REFLECTION, `${reply.summary}${rewrote.length === 0 ? "" : `\n\nRewrote ${rewrote.join(", ")}.`}`);
 }

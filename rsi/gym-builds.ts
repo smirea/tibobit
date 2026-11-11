@@ -2,7 +2,7 @@
 import { stopping } from "./stop";
 import { EVAL_SEED } from "./flags";
 import type { Templates } from "../bot/templates";
-import { type Gym, updateGyms } from "./store/gyms";
+import { type Gym, updateGyms, upsertGym } from "./store/gyms";
 import { onSlots, Slot } from "./training/slots";
 import { slots } from "./session";
 import { GOAL_LEVEL } from "./rules";
@@ -31,11 +31,7 @@ export function buildGym(slot: Slot, gym: Gym, templates: Templates): Promise<Gy
     const built = await slot.buildGym({ ...gym, status: "building" }, gym.templates ?? templates, EVAL_SEED);
     // A build cut off by a stop stays building, and goes back to pending on restart.
     if (stopping) return built;
-    await updateGyms((gyms) => {
-      const at = gyms.findIndex((g) => g.name === gym.name);
-      if (at >= 0) gyms[at] = built;
-      else gyms.push(built);
-    });
+    await updateGyms((gyms) => upsertGym(gyms, built));
     console.log(`gym ${gym.name}: ${built.status}${built.error === undefined ? "" : ` (${built.error})`}`);
     return built;
   })().finally(() => building.delete(gym.name));

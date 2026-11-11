@@ -1,5 +1,5 @@
 /** Why the action model is asked even though the forecast calls the way to the goal cheap, if it is. */
-import { aimAt, type Course, distrusted, ending, everListed, finish, outcomes, pursuit, type Pursuit, setDistrust } from "./goals";
+import { aimAt, type Course, distrusted, ending, everListed, finish, outcomes, type Pursuit, pursuit, setDistrust } from "./goals";
 import { knobs } from "./playing";
 import { cheapestMove, dashOnTheWay, dashWorthAsking, moveCost, steer } from "./action-model";
 import type { Command, CommandStatus } from "../protocol/commands";

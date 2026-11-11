@@ -2,6 +2,8 @@
 export const GOAL_LEVEL = 20;
 
 export const EXPERIMENT_ITERATIONS = 9;
+/** The iteration after the experiments, which plays the full run. */
+export const FULL_RUN_ITERATION = EXPERIMENT_ITERATIONS + 1;
 
 export const MAX_GAMES = 5;
 

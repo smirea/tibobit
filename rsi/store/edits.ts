@@ -69,6 +69,23 @@ export function checkEdits(raw: Record<string, unknown>, before: Tables): Checke
  * Writes the coach's checked edits. `stamp` says when, such as "L4.I3", and goes into the beliefs'
  * created and updated columns and the experiments'.
  */
+/** An experiment with a coach's edit over it: only the fields the edit sends change, and a new one starts proposed. */
+export function edited(old: Experiment | undefined, edit: ExperimentEdit): Experiment {
+  const sent = Object.fromEntries(Object.entries(edit).filter(([, v]) => v !== undefined));
+  return { title: "", status: "proposed", area: "models", result: "", created: "", updated: "", hypothesis: "", method: "", findings: "", games: "", ...old, ...sent, name: edit.name };
+}
+
+/** The experiments and beliefs as they stand once the edits are in. */
+export function afterEdits(before: Tables, edits: LoopEdits | undefined): Tables {
+  const changed = edits?.experiments ?? [];
+  const experiments = before.experiments.map((e) => {
+    const edit = changed.find((x) => x.name === e.name);
+    return edit === undefined ? e : edited(e, edit);
+  });
+  for (const edit of changed) if (!before.experiments.some((e) => e.name === edit.name)) experiments.push(edited(undefined, edit));
+  return { experiments, beliefs: upsert(edits?.beliefs ?? [], before.beliefs) };
+}
+
 export async function applyEdits(edits: LoopEdits, stamp: string): Promise<string[]> {
   return withLock(async () => {
     const done: string[] = [];
@@ -80,9 +97,7 @@ export async function applyEdits(edits: LoopEdits, stamp: string): Promise<strin
     for (const edit of edits.experiments ?? []) {
       const file = Bun.file(experimentFile(edit.name));
       const old = (await file.exists()) ? parseExperiment(await file.text(), edit.name) : undefined;
-      const base: Experiment = old ?? { name: edit.name, title: "", status: "proposed", area: "models", result: "", created: stamp, updated: stamp, hypothesis: "", method: "", findings: "", games: "" };
-      const defined = Object.fromEntries(Object.entries(edit).filter(([, v]) => v !== undefined));
-      await writeExperiment({ ...base, ...defined, updated: stamp });
+      await writeExperiment({ ...edited(old, edit), created: old?.created ?? stamp, updated: stamp });
       done.push(`experiment_${edit.name}.md${old === undefined ? " (new)" : ""}`);
     }
     if (edits.infra !== undefined && edits.infra.length > 0) {

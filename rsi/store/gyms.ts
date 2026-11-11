@@ -59,3 +59,10 @@ export function gymLine(g: Gym): string {
   const used = g.used === undefined || g.used.length === 0 ? "never used" : `used in ${g.used.length} iterations, last ${g.used.at(-1)?.iteration}`;
   return `- ${g.name} (${g.status}${g.error === undefined ? "" : `: ${g.error}`}): Nightmare ${g.difficulty} at ${clockPadded(g.at)}${g.weapon === "" ? "" : `, started with ${g.weapon}`}${g.loadout === undefined ? "" : ", build swapped in at the start"}${build}. ${g.purpose} (by ${g.coach}, ${g.source}; ${used})`;
 }
+
+/** Puts a gym in the list, in place of the one with its name. */
+export function upsertGym(gyms: Gym[], gym: Gym) {
+  const at = gyms.findIndex((g) => g.name === gym.name);
+  if (at >= 0) gyms[at] = gym;
+  else gyms.push(gym);
+}

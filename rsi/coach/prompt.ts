@@ -1,20 +1,19 @@
 import path from "node:path";
-import { totalsLines } from "../../bot/tallies";
 import { campaign, latestNotes } from "../store/campaign";
 import { coachSpec } from "../flags";
 import { BOOK, IDS, ladder, LOGS, main, OFFERED } from "../session";
 import { coverage, readExperiments, renderExperiment } from "../store/experiments";
 import { heldCoverage, readHeld } from "../store/held";
 import { BELIEFS_CSV, COACH_LOG, INFRA_CSV } from "../store/paths";
-import type { GameResult, Start } from "../training/slots";
+import type { GameResult } from "../training/slots";
 import { EXPERIMENT_ITERATIONS, GOAL_LEVEL, MAX_GAME_SECONDS, MAX_GAMES, MAX_GYM_SECONDS, MAX_NEW_GYMS } from "../rules";
 import type { Playbook } from "../../bot/playbook";
 import { BLOCKS, KNOBS, QUESTION_LIMIT, SLOTS, STATE_LIMIT, type TemplateSlot } from "../../bot/templates";
-import { type Gym, gymLine, readGyms } from "../store/gyms";
+import { gymLine, readGyms } from "../store/gyms";
 import { GIVE_UP_SECONDS, PLAN_RANGE } from "../../bot/limits";
 import type { CoachState } from "../store/coach-log";
-import { clockPadded } from "../../format";
 import { JEV } from "../../bot/args";
+import { gameEntry } from "../store/games";
 export function editableFiles(phase: "experiments" | "fullRun" | "reflect"): string {
   return [
     "# What you can change",
@@ -43,42 +42,11 @@ export const GYMS_CONTRACT = `"gyms": gyms to build or retire: {"name": kebab-ca
 
 export const PLAYBOOK_CONTRACT = `"playbook": optional changes to your playbook: {"planner", "action", "knobs"} (only the keys that change), "weapon": a base weapon id or "random", "why": what makes this better than the playbook it replaces, "evidence": the names of the experiments that show it}. A change goes in only on evidence: every experiment named must have the result confirmed (in this reply or before) and games from 0:00 on fresh seeds, so the change beat the playbook where every run starts. Before the full run the loop plays the last full run's playbook against yours on the same fresh seeds, and keeps the old one if yours does worse.`;
 
-
 export type LastGames = { tag: string; results: GameResult[]; gyms: string[] };
 
 async function lastGames(): Promise<LastGames | undefined> {
   const f = Bun.file(path.join(LOGS, "last-games.json"));
   return (await f.exists()) ? ((await f.json()) as LastGames) : undefined;
-}
-
-const describeStart = (from: Start, gyms: Gym[]) => {
-  if ("gym" in from) {
-    const name = from.gym;
-    const g = gyms.find((x) => x.name === name);
-    return `gym ${from.gym}${g === undefined ? "" : ` (Nightmare ${g.difficulty} at ${clockPadded(g.at)})`}`;
-  }
-  return `a fresh game on Nightmare ${from.fresh.difficulty}${from.fresh.weapon === "" ? "" : ` with ${from.fresh.weapon}`}`;
-};
-
-export function outcome(r: GameResult): string {
-  if (r.error !== undefined) return `not played: ${r.error}`;
-  const t = r.result;
-  if (t === undefined) return "no result";
-  const taken = Object.values(t.damageTaken).reduce((a, b) => a + b, 0);
-  const top = Object.entries(t.damageTaken).slice(0, 4).map(([k, v]) => `${k} ${v}`).join(", ");
-  return `${t.died ? `died after ${t.survived}s (game clock ${clockPadded(t.end)})` : `alive after ${t.survived}s (game clock ${clockPadded(t.end)}), health ${t.hp.end}/${t.hp.max}`}; damage taken ${Math.round(taken)}${top === "" ? "" : ` (${top})`}; ${t.kills} kills; level ${t.level.start} to ${t.level.end}${t.plannerCalls === undefined ? "" : `; planner asked ${t.plannerCalls} times, action model ${t.actionCalls ?? 0}`}${t.snapshotAgeMs === undefined ? "" : `; the models saw the game ${t.snapshotAgeMs.p50} ms late (p90 ${t.snapshotAgeMs.p90})`}; ended with ${[...t.weapons, ...t.passives].join(", ") || "nothing"}${r.savedGym === undefined ? "" : `; saved as gym ${r.spec.saveGym?.name}`}`;
-}
-
-export function gameEntry(r: GameResult, gyms: Gym[], full: boolean): string {
-  const s = r.spec;
-  return [
-    `### ${s.id}: ${s.label}`,
-    "",
-    `- Start: ${describeStart(s.from, gyms)}, seed ${r.seed || "?"}${s.loadout === undefined ? "" : `, build swapped for ${[...s.loadout.weapons.map((w) => `${w.id} ${w.level}`), ...s.loadout.passives.map((p) => `${p.id} ${p.level}`), ...s.loadout.items.map((x) => `${x.id} x${x.count}`)].join(", ")}`}; ${s.seconds}s; plays the playbook${s.changes === "" ? "" : ` with ${s.changes}`}.`,
-    `- Outcome: ${outcome(r)}.`,
-    ...(r.result?.totals === undefined ? [] : totalsLines(r.result.totals).map((l) => `- ${l}`)),
-    ...(full && r.stats !== undefined ? ["", r.stats] : []),
-  ].join("\n");
 }
 
 export async function facts(state: CoachState, playbook: Playbook): Promise<string> {

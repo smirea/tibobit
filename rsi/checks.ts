@@ -1,6 +1,5 @@
 import { type Gym, GYM_NAME } from "./store/gyms";
 import { checkTemplates, type Templates } from "../bot/templates";
-import type { BeliefRow } from "./store/beliefs";
 import { IDS } from "./session";
 import { WORDING_ONLY, wordsChanged } from "./wording";
 import { GOAL_LEVEL, MAX_GAME_SECONDS, MAX_GAMES, MAX_GYM_SECONDS, MAX_NEW_GYMS } from "./rules";
@@ -8,9 +7,8 @@ import type { Playbook } from "../bot/playbook";
 import { EVAL_SEED } from "./flags";
 import { type Held, untried } from "./store/held";
 import { isText } from "../protocol/parse";
-import { type Experiment, hasFreshGames } from "./store/experiments";
-import { upsert } from "./store/lock";
-import type { LoopEdits, Tables } from "./store/edits";
+import type { Experiment } from "./store/experiments";
+import { gameId, hasFreshGames } from "./store/games";
 import { type LoadoutSpec, parseLoadout } from "../protocol/commands";
 import type { GameSpec, Start } from "./training/slots";
 import { clockPadded } from "../format";
@@ -50,18 +48,6 @@ function describeChanges(raw: { planner?: unknown; action?: unknown; knobs?: unk
     ...Object.keys((raw.planner as object) ?? {}).map((k) => `its own planner.${k}`),
     ...Object.keys((raw.action as object) ?? {}).map((k) => `its own action.${k}`),
   ].join(", ");
-}
-
-/** The experiments and beliefs as they would stand with a reply's edits. */
-export function afterEdits(before: Tables, edits: LoopEdits | undefined): { experiments: Experiment[]; beliefs: BeliefRow[] } {
-  const defined = <T extends object>(o: T) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
-  const experiments = before.experiments.map((e) => {
-    const edit = edits?.experiments?.find((x) => x.name === e.name);
-    return edit === undefined ? e : ({ ...e, ...defined(edit) } as Experiment);
-  });
-  for (const edit of edits?.experiments ?? [])
-    if (!experiments.some((e) => e.name === edit.name)) experiments.push({ title: "", status: "proposed", area: "models", result: "", created: "", updated: "", hypothesis: "", method: "", findings: "", games: "", ...defined(edit) } as Experiment);
-  return { experiments, beliefs: upsert(edits?.beliefs ?? [], before.beliefs) };
 }
 
 export function checkPlaybook(raw: unknown, now: Playbook, stamp: string, experiments: Experiment[], errors: string[]): Playbook | undefined {
@@ -171,7 +157,7 @@ export function checkGames(raw: unknown, ctx: { playbook: Playbook; gyms: Gym[];
     }
     if (start === undefined || !("value" in t)) continue;
     out.push({
-      id: `${ctx.tag}.G${i + 1}`,
+      id: gameId(ctx.tag, i + 1),
       label: String(g.label ?? ""),
       experiment: String(g.experiment),
       from: start,

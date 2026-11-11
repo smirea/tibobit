@@ -6,6 +6,7 @@ import path from "node:path";
 import { mkdirSync, readdirSync } from "node:fs";
 import { EXPERIMENTS_DIR } from "./paths";
 import { withLock } from "./lock";
+import { gameLoops } from "./games";
 
 export const AREAS = {
   build: "weapons, passives, level-up picks, recipes and evolutions, reroll, skip and banish",
@@ -133,10 +134,6 @@ export function coverage(rows: Experiment[]): string {
   return lines.join("\n");
 }
 
-/** The loops an experiment had games in, from its game ids (L4.I3.G2). */
-export const gameLoops = (e: Experiment) => [...e.games.matchAll(/^### L(\d+)\.I\d+\.G\d+/gm)].map((m) => Number(m[1]));
-
-
 const lastLoopTested = (rows: Experiment[], area: Area) => Math.max(0, ...rows.filter((r) => r.area === area).flatMap(gameLoops));
 
 /**
@@ -147,5 +144,3 @@ const REQUIRED_AREAS = ["build", "items", "economy", "bosses", "movement", "spot
 
 export const overdueAreas = (rows: Experiment[], loop: number) => REQUIRED_AREAS.filter((a) => lastLoopTested(rows, a) < loop - 1);
 
-/** Whether an experiment's games include one from a fresh start (0:00 on a new seed). */
-export const hasFreshGames = (e: Experiment) => /^- Start: a fresh game/m.test(e.games);
