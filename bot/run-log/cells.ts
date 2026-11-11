@@ -125,6 +125,15 @@ export const changeCell = {
 };
 export const changesCell = { encode: (parts: string[]) => parts.join(", "), decode: (cell: string | undefined) => (cell ?? "").split(", ").filter(Boolean) };
 
+/** Why a goal that held Tibo in place was given up for the health it cost (knob holdAbortHurt): `Tibo lost 32 health in 3 seconds while this goal kept it in place`. */
+export const hurtLeaveCell = {
+  encode: (lost: number, seconds: number) => `Tibo lost ${Math.round(lost)} health in ${seconds} seconds while this goal kept it in place`,
+  decode: (detail: string | undefined) => {
+    const m = (detail ?? "").match(/^Tibo lost (\d+) health in \d+ seconds while this goal kept it in place$/);
+    return m === null ? undefined : { lost: Number(m[1]) };
+  },
+};
+
 /** What the action model made of a dash it was asked about: `dash asked: 62%, dashed`. */
 export const dashCell = {
   encode: (score: number, dashed: boolean) => `dash asked: ${Math.round(score * 100)}%${dashed ? ", dashed" : ""}`,

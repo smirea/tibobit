@@ -2,7 +2,8 @@
 // took it, when bosses and the first chest came, how goals ended, what Tibo gained, and dashes.
 
 import { csvField, parseCsv } from "../../csv";
-import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, heldCell, hurtCell, listCell, LOG_COLUMNS, type LoggedRow, numbersCell, type RunCount, UNANSWERED, weighedCell } from "./cells";
+import { GIVE_UP_SECONDS } from "../limits";
+import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, heldCell, hurtCell, hurtLeaveCell, listCell, LOG_COLUMNS, type LoggedRow, numbersCell, type RunCount, UNANSWERED, weighedCell } from "./cells";
 
 const goalKind = goalCell.kind;
 
@@ -21,6 +22,19 @@ function rises(live: LoggedRow[], count: RunCount): LoggedRow[] {
   let before = numbersCell.decode(live[0]?.counts)[count] ?? 0;
   for (const r of live) for (const now = numbersCell.decode(r.counts)[count] ?? before; before < now; before++) out.push(r);
   return out;
+}
+
+/** Every goal given up for the health it cost while it held Tibo in place: when, which, the health lost, and whether the planner went back to that target while it still read why Tibo left. */
+function hurtLeaves(rows: LoggedRow[]): string[] {
+  const starts = rows.filter((r) => r.event === "goal" && r.action === "start");
+  return rows.flatMap((r) => {
+    const left = r.event === "goal" && r.action === "failed" ? hurtLeaveCell.decode(r.detail) : undefined;
+    if (left === undefined) return [];
+    const at = Number(r.seconds);
+    const title = starts.filter((s) => s.goal === r.goal && Number(s.seconds) <= at).at(-1)?.detail ?? r.goal;
+    const again = starts.find((s) => s.goal === r.goal && Number(s.seconds) > at && Number(s.seconds) <= at + GIVE_UP_SECONDS);
+    return `${r.time} ${title} (${left.lost} health lost), ${again === undefined ? `not picked again within ${GIVE_UP_SECONDS} s` : `picked again at ${again.time}`}`;
+  });
 }
 
 /** A Markdown summary of a run from its CSV log. */
@@ -97,6 +111,7 @@ export function runStats(csv: string): string {
     i = j + 1;
   }
   const firstChest = live.find((r) => (r.chests ?? "") !== "")?.time;
+  const left = hurtLeaves(rows);
   const opened = rises(live, "bossChests");
   const times = (count: RunCount) => rises(live, count).map((r) => r.time).join(", ") || "none";
   const atTwo = live.filter((r) => num(r.seconds) <= 120).at(-1) ?? lastRow;
@@ -142,6 +157,7 @@ export function runStats(csv: string): string {
     ...buildLines(csv).map((line) => `- ${line}`),
     `- Goal changes, each with the planner's rating of the goal chosen and of the next two: ${goalChanges(csv).join("; ") || "none"}.`,
     `- Goals by kind (done / gave up / dropped): ${[...goals].map(([k, g]) => `${k} ${g.done}/${g.failed}/${g.dropped}`).join("; ") || "none"}.`,
+    `- Of the goals given up, those left for the health they cost while they held Tibo in place (holdAbortHurt): ${left.length}${left.length === 0 ? "" : `: ${left.join(" | ")}`}.`,
     `- Dashes: ${dashes.length}${dashes.length === 0 ? "" : `: ${dashes.slice(0, 12).join("; ")}${dashes.length > 12 ? "; …" : ""}`}.`,
     `- Model calls: ${calls("plan").length} plans, ${calls("pick").length} picks, ${calls("move").length} moves (mean ${meanMs(calls("move"))}ms); the page walked through ${calls("walk").length} hits on its own. Calls the model never answered in time, where the bot went on without it: ${rows.filter((r) => (r.reason ?? "").includes(UNANSWERED)).length}.`,
     `- New cards, evolutions and jumps of 3 or more levels (chests give those): ${gained.length === 0 ? "nothing logged" : gained.join("; ")}.`,

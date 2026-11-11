@@ -11,7 +11,7 @@ const withKnob = (holdAbortHurt: number) => setTemplates({ ...DEFAULT_TEMPLATES,
 test("a goal that holds Tibo in place is given up when it costs more health than the knob allows", () => {
   withKnob(0.25);
   const standing = { heading: "stay", left: 30, progress: "charging" } as const;
-  expect(ending(pursuing("poi"), world({ "Fry Fly": 20, "Hot oil": 12 }), standing, undefined)).toEqual({ done: "left it: Tibo lost 32 health in 3 seconds while this goal kept it in place", success: false });
+  expect(ending(pursuing("poi"), world({ "Fry Fly": 20, "Hot oil": 12 }), standing, undefined)).toEqual({ done: "Tibo lost 32 health in 3 seconds while this goal kept it in place", success: false });
   expect(ending(pursuing("poi"), world({ "Fry Fly": 20 }), standing, undefined)).toBeUndefined();
   expect(ending(pursuing("elite"), world({ "Fry Fly": 40 }), { progress: "in reach" }, undefined)?.success).toBe(false);
 });

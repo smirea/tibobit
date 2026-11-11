@@ -12,7 +12,7 @@ import type { CommandStatus } from "../protocol/commands";
 import { recentLoss, type World } from "./world";
 import { say } from "./server";
 import { RunLog } from "./run-log/writer";
-import { goalCell, goalTitleCell } from "./run-log/cells";
+import { goalCell, goalTitleCell, hurtLeaveCell } from "./run-log/cells";
 
 export type Goal = { kind: "chest" | "poi" | "food" | "elite"; uid: number } | { kind: "explore"; dir: Direction } | { kind: "evade" };
 
@@ -253,7 +253,7 @@ export function ending(p: Pursuit, r: World, aim: Course | Ended, status: Comman
   if (r.time > p.deadline) return { done: `still not done after ${Math.round(r.time - p.since)} seconds`, success: false };
   const held = aim.heading === "stay" || (p.goal.kind === "elite" && aim.heading === undefined);
   const lost = recentLoss(r);
-  if (held && knobs().holdAbortHurt > 0 && lost >= knobs().holdAbortHurt * r.maxHp) return { done: `left it: Tibo lost ${Math.round(lost)} health in ${HURT_SECONDS} seconds while this goal kept it in place`, success: false };
+  if (held && knobs().holdAbortHurt > 0 && lost >= knobs().holdAbortHurt * r.maxHp) return { done: hurtLeaveCell.encode(lost, HURT_SECONDS), success: false };
   if (aim.left === undefined) return undefined;
   if (aim.left < p.best.left - 1) p.best = { left: aim.left, time: r.time };
   else if (r.time - p.best.time > knobs().stuckSeconds)

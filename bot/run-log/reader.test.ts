@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { LOG_COLUMNS } from "./cells";
+import { hurtLeaveCell, LOG_COLUMNS } from "./cells";
 import { buildOverTime, economy, passiveLevels, runStats } from "./reader";
 
 const log = (rows: Record<string, string>[]) => [LOG_COLUMNS.join(","), ...rows.map((r) => LOG_COLUMNS.map((c) => r[c] ?? "").join(","))].join("\n");
@@ -31,4 +31,17 @@ test("chests opened and kills come from the game's own counts, with the time of 
 test("a game from a gym counts only what it opened itself", () => {
   const csv = log([{ seconds: "350", time: "5:50", event: "move", counts: "bossChests 4" }, { seconds: "400", time: "6:40", event: "move", counts: "bossChests 5" }]);
   expect(economy(csv)).toEndWith("opened 1");
+});
+
+test("goals left for the health they cost are listed apart, with whether the planner went back", () => {
+  const goal = (seconds: number, time: string, id: string, action: string, detail: string) => ({ seconds: String(seconds), time, event: "goal", goal: id, action, detail });
+  const csv = log([
+    goal(90, "1:30", "P7", "start", "Charge the Spud Shrine"),
+    goal(97, "1:37", "P7", "failed", hurtLeaveCell.encode(31.6, 3)),
+    goal(120, "2:00", "P7", "start", "Charge the Spud Shrine"),
+    goal(126, "2:06", "P7", "failed", "standing on it charged nothing for 6 seconds"),
+    goal(130, "2:10", "C9", "start", "Open the chest"),
+    goal(133, "2:13", "C9", "failed", hurtLeaveCell.encode(18, 3)),
+  ]);
+  expect(runStats(csv)).toContain("(holdAbortHurt): 2: 1:37 Charge the Spud Shrine (32 health lost), picked again at 2:00 | 2:13 Open the chest (18 health lost), not picked again within 45 s.");
 });

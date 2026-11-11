@@ -76,7 +76,7 @@ export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: strin
   bossDashRange: { min: 0, max: 600, about: "while a boss is within this many units, bossDashThreshold applies; 0 never" },
   eliteFrom: { min: 0, max: 1200, about: "game seconds before which no fight-the-elite goal is offered, so the planner cannot pick one; 0 offers them from the start" },
   eliteMinHp: { min: 0, max: 1, about: "share of max health below which no fight-the-elite goal is offered; 0 offers them at any health" },
-  holdAbortHurt: { min: 0, max: 0.5, about: `share of max health lost within the last ${HURT_SECONDS} seconds at which a goal that holds Tibo in place ends as given up and the planner is asked: standing on a chest, a shrine or another spot, or keeping an elite within reach. The target is then not offered again for ${GIVE_UP_SECONDS} seconds, like any goal given up. 0 never ends a goal this way` },
+  holdAbortHurt: { min: 0, max: 0.5, about: `share of max health lost within the last ${HURT_SECONDS} seconds at which a goal that holds Tibo in place ends as given up and the planner is asked: standing on a chest, a shrine or another spot, or keeping an elite within reach. For ${GIVE_UP_SECONDS} seconds the planner then reads next to that target that Tibo gave up on it and why, like any goal given up; it can still pick it. 0 never ends a goal this way` },
   planOnHurt: { min: 0, max: 0.5, about: `share of max health lost within the last ${HURT_SECONDS} seconds at which the planner is asked at once, whatever planEvery says, and at most once in ${HURT_SECONDS} seconds; the goal under way goes on unless the planner picks another. 0 never asks for this` },
 };
 
