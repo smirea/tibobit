@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | proposed |
+| Status | retired |
 | Area | spots |
 | Result | - |
 | Created | L4.I10 |
-| Updated | L4.I10 |
+| Updated | L5.I1 |
 
 ## Hypothesis
 
@@ -18,7 +18,7 @@ Seeker-sprouts, playbook knobs, 240 s on s31-40 against the playbook games alrea
 
 ## Findings
 
-(none yet)
+Superseded by hurt-keepaway-goal-text (area movement), which plays the same idea from 0:00 on s31-40. The chargeAbortHurt infra request stays open.
 
 ## Games
 

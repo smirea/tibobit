@@ -1,0 +1,835 @@
+# Do starts whose catalyst the planner likes (frozen-fries with Thick Skin, rosti-disc with Starch Plating) live longer than seeker-sprouts?
+
+| Field | Value |
+| --- | --- |
+| Status | done |
+| Area | build |
+| Result | refuted |
+| Created | L5.I7 |
+| Updated | L5.I9 |
+
+## Hypothesis
+
+The planner takes Thick Skin and Starch Plating at 76-93% every time they are offered, but Fertilizer (the seeker-sprouts catalyst) at 1-26%. A start that depends on a catalyst it likes should level and evolve sooner. Frozen-fries also freezes the nearest elite for 1 s on a 1.6 s cooldown, which targets the 1:00 elite burst. Rosti-disc adds armor and crowd clearing.
+
+## Method
+
+Fresh Nightmare 1, playbook knobs and prompts unchanged, 240 s, s31-35, frozen-fries and rosti-disc, paired with the 5 playbook games on file (3 of 5 alive at 4:00). Metrics chosen first: alive at 4:00, chests opened by 2:00 (game's own count), health lost 0:00-2:00, start weapon level and catalyst at 2:00. Manipulation check: the catalyst is taken when offered and the start weapon is above 1/8 at 2:00. Extend the better arm to s36-40 next iteration. Adopt a start only on 8 or more of 10 alive with a net of 3 or more paired wins, then confirm it on fresh seeds.
+
+## Findings
+
+L5.I7 s31-35: frozen-fries 4/5 alive at 4:00, rosti-disc 2/5. L5.I8 s36-45: frozen-fries 6/10. Pooled frozen-fries s31-45 10/15 against the playbook's 10/15, with 4 wins, 4 losses and 7 ties. Rosti-disc 2/5 (refuted earlier). Permafrost Fries evolved in only 3 of 15 games and the survivors evolved other weapons from chests. Deaths at 2:11-2:15 were the amusing boss with 0-1 chests. Neither start goes into the playbook (B111, B113).
+
+## Games
+
+### L5.I7.G1: frozen-fries s31
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 31; 240s; plays the playbook.
+- Outcome: died after 238.9s (game clock 03:58); damage taken 186 (enemy:sprout-mite 6.831, enemy:crumb-ant 9.153, Hot oil 31, enemy:oil-drip 9.072); 586 kills; level 1 to 10; planner asked 78 times, action model 563; the models saw the game 37 ms late (p90 73); ended with frozen-fries 4, harvest-moon 2, frying-pan 1, potato-battery 1, butter-socks 1, thick-skin 1.
+- run.timeSec: 238.933
+- run.level: 9
+- run.kills: 586
+- run.damageBySource: frozen-fries 7551.451, dog:dalmatian 1045.513, harvest-moon 5225.665, frying-pan 1769.212, alex 616.148, potato-battery 255.389
+- run.damageTakenBySource: enemy:sprout-mite 6.831, enemy:crumb-ant 9.153, Hot oil 31, enemy:oil-drip 9.072, enemy:fry-fly 5.872, enemy:aphid 5.131, boss:amusing 34.371, enemy:compost-maggot 15.75, Spore vent 1.467, enemy:tomato-leech 24.104, boss:beetle-queen 2.72, enemy:garden-slug 4.542, enemy:beetle-brood 24.993, enemy:cave-grub 3.599, enemy:ketchup-drop 2.169, enemy:sand-crab 5.215
+- run.killsBySource: frozen-fries 271, dog:dalmatian 46, harvest-moon 196, frying-pan 48, alex 19, potato-battery 6
+- run.biomes: ["fry-oil-desert","chip-canyons","mash-swamp","peel-forest","compost-caves","ketchup-bog"]
+- run.dogs: [{"id":"dalmatian","at":25.683333333333334}]
+- run.dogHelp: damage.dalmatian 1045.513, hits.dalmatian 81
+- run.distance: 14166.855
+- run.dodgePoints: 1842.442
+- run.dodgeSecond: 238
+- run.dodgeTaken: [73.02424871355309,73.02424871355309,73.02424871355309,75.2417598246642,75.2417598246642,80.98468003245976,84.90426493447013,84.90426493447013,88.8395727394767,94.76139305112767,94.76139305112767,94.76139305112767,94.76139305112767,94.76139305112767,94.76139305112767,94.76139305112767,94.76139305112767,94.76139305112767,94.76139305112767,97.48124305112766,99.69875416223877,99.69875416223877,99.69875416223877,99.69875416223877,99.69875416223877,99.69875416223877,103.75574475057202,103.75574475057202,112.43302072138314,118.65521857575405,118.65521857575405,118.65521857575405,118.65521857575405,118.65521857575405,118.65521857575405,118.65521857575405,118.65521857575405,118.65521857575405,118.65521857575405,118.65521857575405,118.65521857575405,118.65521857575405,118.65521857575405,121.98148524242072,121.98148524242072,121.98148524242072,121.98148524242072,121.98148524242072,121.98148524242072,121.98148524242072,121.98148524242072,121.98148524242072,121.98148524242072,121.98148524242072,121.98148524242072,129.35383377262974,66.1979820468864,66.1979820468864,69.19798204688642,69.69798204688642,69.69798204688642]
+- run.dodgeSteps: [1062.592166666475,1068.792166666472,1074.992166666469,1078.0921666664676,1084.2921666664647,1088.9421666664625,1095.1421666664596,1101.3421666664567,1107.5421666664538,1113.5354999997842,1119.7354999997813,1125.9354999997784,1132.1354999997754,1138.3354999997725,1144.5354999997696,1150.7354999997667,1156.9354999997638,1163.135499999761,1169.335499999758,1175.535499999755,1181.7354999997522,1187.9354999997493,1194.1354999997463,1200.3354999997434,1206.5354999997405,1216.6054999997386,1222.8054999997357,1231.5854999997334,1239.075499999731,1249.145499999729,1255.3454999997261,1261.5454999997232,1267.7454999997203,1273.9454999997174,1280.1454999997145,1286.3454999997116,1292.5454999997087,1298.7454999997058,1304.9454999997029,1313.3621666663682,1319.7121666663681,1325.9121666663652,1329.9421666663634,1340.0121666663613,1346.2121666663584,1352.4121666663555,1355.098833333021,1361.2988333330181,1367.4988333330152,1373.6988333330123,1379.8988333330094,1386.0988333330065,1392.2988333330036,1398.4988333330007,1404.6988333329978,1410.8988333329949,1031.5921666664894,1037.7921666664865,1043.9921666664836,1050.1921666664807,1056.3921666664778]
+- run.curseSince: 11956
+- run.killer: "enemy:beetle-brood"
+- run.goldEarned: 66.99
+- run.bossesKilled: 1
+- run.peakEnemies: 181
+- run.shrinesUsed: 1
+- run.grokBotHelps: 5
+- run.lootRunnersMet: [1]
+- counters.kills: 586
+- counters.hits: 1453
+- counters.gems: 372
+- counters.coins: 27
+- counters.shots: 491
+- counters.hostileShots: 885
+- counters.nearMisses: 32
+- counters.hostileHits: 12
+- shrineTotals.might: 0.06
+- Gold, spots and chests: gold held at the end 66, spent 0; spots charged and used: Crop Patch 2, Stray Dog 1; chests seen 1, opened 0.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:10 took Frozen Fries 49% over Spud Lob 43%, Rotten Spud 8%; 0:20 took Butter Socks 38% over Seeker Sprouts 33%, Peel Phantom 29%; 0:30 took Frozen Fries 42% over Four-Eyed Spud 35%, Gem Sling 23%; 0:57 took Harvest Moon 77% over Hot Start 20%, Gravy Splash 3%; 1:07 took Harvest Moon 49% over Deep Fryer 31%, Grab Bag 20%; 1:43 took Damage 40% over Area 33%, XP gain 27%; 2:01 took Frozen Fries 58% over Harvest Moon 28%, Clean Plate 14%; 3:19 took Thick Skin 60% over Hot Streak 34%, Aged Russet 6%; 3:20 took Frying Pan 46% over Root Spikes 30%, Peeler 24%; 3:57 took Potato Battery 50% over Butter Pat 49%, Hearty Helping 1%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 1:00 level 5, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 3/8, Harvest Moon 1/8, Butter Socks 1/5 | 2:00 level 6, maxHp 120, armor 0, damageMult 1.06, recovery 0, Frozen Fries 3/8, Harvest Moon 2/8, Butter Socks 1/5 | 2:59 level 7, maxHp 120, armor 0, damageMult 1.06, recovery 0, Frozen Fries 4/8, Harvest Moon 2/8, Butter Socks 1/5 | 3:58 level 10, maxHp 120, armor 0, damageMult 1.06, recovery 0, Frozen Fries 4/8, Harvest Moon 2/8, Frying Pan 1/8, Potato Battery 1/8, Butter Socks 1/5, Thick Skin 1/5.
+- Passive levels first reached: Butter Socks 1 at 0:20; Thick Skin 1 at 3:19.
+
+### L5.I7.G2: frozen-fries s32
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 32; 240s; plays the playbook.
+- Outcome: alive after 240.2s (game clock 04:00), health 134/137; damage taken 46 (enemy:sprout-mite 2.309, enemy:aphid 2.295, enemy:frost-flea 2.564, enemy:crumb-ant 0.855); 2147 kills; level 1 to 16; planner asked 97 times, action model 380; the models saw the game 35 ms late (p90 73); ended with frozen-fries 5, tater-minigun 1, spud-dice 1, spud-lob 1, hot-streak 2, mash-avalanche 1, masher-grip 1, salt-shaker 1, gpu 1.
+- run.timeSec: 240.217
+- run.level: 15
+- run.kills: 2147
+- run.damageBySource: frozen-fries 5596.65, locked-gatling 6146.911, spud-dice 5655.308, spud-lob 4996.243, grok-bot 2915.988, hot-streak 9493.03, mash-snowball 5403.918, tater-minigun 20456.744, mash-avalanche 3219.251
+- run.damageTakenBySource: enemy:sprout-mite 2.309, enemy:aphid 2.295, enemy:frost-flea 2.564, enemy:crumb-ant 0.855, enemy:snow-mold 8.824, enemy:compost-maggot 0.892, Spore vent 7.503, boss:amusing 2.345, boss:beetle-queen 1.943, enemy:potato-beetle 11.297, enemy:beetle-brood 2.72, enemy:sand-crab 2.847
+- run.killsBySource: frozen-fries 143, locked-gatling 367, spud-dice 207, spud-lob 178, grok-bot 80, hot-streak 372, mash-snowball 183, tater-minigun 526, mash-avalanche 91
+- run.evolutions: [{"id":"tater-minigun","at":155.05},{"id":"mash-avalanche","at":224.93333333333334}]
+- run.biomes: ["fry-oil-desert","frozen-tundra","compost-caves","fry-palace"]
+- run.dogs: [{"id":"husky","at":26.616666666666667}]
+- run.distance: 12037.046
+- run.dodgePoints: 2185.407
+- run.dodgeSecond: 240
+- run.dodgeTaken: [24.15448033611565,24.15448033611565,24.15448033611565,24.15448033611565,24.15448033611565,24.15448033611565,24.15448033611565,26.09723033611565,26.09723033611565,30.677256864865928,30.677256864865928,35.70087182342588,39.160665722503154,39.160665722503154,39.160665722503154,39.160665722503154,39.160665722503154,39.160665722503154,39.160665722503154,39.160665722503154,39.160665722503154,39.160665722503154,39.160665722503154,39.160665722503154,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,43.546952645992576,46.39417776711138,46.39417776711138,46.39417776711138,46.39417776711138,46.39417776711138,46.39417776711138,46.39417776711138,46.39417776711138,46.39417776711138,46.39417776711138,46.39417776711138,46.39417776711138,46.39417776711138,22.046372228007545,22.749074930710247,24.15448033611565]
+- run.dodgeSteps: [911.3663133332357,918.0003133332339,924.6343133332321,931.2683133332303,937.9023133332284,942.1038466665607,942.1038466665607,946.9687799998926,953.6027799998908,954.9295799998905,954.9295799998905,956.9197799998899,963.5537799998881,968.8609799998867,970.5194799998862,977.1534799998844,983.7874799998826,990.4214799998808,997.055479999879,999.0456799998785,1003.8000466665438,1010.434046666542,1017.0680466665402,1020.4956133332059,1022.2646799998722,1027.793013333204,1034.4270133332022,1041.0610133332004,1045.5942466665324,1045.8153799998659,1052.449379999864,1059.0833799998622,1065.7173799998604,1072.3513799998586,1078.9853799998568,1085.619379999855,1092.1428133331865,1092.1428133331865,1094.6858466665192,1101.3198466665174,1107.9538466665156,1114.5878466665138,1118.0154133331794,1119.2316466665125,1125.8656466665107,1132.4996466665089,1139.133646666507,1143.5563133331725,1143.5563133331725,1149.195213333171,1155.8292133331693,1162.4632133331675,1169.0972133331657,1175.7312133331639,1182.365213333162,1188.9992133331602,1195.6332133331584,1202.2672133331566,891.4643133332411,898.0983133332393,904.7323133332375]
+- run.curseSince: 12178
+- run.goldEarned: 620.022
+- run.goldSpent: 30
+- run.bossChests: 9
+- run.paidChests: 1
+- run.bossesKilled: 2
+- run.elitesKilled: 8
+- run.peakEnemies: 174
+- run.shrinesUsed: 7
+- run.grokBotHelps: 5
+- run.botSwarms: 1
+- run.throttles: 2
+- run.lootRunnersMet: [1]
+- run.lootRunnersCaught: [1]
+- counters.kills: 2147
+- counters.hits: 3503
+- counters.gems: 1018
+- counters.coins: 117
+- counters.shots: 4935
+- counters.hostileShots: 180
+- counters.nearMisses: 10
+- counters.hostileHits: 1
+- shrineTotals.cooldown: 0.042
+- shrineTotals.moveSpeed: 0.07
+- shrineTotals.maxHp: 14.4
+- shrineTotals.armor: 46
+- Gold, spots and chests: gold held at the end 587, spent 30 (Potato Crate 30); spots charged and used: Stray Dog 1, Spud Freezer 1, Potato Crate 1, Beetle Nest 1; chests seen 10, opened 9.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:08 took Locked Gatling 71% over Sprout Squad 17%, Clean Plate 12%; 0:20 took Locked Gatling 58% over Frozen Fries 33%, Leave 9%; 0:22 took Locked Gatling 52% over Peel Phantom 30%, Gravy Heart 18%; 0:40 took Armor 80% over Area 18%, Pickup range 2%; 0:48 took Spud Dice 55% over Couch Potato 40%, Potato Magnet 5%; 0:48 took Armor 91% over Crit 5%, Duration 4%; 0:56 took Move speed 55% over XP gain 31%, Duration 14%; 1:02 took Spud Lob 54% over Small Fry 24%, Steam Vent 22%; 1:06 took Cooldown 83% over Area 14%, Move speed 3%; 1:15 took Frozen Fries 47% over Peel Lash 30%, Afterburner Fries 23%; 1:17 took Armor 85% over Gold gain 9%, Area 6%; 1:21 took Locked Gatling 57% over Mash Wave 39%, Spud Lob 4%; 1:25 took Armor 64% over Area 33%, Move speed 3%; 1:42 took Masher Grip 78% over Spud Lob 14%, Spud Dice 8%; 2:01 took Hot Streak 54% over Lean Lunch 35%, Frozen Fries 11%; 2:11 took Mash Snowball 70% over Four-Eyed Spud 23%, Packed Pan 7%; 2:32 took Mash Snowball 51% over Frozen Fries 26%, Stuffed Skin 23%; 3:00 took Salt Shaker 30% over Frozen Fries 30%, Reroll 25%, Spud Lob 15%; 3:13 took Max HP 65% over Crit 21%, Pickup range 14%; 3:23 took GPU 54% over Hot Streak 26%, Reroll 11%, Spud Dice 7%, Skip 2%; 3:24 took Mash Snowball 76% over Starch Plating 14%, Reroll 6%, Clean Plate 3%, Skip 1%; 3:25 took Mash Snowball 82% over Reroll 11%, Frozen Fries 3%, Spud Lob 2%, Skip 2%; 3:47 took Hot Streak 41% over Frozen Fries 22%, Reroll 21%, Salt Shaker 14%, Skip 2%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 1:00 level 4, maxHp 120, armor 24, damageMult 1, recovery 0, Frozen Fries 1/8, Locked Gatling 3/8, Spud Dice 1/8 | 1:59 level 8, maxHp 120, armor 46, damageMult 1, recovery 0, Frozen Fries 2/8, Locked Gatling 8/8, Spud Dice 1/8, Spud Lob 1/8, Masher Grip 1/5 | 2:58 level 11, maxHp 120, armor 46, damageMult 1, recovery 0, Frozen Fries 2/8, Tater Minigun 1/1, Spud Dice 1/8, Spud Lob 1/8, Hot Streak 1/8, Mash Snowball 2/8, Masher Grip 1/5 | 3:56 level 16, maxHp 137.28, armor 46, damageMult 1, recovery 0, Frozen Fries 5/8, Tater Minigun 1/1, Spud Dice 1/8, Spud Lob 1/8, Hot Streak 2/8, Mash Avalanche 1/1, Masher Grip 1/5, Salt Shaker 1/5, GPU 1/5.
+- Passive levels first reached: Masher Grip 1 at 1:42; Salt Shaker 1 at 3:00; GPU 1 at 3:23.
+
+### L5.I7.G3: frozen-fries s33
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 33; 240s; plays the playbook.
+- Outcome: alive after 240.3s (game clock 04:00), health 72/134; damage taken 165 (enemy:aphid 1.14, enemy:crumb-ant 4.971, Spore vent 10.731, boss:amusing 54.883); 1704 kills; level 1 to 15; planner asked 92 times, action model 488; the models saw the game 36 ms late (p90 65); ended with frozen-fries 7, peel-lash 1, hash-hawk 2, fry-sentry 1, starch-puddle 1, starch-bolt 1, thick-skin 3, chives 1, butter-pat 1.
+- run.timeSec: 240.25
+- run.level: 14
+- run.kills: 1704
+- run.damageBySource: frozen-fries 16531.015, peel-lash 5735.104, hash-hawk 6364.374, fry-sentry 5846.681, starch-puddle 9240.398, grok-bot 656.203, starch-bolt 4844.232
+- run.damageTakenBySource: enemy:aphid 1.14, enemy:crumb-ant 4.971, Spore vent 10.731, boss:amusing 54.883, enemy:compost-maggot 6.606, enemy:cave-grub 20.687, boss:beetle-queen 19.184, Brambles 3.813, enemy:snow-mold 39.775, enemy:frost-flea 3.651
+- run.killsBySource: frozen-fries 648, peel-lash 241, hash-hawk 133, fry-sentry 220, starch-puddle 305, grok-bot 42, starch-bolt 115
+- run.biomes: ["fry-oil-desert","peel-forest","chip-canyons","compost-caves","frozen-tundra"]
+- run.dogs: [{"id":"retriever","at":29.733333333333334}]
+- run.dogHelp: fetched.retriever 457
+- run.distance: 12425.58
+- run.dodgePoints: 1768.729
+- run.dodgeSecond: 240
+- run.dodgeTaken: [76.42026663518004,78.92252863518004,78.92252863518004,87.26340196851338,95.60427530184671,95.60427530184671,95.60427530184671,95.60427530184671,95.60427530184671,95.60427530184671,95.60427530184671,95.60427530184671,99.41760863518004,99.41760863518004,99.41760863518004,99.41760863518004,104.41885960261878,104.41885960261878,104.41885960261878,104.41885960261878,111.203639754841,111.203639754841,111.203639754841,111.203639754841,114.72371810718963,118.25402555725677,130.57272572004658,130.57272572004658,130.57272572004658,137.6695286415701,137.6695286415701,141.27245608792433,141.27245608792433,141.27245608792433,141.27245608792433,141.27245608792433,144.89992683239518,144.89992683239518,144.89992683239518,144.89992683239518,144.89992683239518,144.89992683239518,144.89992683239518,144.89992683239518,144.89992683239518,144.89992683239518,144.89992683239518,144.89992683239518,156.02755494683794,156.02755494683794,156.02755494683794,161.64962476404412,161.64962476404412,161.64962476404412,165.44258132004256,165.44258132004256,165.44258132004256,165.44258132004256,73.19852751985839,73.19852751985839,76.42026663518004]
+- run.dodgeSteps: [932.5833333332791,937.95666666661,944.1566666666071,950.3566666666042,956.5566666666012,962.7566666665983,968.9566666665954,975.1566666665925,978.0499999999245,981.459999999923,982.3899999999225,988.5899999999195,994.7899999999166,1000.9899999999137,1005.9499999999114,1011.3233333332422,1017.5233333332393,1023.7233333332364,1029.9233333332336,1036.1233333332307,1042.3233333332278,1048.5233333332249,1054.723333333222,1059.7866666665527,1065.0566666665504,1069.6033333332148,1075.8033333332119,1080.14333333321,1090.213333333208,1096.4133333332052,1102.6133333332023,1108.8133333331994,1112.9466666665307,1119.5756666665304,1122.2519999998638,1124.2773333331972,1127.9559999998633,1132.8126666665275,1137.1319999998605,1140.4386666665266,1149.0619999998587,1155.2619999998558,1160.6559999998542,1164.9959999998543,1170.916999999852,1175.25699999985,1179.5969999998479,1185.796999999845,1191.996999999842,1196.4403333331734,1202.6403333331705,1208.8403333331676,1213.3043333331675,1216.8486666665008,1222.4079999998316,1228.6079999998287,1234.8079999998258,1241.007999999823,919.2533333332855,925.4533333332826,931.1366666666132]
+- run.curseSince: 14009
+- run.goldEarned: 264.815
+- run.bossChests: 2
+- run.bossesKilled: 2
+- run.elitesKilled: 4
+- run.peakEnemies: 177
+- run.shrinesUsed: 4
+- run.grokBotHelps: 6
+- run.botSwarms: 1
+- run.lootRunnersMet: [1]
+- counters.kills: 1704
+- counters.hits: 3883
+- counters.gems: 802
+- counters.coins: 96
+- counters.shots: 1027
+- counters.hostileShots: 112
+- counters.nearMisses: 17
+- counters.hostileHits: 6
+- shrineTotals.area: 0.072
+- shrineTotals.cooldown: 0.051
+- shrineTotals.maxHp: 12
+- shrineTotals.armor: 10
+- Gold, spots and chests: gold held at the end 264, spent 0; spots charged and used: Spud Freezer 2, Stray Dog 1, Crop Patch 1, Tater Lantern 1; chests seen 6, opened 2.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:13 took Peel Lash 83% over Salt Shaker 12%, Fertilizer 5%; 0:24 took Hash Hawk 68% over Frozen Fries 29%, Slow Cooker 3%; 0:33 took Frozen Fries 42% over Fertilizer 35%, Peel Lash 23%; 0:42 took Frozen Fries 72% over Clean Plate 15%, Salt Shaker 13%; 0:52 took Armor 86% over Gold gain 8%, Move speed 6%; 0:55 took Fry Cook Sentry 62% over Frozen Fries 30%, Sour Cream 8%; 1:02 took Max HP 57% over XP gain 39%, Luck 4%; 1:11 took Cooldown 98% over Duration 1%, Move speed 1%; 1:20 took Area 77% over Cooldown 16%, Gold gain 7%; 1:21 took Starch Puddle 72% over Hash Hawk 26%, Golden Fry 2%; 1:31 took Thick Skin 60% over Reroll 18%, Fry Cook Sentry 15%, Peel Lash 7%; 1:51 took Frozen Fries 79% over Leave 9%, Starch Puddle 7%, Peel Lash 5%; 1:58 took Frozen Fries 42% over Chives 28%, Thick Skin 21%, Reroll 8%, Skip 1%; 2:14 took Starch Bolt 42% over Butter Pat 27%, Reroll 19%, Peel Lash 9%, Skip 3%; 2:31 took Thick Skin 55% over Reroll 17%, Slow Cooker 14%, Starch Bolt 12%, Skip 2%; 3:15 took Thick Skin 57% over Hash Hawk 26%, Starch Bolt 8%, Reroll 8%, Skip 1%; 3:23 took Chives 75% over Reroll 11%, Hash Rush 6%, Gravy Splash 6%, Skip 2%; 3:41 took Hash Hawk 35% over Chives 34%, Reroll 16%, Starch Puddle 12%, Skip 3%; 3:53 took Butter Pat 35% over Hash Hawk 26%, Chives 24%, Reroll 13%, Skip 2%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 6, maxHp 120, armor 10, damageMult 1, recovery 0, Frozen Fries 3/8, Peel Lash 1/8, Hash Hawk 1/8, Fry Cook Sentry 1/8 | 1:59 level 9, maxHp 134.4, armor 10, damageMult 1, recovery 0, Frozen Fries 6/8, Peel Lash 1/8, Hash Hawk 1/8, Fry Cook Sentry 1/8, Starch Puddle 1/8, Thick Skin 1/5 | 2:57 level 11, maxHp 134.4, armor 10, damageMult 1, recovery 0, Frozen Fries 6/8, Peel Lash 1/8, Hash Hawk 1/8, Fry Cook Sentry 1/8, Starch Puddle 1/8, Starch Bolt 1/8, Thick Skin 2/5 | 3:57 level 15, maxHp 134.4, armor 10, damageMult 1.2, recovery 0, Frozen Fries 7/8, Peel Lash 1/8, Hash Hawk 2/8, Fry Cook Sentry 1/8, Starch Puddle 1/8, Starch Bolt 1/8, Thick Skin 3/5, Chives 1/5, Butter Pat 1/5.
+- Passive levels first reached: Thick Skin 1 at 1:31, 3 at 3:15; Chives 1 at 3:23; Butter Pat 1 at 3:53.
+
+### L5.I7.G4: frozen-fries s34
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 34; 240s; plays the playbook.
+- Outcome: alive after 240.2s (game clock 04:00), health 120/120; damage taken 94 (enemy:aphid 3.552, Hot oil 8.267, enemy:potato-beetle 4.47, enemy:oil-drip 4.277); 1750 kills; level 1 to 17; planner asked 98 times, action model 430; the models saw the game 33 ms late (p90 64); ended with frozen-fries 7, eclipse-scythe 1, mash-mortar 1, spud-fence 1, thick-skin 1, big-bowl 4.
+- run.timeSec: 240.2
+- run.level: 16
+- run.kills: 1750
+- run.damageBySource: frozen-fries 6513.451, comet-scythe 12151.712, mash-mortar 8535.485, spud-fence 5415.882, dog:terrier 2349.835, eclipse-scythe 17148.435
+- run.damageTakenBySource: enemy:aphid 3.552, Hot oil 8.267, enemy:potato-beetle 4.47, enemy:oil-drip 4.277, boss:amusing 56.547, boss:beetle-queen 2.72, enemy:compost-maggot 1.96, enemy:snow-mold 3.893, enemy:tomato-leech 3.983, Brambles 4
+- run.killsBySource: frozen-fries 158, comet-scythe 522, mash-mortar 343, spud-fence 158, dog:terrier 113, eclipse-scythe 456
+- run.evolutions: [{"id":"eclipse-scythe","at":202.35}]
+- run.biomes: ["fry-oil-desert","ketchup-bog","mash-swamp","peel-forest","compost-caves","chip-canyons"]
+- run.dogs: [{"id":"retriever","at":44.45},{"id":"terrier","at":49.55}]
+- run.dogHelp: damage.terrier 2349.835, hits.terrier 163, fetched.retriever 551
+- run.distance: 12508.5
+- run.dodgePoints: 1954.289
+- run.dodgeSecond: 240
+- run.dodgeTaken: [73.11147402237724,75.83132402237723,75.83132402237723,75.83132402237723,75.83132402237723,75.83132402237723,75.83132402237723,75.83132402237723,75.83132402237723,75.83132402237723,75.83132402237723,75.83132402237723,77.79111647338242,81.68444694085889,81.68444694085889,81.68444694085889,81.68444694085889,81.68444694085889,85.66724041913636,87.26724041913636,87.26724041913636,87.26724041913636,87.26724041913636,87.26724041913636,87.26724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,89.66724041913636,93.66724041913636,93.66724041913636,93.66724041913636,93.66724041913636,93.66724041913636,93.66724041913636,93.66724041913636,93.66724041913636,93.66724041913636,93.66724041913636,73.11147402237724,73.11147402237724,73.11147402237724]
+- run.dodgeSteps: [949.9433333333033,956.1433333333003,962.3433333332974,968.5433333332945,971.7466666666263,974.2266666666252,979.4966666666227,985.6966666666198,988.5899999999517,988.5899999999517,988.5899999999517,991.9999999999502,993.033333333283,998.1999999999473,1001.7133333332789,1007.6033333332762,1013.8033333332733,1020.0033333332703,1026.2033333332674,1032.4033333332645,1033.7466666665973,1037.5699999999288,1043.7699999999259,1049.969999999923,1056.16999999992,1062.3699999999171,1068.5699999999142,1074.7699999999113,1080.9699999999084,1087.1699999999055,1093.3699999999026,1099.5699999998997,1105.7699999998968,1111.9699999998938,1118.169999999891,1124.369999999888,1125.506666666554,1125.6099999998873,1131.8099999998844,1138.0099999998815,1144.2099999998786,1150.4099999998757,1156.6099999998728,1162.80999999987,1169.009999999867,1175.209999999864,1181.4099999998612,1187.6099999998582,1193.8099999998553,1200.0099999998524,1206.2099999998495,1212.4099999998466,1218.6099999998437,1224.8099999998408,1231.0099999998379,1237.209999999835,1243.409999999832,1249.6099999998291,931.343333333312,937.5433333333091,943.7433333333062]
+- run.curseSince: 13304
+- run.goldEarned: 388.89
+- run.bossChests: 6
+- run.bossesKilled: 2
+- run.elitesKilled: 4
+- run.peakEnemies: 167
+- run.shrinesUsed: 3
+- run.grokBotHelps: 6
+- run.lootRunnersMet: [1]
+- counters.kills: 1750
+- counters.hits: 3019
+- counters.gems: 1302
+- counters.coins: 117
+- counters.shots: 446
+- counters.hostileShots: 66
+- counters.nearMisses: 14
+- counters.hostileHits: 1
+- shrineTotals.area: 0.132
+- shrineTotals.luck: 0.072
+- Gold, spots and chests: gold held at the end 382, spent 0; spots charged and used: Crop Patch 2, Spud Freezer 2, Tater Lantern 1; chests seen 6, opened 6.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:08 took Comet Scythe 75% over Frozen Fries 22%, Tot Toss 3%; 0:14 took Mash Mortar 87% over Frozen Fries 10%, Tater Trot 3%; 0:23 took Spud Fence 67% over Gem Sling 23%, Bacon Bits 10%; 0:32 took Comet Scythe 50% over Gravy Heart 28%, Frozen Fries 22%; 0:54 took Comet Scythe 64% over Butter Socks 25%, Mash Mortar 11%; 1:13 took Thick Skin 40% over Sprouting Eyes 31%, Root Network 29%; 1:18 took Frozen Fries 59% over Spud Decoy 21%, Hot Potato 11%, Reroll 9%; 1:34 took Big Bowl 75% over Frozen Fries 12%, Fry Knives 8%, Reroll 4%, Skip 1%; 2:05 took Comet Scythe 70% over Lean Lunch 13%, Sprouting Eyes 8%, Reroll 8%, Skip 1%; 2:10 took Big Bowl 78% over Mash Mortar 10%, Reroll 8%, Bacon Bits 3%, Skip 1%; 2:38 took Area 51% over Luck 31%, Crit 18%; 2:47 took Luck 46% over Area 43%, XP gain 11%; 2:50 took Frozen Fries 42% over Starch Chain 32%, Reroll 14%, Tot Stampede 8%, Skip 4%; 3:14 took Area 80% over Max HP 14%, Duration 6%; 3:15 took Comet Scythe 94% over Mezzaluna 2%, Mash Mortar 2%, Reroll 2%, Skip 0%; 3:22 took Big Bowl 87% over Potato Rain 7%, Reroll 5%, Skip 1%, Rotten Spud 0%; 3:41 took Big Bowl 59% over Reroll 14%, Spud Fence 13%, Root Network 13%, Skip 1%; 3:55 took Frozen Fries 65% over Thick Skin 14%, Reroll 14%, Spud Fence 6%, Skip 1%; 3:59 took Frozen Fries 75% over Reroll 13%, Spud Fence 6%, Potato Magnet 5%, Skip 1%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:55 level 6, maxHp 120, armor 0, damageMult 1.03, recovery 0, Frozen Fries 1/8, Comet Scythe 3/8, Mash Mortar 1/8, Spud Fence 1/8 | 1:58 level 9, maxHp 120, armor 0, damageMult 1.03, recovery 0, Frozen Fries 2/8, Comet Scythe 5/8, Mash Mortar 1/8, Spud Fence 1/8, Thick Skin 1/5, Big Bowl 1/5 | 2:55 level 12, maxHp 120, armor 0, damageMult 1.03, recovery 0, Frozen Fries 3/8, Comet Scythe 7/8, Mash Mortar 1/8, Spud Fence 1/8, Thick Skin 1/5, Big Bowl 2/5 | 3:59 level 17, maxHp 120, armor 0, damageMult 1.03, recovery 0, Frozen Fries 7/8, Eclipse Scythe 1/1, Mash Mortar 1/8, Spud Fence 1/8, Thick Skin 1/5, Big Bowl 4/5.
+- Passive levels first reached: Thick Skin 1 at 1:13; Big Bowl 1 at 1:34, 3 at 3:22.
+
+### L5.I7.G5: frozen-fries s35
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 35; 240s; plays the playbook.
+- Outcome: alive after 240.1s (game clock 04:00), health 108/120; damage taken 93 (enemy:aphid 2.499, enemy:cave-grub 46.899, enemy:potato-beetle 6.044, enemy:frost-flea 1.347); 1759 kills; level 1 to 14; planner asked 94 times, action model 244; the models saw the game 34 ms late (p90 60); ended with frozen-fries 2, wildfire-roast 1, tailgate-fries 1, mash-mortar 7, starch-puddle 1, root-cellar 1, peel-out 2, thick-skin 2.
+- run.timeSec: 240.067
+- run.level: 13
+- run.kills: 1759
+- run.damageBySource: frozen-fries 3420.717, hot-streak 5844.967, tailgate-fries 2201.884, mash-mortar 11858.646, starch-puddle 3485.248, grok-bot 2240.226, root-cellar 1171.676, wildfire-roast 22400.859
+- run.damageTakenBySource: enemy:aphid 2.499, enemy:cave-grub 46.899, enemy:potato-beetle 6.044, enemy:frost-flea 1.347, Spore vent 8.667, Brambles 5.4, boss:amusing 12.196, enemy:snow-mold 9.692
+- run.killsBySource: frozen-fries 86, hot-streak 255, tailgate-fries 46, mash-mortar 434, starch-puddle 145, grok-bot 67, root-cellar 21, wildfire-roast 705
+- run.evolutions: [{"id":"wildfire-roast","at":139.51666666666668}]
+- run.biomes: ["mash-swamp","compost-caves","peel-forest","frozen-tundra","chip-canyons"]
+- run.distance: 13635.04
+- run.dodgePoints: 1930.143
+- run.dodgeSecond: 240
+- run.dodgeTaken: [92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158,92.74332391199158]
+- run.dodgeSteps: [1048.2753333333706,1048.2753333333706,1052.8220000000351,1059.0220000000322,1065.2220000000293,1071.4220000000264,1077.6220000000235,1083.8220000000206,1090.0220000000177,1096.2220000000148,1102.4220000000118,1108.622000000009,1114.822000000006,1121.0220000000031,1127.2220000000002,1133.4219999999973,1137.8653333333284,1137.8653333333284,1142.8253333333262,1149.0253333333233,1155.2253333333203,1161.4253333333174,1167.6253333333145,1168.0386666666477,1173.1019999999785,1179.3019999999756,1185.5019999999727,1191.7019999999698,1197.9019999999668,1202.1386666666317,1203.1719999999646,1209.3719999999616,1215.5719999999587,1221.7719999999558,1227.971999999953,1234.17199999995,1240.371999999947,1246.5719999999442,1252.7719999999413,1258.9719999999384,1265.1719999999355,1271.3719999999325,1277.5719999999296,1283.7719999999267,1289.9719999999238,1296.171999999921,1302.371999999918,1308.571999999915,1314.7719999999122,1320.9719999999093,1324.7074999999054,1328.1639999999018,1334.3639999998989,1340.563999999896,1346.763999999893,1352.9639999998901,1359.1639999998872,1363.503999999885,1032.9820000000443,1039.1820000000414,1045.3820000000385]
+- run.curseSince: 8655
+- run.goldEarned: 548.565
+- run.bossChests: 7
+- run.bossesKilled: 2
+- run.elitesKilled: 8
+- run.peakEnemies: 176
+- run.grokBotHelps: 6
+- run.botSwarms: 1
+- run.lootRunnersMet: [1]
+- run.lootRunnersCaught: [1]
+- counters.kills: 1759
+- counters.hits: 3066
+- counters.gems: 1165
+- counters.coins: 73
+- counters.shots: 1363
+- counters.hostileShots: 120
+- counters.nearMisses: 8
+- counters.hostileHits: 4
+- Gold, spots and chests: gold held at the end 548, spent 0; spots charged and used: Beetle Nest 2, Crop Patch 1, Tater Lantern 1; chests seen 10, opened 7.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:08 took Hot Streak 81% over Gem Sling 11%, Rotten Spud 8%; 0:10 took Hot Streak 35% over Frozen Fries 35%, Peeler 30%; 0:26 took Tailgate Fries 53% over Frozen Fries 44%, Golden Fry 3%; 0:40 took Mash Mortar 75% over Tailgate Fries 14%, Sprout Satellites 11%; 0:59 took Starch Puddle 84% over Reroll 7%, Potato Magnet 6%, Clean Plate 3%; 1:01 took Peel Out 76% over Frozen Fries 11%, Reroll 8%, Starch Puddle 5%; 1:28 took Root Cellar 54% over Thick Skin 42%, Reroll 3%, Golden Fry 1%; 1:34 took Thick Skin 89% over Slow Cooker 6%, Reroll 4%, Golden Fry 1%; 2:12 took Thick Skin 56% over Reroll 16%, Frozen Fries 15%, Masher Grip 13%; 2:22 took Frozen Fries 49% over Starch Puddle 24%, Reroll 20%, Potato Magnet 7%; 2:24 took Peel Out 32% over Thick Skin 30%, Mash Finisher 27%, Reroll 11%; 3:11 took Mash Mortar 47% over Peel Out 36%, Reroll 14%, Starch Puddle 3%; 3:13 took Mash Mortar 45% over Big Bowl 40%, Reroll 13%, Tailgate Fries 2%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 6, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Hot Streak 2/8, Tailgate Fries 1/8, Mash Mortar 1/8, Starch Puddle 1/8 | 1:59 level 9, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Hot Streak 5/8, Tailgate Fries 1/8, Mash Mortar 1/8, Starch Puddle 1/8, Root Cellar 1/8, Peel Out 1/5, Thick Skin 1/5 | 2:55 level 12, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 2/8, Wildfire Roast 1/1, Tailgate Fries 1/8, Mash Mortar 2/8, Starch Puddle 1/8, Root Cellar 1/8, Peel Out 2/5, Thick Skin 2/5 | 3:55 level 14, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 2/8, Wildfire Roast 1/1, Tailgate Fries 1/8, Mash Mortar 7/8, Starch Puddle 1/8, Root Cellar 1/8, Peel Out 2/5, Thick Skin 2/5.
+- Passive levels first reached: Peel Out 1 at 1:01; Thick Skin 1 at 1:34.
+
+### L5.I7.G6: rosti-disc s31
+
+- Start: a fresh game on Nightmare 1 with rosti-disc, seed 31; 240s; plays the playbook.
+- Outcome: died after 206.8s (game clock 03:26); damage taken 232 (enemy:aphid 20.65, enemy:sprout-mite 5.272, enemy:crumb-ant 5.056, Hot oil 4); 1021 kills; level 1 to 10; planner asked 72 times, action model 634; the models saw the game 35 ms late (p90 62); ended with rosti-disc 1, julienne-dash 6, tater-mines 2, skipping-cannonball 1, spry-sprout 1, gpu 1, butter-socks 1.
+- run.timeSec: 206.833
+- run.level: 9
+- run.kills: 1021
+- run.damageBySource: rosti-disc 5157.942, julienne-dash 6141.72, tater-mines 7922.448, grok-bot 693.851, skipping-cannonball 2697.956, alex 2846.744, mash-bomb 533.584
+- run.damageTakenBySource: enemy:aphid 20.65, enemy:sprout-mite 5.272, enemy:crumb-ant 5.056, Hot oil 4, enemy:oil-drip 20.886, enemy:potato-beetle 21.953, enemy:fry-fly 4.302, enemy:bog-slime 3.573, enemy:garden-slug 3.118, enemy:sand-crab 44.52, enemy:ketchup-drop 1.931, enemy:compost-maggot 4.772, boss:amusing 8.87, Brambles 11.2, enemy:frost-flea 1.7, enemy:snow-mold 28.367, boss:beetle-queen 28.105, enemy:wireworm-larva 3.962, enemy:bowling-ball 5.184, enemy:beetle-brood 4.781
+- run.killsBySource: rosti-disc 121, julienne-dash 216, tater-mines 385, grok-bot 36, skipping-cannonball 91, alex 142, mash-bomb 30
+- run.biomes: ["fry-oil-desert","chip-canyons","mash-swamp","coin-laundromat","peel-forest","compost-caves","frozen-tundra"]
+- run.distance: 11599.117
+- run.dodgePoints: 1304.692
+- run.dodgeSecond: 206
+- run.dodgeTaken: [117.99532233940775,117.99532233940775,121.82205629888796,121.82205629888796,121.82205629888796,121.82205629888796,121.82205629888796,124.54190629888795,124.54190629888795,124.54190629888795,128.50358376000852,128.50358376000852,128.50358376000852,133.05811938215825,133.05811938215825,133.05811938215825,137.06951835190512,137.2695183519051,137.2695183519051,137.2695183519051,145.7712103459741,166.5976096506406,182.38362631730726,185.10347631730724,110.78493717215146,110.78493717215146,110.78493717215146,110.78493717215146,110.78493717215146,110.78493717215146,110.78493717215146,112.56467539293004,116.1438066429431,116.1438066429431,116.1438066429431,116.1438066429431,116.1438066429431,116.1438066429431,116.1438066429431,116.1438066429431,116.1438066429431,116.1438066429431,116.1438066429431,116.1438066429431,116.1438066429431,116.1438066429431,117.99532233940775,117.99532233940775,117.99532233940775,117.99532233940775,117.99532233940775,117.99532233940775,117.99532233940775,117.99532233940775,117.99532233940775,117.99532233940775,117.99532233940775,117.99532233940775,117.99532233940775,117.99532233940775,117.99532233940775]
+- run.dodgeSteps: [1022.6849999998112,1028.8849999998083,1032.7083333331398,1038.9083333331369,1045.108333333134,1051.308333333131,1057.5083333331281,1063.7083333331252,1069.9083333331223,1073.421666666454,1079.6216666664511,1085.8216666664482,1092.0216666664453,1096.4649999997766,1102.6649999997737,1107.1083333331048,1113.308333333102,1119.508333333099,1125.708333333096,1131.9083333330932,1138.1083333330903,1142.9649999997548,1148.5449999997522,1154.7449999997493,805.1166666665791,807.9066666665778,814.1066666665749,820.306666666572,826.5066666665691,832.7066666665662,838.9066666665633,845.1066666665604,851.3066666665575,855.8533333332219,862.053333333219,868.2533333332161,874.4533333332132,880.6533333332103,886.0783333332087,892.2783333332058,898.4783333332028,904.6783333331999,910.878333333197,917.0783333331941,923.2783333331912,929.4783333331883,935.6783333331854,941.8783333331825,948.0783333331796,954.2783333331766,960.4783333331737,966.6783333331708,967.091666666504,973.0849999998345,979.2849999998316,985.4849999998287,991.6849999998258,997.8849999998229,1004.08499999982,1010.284999999817,1016.4849999998141]
+- run.curseSince: 7394
+- run.killer: "boss:beetle-queen"
+- run.goldEarned: 80.543
+- run.bossChests: 1
+- run.bossesKilled: 1
+- run.elitesKilled: 3
+- run.peakEnemies: 173
+- run.grokBotHelps: 5
+- run.botSwarms: 1
+- run.throttles: 7
+- run.lootRunnersMet: [1]
+- counters.kills: 1021
+- counters.hits: 1660
+- counters.gems: 455
+- counters.coins: 28
+- counters.shots: 1059
+- counters.hostileShots: 138
+- counters.nearMisses: 11
+- counters.hostileHits: 3
+- Gold, spots and chests: gold held at the end 80, spent 0; spots charged and used: Tater Lantern 1, Crop Patch 1; chests seen 4, opened 1.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:05 took Julienne Dash 58% over Rösti Disc 21%, Root Spikes 21%; 0:12 took Spry Sprout 49% over Rösti Disc 47%, Hot Sauce 4%; 0:26 took Julienne Dash 80% over Rösti Disc 14%, Leave 6%; 0:33 took GPU 59% over Rösti Disc 38%, Golden Fry 3%; 0:54 took Tater Mines 72% over Slow Cooker 19%, Tater Trot 9%; 1:07 took Julienne Dash 64% over Spud Fence 34%, Rotten Spud 2%; 1:33 took Julienne Dash 88% over Starch Bolt 9%, Tater Mines 3%; 2:03 took Butter Socks 53% over Grab Bag 36%, Aged Russet 11%; 2:04 took Julienne Dash 90% over Leave 4%, Rösti Disc 3%, Tater Mines 3%; 2:05 took Skipping Cannonball 65% over Chives 25%, Spry Sprout 10%; 2:18 took Tater Mines 36% over Fertilizer 33%, Rösti Disc 31%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 5, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 1/8, Julienne Dash 2/8, Tater Mines 1/8, Spry Sprout 1/5, GPU 1/5 | 2:00 level 7, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 1/8, Julienne Dash 4/8, Tater Mines 1/8, Spry Sprout 1/5, GPU 1/5 | 3:00 level 10, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 1/8, Julienne Dash 6/8, Tater Mines 2/8, Skipping Cannonball 1/8, Spry Sprout 1/5, GPU 1/5, Butter Socks 1/5 | 3:26 level 10, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 1/8, Julienne Dash 6/8, Tater Mines 2/8, Skipping Cannonball 1/8, Spry Sprout 1/5, GPU 1/5, Butter Socks 1/5.
+- Passive levels first reached: Spry Sprout 1 at 0:12; GPU 1 at 0:33; Butter Socks 1 at 2:03.
+
+### L5.I7.G7: rosti-disc s32
+
+- Start: a fresh game on Nightmare 1 with rosti-disc, seed 32; 240s; plays the playbook.
+- Outcome: died after 149.1s (game clock 02:29); damage taken 186 (enemy:sprout-mite 27.398, enemy:potato-beetle 37.878, enemy:cave-grub 28.008, enemy:aphid 7.483); 214 kills; level 1 to 5; planner asked 42 times, action model 422; the models saw the game 37 ms late (p90 96); ended with rosti-disc 1, mash-wave 1, root-network 3.
+- run.timeSec: 149.133
+- run.level: 4
+- run.kills: 214
+- run.damageBySource: rosti-disc 2168.203, grok-bot 226.909, mash-wave 2145.638
+- run.damageTakenBySource: enemy:sprout-mite 27.398, enemy:potato-beetle 37.878, enemy:cave-grub 28.008, enemy:aphid 7.483, enemy:compost-maggot 16.808, enemy:snow-mold 8.084, enemy:bog-slime 3.788, enemy:ketchup-drop 1.899, enemy:crumb-ant 1.507, enemy:oil-drip 4.242, boss:amusing 39.915, enemy:garden-slug 3.46, enemy:frost-flea 1.703, enemy:sand-crab 3.652
+- run.killsBySource: rosti-disc 84, grok-bot 6, mash-wave 124
+- run.biomes: ["compost-caves","peel-forest","mash-swamp","chip-canyons","frozen-tundra"]
+- run.distance: 9231.193
+- run.dodgePoints: 779.711
+- run.dodgeSecond: 149
+- run.dodgeTaken: [114.05052176629911,116.17151895684286,128.2713161473866,128.2713161473866,128.2713161473866,144.99369504940876,144.99369504940876,144.99369504940876,144.99369504940876,144.99369504940876,144.99369504940876,146.69706805684118,146.69706805684118,146.69706805684118,146.69706805684118,146.69706805684118,146.69706805684118,146.69706805684118,146.69706805684118,146.69706805684118,146.69706805684118,146.69706805684118,153.67577270058132,157.002039367248,157.002039367248,157.002039367248,165.41787031240978,182.50048799174334,112.54367035931315,112.54367035931315,112.54367035931315,112.54367035931315,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911,114.05052176629911]
+- run.dodgeSteps: [750.9033333332803,757.103333333282,761.2366666666169,765.8556666666174,770.629666666617,776.8296666666193,786.8996666666212,793.0996666666238,798.7726666666256,803.1126666666257,809.1886666666281,815.1406666666304,819.4806666666306,827.7526666666297,833.9526666666268,840.1526666666239,846.352666666621,852.552666666618,858.7526666666151,864.9526666666122,871.1526666666093,881.2226666666074,887.4226666666045,893.6226666666016,899.8226666665987,909.8926666665968,916.0926666665939,922.292666666591,538.5633333333187,548.6333333333189,554.8333333333192,561.0333333333201,567.2333333333188,573.4333333333159,579.633333333313,585.8333333333115,592.0333333333123,598.2333333333147,604.4333333333126,614.5033333333116,620.7033333333087,626.9033333333058,633.1033333333029,639.3033333333,645.5033333332973,651.7033333332986,657.9033333332957,664.1033333332928,670.3033333332899,676.503333333287,682.703333333284,688.9033333332811,695.1033333332782,701.3033333332753,707.5033333332724,713.7033333332695,719.903333333272,726.1033333332746,732.3033333332771,738.5033333332797,744.7033333332809]
+- run.curseSince: 7294
+- run.killer: "boss:amusing"
+- run.goldEarned: 18.9
+- run.peakEnemies: 106
+- run.grokBotHelps: 4
+- counters.kills: 214
+- counters.hits: 478
+- counters.gems: 64
+- counters.coins: 18
+- counters.shots: 151
+- counters.hostileShots: 190
+- counters.nearMisses: 19
+- counters.hostileHits: 11
+- Gold, spots and chests: gold held at the end 18, spent 0; spots charged and used: Crop Patch 1; chests seen 0, opened 0.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:14 took Root Network 79% over Potato Magnet 16%, Golden Fry 5%; 1:00 took Root Network 86% over Spry Sprout 7%, Tater Trot 7%; 1:34 took Mash Wave 63% over Big Bowl 25%, Four-Eyed Spud 12%; 2:01 took Root Network 86% over Potato Magnet 7%, Spud Sneakers 7%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 1:00 level 3, maxHp 120, armor 0, damageMult 1, recovery 0.25, Rösti Disc 1/8, Root Network 1/5 | 1:58 level 4, maxHp 120, armor 0, damageMult 1, recovery 0.5, Rösti Disc 1/8, Mash Wave 1/8, Root Network 2/5 | 2:29 level 5, maxHp 120, armor 0, damageMult 1, recovery 0.75, Rösti Disc 1/8, Mash Wave 1/8, Root Network 3/5.
+- Passive levels first reached: Root Network 1 at 0:14, 3 at 2:01.
+
+### L5.I7.G8: rosti-disc s33
+
+- Start: a fresh game on Nightmare 1 with rosti-disc, seed 33; 240s; plays the playbook.
+- Outcome: died after 170.5s (game clock 02:50); damage taken 200 (enemy:aphid 11.442, enemy:sprout-mite 6.488, enemy:crumb-ant 21.863, Hot oil 12.5); 718 kills; level 1 to 9; planner asked 56 times, action model 481; the models saw the game 37 ms late (p90 71); ended with rosti-disc 2, mash-mortar 1, root-cellar 4, fry-knives 1, starch-puddle 1.
+- run.timeSec: 170.533
+- run.level: 8
+- run.kills: 718
+- run.damageBySource: rosti-disc 2750.297, mash-mortar 3344.651, root-cellar 2730.703, fry-knives 1088.981, starch-puddle 3162.245, grok-bot 817.532
+- run.damageTakenBySource: enemy:aphid 11.442, enemy:sprout-mite 6.488, enemy:crumb-ant 21.863, Hot oil 12.5, enemy:fry-fly 68.796, enemy:potato-beetle 25.837, enemy:oil-drip 6.691, boss:amusing 44.35, enemy:bog-slime 2.34
+- run.killsBySource: rosti-disc 132, mash-mortar 200, root-cellar 122, fry-knives 34, starch-puddle 180, grok-bot 50
+- run.biomes: ["fry-oil-desert","peel-forest"]
+- run.distance: 10342.7
+- run.dodgePoints: 1002.16
+- run.dodgeSecond: 170
+- run.dodgeTaken: [112.73863686589749,112.73863686589749,112.73863686589749,112.73863686589749,112.73863686589749,112.73863686589749,112.73863686589749,112.73863686589749,112.73863686589749,116.23863686589749,120.89823686589747,120.89823686589747,120.89823686589747,120.89823686589747,120.89823686589747,120.89823686589747,120.89823686589747,120.89823686589747,120.89823686589747,120.89823686589747,120.89823686589747,120.89823686589747,120.89823686589747,120.89823686589747,123.23841700810303,124.9935521147572,137.1992307284731,146.40534476845716,146.40534476845716,146.40534476845716,151.6531426466883,151.6531426466883,151.6531426466883,151.6531426466883,154.97940931335495,154.97940931335495,154.97940931335495,154.97940931335495,154.97940931335495,158.30567598002162,184.91580931335494,184.91580931335494,184.91580931335494,184.91580931335494,184.91580931335494,192.0454225710158,194.51348297019703,196.98154336937827,196.98154336937827,106.3577054662823,106.3577054662823,106.3577054662823,106.3577054662823,106.3577054662823,112.73863686589749,112.73863686589749,112.73863686589749,112.73863686589749,112.73863686589749,112.73863686589749,112.73863686589749]
+- run.dodgeSteps: [727.5500000001049,733.7500000001074,743.8200000001093,750.0200000001118,756.2200000001144,762.4200000001169,768.6200000001195,774.820000000122,781.0200000001246,785.4633333334598,793.6733333334608,799.8733333334634,806.0733333334659,812.2733333334685,818.473333333471,828.1133333334698,834.7433333334669,840.943333333464,847.1433333334611,853.3433333334582,859.5433333334553,865.7433333334524,871.9433333334495,878.1433333334465,881.8633333334449,888.063333333442,894.263333333439,900.4633333334361,906.6633333334332,912.8633333334303,919.0633333334274,925.2633333334245,931.4633333334216,937.3533333334187,942.1066666667499,948.306666666747,954.5066666667441,960.293333333408,965.0466666667392,971.2466666667362,977.4466666667333,987.5166666667313,993.7166666667284,999.9166666667255,1006.1166666667226,1010.8700000000538,1020.7333333333852,1024.7633333333833,1030.9633333333804,653.1500000000743,659.3500000000769,665.5500000000794,671.750000000082,677.9500000000845,684.1500000000871,690.3500000000896,696.5500000000922,702.7500000000947,708.9500000000972,715.1500000000998,721.3500000001023]
+- run.killer: "boss:amusing"
+- run.goldEarned: 63.63
+- run.elitesKilled: 2
+- run.peakEnemies: 116
+- run.grokBotHelps: 4
+- run.botSwarms: 2
+- counters.kills: 718
+- counters.hits: 1657
+- counters.gems: 291
+- counters.coins: 42
+- counters.shots: 454
+- counters.hostileShots: 340
+- counters.nearMisses: 18
+- counters.hostileHits: 6
+- Gold, spots and chests: gold held at the end 63, spent 0; spots charged and used: Crop Patch 1, Tater Lantern 1; chests seen 2, opened 0.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:22 took Mash Mortar 92% over Peel Out 6%, Gravy Splash 2%; 0:25 took Root Cellar 58% over Starch Bolt 25%, Tot Toss 17%; 0:41 took Rösti Disc 57% over Sour Cream 37%, Golden Fry 6%; 0:59 took Fry Knives 44% over Rösti Disc 39%, Salt Line 17%; 1:18 took Starch Puddle 81% over Rösti Disc 13%, Salt Shaker 6%; 1:44 took Root Cellar 44% over Starch Puddle 27%, Reroll 18%, Potato Magnet 11%; 1:54 took Root Cellar 49% over Mash Mallet 36%, Reroll 12%, Fry Knives 3%; 2:31 took Root Cellar 62% over Spud Sneakers 17%, Reroll 16%, Rösti Disc 5%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 5, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 2/8, Mash Mortar 1/8, Root Cellar 1/8, Fry Knives 1/8 | 1:58 level 8, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 2/8, Mash Mortar 1/8, Root Cellar 3/8, Fry Knives 1/8, Starch Puddle 1/8 | 2:49 level 9, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 2/8, Mash Mortar 1/8, Root Cellar 4/8, Fry Knives 1/8, Starch Puddle 1/8.
+
+### L5.I7.G9: rosti-disc s34
+
+- Start: a fresh game on Nightmare 1 with rosti-disc, seed 34; 240s; plays the playbook.
+- Outcome: alive after 240.2s (game clock 04:00), health 107/120; damage taken 304 (Spore vent 9.067, enemy:compost-maggot 26.309, enemy:potato-beetle 109.951, enemy:sprout-mite 31.662); 2215 kills; level 1 to 14; planner asked 88 times, action model 702; the models saw the game 33 ms late (p90 59); ended with rosti-disc 1, seed-potato 1, fry-knives 1, fry-fortress 1, mash-landing 7, broadside 1, gpu 2, gravy-splash 2, slow-cooker 1, butter-pat 1.
+- run.timeSec: 240.233
+- run.level: 13
+- run.kills: 2215
+- run.damageBySource: rosti-disc 5604.901, seed-potato 5226.357, fry-knives 3831.215, fry-sentry 12788.589, broadside 4901.633, mash-landing 10.799, gravy-splash 578.683, fry-fortress 37971.035
+- run.damageTakenBySource: Spore vent 9.067, enemy:compost-maggot 26.309, enemy:potato-beetle 109.951, enemy:sprout-mite 31.662, enemy:aphid 24.456, enemy:cave-grub 20.827, enemy:crumb-ant 1.516, boss:amusing 25.501, enemy:frost-flea 3.742, boss:beetle-queen 25.385, enemy:beetle-brood 9.155, enemy:snow-mold 12.434, enemy:wireworm-larva 4.047
+- run.killsBySource: rosti-disc 144, seed-potato 219, fry-knives 68, fry-sentry 578, broadside 187, mash-landing 1, gravy-splash 29, fry-fortress 989
+- run.evolutions: [{"id":"fry-fortress","at":193.48333333333332}]
+- run.biomes: ["compost-caves","peel-forest"]
+- run.distance: 13455.967
+- run.dodgePoints: 1030.669
+- run.dodgeSecond: 240
+- run.dodgeTaken: [224.3131779030466,228.95171684660875,249.09162372563057,258.1577903922972,258.1577903922972,258.1577903922972,258.1577903922972,258.1577903922972,264.3745903922972,270.5913903922972,270.5913903922972,270.5913903922972,270.5913903922972,270.5913903922972,270.5913903922972,270.5913903922972,274.5715220134065,274.5715220134065,274.5715220134065,280.644571701725,280.644571701725,280.644571701725,280.644571701725,280.644571701725,280.644571701725,280.644571701725,280.644571701725,280.644571701725,280.644571701725,280.644571701725,280.644571701725,284.8086221307497,284.8086221307497,288.97917168707164,288.97917168707164,288.97917168707164,288.97917168707164,288.97917168707164,288.97917168707164,288.97917168707164,291.1035468973074,291.1035468973074,291.1035468973074,291.1035468973074,291.1035468973074,291.1035468973074,291.1035468973074,291.1035468973074,291.1035468973074,295.4182836721279,304.0527751177606,304.0527751177606,304.0527751177606,304.0527751177606,304.0527751177606,304.0527751177606,304.0527751177606,304.0527751177606,219.78009456971327,219.78009456971327,219.78009456971327]
+- run.dodgeSteps: [1048.1000000000354,1054.3000000000325,1060.5000000000296,1062.0500000000288,1062.0500000000288,1064.0133333333613,1067.7333333333595,1073.9333333333566,1080.1333333333537,1086.3333333333508,1092.5333333333479,1096.7700000000127,1097.700000000012,1103.796666666676,1109.996666666673,1116.1966666666701,1122.3966666666672,1128.5966666666643,1134.7966666666614,1140.9966666666585,1147.1966666666556,1153.3966666666527,1159.5966666666498,1165.7966666666468,1171.996666666644,1178.196666666641,1184.396666666638,1190.5966666666352,1196.7966666666323,1202.9966666666294,1209.1966666666265,1215.3966666666236,1221.5966666666206,1226.2466666666185,1232.4466666666156,1238.6466666666126,1244.8466666666097,1251.0466666666068,1257.246666666604,1263.446666666601,1269.646666666598,1275.8466666665952,1278.1199999999276,1280.0833333332598,1286.283333333257,1289.176666666589,1295.376666666586,1301.5766666665832,1307.7766666665802,1313.9766666665773,1315.8366666665765,1317.2833333332424,1323.4833333332394,1329.6833333332365,1335.8833333332336,1336.8133333332332,1337.9499999998993,1344.1499999998964,1030.7400000000437,1035.7000000000412,1041.9000000000383]
+- run.curseSince: 12659
+- run.goldEarned: 459.173
+- run.bossChests: 8
+- run.bossesKilled: 2
+- run.elitesKilled: 6
+- run.peakEnemies: 149
+- run.grokBotHelps: 6
+- run.throttles: 12
+- run.lootRunnersMet: [1]
+- counters.kills: 2215
+- counters.hits: 3874
+- counters.gems: 1094
+- counters.coins: 63
+- counters.shots: 1086
+- counters.hostileShots: 127
+- counters.nearMisses: 9
+- counters.hostileHits: 3
+- Gold, spots and chests: gold held at the end 459, spent 0; spots charged and used: Crop Patch 1, Tater Lantern 1; chests seen 8, opened 8.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:23 took Seed Potato 75% over Rösti Disc 22%, Salt Shaker 3%; 0:28 took Fry Knives 68% over Stuffed Skin 23%, Clean Plate 9%; 0:41 took Fry Cook Sentry 62% over Four-Eyed Spud 25%, Rösti Disc 13%; 0:59 took Mash Landing 81% over Fry Cook Sentry 14%, Potato Magnet 5%; 1:24 took Broadside 62% over Fry Cook Sentry 24%, Salt Line 14%; 1:35 took GPU 79% over Rösti Disc 14%, Skip 4%, Tater Trot 3%; 1:40 took GPU 62% over Slow Cooker 17%, Reroll 12%, Fry Knives 5%, Skip 4%; 2:14 took Mash Landing 40% over Slow Cooker 33%, Reroll 15%, Fry Knives 7%, Skip 5%; 2:30 took Gravy Splash 40% over Fry Cook Sentry 30%, Slow Cooker 19%, Reroll 10%, Skip 1%; 2:45 took Gravy Splash 34% over Slow Cooker 31%, Fry Cook Sentry 21%, Reroll 12%, Skip 2%; 2:45 took Slow Cooker 44% over Seed Potato 28%, Reroll 15%, Fry Knives 10%, Skip 3%; 2:58 took Fry Cook Sentry 72% over Mash Landing 12%, Reroll 12%, Rösti Disc 2%, Skip 2%; 3:31 took Butter Pat 36% over Starch Plating 28%, Reroll 18%, Fry Knives 15%, Skip 3%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 5, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 1/8, Seed Potato 1/8, Fry Knives 1/8, Fry Cook Sentry 1/8, Mash Landing 1/8 | 2:00 level 8, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 1/8, Seed Potato 1/8, Fry Knives 1/8, Fry Cook Sentry 5/8, Mash Landing 1/8, Broadside 1/8, GPU 2/5 | 2:59 level 13, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 1/8, Seed Potato 1/8, Fry Knives 1/8, Fry Cook Sentry 7/8, Mash Landing 2/8, Broadside 1/8, GPU 2/5, Gravy Splash 2/5, Slow Cooker 1/5 | 3:59 level 14, maxHp 120, armor 0, damageMult 1.2, recovery 0, Rösti Disc 1/8, Seed Potato 1/8, Fry Knives 1/8, Fry Fortress 1/1, Mash Landing 7/8, Broadside 1/8, GPU 2/5, Gravy Splash 2/5, Slow Cooker 1/5, Butter Pat 1/5.
+- Passive levels first reached: GPU 1 at 1:35; Gravy Splash 1 at 2:30; Slow Cooker 1 at 2:45; Butter Pat 1 at 3:31.
+
+### L5.I7.G10: rosti-disc s35
+
+- Start: a fresh game on Nightmare 1 with rosti-disc, seed 35; 240s; plays the playbook.
+- Outcome: alive after 240.2s (game clock 04:00), health 120/120; damage taken 154 (enemy:cave-grub 62.833, enemy:aphid 6.039, enemy:compost-maggot 2.337, enemy:sprout-mite 8.377); 2236 kills; level 1 to 12; planner asked 91 times, action model 470; the models saw the game 36 ms late (p90 59); ended with rosti-disc 1, stand-mixer 1, sprout-satellites 1, hashnado 1, harvest-moon 2, locked-gatling 4, big-bowl 1, sour-cream 1, masher-grip 1.
+- run.timeSec: 240.15
+- run.level: 11
+- run.kills: 2236
+- run.damageBySource: rosti-disc 2081.352, whisk-vortex 5091.526, sprout-satellites 618.133, hash-boomerang 10489.165, harvest-moon 1101.942, locked-gatling 7705.12, stand-mixer 31365.777, hashnado 12700.973
+- run.damageTakenBySource: enemy:cave-grub 62.833, enemy:aphid 6.039, enemy:compost-maggot 2.337, enemy:sprout-mite 8.377, Brambles 21.3, enemy:potato-beetle 22.349, enemy:bowling-ball 3.966, Hot oil 4.667, enemy:ketchup-drop 2.34, boss:beetle-queen 12.693, enemy:fry-fly 6.951
+- run.killsBySource: rosti-disc 35, whisk-vortex 241, sprout-satellites 13, hash-boomerang 364, harvest-moon 27, locked-gatling 180, stand-mixer 1069, hashnado 307
+- run.evolutions: [{"id":"stand-mixer","at":117.15},{"id":"hashnado","at":195.73333333333332}]
+- run.biomes: ["compost-caves","peel-forest","mash-swamp","gutterball-lanes","ketchup-bog","fry-oil-desert","chip-canyons"]
+- run.distance: 13406.417
+- run.dodgePoints: 1537.296
+- run.dodgeSecond: 240
+- run.dodgeTaken: [131.70792019375696,131.70792019375696,131.70792019375696,131.70792019375696,131.70792019375696,134.207920193757,134.207920193757,142.367470193757,142.367470193757,142.367470193757,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,146.90055352709032,150.3709370163858,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,153.85133550943647,131.70792019375696,131.70792019375696,131.70792019375696]
+- run.dodgeSteps: [1042.4216666666512,1048.208333333315,1054.4083333333122,1060.6083333333092,1066.8083333333063,1073.0083333333034,1079.2083333333005,1085.4083333332976,1091.6083333332947,1097.8083333332918,1099.9783333332907,1100.391666666624,1105.0416666666217,1107.8316666666203,1112.068333333285,1118.268333333282,1124.4683333332791,1130.6683333332762,1136.8683333332733,1143.0683333332704,1149.2683333332675,1155.4683333332646,1161.6683333332617,1167.8683333332588,1172.31166666659,1172.31166666659,1176.5483333332547,1182.7483333332518,1188.948333333249,1195.148333333246,1201.348333333243,1207.5483333332402,1208.891666666573,1212.3016666665712,1218.5016666665683,1224.7016666665654,1230.9016666665625,1237.1016666665596,1243.3016666665567,1249.5016666665538,1255.7016666665509,1261.901666666548,1262.1083333332147,1263.1416666665475,1269.3416666665446,1275.5416666665417,1281.7416666665388,1287.9416666665359,1294.141666666533,1298.7916666665308,1298.7916666665308,1302.511666666529,1308.711666666526,1314.9116666665232,1321.1116666665203,1327.3116666665173,1333.5116666665144,1339.7116666665115,1023.8216666666598,1030.021666666657,1036.221666666654]
+- run.curseSince: 13605
+- run.goldEarned: 580.105
+- run.goldSpent: 30
+- run.bossChests: 8
+- run.paidChests: 1
+- run.bossesKilled: 2
+- run.elitesKilled: 8
+- run.peakEnemies: 133
+- run.grokBotHelps: 3
+- run.lootRunnersMet: [1]
+- run.lootRunnersCaught: [1]
+- counters.kills: 2236
+- counters.hits: 4827
+- counters.gems: 201
+- counters.coins: 48
+- counters.shots: 2742
+- counters.hostileShots: 48
+- counters.nearMisses: 5
+- counters.hostileHits: 3
+- Gold, spots and chests: gold held at the end 548, spent 30 (Potato Crate 30); spots charged and used: Beetle Nest 1, Dinner Bell 1, Potato Crate 1, Spud Freezer 1; chests seen 10, opened 8.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:20 took Whisk Vortex 87% over Gem Sling 8%, Rotten Spud 5%; 0:40 took Whisk Vortex 48% over Hot Start 44%, Rösti Disc 8%; 0:46 took Sprout Satellites 36% over Tater Mines 33%, Rösti Disc 31%; 0:46 took Hash Boomerang 65% over Sprout Satellites 14%, Clean Plate 13%, Reroll 8%; 0:47 took Harvest Moon 69% over Aged Russet 19%, Hash Boomerang 6%, Reroll 6%; 1:11 took Whisk Vortex 45% over Big Bowl 30%, Peel Phantom 16%, Reroll 9%; 1:34 took Big Bowl 79% over Tater Tot Pup 15%, Reroll 4%, Hash Boomerang 2%; 1:43 took Locked Gatling 85% over Reroll 9%, Rösti Disc 3%, Sprout Satellites 3%; 2:23 took Sour Cream 84% over Big Bowl 10%, Reroll 5%, Sprout Satellites 1%; 2:34 took Locked Gatling 62% over Leave 25%, Sprout Satellites 7%, Rösti Disc 6%; 2:50 took Harvest Moon 46% over Potato Magnet 25%, Reroll 20%, Rösti Disc 9%; 3:28 took Locked Gatling 74% over Harvest Moon 18%, Rösti Disc 4%, Leave 4%; 3:35 took Locked Gatling 77% over Harvest Moon 14%, Leave 5%, Rösti Disc 4%; 3:46 took Masher Grip 53% over Harvest Moon 24%, Reroll 15%, Sprout Satellites 5%, Skip 3%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 6, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 1/8, Whisk Vortex 5/8, Sprout Satellites 1/8, Hash Boomerang 1/8, Harvest Moon 1/8 | 1:57 level 9, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 1/8, Stand Mixer 1/1, Sprout Satellites 1/8, Hash Boomerang 6/8, Harvest Moon 1/8, Locked Gatling 1/8, Big Bowl 1/5 | 3:00 level 11, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 1/8, Stand Mixer 1/1, Sprout Satellites 1/8, Hash Boomerang 8/8, Harvest Moon 2/8, Locked Gatling 2/8, Big Bowl 1/5, Sour Cream 1/5 | 3:58 level 12, maxHp 120, armor 0, damageMult 1, recovery 0, Rösti Disc 1/8, Stand Mixer 1/1, Sprout Satellites 1/8, Hashnado 1/1, Harvest Moon 2/8, Locked Gatling 4/8, Big Bowl 1/5, Sour Cream 1/5, Masher Grip 1/5.
+- Passive levels first reached: Big Bowl 1 at 1:34; Sour Cream 1 at 2:23; Masher Grip 1 at 3:46.
+
+### L5.I8.G1: frozen-fries s36
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 36; 240s; plays the playbook.
+- Outcome: alive after 240.3s (game clock 04:00), health 120/120; damage taken 101 (enemy:sprout-mite 2.288, enemy:aphid 2.405, Hot oil 63.667, Brambles 20.4); 1609 kills; level 1 to 12; planner asked 88 times, action model 335; the models saw the game 31 ms late (p90 50); ended with frozen-fries 2, tater-minigun 1, spud-fence 1, hash-brown-shield 1, starch-puddle 1, hot-streak 4, masher-grip 1, thick-skin 1.
+- run.timeSec: 240.25
+- run.level: 11
+- run.kills: 1609
+- run.damageBySource: frozen-fries 4533.254, locked-gatling 9192.1, spud-fence 5485.245, hash-brown-shield 1141.127, grok-bot 3405.66, starch-puddle 4103.638, hot-streak 14253.967, tater-minigun 7125.531
+- run.damageTakenBySource: enemy:sprout-mite 2.288, enemy:aphid 2.405, Hot oil 63.667, Brambles 20.4, boss:beetle-queen 2.72, enemy:dumpster-raccoon 4.353, enemy:fry-fly 5.181
+- run.killsBySource: frozen-fries 119, locked-gatling 351, spud-fence 138, hash-brown-shield 56, grok-bot 132, starch-puddle 125, hot-streak 488, tater-minigun 200
+- run.evolutions: [{"id":"tater-minigun","at":191.45}]
+- run.biomes: ["fry-oil-desert","chip-canyons","ketchup-bog","mash-swamp","peel-forest","fry-palace"]
+- run.distance: 13757.748
+- run.dodgePoints: 1938.543
+- run.dodgeSecond: 240
+- run.dodgeTaken: [58.49290833824471,58.49290833824471,58.49290833824471,58.49290833824471,58.49290833824471,61.21275833824471,61.21275833824471,70.74605378340442,70.74605378340442,75.27938711673772,79.41272045007105,79.41272045007105,79.41272045007105,79.41272045007105,79.41272045007105,79.41272045007105,87.2793871167377,93.41272045007099,93.41272045007099,93.41272045007099,93.41272045007099,93.41272045007099,93.41272045007099,93.41272045007099,93.41272045007099,93.41272045007099,93.41272045007099,93.41272045007099,93.41272045007099,94.07938711673765,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,94.47938711673766,101.01272045007096,101.01272045007096,101.01272045007096,101.01272045007096,101.01272045007096,101.01272045007096,101.01272045007096,58.49290833824471,58.49290833824471,58.49290833824471]
+- run.dodgeSteps: [1045.7281666665392,1051.9281666665363,1058.1281666665334,1064.3281666665305,1070.5281666665276,1076.3148333331915,1077.4514999998578,1079.001499999857,1085.2014999998541,1090.1614999998517,1094.8114999998495,1098.4281666665145,1104.6281666665116,1110.8281666665087,1117.0281666665057,1123.2281666665028,1126.121499999835,1127.9814999998339,1134.181499999831,1140.381499999828,1146.5814999998252,1152.7814999998222,1158.9814999998193,1165.1814999998164,1171.3814999998135,1177.5814999998106,1183.7814999998077,1189.9814999998048,1196.1814999998019,1202.381499999799,1208.581499999796,1214.7814999997931,1220.9814999997902,1227.1814999997873,1233.3814999997844,1239.5814999997815,1245.7814999997786,1251.9814999997757,1258.1814999997728,1264.3814999997699,1270.581499999767,1276.781499999764,1282.9814999997611,1289.1814999997582,1295.3814999997553,1301.5814999997524,1307.7814999997495,1313.9814999997466,1320.1814999997437,1326.3814999997408,1332.5814999997378,1337.2314999997357,1343.4314999997328,1349.6314999997298,1355.831499999727,1362.031499999724,1368.231499999721,1374.4314999997182,1027.128166666548,1033.328166666545,1039.5281666665421]
+- run.curseSince: 14388
+- run.goldEarned: 386.755
+- run.goldSpent: 30
+- run.bossChests: 6
+- run.paidChests: 1
+- run.bossesKilled: 2
+- run.elitesKilled: 6
+- run.peakEnemies: 173
+- run.grokBotHelps: 5
+- run.botSwarms: 2
+- run.lootRunnersMet: [1]
+- counters.kills: 1609
+- counters.hits: 3220
+- counters.gems: 351
+- counters.coins: 53
+- counters.shots: 4156
+- counters.hostileShots: 89
+- counters.nearMisses: 9
+- counters.hostileHits: 1
+- Gold, spots and chests: gold held at the end 355, spent 30 (Potato Crate 30); spots charged and used: Crop Patch 1, Tater Lantern 1, Beetle Nest 1, Spud Freezer 1, Potato Crate 1; chests seen 8, opened 6.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:08 took Locked Gatling 30% over Root Cellar 30%, Julienne Dash 29%, Reroll 11%; 0:14 took Frozen Fries 52% over Tailgate Fries 33%, Reroll 10%, Bacon Bits 5%; 0:23 took Spud Fence 43% over Tater Mines 23%, Reroll 19%, Hearty Helping 15%; 0:42 took Hash Brown Shield 61% over Hot Start 22%, Reroll 9%, Peel Lash 8%; 0:57 took Locked Gatling 41% over Root Network 29%, Frozen Fries 15%, Reroll 15%; 1:44 took Starch Puddle 60% over Four-Eyed Spud 31%, Reroll 7%, Hot Sauce 2%; 1:57 took Hot Streak 40% over Spud Decoy 24%, Spud Fence 20%, Reroll 16%; 2:18 took Masher Grip 49% over Hash Brown Shield 36%, Reroll 11%, Spud Fence 4%; 2:43 took Hot Streak 39% over Frozen Fries 27%, Reroll 23%, Spud Fence 11%; 3:37 took Hot Streak 63% over Reroll 15%, Starch Puddle 13%, Spud Fence 9%; 3:59 took Thick Skin 53% over Frozen Fries 21%, Reroll 15%, Spud Fence 9%, Skip 2%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 6, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 2/8, Locked Gatling 2/8, Spud Fence 1/8, Hash Brown Shield 1/8 | 1:59 level 8, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 2/8, Locked Gatling 2/8, Spud Fence 1/8, Hash Brown Shield 1/8, Starch Puddle 1/8, Hot Streak 1/8 | 2:54 level 10, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 2/8, Locked Gatling 7/8, Spud Fence 1/8, Hash Brown Shield 1/8, Starch Puddle 1/8, Hot Streak 2/8, Masher Grip 1/5 | 3:59 level 12, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 2/8, Tater Minigun 1/1, Spud Fence 1/8, Hash Brown Shield 1/8, Starch Puddle 1/8, Hot Streak 4/8, Masher Grip 1/5, Thick Skin 1/5.
+- Passive levels first reached: Masher Grip 1 at 2:18; Thick Skin 1 at 3:59.
+
+### L5.I8.G2: frozen-fries s37
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 37; 240s; plays the playbook.
+- Outcome: died after 134.2s (game clock 02:14); damage taken 162 (enemy:aphid 2.625, Hot oil 28.833, enemy:fry-fly 11.175, enemy:oil-drip 13.818); 432 kills; level 1 to 9; planner asked 48 times, action model 360; the models saw the game 25 ms late (p90 46); ended with frozen-fries 1, potato-rain 1, mash-mortar 3, mash-golem 1, sprouting-eyes 1, gravy-heart 1, lean-lunch 2.
+- run.timeSec: 134.233
+- run.level: 8
+- run.kills: 432
+- run.damageBySource: frozen-fries 2216.81, potato-rain 1100.811, mash-mortar 3937.488, mash-golem 597.829, grok-bot 322.943
+- run.damageTakenBySource: enemy:aphid 2.625, Hot oil 28.833, enemy:fry-fly 11.175, enemy:oil-drip 13.818, enemy:sprout-mite 4.553, enemy:crumb-ant 7.631, enemy:sand-crab 3.442, enemy:bog-slime 1.936, enemy:cave-grub 3.109, boss:amusing 82.048, enemy:wireworm-larva 3.307
+- run.killsBySource: frozen-fries 96, potato-rain 58, mash-mortar 228, mash-golem 33, grok-bot 17
+- run.biomes: ["ketchup-bog","fry-oil-desert","chip-canyons","mash-swamp","compost-caves"]
+- run.distance: 8182.867
+- run.dodgePoints: 925.807
+- run.dodgeSecond: 134
+- run.dodgeTaken: [82.12840324571535,118.71733657904866,136.97523241933226,136.97523241933226,136.97523241933226,136.97523241933226,136.97523241933226,136.97523241933226,136.97523241933226,140.30149908599893,142.51901019711005,142.51901019711005,142.51901019711005,31.73952172068469,31.73952172068469,31.73952172068469,39.18921060957357,43.022543942906935,44.91875450598367,46.345715080271454,46.345715080271454,46.345715080271454,52.73877408340876,52.73877408340876,54.21856933121781,55.70372267779323,55.70372267779323,55.70372267779323,57.207112172848525,59.1844778501298,59.1844778501298,59.1844778501298,59.1844778501298,59.1844778501298,59.1844778501298,59.1844778501298,59.1844778501298,59.1844778501298,67.16240840091294,69.1907216586289,69.1907216586289,69.1907216586289,69.1907216586289,70.75925137684533,70.75925137684533,70.75925137684533,70.75925137684533,70.75925137684533,70.75925137684533,70.75925137684533,70.75925137684533,70.75925137684533,75.47586991238201,75.47586991238201,75.47586991238201,75.47586991238201,75.47586991238201,75.47586991238201,75.47586991238201,75.47586991238201,75.47586991238201]
+- run.dodgeSteps: [743.5866666666985,749.7866666666985,755.9866666666967,762.1866666666945,768.3866666666929,774.5866666666932,784.6566666666929,790.8566666666918,795.4033333333593,800.6733333333615,804.8066666666961,813.5333333333627,816.8400000000302,449.60333333333654,455.80333333333783,462.0033333333404,468.2033333333429,474.4033333333455,480.603333333348,486.80333333335057,493.0033333333492,499.2033333333463,505.4033333333435,511.6033333333406,517.8033333333399,524.0033333333415,530.2033333333441,536.4033333333466,542.6033333333451,548.8033333333476,555.0033333333502,561.2033333333496,567.4033333333495,571.6400000000161,576.1866666666847,582.3866666666843,588.5866666666868,594.7866666666894,600.9866666666919,607.186666666691,613.3866666666919,619.5866666666903,625.7866666666918,631.9866666666907,638.1866666666932,644.3866666666958,650.5866666666972,656.7866666666997,662.9866666667023,669.1866666667025,675.3866666667024,681.5866666667049,687.7866666667061,693.9866666667086,700.1866666667112,706.3866666667136,712.5866666667107,718.7866666667078,724.9866666667073,731.1866666667044,737.3866666667014]
+- run.curseSince: 7724
+- run.killer: "boss:amusing"
+- run.goldEarned: 73.565
+- run.bossChests: 1
+- run.elitesKilled: 2
+- run.peakEnemies: 99
+- run.grokBotHelps: 4
+- run.botSwarms: 1
+- counters.kills: 432
+- counters.hits: 815
+- counters.gems: 198
+- counters.coins: 25
+- counters.shots: 335
+- counters.hostileShots: 70
+- counters.nearMisses: 5
+- counters.hostileHits: 9
+- Gold, spots and chests: gold held at the end 73, spent 0; spots charged and used: Tater Lantern 1; chests seen 2, opened 1.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:05 took Potato Rain 77% over Butter Socks 12%, Stuffed Skin 9%, Skip 2%; 0:26 took Sprouting Eyes 59% over Frozen Fries 23%, Potato Rain 15%, Skip 3%; 0:38 took Mash Mortar 56% over Starch Plating 25%, Tot Stampede 16%, Skip 3%; 0:51 took Mash Golem 80% over Sprouting Eyes 14%, Fertilizer 5%, Skip 1%; 0:57 took Gravy Heart 61% over Afterburner Fries 22%, Gem Sling 14%, Skip 3%; 1:24 took Lean Lunch 58% over Potato Rain 26%, Mash Golem 12%, Skip 4%; 1:40 took Mash Mortar 50% over Packed Pan 36%, Reroll 8%, Frozen Fries 5%, Skip 1%; 2:08 took Lean Lunch 36% over Frozen Fries 29%, Spud Sneakers 19%, Reroll 13%, Skip 3%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 6, maxHp 134.4, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Potato Rain 1/8, Mash Mortar 1/8, Mash Golem 1/8, Sprouting Eyes 1/5, Gravy Heart 1/5 | 1:59 level 8, maxHp 134.4, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Potato Rain 1/8, Mash Mortar 3/8, Mash Golem 1/8, Sprouting Eyes 1/5, Gravy Heart 1/5, Lean Lunch 1/5 | 2:14 level 9, maxHp 134.4, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Potato Rain 1/8, Mash Mortar 3/8, Mash Golem 1/8, Sprouting Eyes 1/5, Gravy Heart 1/5, Lean Lunch 2/5.
+- Passive levels first reached: Sprouting Eyes 1 at 0:26; Gravy Heart 1 at 0:58; Lean Lunch 1 at 1:24.
+
+### L5.I8.G3: frozen-fries s38
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 38; 240s; plays the playbook.
+- Outcome: alive after 240.1s (game clock 04:00), health 75/134; damage taken 123 (enemy:aphid 4.762, enemy:sprout-mite 2.558, enemy:compost-maggot 4.017, enemy:crumb-ant 1.432); 1543 kills; level 1 to 14; planner asked 88 times, action model 659; the models saw the game 33 ms late (p90 55); ended with permafrost-fries 1, harvest-moon 1, locked-gatling 5, tater-twirl 1, thick-skin 4, root-network 2.
+- run.timeSec: 240.133
+- run.level: 13
+- run.kills: 1543
+- run.damageBySource: frozen-fries 14843.333, dog:greyhound 1514.766, harvest-moon 4835.259, locked-gatling 10234.239, grok-bot 2831.013, tater-twirl 4642.163, permafrost-fries 5383.125
+- run.damageTakenBySource: enemy:aphid 4.762, enemy:sprout-mite 2.558, enemy:compost-maggot 4.017, enemy:crumb-ant 1.432, Hot oil 26.8, enemy:potato-beetle 8.94, enemy:tomato-leech 7.331, boss:amusing 38.806, boss:beetle-queen 18.132, enemy:fry-fly 5.181, enemy:sand-crab 4.82
+- run.killsBySource: frozen-fries 598, dog:greyhound 70, harvest-moon 169, locked-gatling 332, grok-bot 96, tater-twirl 135, permafrost-fries 143
+- run.evolutions: [{"id":"permafrost-fries","at":224.71666666666667}]
+- run.biomes: ["fry-oil-desert","ketchup-bog","chip-canyons","gutterball-lanes","mash-swamp"]
+- run.dogs: [{"id":"greyhound","at":10.633333333333333},{"id":"retriever","at":83.16666666666667}]
+- run.dogHelp: damage.greyhound 1514.766, hits.greyhound 87, fetched.retriever 266
+- run.distance: 13022.173
+- run.dodgePoints: 1847.174
+- run.dodgeSecond: 240
+- run.dodgeTaken: [90.46046696627482,93.18031696627482,93.18031696627482,93.18031696627482,93.18031696627482,93.18031696627482,97.71340029960815,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,100.43325029960816,110.43432416451762,110.43432416451762,110.43432416451762,114.61986733121476,114.61986733121476,117.33971733121476,117.33971733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,122.77941733121476,90.46046696627482,90.46046696627482,90.46046696627482]
+- run.dodgeSteps: [998.9195333333373,1001.6578666666692,1008.2298666666657,1013.158866666663,1019.7308666666595,1026.302866666656,1031.0127999999868,1035.7227333333176,1037.5847999999833,1044.1567999999797,1045.6902666666456,1052.262266666642,1058.8342666666385,1065.406266666635,1071.9782666666315,1073.2926666666308,1078.1121333332949,1081.6171999999597,1084.3555333332915,1090.927533333288,1097.4995333332845,1104.071533333281,1110.6435333332774,1117.1059999999407,1121.8159333332715,1128.387933333268,1134.9599333332644,1141.531933333261,1148.1039333332574,1154.6759333332539,1161.2479333332503,1167.8199333332468,1174.3919333332433,1180.9639333332398,1185.7833999999038,1192.3553999999003,1197.0653333332311,1201.1180666665623,1206.594733333226,1212.8381333332227,1212.8381333332227,1215.795533333221,1215.795533333221,1219.5196666665524,1225.5439999998825,1225.5439999998825,1229.0490666665473,1235.6210666665438,1242.1930666665403,1248.7650666665368,1255.3370666665332,1261.9090666665297,1268.4810666665262,1275.0530666665227,1281.6250666665192,1288.1970666665156,1294.7690666665121,1301.3410666665086,981.2846666666801,987.8566666666766,994.428666666673]
+- run.curseSince: 12182
+- run.goldEarned: 346.188
+- run.bossChests: 5
+- run.bossesKilled: 2
+- run.elitesKilled: 4
+- run.peakEnemies: 180
+- run.shrinesUsed: 2
+- run.grokBotHelps: 5
+- run.botSwarms: 1
+- run.lootRunnersMet: [1]
+- run.lootRunnersCaught: [1]
+- counters.kills: 1543
+- counters.hits: 3610
+- counters.gems: 579
+- counters.coins: 76
+- counters.shots: 2915
+- counters.hostileShots: 271
+- counters.nearMisses: 13
+- counters.hostileHits: 7
+- shrineTotals.maxHp: 12
+- shrineTotals.magnet: 0.15
+- Gold, spots and chests: gold held at the end 344, spent 0; spots charged and used: Stray Dog 2, Crop Patch 1, Spud Freezer 1; chests seen 6, opened 5.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:08 took Thick Skin 67% over Frying Pan 28%, Butter Streak 5%; 0:23 took Thick Skin 51% over Whisk Vortex 38%, Sprouting Eyes 11%; 0:40 took Frozen Fries 85% over Tot Toss 14%, Golden Fry 1%; 0:45 took Pickup range 60% over Duration 23%, Luck 17%; 0:56 took Harvest Moon 57% over Potato Battery 38%, Spry Sprout 5%; 1:14 took Locked Gatling 50% over Harvest Moon 33%, Reroll 10%, Deep Fryer 7%; 1:15 took Locked Gatling 43% over Frozen Fries 39%, Harvest Moon 9%, Leave 9%; 1:36 took Max HP 77% over Duration 15%, Luck 8%; 1:40 took Frozen Fries 63% over Spud Lob 27%, Reroll 7%, Salt Line 3%; 1:49 took Tater Twirl 54% over Mash Mallet 20%, Reroll 18%, Clean Plate 8%; 2:01 took Thick Skin 59% over Spud Dynamo 30%, Reroll 9%, Hot Sauce 2%; 2:33 took Root Network 54% over Seeker Sprouts 31%, Reroll 8%, Hash Rush 5%, Skip 2%; 2:48 took Thick Skin 71% over Locked Gatling 16%, Reroll 9%, Tater Twirl 3%, Skip 1%; 3:23 took Root Network 45% over Tater Tot Pup 26%, Reroll 14%, Harvest Moon 13%, Skip 2%; 3:43 took Locked Gatling 44% over Reroll 19%, Harvest Moon 16%, Tater Twirl 12%, Skip 9%; 3:58 took Locked Gatling 38% over Broadside 31%, Masher Grip 21%, Reroll 8%, Skip 2%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 5, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 2/8, Harvest Moon 1/8, Thick Skin 2/5 | 1:59 level 8, maxHp 134.4, armor 0, damageMult 1, recovery 0, Frozen Fries 7/8, Harvest Moon 1/8, Locked Gatling 2/8, Tater Twirl 1/8, Thick Skin 2/5 | 2:55 level 11, maxHp 134.4, armor 0, damageMult 1, recovery 0.25, Frozen Fries 7/8, Harvest Moon 1/8, Locked Gatling 2/8, Tater Twirl 1/8, Thick Skin 4/5, Root Network 1/5 | 3:59 level 14, maxHp 134.4, armor 0, damageMult 1, recovery 0.5, Permafrost Fries 1/1, Harvest Moon 1/8, Locked Gatling 5/8, Tater Twirl 1/8, Thick Skin 4/5, Root Network 2/5.
+- Passive levels first reached: Thick Skin 1 at 0:08, 3 at 2:01; Root Network 1 at 2:33.
+
+### L5.I8.G4: frozen-fries s39
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 39; 240s; plays the playbook.
+- Outcome: alive after 240.2s (game clock 04:00), health 8/120; damage taken 253 (enemy:sprout-mite 13.454, enemy:aphid 29.789, enemy:frost-flea 33.995, enemy:potato-beetle 25.249); 1377 kills; level 1 to 15; planner asked 81 times, action model 751; the models saw the game 27 ms late (p90 48); ended with frozen-fries 2, julienne-dash 8, rosti-disc 1, butter-streak 1, peel-lash 1, fry-lance 1, peel-out 1, thick-skin 1, butter-socks 1.
+- run.timeSec: 240.183
+- run.level: 14
+- run.kills: 1377
+- run.damageBySource: frozen-fries 4104.797, julienne-dash 11439.543, rosti-disc 5987.016, grok-bot 241.714, butter-streak 8534.225, peel-lash 4643.684, fry-lance 3739.819
+- run.damageTakenBySource: enemy:sprout-mite 13.454, enemy:aphid 29.789, enemy:frost-flea 33.995, enemy:potato-beetle 25.249, enemy:fry-fly 2.028, enemy:oil-drip 11.219, enemy:snow-mold 50.465, boss:amusing 26.61, enemy:parking-gull 3.264, enemy:crumb-ant 5.433, boss:beetle-queen 16.319, enemy:beetle-brood 19.38, enemy:compost-maggot 6.302, enemy:sand-crab 9.389
+- run.killsBySource: frozen-fries 145, julienne-dash 407, grok-bot 16, rosti-disc 134, butter-streak 352, peel-lash 199, fry-lance 124
+- run.biomes: ["frozen-tundra","chip-canyons","fry-oil-desert","compost-caves"]
+- run.dogs: [{"id":"retriever","at":9.966666666666667}]
+- run.dogHelp: fetched.retriever 422
+- run.distance: 13622.963
+- run.dodgePoints: 1419.778
+- run.dodgeSecond: 240
+- run.dodgeTaken: [135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,135.7827741707922,141.78596168464605,141.78596168464605,144.50581168464606,144.50581168464606,156.5226990642471,156.5226990642471,156.5226990642471,156.5226990642471,174.0549737086379,178.1116390211462,182.20105101075112,182.20105101075112,182.20105101075112,182.20105101075112,184.92090101075112,186.99754067561742,186.99754067561742,210.98600755181008,237.48142348498595,237.48142348498595,240.20127348498593,240.20127348498593,240.20127348498593,240.20127348498593,240.20127348498593,240.20127348498593,240.20127348498593,242.32116797742995,244.42665422644194,252.89528792814548,252.89528792814548,252.89528792814548,252.89528792814548,252.89528792814548,252.89528792814548,252.89528792814548,252.89528792814548,252.89528792814548,252.89528792814548,252.89528792814548,252.89528792814548,252.89528792814548,135.7827741707922,135.7827741707922,135.7827741707922]
+- run.dodgeSteps: [1055.0853333333357,1061.2853333333328,1067.48533333333,1073.685333333327,1079.885333333324,1086.0853333333212,1092.2853333333182,1098.4853333333153,1104.6853333333124,1110.8853333333095,1115.431999999974,1121.6319999999712,1127.8319999999683,1134.0319999999654,1140.2319999999625,1144.1586666666274,1150.3586666666245,1156.5586666666215,1158.211999999954,1159.7619999999533,1165.9619999999504,1172.1619999999475,1174.6626666666139,1178.8579999999474,1184.6239999999452,1189.9869999999437,1195.5669999999418,1201.766999999939,1206.9129999999377,1211.2529999999379,1213.3506666666046,1219.2096666666018,1222.8263333332668,1228.0239999999314,1241.3129999999314,1245.3429999999296,1251.4396666665934,1252.9896666665927,1254.539666666592,1262.3363333332577,1265.332999999923,1267.089666666589,1276.2296666665875,1278.8129999999196,1282.1196666665846,1288.3196666665817,1296.5296666665806,1301.3863333332451,1307.5863333332422,1313.7863333332393,1318.3329999999037,1323.086333333235,1329.286333333232,1332.4896666665638,1342.559666666562,1348.759666666559,1354.9596666665561,1361.1596666665532,1036.4853333333444,1042.6853333333415,1048.8853333333386]
+- run.curseSince: 6824
+- run.goldEarned: 228.213
+- run.bossChests: 2
+- run.bossesKilled: 2
+- run.elitesKilled: 4
+- run.peakEnemies: 183
+- run.grokBotHelps: 6
+- run.lootRunnersMet: [1]
+- counters.kills: 1377
+- counters.hits: 2701
+- counters.gems: 1352
+- counters.coins: 89
+- counters.shots: 1323
+- counters.hostileShots: 190
+- counters.nearMisses: 7
+- counters.hostileHits: 2
+- Gold, spots and chests: gold held at the end 228, spent 0; spots charged and used: Crop Patch 2, Stray Dog 1, Tater Lantern 1; chests seen 6, opened 2.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:08 took Julienne Dash 78% over Chives 20%, Clean Plate 2%; 0:12 took Peel Out 46% over Butter Pat 29%, Gem Sling 25%; 0:23 took Julienne Dash 60% over Fry Knives 29%, Butter Pat 11%; 0:35 took Thick Skin 47% over Whisk Vortex 43%, Spud Lob 10%; 0:54 took Rösti Disc 42% over Sour Cream 41%, Gravy Boat 17%; 1:16 took Butter Streak 76% over Gravy Heart 20%, Hot Sauce 4%; 1:25 took Julienne Dash 66% over Thick Skin 19%, Reroll 10%, Butter Streak 5%; 1:53 took Butter Socks 52% over Peel Out 19%, Reroll 15%, Butter Streak 12%, Skip 2%; 2:10 took Peel Lash 32% over Frozen Fries 26%, Butter Streak 21%, Reroll 18%, Skip 3%; 2:38 took Fry Lance 74% over Butter Streak 13%, Reroll 10%, Rösti Disc 2%, Skip 1%; 3:22 took Frozen Fries 35% over Peel Out 34%, Lean Lunch 17%, Reroll 12%, Skip 2%; 3:35 took Julienne Dash 88% over Reroll 7%, Butter Streak 3%, Rösti Disc 1%, Skip 1%; 3:39 took Julienne Dash 75% over Butter Socks 15%, Reroll 7%, Skip 2%, Peel Lash 1%; 3:55 took Julienne Dash 82% over Thick Skin 11%, Reroll 5%, Tater Trot 1%, Skip 1%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 6, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Julienne Dash 2/8, Rösti Disc 1/8, Peel Out 1/5, Thick Skin 1/5 | 1:59 level 9, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Julienne Dash 5/8, Rösti Disc 1/8, Butter Streak 1/8, Peel Out 1/5, Thick Skin 1/5, Butter Socks 1/5 | 2:59 level 11, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Julienne Dash 5/8, Rösti Disc 1/8, Butter Streak 1/8, Peel Lash 1/8, Fry Lance 1/8, Peel Out 1/5, Thick Skin 1/5, Butter Socks 1/5 | 3:59 level 15, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 2/8, Julienne Dash 8/8, Rösti Disc 1/8, Butter Streak 1/8, Peel Lash 1/8, Fry Lance 1/8, Peel Out 1/5, Thick Skin 1/5, Butter Socks 1/5.
+- Passive levels first reached: Peel Out 1 at 0:12; Thick Skin 1 at 0:35; Butter Socks 1 at 1:53.
+
+### L5.I8.G5: frozen-fries s40
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 40; 240s; plays the playbook.
+- Outcome: died after 201.2s (game clock 03:21); damage taken 242 (enemy:aphid 10.445, enemy:sprout-mite 13.806, enemy:potato-beetle 42.091, enemy:oil-drip 18.88); 1239 kills; level 1 to 13; planner asked 71 times, action model 495; the models saw the game 28 ms late (p90 48); ended with frozen-fries 1, tailgate-fries 1, mash-mortar 4, spud-lob 1, locked-gatling 2, grab-bag 1, packed-pan 1, big-bowl 2.
+- run.timeSec: 201.167
+- run.level: 12
+- run.kills: 1239
+- run.damageBySource: frozen-fries 2753.217, tailgate-fries 3788.735, mash-mortar 7481.513, spud-lob 3653.957, locked-gatling 8390.309, grab-bag 1781.667, grok-bot 344.518
+- run.damageTakenBySource: enemy:aphid 10.445, enemy:sprout-mite 13.806, enemy:potato-beetle 42.091, enemy:oil-drip 18.88, Hot oil 5.667, enemy:frost-flea 12.794, boss:amusing 14.414, enemy:fry-fly 9.273, enemy:crumb-ant 21.876, enemy:snow-mold 62.657, enemy:sand-crab 13.21, enemy:beetle-brood 13.733, boss:beetle-queen 2.72
+- run.killsBySource: frozen-fries 119, tailgate-fries 137, mash-mortar 339, spud-lob 210, locked-gatling 369, grab-bag 61, grok-bot 4
+- run.biomes: ["frozen-tundra","compost-caves","fry-oil-desert","chip-canyons"]
+- run.distance: 11761.043
+- run.dodgePoints: 1404.91
+- run.dodgeSecond: 201
+- run.dodgeTaken: [130.58204616563972,130.58204616563972,130.58204616563972,140.19675834104618,140.19675834104618,144.08497431509159,171.6116395917389,205.6912754395331,208.4111254395331,212.31501311566137,212.31501311566137,218.22072832011025,218.22072832011025,218.22072832011025,218.22072832011025,218.22072832011025,220.22553767556215,234.24451803096923,238.2190852051928,61.11548136277074,61.11548136277074,61.11548136277074,61.11548136277074,61.11548136277074,64.04519614870287,64.04519614870287,64.04519614870287,65.81389106797099,67.59084695051014,67.59084695051014,72.34619890871686,72.34619890871686,72.34619890871686,72.34619890871686,72.34619890871686,72.34619890871686,74.15710873053504,97.70316254184289,121.3124259121555,124.91287078853725,124.91287078853725,124.91287078853725,124.91287078853725,124.91287078853725,124.91287078853725,124.91287078853725,126.76713134784794,126.76713134784794,126.76713134784794,126.76713134784794,126.76713134784794,128.64647916511888,128.64647916511888,128.64647916511888,128.64647916511888,128.64647916511888,128.64647916511888,128.64647916511888,128.64647916511888,128.64647916511888,128.64647916511888]
+- run.dodgeSteps: [1055.5809999999499,1061.780999999947,1067.980999999944,1074.1809999999412,1080.3809999999382,1086.5809999999353,1092.7809999999324,1098.9809999999295,1106.984333333262,1113.184333333259,1119.384333333256,1125.5843333332532,1131.7843333332503,1141.8543333332484,1148.0543333332455,1154.2543333332426,1160.4543333332397,1166.6543333332368,1172.0609999999015,826.3876666667242,832.5876666667212,838.7876666667183,844.9876666667154,851.1876666667125,857.3876666667096,863.5876666667067,869.7876666667038,871.8543333333695,877.9510000000333,884.1510000000304,890.3510000000275,896.5510000000246,902.7510000000217,908.9510000000188,913.4976666666832,916.3910000000153,922.5910000000124,928.7910000000095,934.9910000000066,941.1910000000037,947.3910000000008,953.5909999999978,957.5176666666626,958.5509999999955,960.927666666661,966.3009999999919,970.6409999999898,975.3943333333209,981.594333333318,987.7943333333151,992.0309999999797,998.2309999999768,1001.2276666666421,1007.4276666666392,1013.6276666666363,1019.8276666666334,1024.5809999999644,1030.7809999999615,1036.9809999999586,1043.1809999999557,1049.3809999999528]
+- run.curseSince: 11965
+- run.killer: "enemy:fry-fly"
+- run.goldEarned: 99.96
+- run.bossesKilled: 1
+- run.elitesKilled: 2
+- run.peakEnemies: 173
+- run.grokBotHelps: 4
+- run.lootRunnersMet: [1]
+- counters.kills: 1239
+- counters.hits: 3479
+- counters.gems: 463
+- counters.coins: 39
+- counters.shots: 3025
+- counters.hostileShots: 254
+- counters.nearMisses: 18
+- counters.hostileHits: 4
+- Gold, spots and chests: gold held at the end 99, spent 0; spots charged and used: Crop Patch 1; chests seen 3, opened 0.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:11 took Tailgate Fries 71% over Starch Bolt 19%, Potato Magnet 10%; 0:41 took Mash Mortar 84% over Hash Rush 11%, Salt Shaker 5%; 0:57 took Spud Lob 60% over Frozen Fries 34%, Hearty Helping 6%; 1:07 took Locked Gatling 62% over Sprouting Eyes 24%, Root Spikes 14%; 1:29 took Mash Mortar 60% over Mezzaluna 24%, Small Fry 16%; 2:12 took Mash Mortar 70% over Locked Gatling 15%, Tater Trot 12%, Skip 3%; 2:31 took Packed Pan 54% over Tailgate Fries 31%, Potato Magnet 11%, Skip 4%; 2:41 took Grab Bag 60% over Mash Mortar 37%, Tailgate Fries 2%, Skip 1%; 3:09 took Big Bowl 58% over Grab Bag 25%, Tailgate Fries 13%, Skip 4%; 3:18 took Locked Gatling 63% over Lean Lunch 23%, Skip 10%, Golden Fry 4%; 3:18 took Mash Mortar 85% over Frozen Fries 7%, Grab Bag 4%, Skip 4%; 3:19 took Big Bowl 73% over Frozen Fries 15%, Grab Bag 7%, Skip 5%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 4, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Tailgate Fries 1/8, Mash Mortar 1/8, Spud Lob 1/8 | 1:59 level 6, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Tailgate Fries 1/8, Mash Mortar 2/8, Spud Lob 1/8, Locked Gatling 1/8 | 2:57 level 9, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Tailgate Fries 1/8, Mash Mortar 3/8, Spud Lob 1/8, Locked Gatling 1/8, Grab Bag 1/8, Packed Pan 1/5 | 3:21 level 13, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Tailgate Fries 1/8, Mash Mortar 4/8, Spud Lob 1/8, Locked Gatling 2/8, Grab Bag 1/8, Packed Pan 1/5, Big Bowl 2/5.
+- Passive levels first reached: Packed Pan 1 at 2:31; Big Bowl 1 at 3:09.
+
+### L5.I8.G6: frozen-fries s41
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 41; 240s; plays the playbook.
+- Outcome: died after 135.3s (game clock 02:15); damage taken 146 (enemy:sprout-mite 2.431, Spore vent 6.533, enemy:tomato-leech 44.43, enemy:bog-slime 3.392); 351 kills; level 1 to 7; planner asked 50 times, action model 305; the models saw the game 30 ms late (p90 48); ended with frozen-fries 2, starch-bolt 1, mash-snowball 2, potato-rain 1, peel-out 1.
+- run.timeSec: 135.317
+- run.level: 6
+- run.kills: 351
+- run.damageBySource: frozen-fries 2404.204, starch-bolt 2766.766, mash-snowball 2286.23, potato-rain 523.858, grok-bot 230.324
+- run.damageTakenBySource: enemy:sprout-mite 2.431, Spore vent 6.533, enemy:tomato-leech 44.43, enemy:bog-slime 3.392, enemy:garden-slug 2.841, boss:amusing 80.976, enemy:swarm-fly 2.31, enemy:crumb-ant 2.825
+- run.killsBySource: frozen-fries 97, starch-bolt 140, mash-snowball 81, potato-rain 28, grok-bot 5
+- run.biomes: ["compost-caves","frozen-tundra","chip-canyons","ketchup-bog","mash-swamp"]
+- run.distance: 7157.18
+- run.dodgePoints: 1106.885
+- run.dodgeSecond: 135
+- run.dodgeTaken: [48.89478619379749,51.89387908997236,57.89206488232208,84.1947154591284,84.1947154591284,84.1947154591284,84.1947154591284,84.1947154591284,84.1947154591284,84.1947154591284,84.1947154591284,84.1947154591284,96.19108704382785,125.04667978527485,7.681499276558809,7.681499276558809,7.681499276558809,7.681499276558809,7.681499276558809,7.681499276558809,7.681499276558809,7.681499276558809,7.681499276558809,7.681499276558809,7.681499276558809,7.681499276558809,7.681499276558809,7.681499276558809,7.681499276558809,11.56829347945736,28.747041579035663,28.747041579035663,28.747041579035663,28.747041579035663,36.520629984832766,44.294218390629865,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,47.13483699418692,48.89478619379749,48.89478619379749,48.89478619379749,48.89478619379749,48.89478619379749,48.89478619379749,48.89478619379749]
+- run.dodgeSteps: [632.0951666667322,638.2951666667293,644.4951666667264,654.5651666667237,660.765166666725,666.9651666667276,670.3751666667292,674.8546666667312,681.0546666667337,687.2546666667363,697.3246666667382,701.3546666667398,707.5546666667424,713.7546666667449,410.7913333333246,410.7913333333246,410.7913333333246,410.7913333333246,410.7913333333246,411.30799999999147,417.507999999994,423.70799999999656,429.9079999999991,436.10800000000165,441.58466666667056,441.58466666667056,441.58466666667056,441.58466666667056,441.58466666667056,441.58466666667056,447.474666666673,453.67466666667553,459.8746666666781,466.0746666666806,472.2746666666832,478.4746666666857,484.67466666668827,490.8746666666908,495.83466666669284,501.4146666666951,507.61466666669764,513.8146666667002,520.0146666667027,526.2146666667053,532.4146666667078,538.6146666667104,544.8146666667129,551.0146666667155,557.214666666714,563.4146666667162,569.6146666667188,575.8146666667183,582.0146666667175,588.2146666667193,592.6011666667212,598.8011666667237,605.0011666667262,608.550666666728,613.4951666667301,619.6951666667316,625.8951666667325]
+- run.curseSince: 5723
+- run.killer: "boss:amusing"
+- run.goldEarned: 42
+- run.elitesKilled: 2
+- run.peakEnemies: 99
+- run.shrinesUsed: 3
+- run.grokBotHelps: 3
+- counters.kills: 351
+- counters.hits: 635
+- counters.gems: 108
+- counters.coins: 28
+- counters.shots: 304
+- counters.hostileShots: 83
+- counters.nearMisses: 8
+- counters.hostileHits: 3
+- shrineTotals.area: 0.072
+- shrineTotals.maxHp: 12
+- shrineTotals.armor: 12
+- Gold, spots and chests: gold held at the end 41, spent 0; spots charged and used: Crop Patch 2; chests seen 2, opened 0.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:14 took Starch Bolt 47% over Hash Rush 32%, Mash Mallet 21%; 0:25 took Mash Snowball 82% over Starch Bolt 12%, Slow Cooker 6%; 0:35 took Frozen Fries 53% over Salt Line 32%, Mezzaluna 15%; 0:53 took Armor 96% over Gold gain 2%, Move speed 2%; 1:19 took Max HP 80% over Luck 11%, Pickup range 9%; 1:22 took Potato Rain 43% over Skipping Cannonball 37%, Starch Bolt 20%; 1:29 took Area 70% over Gold gain 25%, Luck 5%; 1:35 took Peel Out 60% over Fry Knives 21%, Peel Phantom 19%; 1:36 took Mash Snowball 56% over Gem Sling 29%, Reroll 11%, Rotten Spud 4%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 4, maxHp 120, armor 12, damageMult 1, recovery 0, Frozen Fries 2/8, Starch Bolt 1/8, Mash Snowball 1/8 | 1:59 level 7, maxHp 134.4, armor 12, damageMult 1, recovery 0, Frozen Fries 2/8, Starch Bolt 1/8, Mash Snowball 2/8, Potato Rain 1/8, Peel Out 1/5 | 2:15 level 7, maxHp 134.4, armor 12, damageMult 1, recovery 0, Frozen Fries 2/8, Starch Bolt 1/8, Mash Snowball 2/8, Potato Rain 1/8, Peel Out 1/5.
+- Passive levels first reached: Peel Out 1 at 1:35.
+
+### L5.I8.G7: frozen-fries s42
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 42; 240s; plays the playbook.
+- Outcome: alive after 240.3s (game clock 04:00), health 120/120; damage taken 102 (enemy:sprout-mite 1.14, enemy:aphid 1.234, enemy:wireworm-larva 29.483, enemy:potato-beetle 21.06); 2049 kills; level 1 to 16; planner asked 93 times, action model 453; the models saw the game 34 ms late (p90 58); ended with permafrost-fries 1, peeler 1, tater-twister 1, mash-wave 6, tater-minigun 1, afterburner-fries 1, thick-skin 1, masher-grip 1, salt-shaker 1, big-bowl 1.
+- run.timeSec: 240.25
+- run.level: 15
+- run.kills: 2049
+- run.damageBySource: frozen-fries 3042.847, peeler 864.3, tater-twirl 3677.857, dog:dalmatian 809.672, mash-wave 9549.682, locked-gatling 6965.287, permafrost-fries 27422.162, afterburner-fries 30.042, grok-bot 1742.83, tater-minigun 4549.195, tater-twister 2691.717
+- run.damageTakenBySource: enemy:sprout-mite 1.14, enemy:aphid 1.234, enemy:wireworm-larva 29.483, enemy:potato-beetle 21.06, Brambles 2, enemy:frost-flea 4.666, enemy:snow-mold 6.214, boss:amusing 13.305, enemy:fry-fly 8.468, boss:beetle-queen 2.72, enemy:crumb-ant 1.936, Hot oil 10.167
+- run.killsBySource: frozen-fries 179, peeler 13, tater-twirl 101, dog:dalmatian 44, mash-wave 337, locked-gatling 250, permafrost-fries 803, afterburner-fries 1, grok-bot 65, tater-minigun 150, tater-twister 106
+- run.evolutions: [{"id":"permafrost-fries","at":128.06666666666666},{"id":"tater-minigun","at":195.73333333333332},{"id":"tater-twister","at":209.98333333333332}]
+- run.biomes: ["peel-forest","frozen-tundra","chip-canyons","fry-oil-desert"]
+- run.dogs: [{"id":"retriever","at":9},{"id":"dalmatian","at":20.016666666666666}]
+- run.dogHelp: damage.dalmatian 809.672, hits.dalmatian 64, fetched.retriever 768
+- run.distance: 12962.497
+- run.dodgePoints: 1925.756
+- run.dodgeSecond: 240
+- run.dodgeTaken: [84.13952053334279,84.13952053334279,84.13952053334279,86.85937053334278,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,88.79581488471715,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,92.22708590230049,98.06041923563382,98.06041923563382,98.06041923563382,98.06041923563382,98.06041923563382,102.39375256896716,102.39375256896716,102.39375256896716,102.39375256896716,84.13952053334279,84.13952053334279,84.13952053334279]
+- run.dodgeSteps: [985.1129999998863,991.3129999998833,997.5129999998804,1003.7129999998775,1009.9129999998746,1016.1129999998717,1022.3129999998688,1026.7563333332,1031.3029999998646,1037.5029999998617,1043.7029999998588,1049.9029999998559,1053.5196666665208,1057.7563333331855,1063.9563333331826,1070.1563333331796,1076.3563333331767,1082.5563333331738,1088.756333333171,1094.956333333168,1101.156333333165,1107.3563333331622,1113.5563333331593,1115.0029999998253,1118.8263333331568,1125.0263333331538,1131.1229999998177,1131.1229999998177,1131.7429999998174,1137.9429999998144,1142.2829999998125,1147.0363333331436,1153.2363333331407,1159.4363333331378,1165.6363333331349,1171.836333333132,1178.036333333129,1184.2363333331261,1186.406333333125,1189.6096666664569,1195.809666666454,1202.009666666451,1208.2096666664481,1214.4096666664452,1220.6096666664423,1226.8096666664394,1227.429666666439,1232.6996666664368,1238.8996666664339,1245.099666666431,1251.299666666428,1257.4996666664251,1263.6996666664222,1269.8996666664193,1276.0996666664164,1282.2996666664135,1288.4996666664106,1294.6996666664077,971.9896666665591,977.5696666665565,978.9129999998892]
+- run.curseSince: 14001
+- run.goldEarned: 869.428
+- run.goldSpent: 30
+- run.bossChests: 11
+- run.paidChests: 1
+- run.bossesKilled: 2
+- run.elitesKilled: 12
+- run.peakEnemies: 133
+- run.grokBotHelps: 4
+- run.botSwarms: 1
+- run.lootRunnersMet: [1]
+- run.lootRunnersCaught: [1]
+- counters.kills: 2049
+- counters.hits: 3197
+- counters.gems: 1365
+- counters.coins: 101
+- counters.shots: 3912
+- counters.hostileShots: 61
+- counters.nearMisses: 7
+- counters.hostileHits: 3
+- Gold, spots and chests: gold held at the end 838, spent 29 (Potato Crate 29); spots charged and used: Stray Dog 2, Crop Patch 2, Potato Crate 1, Beetle Nest 1; chests seen 14, opened 11.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:10 took Peeler 65% over Butter Socks 24%, Masher Grip 11%; 0:18 took Tater Twirl 60% over Butter Pat 33%, Mash Finisher 7%; 0:24 took Mash Wave 65% over Tater Twirl 27%, Slow Cooker 8%; 0:47 took Frozen Fries 47% over Spud Cannon 40%, Chip Shuriken 13%; 0:47 took Frozen Fries 56% over Hot Sauce 20%, Reroll 17%, Mash Wave 7%; 1:21 took Locked Gatling 74% over Reroll 11%, Gravy Boat 8%, Mash Mallet 7%; 1:33 took Afterburner Fries 42% over Thick Skin 29%, Tater Twirl 18%, Reroll 11%; 1:37 took Frozen Fries 72% over Reroll 13%, Tater Twirl 11%, Peeler 4%; 1:52 took Thick Skin 44% over Locked Gatling 38%, Reroll 13%, Peeler 5%; 2:06 took Frozen Fries 68% over Thick Skin 26%, Reroll 5%, Bacon Bits 1%; 2:14 took Masher Grip 43% over Thick Skin 33%, Tater Twirl 14%, Reroll 10%; 2:35 took Locked Gatling 81% over Reroll 9%, Thick Skin 6%, Mash Wave 4%; 3:08 took Tater Twirl 44% over Reroll 22%, Thick Skin 19%, Hearty Helping 10%, Skip 5%; 3:29 took Salt Shaker 40% over Mash Wave 20%, Thick Skin 19%, Reroll 19%, Skip 2%; 3:53 took Big Bowl 45% over Masher Grip 25%, Reroll 15%, Afterburner Fries 13%, Skip 2%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 6, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 3/8, Peeler 1/8, Tater Twirl 1/8, Mash Wave 1/8 | 1:59 level 10, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 7/8, Peeler 1/8, Tater Twirl 1/8, Mash Wave 1/8, Locked Gatling 1/8, Afterburner Fries 1/8, Thick Skin 1/5 | 2:59 level 13, maxHp 120, armor 0, damageMult 1, recovery 0, Permafrost Fries 1/1, Peeler 1/8, Tater Twirl 1/8, Mash Wave 1/8, Locked Gatling 5/8, Afterburner Fries 1/8, Thick Skin 1/5, Masher Grip 1/5 | 3:59 level 16, maxHp 120, armor 0, damageMult 1, recovery 0, Permafrost Fries 1/1, Peeler 1/8, Tater Twister 1/1, Mash Wave 6/8, Tater Minigun 1/1, Afterburner Fries 1/8, Thick Skin 1/5, Masher Grip 1/5, Salt Shaker 1/5, Big Bowl 1/5.
+- Passive levels first reached: Thick Skin 1 at 1:52; Masher Grip 1 at 2:14; Salt Shaker 1 at 3:29; Big Bowl 1 at 3:53.
+
+### L5.I8.G8: frozen-fries s43
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 43; 240s; plays the playbook.
+- Outcome: alive after 240s (game clock 04:00), health 50/130; damage taken 133 (enemy:sprout-mite 3.863, enemy:aphid 3.623, enemy:frost-flea 1.278, enemy:fry-fly 12.667); 1594 kills; level 1 to 14; planner asked 90 times, action model 445; the models saw the game 32 ms late (p90 80); ended with frozen-fries 1, tater-twirl 1, skipping-cannonball 6, starch-chain 1, mash-mortar 1, small-fry 1, salt-shaker 1, thick-skin 1, sprouting-eyes 2, four-eyed-spud 1.
+- run.timeSec: 240.033
+- run.level: 13
+- run.kills: 1594
+- run.damageBySource: frozen-fries 3503.552, tater-twirl 6873.243, dog:greyhound 1891.179, skipping-cannonball 6518.447, grok-bot 795.421, starch-chain 9019.142, mash-mortar 10747.353, small-fry 3600.363, thorny-jacket 48, dog:terrier 1195.628
+- run.damageTakenBySource: enemy:sprout-mite 3.863, enemy:aphid 3.623, enemy:frost-flea 1.278, enemy:fry-fly 12.667, enemy:crumb-ant 1.486, enemy:snow-mold 21.706, boss:amusing 57.655, enemy:beetle-brood 4.578, boss:beetle-queen 16.319, Spore vent 9.867
+- run.killsBySource: frozen-fries 138, tater-twirl 247, dog:greyhound 76, skipping-cannonball 239, grok-bot 49, starch-chain 308, mash-mortar 372, small-fry 110, dog:terrier 55
+- run.biomes: ["frozen-tundra","fry-oil-desert","chip-canyons","compost-caves","mash-swamp"]
+- run.dogs: [{"id":"greyhound","at":30.9},{"id":"newfoundland","at":58.6},{"id":"terrier","at":148.08333333333334}]
+- run.dogHelp: damage.greyhound 1891.179, damage.terrier 1195.628, hits.greyhound 105, hits.terrier 81, blocked.newfoundland 11
+- run.distance: 12926.1
+- run.dodgePoints: 1788.367
+- run.dodgeSecond: 240
+- run.dodgeTaken: [83.62748704344338,88.2050126778399,88.2050126778399,88.2050126778399,88.2050126778399,88.2050126778399,88.2050126778399,88.2050126778399,88.2050126778399,88.2050126778399,88.2050126778399,88.2050126778399,88.2050126778399,90.9248626778399,90.9248626778399,90.9248626778399,101.67474601117323,103.27474601117322,107.5414126778399,132.3745126778399,132.3745126778399,132.3745126778399,132.3745126778399,132.3745126778399,132.3745126778399,132.3745126778399,132.3745126778399,132.3745126778399,132.3745126778399,132.3745126778399,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,133.04117934450656,83.62748704344338,83.62748704344338,83.62748704344338]
+- run.dodgeSteps: [1024.2375199999901,1028.0711866666547,1034.6431866666512,1041.2151866666477,1047.7871866666442,1054.3591866666407,1059.8468066666405,1065.1044066666414,1070.5263066666416,1077.098306666638,1083.6703066666346,1090.242306666631,1096.8143066666275,1103.386306666624,1109.9583066666205,1116.530306666617,1123.1023066666135,1129.67430666661,1136.2463066666064,1142.818306666603,1150.575706666602,1152.7663733332674,1157.1477066665984,1161.8576399999292,1167.9915066665926,1173.358639999923,1175.5493066665886,1182.121306666585,1189.2215066665844,1189.2215066665844,1195.3553733332478,1199.846239999912,1201.7083066665778,1208.2803066665742,1212.2235066665721,1217.8097066665691,1220.0003733332346,1221.8624399999003,1225.1484399998985,1231.720439999895,1238.2924399998915,1244.1196133332219,1244.3605866665553,1249.8482066665533,1256.4202066665498,1257.4826799998832,1257.4826799998832,1257.4826799998832,1257.4826799998832,1259.892413333217,1262.0009299998842,1263.868473333218,1267.433783333217,1274.0057833332135,1280.57778333321,1284.959116666541,1290.216716666538,1292.4895333332047,1004.5215200000006,1011.093519999997,1017.6655199999935]
+- run.curseSince: 12036
+- run.goldEarned: 246.705
+- run.goldSpent: 30
+- run.bossChests: 2
+- run.paidChests: 1
+- run.bossesKilled: 2
+- run.elitesKilled: 4
+- run.peakEnemies: 179
+- run.shrinesUsed: 2
+- run.grokBotHelps: 5
+- run.botSwarms: 1
+- run.lootRunnersMet: [1]
+- counters.kills: 1594
+- counters.hits: 3643
+- counters.gems: 1081
+- counters.coins: 84
+- counters.shots: 1318
+- counters.hostileShots: 189
+- counters.nearMisses: 4
+- counters.hostileHits: 3
+- shrineTotals.magnet: 0.255
+- shrineTotals.growth: 0.072
+- Gold, spots and chests: gold held at the end 216, spent 30 (Stray Dog 30); spots charged and used: Stray Dog 3, Crop Patch 2, Tater Lantern 1; chests seen 6, opened 2.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:11 took Tater Twirl 53% over Tailgate Fries 28%, Slow Cooker 19%; 0:22 took Salt Shaker 57% over Potato Rain 35%, Sprout Satellites 8%; 0:30 took Thick Skin 68% over Butter Socks 21%, Spud Sneakers 11%; 0:48 took Skipping Cannonball 69% over Hash Rush 25%, Spud Dice 6%; 1:15 took Skipping Cannonball 51% over Salt Shaker 32%, Salt Line 17%; 1:26 took Starch Chain 53% over Skipping Cannonball 32%, Reroll 8%, Salt Shaker 7%; 1:52 took Mash Mortar 71% over Packed Pan 12%, Grab Bag 9%, Reroll 8%; 2:14 took Small Fry 40% over Sprouting Eyes 31%, Lean Lunch 22%, Reroll 7%; 2:23 took Sprouting Eyes 38% over Thick Skin 36%, Salt Shaker 18%, Reroll 8%; 2:43 took XP gain 94% over Move speed 4%, Luck 2%; 2:46 took Skipping Cannonball 79% over Thick Skin 8%, Reroll 7%, Starch Chain 6%; 2:53 took Pickup range 55% over Armor 29%, XP gain 16%; 3:17 took Four-Eyed Spud 51% over Butter Socks 24%, Reroll 13%, Spry Sprout 9%, Skip 3%; 3:20 took Sprouting Eyes 45% over Tater Twirl 20%, Reroll 17%, Small Fry 16%, Skip 2%; 3:23 took Skipping Cannonball 60% over Sprouting Eyes 21%, Reroll 10%, Hot Start 8%, Skip 1%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:58 level 5, maxHp 129.6, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Tater Twirl 1/8, Skipping Cannonball 1/8, Salt Shaker 1/5, Thick Skin 1/5 | 2:00 level 8, maxHp 129.6, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Tater Twirl 1/8, Skipping Cannonball 3/8, Starch Chain 1/8, Mash Mortar 1/8, Salt Shaker 1/5, Thick Skin 1/5 | 3:00 level 11, maxHp 129.6, armor 0, damageMult 1.03, recovery 0, Frozen Fries 1/8, Tater Twirl 1/8, Skipping Cannonball 5/8, Starch Chain 1/8, Mash Mortar 1/8, Small Fry 1/8, Salt Shaker 1/5, Thick Skin 1/5, Sprouting Eyes 1/5 | 3:59 level 14, maxHp 129.6, armor 0, damageMult 1.03, recovery 0, Frozen Fries 1/8, Tater Twirl 1/8, Skipping Cannonball 6/8, Starch Chain 1/8, Mash Mortar 1/8, Small Fry 1/8, Salt Shaker 1/5, Thick Skin 1/5, Sprouting Eyes 2/5, Four-Eyed Spud 1/5.
+- Passive levels first reached: Salt Shaker 1 at 0:22; Thick Skin 1 at 0:30; Sprouting Eyes 1 at 2:23; Four-Eyed Spud 1 at 3:17.
+
+### L5.I8.G9: frozen-fries s44
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 44; 240s; plays the playbook.
+- Outcome: died after 131.8s (game clock 02:11); damage taken 140 (enemy:potato-beetle 2.28, enemy:crumb-ant 13.324, enemy:bog-slime 9.761, enemy:ketchup-drop 11.217); 158 kills; level 1 to 4; planner asked 40 times, action model 371; the models saw the game 27 ms late (p90 48); ended with frozen-fries 1, reset-button 4.
+- run.timeSec: 131.817
+- run.level: 3
+- run.kills: 158
+- run.damageBySource: frozen-fries 1766.319, grok-bot 112.131, reset-button 1877.887
+- run.damageTakenBySource: enemy:potato-beetle 2.28, enemy:crumb-ant 13.324, enemy:bog-slime 9.761, enemy:ketchup-drop 11.217, enemy:aphid 1.243, enemy:sprout-mite 1.316, Hot oil 33.733, enemy:tomato-leech 15.118, enemy:garden-slug 3.257, enemy:swarm-fly 13.859, boss:amusing 28.828, enemy:wireworm-larva 6.46
+- run.killsBySource: frozen-fries 78, grok-bot 10, reset-button 70
+- run.biomes: ["chip-canyons","fry-oil-desert","ketchup-bog","mash-swamp","peel-forest"]
+- run.distance: 7476.168
+- run.dodgePoints: 991.064
+- run.dodgeSecond: 131
+- run.dodgeTaken: [59.29946910625661,67.61513577292328,73.15891355070106,73.15891355070106,73.15891355070106,73.15891355070106,73.15891355070106,73.15891355070106,75.37642466181217,86.4104829798567,16.9832906781395,16.9832906781395,16.9832906781395,16.9832906781395,23.516624011472842,36.01398983803546,45.50909534451425,51.375762011180896,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661,59.29946910625661]
+- run.dodgeSteps: [690.1479999999998,696.347999999999,702.5479999999986,708.748000000001,713.925,720.124999999997,726.3249999999994,732.4784999999983,736.3535000000002,742.5534999999979,385.09233333332526,391.2923333333251,397.4923333333249,403.6923333333247,409.8923333333245,416.09233333332156,422.29233333331865,428.49233333331574,434.69233333331476,440.8923333333131,444.5813333333143,447.26799999997974,453.46799999997694,459.66799999997403,465.8679999999711,472.0679999999684,478.2679999999664,484.4679999999689,490.6679999999702,496.86799999997277,503.0679999999753,509.26799999997786,515.4679999999782,521.6679999999794,527.8679999999806,534.0679999999822,540.2679999999793,545.0213333333143,545.0213333333143,549.8779999999803,556.0779999999802,562.2779999999773,568.4779999999757,574.6779999999729,584.7479999999747,590.9479999999718,597.1479999999729,603.3479999999738,609.5479999999764,615.7479999999789,621.9479999999814,628.147999999984,634.3479999999838,640.5479999999864,646.7479999999889,652.9479999999915,659.147999999994,665.3479999999953,671.5479999999978,677.7480000000004,683.9480000000001]
+- run.curseSince: 4208
+- run.killer: "boss:amusing"
+- run.goldEarned: 31.78
+- run.bossChests: 1
+- run.elitesKilled: 2
+- run.peakEnemies: 99
+- run.shrinesUsed: 1
+- run.grokBotHelps: 3
+- counters.kills: 158
+- counters.hits: 310
+- counters.gems: 33
+- counters.coins: 3
+- counters.shots: 170
+- counters.hostileShots: 70
+- counters.nearMisses: 3
+- counters.hostileHits: 5
+- shrineTotals.maxHp: 12
+- Gold, spots and chests: gold held at the end 31, spent 0; spots charged and used: Tater Lantern 1; chests seen 2, opened 1.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:28 took Reset Button 81% over Frozen Fries 17%, Hot Sauce 2%; 0:44 took Reset Button 65% over Tailgate Fries 23%, Frozen Fries 12%; 1:10 took Max HP 55% over Damage 23%, XP gain 22%; 1:36 took Reset Button 69% over Peel Phantom 18%, Chives 13%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 0:59 level 3, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Reset Button 2/8 | 1:59 level 4, maxHp 134.4, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Reset Button 4/8 | 2:11 level 4, maxHp 134.4, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Reset Button 4/8.
+
+### L5.I8.G10: frozen-fries s45
+
+- Start: a fresh game on Nightmare 1 with frozen-fries, seed 45; 240s; plays the playbook.
+- Outcome: alive after 240.2s (game clock 04:00), health 120/120; damage taken 100 (enemy:sprout-mite 3.428, Spore vent 9.2, Hot oil 26.8, boss:amusing 13.305); 1750 kills; level 1 to 14; planner asked 89 times, action model 509; the models saw the game 36 ms late (p90 139); ended with frozen-fries 1, spud-cannon 1, mash-mortar 4, wildfire-roast 1, whisk-vortex 1, small-fry 1, thick-skin 1, big-bowl 3.
+- run.timeSec: 240.2
+- run.level: 13
+- run.kills: 1750
+- run.damageBySource: frozen-fries 2795.502, spud-cannon 4475.246, mash-mortar 11651.8, hot-streak 14806.666, grok-bot 395.753, whisk-vortex 12266.793, small-fry 1819.311, alex 1246.966, wildfire-roast 7832.216
+- run.damageTakenBySource: enemy:sprout-mite 3.428, Spore vent 9.2, Hot oil 26.8, boss:amusing 13.305, enemy:lint-bunny 6.689, enemy:crumb-ant 1.685, enemy:sock-pile 3.364, enemy:sand-crab 4.07, boss:beetle-queen 19.039, enemy:wireworm-larva 4.121, Brambles 3.7, enemy:garden-slug 4.959
+- run.killsBySource: frozen-fries 59, spud-cannon 168, mash-mortar 377, hot-streak 522, grok-bot 11, whisk-vortex 383, small-fry 20, alex 48, wildfire-roast 162
+- run.evolutions: [{"id":"wildfire-roast","at":227.91666666666666}]
+- run.biomes: ["ketchup-bog","fry-oil-desert","compost-caves","chip-canyons","coin-laundromat","mash-swamp","peel-forest"]
+- run.dogs: [{"id":"collie","at":167.31666666666666}]
+- run.dogHelp: pushed.collie 30
+- run.distance: 13771.117
+- run.dodgePoints: 1952.825
+- run.dodgeSecond: 240
+- run.dodgeTaken: [68.40746181296976,71.12731181296975,71.12731181296975,71.12731181296975,71.12731181296975,71.12731181296975,71.12731181296975,73.84716181296976,73.84716181296976,73.84716181296976,73.84716181296976,73.84716181296976,73.84716181296976,76.56701181296975,76.56701181296975,76.56701181296975,76.56701181296975,76.70034514630309,76.70034514630309,79.4201951463031,79.4201951463031,79.4201951463031,79.4201951463031,79.4201951463031,79.4201951463031,82.1400451463031,82.1400451463031,82.1400451463031,82.1400451463031,88.98102235868802,88.98102235868802,91.70087235868802,91.70087235868802,91.70087235868802,91.70087235868802,91.70087235868802,91.70087235868802,91.70087235868802,91.70087235868802,91.70087235868802,91.70087235868802,91.70087235868802,91.70087235868802,91.70087235868802,100.35987882436496,100.35987882436496,100.35987882436496,100.35987882436496,100.35987882436496,100.35987882436496,100.35987882436496,100.35987882436496,100.35987882436496,100.35987882436496,100.35987882436496,100.35987882436496,100.35987882436496,100.35987882436496,68.40746181296976,68.40746181296976,68.40746181296976]
+- run.dodgeSteps: [1072.9251899999342,1079.3111899999365,1085.6971899999387,1085.803623333272,1087.8258566666061,1094.2118566666084,1100.5978566666106,1106.9838566666128,1113.369856666615,1119.7558566666173,1123.5874566666187,1129.973456666621,1131.3570899999547,1137.3173566666235,1143.7033566666257,1150.089356666628,1156.4753566666302,1162.8613566666324,1169.2473566666347,1175.633356666637,1182.0193566666392,1184.0415899999732,1190.001856666642,1196.3878566666442,1202.7738566666465,1209.1598566666487,1215.545856666651,1221.293256666653,1221.612556666653,1227.9985566666553,1234.3845566666575,1236.513223333325,1242.8992233333272,1245.134323333328,1251.5203233333302,1257.9063233333325,1264.2923233333347,1270.678323333337,1274.722790000005,1279.4058566666733,1285.1532566666754,1285.1532566666754,1288.1333900000097,1294.519390000012,1300.9053900000142,1303.2469233333484,1305.5884566666825,1311.9744566666848,1318.360456666687,1324.7464566666893,1331.1324566666915,1337.5184566666937,1343.904456666696,1350.2904566666982,1356.6764566667005,1363.0624566667027,1369.448456666705,1375.8344566667072,1053.7671899999275,1060.1531899999297,1066.539189999932]
+- run.curseSince: 14088
+- run.goldEarned: 346.942
+- run.goldSpent: 30
+- run.bossChests: 6
+- run.paidChests: 1
+- run.bossesKilled: 2
+- run.elitesKilled: 4
+- run.peakEnemies: 178
+- run.grokBotHelps: 7
+- run.lootRunnersMet: [1]
+- run.lootRunnersCaught: [1]
+- counters.kills: 1750
+- counters.hits: 6258
+- counters.gems: 317
+- counters.coins: 70
+- counters.shots: 1076
+- counters.hostileShots: 188
+- counters.nearMisses: 15
+- counters.hostileHits: 3
+- Gold, spots and chests: gold held at the end 314, spent 30 (Potato Crate 30); spots charged and used: Tater Lantern 1, Potato Crate 1, Spud Freezer 1; chests seen 6, opened 6.
+- Picks, each with the planner's odds for the card taken and for the others offered: 0:18 took Spud Cannon 59% over Frozen Fries 34%, Salt Shaker 7%; 0:22 took Mash Mortar 60% over Frozen Fries 33%, Spud Cannon 7%; 0:50 took Hot Streak 61% over Frozen Fries 28%, Spud Cannon 11%; 1:10 took Whisk Vortex 62% over Packed Pan 25%, Sprout Squad 13%; 1:12 took Mash Mortar 43% over Salt Line 31%, Hot Streak 26%; 1:56 took Hot Streak 42% over Potato Rain 35%, Seed Potato 12%, Reroll 10%, Skip 1%; 2:05 took Thick Skin 69% over Gravy Heart 13%, Reroll 9%, Whisk Vortex 8%, Skip 1%; 2:15 took Small Fry 35% over Tater Mines 30%, Reroll 18%, Spud Dice 12%, Skip 5%; 2:36 took Hot Streak 68% over Reroll 11%, Whisk Vortex 10%, Small Fry 9%, Skip 2%; 3:05 took Mash Mortar 73% over Frozen Fries 11%, Leave 9%, Whisk Vortex 7%; 3:18 took Mash Mortar 83% over Reroll 11%, Golden Fry 3%, Spud Cannon 2%, Skip 1%; 3:35 took Big Bowl 62% over Frozen Fries 15%, Reroll 13%, Whisk Vortex 8%, Skip 2%; 3:54 took Big Bowl 77% over Reroll 8%, Small Fry 7%, Lean Lunch 7%, Skip 1%; 3:54 took Big Bowl 70% over Chives 16%, Reroll 8%, Small Fry 5%, Skip 1%.
+- Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): 1:00 level 4, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Spud Cannon 1/8, Mash Mortar 1/8, Hot Streak 1/8 | 1:59 level 7, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Spud Cannon 1/8, Mash Mortar 2/8, Hot Streak 4/8, Whisk Vortex 1/8 | 2:56 level 10, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Spud Cannon 1/8, Mash Mortar 2/8, Hot Streak 6/8, Whisk Vortex 1/8, Small Fry 1/8, Thick Skin 1/5 | 3:59 level 14, maxHp 120, armor 0, damageMult 1, recovery 0, Frozen Fries 1/8, Spud Cannon 1/8, Mash Mortar 4/8, Wildfire Roast 1/1, Whisk Vortex 1/8, Small Fry 1/8, Thick Skin 1/5, Big Bowl 3/5.
+- Passive levels first reached: Thick Skin 1 at 2:05; Big Bowl 1 at 3:35, 3 at 3:54.
