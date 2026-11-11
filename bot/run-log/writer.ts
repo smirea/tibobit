@@ -3,7 +3,7 @@ import { groundSources, pct, said, spotLine } from "../phrasing";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import type { World } from "../world";
 import { clock } from "../../clock";
-import { bossCell, changeCell, changesCell, eliteCell, hurtCell, listCell, placeCell } from "./cells";
+import { bossCell, changeCell, changesCell, chestCell, eliteCell, hurtCell, listCell, placeCell } from "./cells";
 import { csvField } from "../../csv";
 
 // One CSV row per model call and per goal that starts or ends, with the player's state at that
@@ -46,6 +46,7 @@ const LOG_COLUMNS = [
   "dealt",
   "elites",
   "elite_list",
+  "spot",
 ] as const;
 
 /** `walk`: the page walked Tibo toward its goal without asking a model, and Tibo lost health on the way. `loadout`: what Tibo holds changed. */
@@ -96,7 +97,8 @@ export class RunLog {
             hurt_by: listCell.encode(Object.entries(r.hurtBy).map(hurtCell.encode)),
             standing_on: spotLine(r) ?? "",
             underfoot: listCell.encode(groundSources(r)),
-            chests: listCell.encode(r.chests.slice(0, 3).map(at)),
+            chests: listCell.encode(r.chests.map(chestCell.encode)),
+            spot: r.chests.some((c) => c.dir === "still") ? "chest" : (r.spots.find((p) => p.inside)?.name ?? ""),
             food: listCell.encode(r.food.slice(0, 2).map(at)),
             pois: listCell.encode(r.spots.filter((x) => x.chargeSeconds > 0).slice(0, 4).map((x) => `${x.name} ${at(x)}`)),
             weapons: listCell.encode(r.weapons.map((w) => `${w.name} ${w.level}/${w.max}`)),

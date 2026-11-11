@@ -38,6 +38,7 @@ export function gameEntry(r: GameResult, gyms: Gym[], full: boolean): string {
     `- Start: ${describeStart(s.from, gyms)}, seed ${r.seed || "?"}${s.loadout === undefined ? "" : `, build swapped for ${[...s.loadout.weapons.map((w) => `${w.id} ${w.level}`), ...s.loadout.passives.map((p) => `${p.id} ${p.level}`), ...s.loadout.items.map((x) => `${x.id} x${x.count}`)].join(", ")}`}; ${s.seconds}s; plays the playbook${s.changes === "" ? "" : ` with ${s.changes}`}.`,
     `- Outcome: ${outcome(r)}.`,
     ...(r.result?.totals === undefined ? [] : totalsLines(r.result.totals).map((l) => `- ${l}`)),
+    ...(!full && r.economy !== undefined ? [`- Gold, spots and chests: ${r.economy}.`] : []),
     ...(full && r.stats !== undefined ? ["", r.stats] : []),
   ].join("\n");
 }

@@ -12,7 +12,7 @@ import type { CommandStatus } from "../protocol/commands";
 import type { World } from "./world";
 import { say } from "./server";
 import { RunLog } from "./run-log/writer";
-import { goalCell } from "./run-log/cells";
+import { goalCell, goalTitleCell } from "./run-log/cells";
 
 export type Goal = { kind: "chest" | "poi" | "food" | "elite"; uid: number } | { kind: "explore"; dir: Direction } | { kind: "evade" };
 
@@ -110,7 +110,7 @@ export function goalTitle(g: Goal, r: World): string {
     case "chest":
       return "Open the chest";
     case "poi":
-      return `Charge the ${r.spots.find((p) => p.id === g.uid)?.name ?? "spot"}`;
+      return goalTitleCell.spot(r.spots.find((p) => p.id === g.uid)?.name ?? "spot");
     case "food":
       return "Eat the food";
     case "elite":

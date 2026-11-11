@@ -34,8 +34,20 @@ export const hurtCell = {
   decode: (text: string): [string, number] => [text.replace(/\s+[\d.]+$/, ""), Number(text.match(/([\d.]+)$/)?.[1]) || 0],
 };
 
-/** Where a chest, food or spot is: `85 up-left`, with the spot's name before it. */
+/** Where food or a spot is: `85 up-left`, with the spot's name before it. */
 export const placeCell = { encode: where };
+
+/** A chest on the map, known by its uid: `C12 85 up-left`. */
+export const chestCell = {
+  encode: (c: Where & { id: number }) => `C${c.id} ${where(c)}`,
+  uid: (text: string) => text.split(" ")[0] ?? "",
+};
+
+/** What a goal is called. A spot's goal names the spot, so its uses can be counted by kind. */
+export const goalTitleCell = {
+  spot: (name: string) => `Charge the ${name}`,
+  spotName: (title: string | undefined) => (title ?? "").match(/^Charge the (.*)$/)?.[1],
+};
 
 /** One change to what Tibo holds: `Peeler 3/8 to 7/8`, `Spud Lob 1/8 new (the game's description)` or `Peeler gone`. */
 export type Change = { name: string; now?: string; before?: string; said?: string };

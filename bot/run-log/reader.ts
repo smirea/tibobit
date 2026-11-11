@@ -2,7 +2,7 @@
 // took it, when bosses and the first chest came, how goals ended, what Tibo gained, and dashes.
 
 import { csvField, parseCsv } from "../../csv";
-import { bossCell, changeCell, changesCell, dashCell, eliteCell, goalCell, hurtCell, listCell, UNANSWERED } from "./cells";
+import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, hurtCell, listCell, UNANSWERED } from "./cells";
 
 const goalKind = goalCell.kind;
 
@@ -120,11 +120,44 @@ export function runStats(csv: string): string {
     `- Elites first seen: ${elitesSeen.join(" | ") || "none"}.`,
     `- Bursts of 40+ health lost within 3 s, hit by hit: ${bursts.join(" | ") || "none"}.`,
     `- First chest listed: ${firstChest ?? "never"}. First time under 25% health: ${low ?? "never"}.`,
+    `- Gold, spots and chests: ${economy(csv)}.`,
     `- Goals by kind (done / gave up / dropped): ${[...goals].map(([k, g]) => `${k} ${g.done}/${g.failed}/${g.dropped}`).join("; ") || "none"}.`,
     `- Dashes: ${dashes.length}${dashes.length === 0 ? "" : `: ${dashes.slice(0, 12).join("; ")}${dashes.length > 12 ? "; …" : ""}`}.`,
     `- Model calls: ${calls("plan").length} plans, ${calls("pick").length} picks, ${calls("move").length} moves (mean ${meanMs(calls("move"))}ms); the page walked through ${calls("walk").length} hits on its own. Calls the model never answered in time, where the bot went on without it: ${rows.filter((r) => (r.reason ?? "").includes(UNANSWERED)).length}.`,
     `- New cards, evolutions and jumps of 3 or more levels (chests give those): ${gained.length === 0 ? "nothing logged" : gained.join("; ")}.`,
   ].join("\n");
+}
+
+/**
+ * What a game did with its gold, its spots and its chests, in one line: gold held at the end and
+ * gold spent, by the spot Tibo stood in when it went; every kind of spot a goal charged and used;
+ * and the chests seen on the map against the chests opened.
+ */
+export function economy(csv: string): string {
+  const [header = [], ...cells] = parseCsv(csv);
+  if (header[0] !== "time") return "(no numbers: the log is damaged)";
+  const rows = cells.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])) as Record<string, string>);
+  const live = rows.filter((r) => r.seconds !== "");
+  // Gold goes when a shop's choice is taken, a moment after Tibo stood in the shop: the spend counts for the last spot he stood in within 5 seconds.
+  const spent = new Map<string, number>();
+  let last: { spot: string; at: number } | undefined;
+  for (const [i, r] of live.entries()) {
+    if ((r.spot ?? "") !== "") last = { spot: r.spot ?? "", at: Number(r.seconds) };
+    const drop = Number(live[i - 1]?.gold) - Number(r.gold);
+    const where = last !== undefined && Number(r.seconds) - last.at <= 5 ? last.spot : "elsewhere";
+    if (drop > 0) spent.set(where, (spent.get(where) ?? 0) + drop);
+  }
+  const total = [...spent.values()].reduce((a, b) => a + b, 0);
+  const titles = new Map(rows.filter((r) => r.event === "goal" && r.action === "start").map((r) => [r.goal ?? "", goalTitleCell.spotName(r.detail)]));
+  const used = new Map<string, number>();
+  for (const r of rows.filter((x) => x.event === "goal" && x.action === "done")) {
+    const name = titles.get(r.goal ?? "");
+    if (name !== undefined) used.set(name, (used.get(name) ?? 0) + 1);
+  }
+  const seen = new Set(live.flatMap((r) => listCell.decode(r.chests).map(chestCell.uid)));
+  const opened = rows.filter((r) => r.event === "goal" && r.action === "done" && goalKind(r.goal ?? "") === "chest").length;
+  const byCount = (m: Map<string, number>) => [...m].sort((a, z) => z[1] - a[1]).map(([k, v]) => `${k} ${Math.round(v)}`).join(", ");
+  return `gold held at the end ${live.at(-1)?.gold ?? "?"}, spent ${Math.round(total)}${total > 0 ? ` (${byCount(spent)})` : ""}; spots charged and used: ${byCount(used) || "none"}; chests seen ${seen.size}, opened ${opened}`;
 }
 
 /**
