@@ -1,0 +1,36 @@
+{
+  "templates": {
+    "planner": {
+      "state": "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.\n\nThe aim: survive 20 minutes on {{difficulty}}.\n\nAsked now because {{why}}. State now:\n\n{{state}}",
+      "goal": "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+      "pick": "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+    },
+    "action": {
+      "state": "Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.\nGoal: {{goal}}.\n{{health}}",
+      "hurt": "If Tibo does this: {{move}}. How badly does it hurt Tibo?",
+      "useful": "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+      "dash": "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+    },
+    "knobs": {
+      "exploreDistance": 300,
+      "evadeSeconds": 8,
+      "stuckSeconds": 6,
+      "extraDamage": 0.02,
+      "safeMargin": 0.1,
+      "distrustSeconds": 10,
+      "distrustBossRange": 0,
+      "planEvery": 5,
+      "eliteSeconds": 20,
+      "bossOfferRange": 0,
+      "dashThreshold": 0.5,
+      "bossDashThreshold": 0.5,
+      "bossDashRange": 0,
+      "eliteFrom": 0,
+      "eliteMinHp": 0,
+      "forecastSeconds": 1
+    }
+  },
+  "weapon": "seeker-sprouts",
+  "updated": "L2.I6",
+  "why": "On four paired fresh seeds (31-34) from 0:00, seeker-sprouts with distrustSeconds 10 and forecastSeconds 1 outlived the unchanged playbook every time and lived 5:00 in 3 of 4, against 0 of 4 for the baseline (3:23, 3:08, 0:52, 3:16). The knobs make the action model check steps after a hit the forecast called free and look further ahead, which cut opening damage from Fry Fly, Cave Grub and Snow Mold elites. Seeker-sprouts is the only start that has reached 5:00 on fresh seeds; fry-knives, steam-vent, fry-sentry and tot-toss died at 2:01-3:12 in loop 1. A random start made the full-run result a coin flip. The knobs were only tested with seeker-sprouts, so the two changes go in together."
+}
