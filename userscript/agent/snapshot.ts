@@ -1,6 +1,6 @@
 import type { GameLink } from "../game";
 import { modeScreen } from "./menu";
-import type { CommandStatus, Forecast, Snapshot } from "./protocol";
+import type { CommandStatus, Forecast, Snapshot } from "../../protocol/protocol";
 import { reflect } from "./reflect";
 import { surroundings } from "./surroundings";
 

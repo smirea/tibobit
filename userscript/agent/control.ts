@@ -1,5 +1,5 @@
 import type { Game, GameLink, GameState } from "../game";
-import { type Command, type CommandStatus, type GameMode, DIRECTIONS, type Envelope, type Heading, type Target } from "./protocol";
+import { type Command, type CommandStatus, type GameMode, DIRECTIONS, type Envelope, type Heading, type Target } from "../../protocol/protocol";
 import { button, modeScreen } from "./menu";
 import { choiceCards, inRun } from "./snapshot";
 import { type CheckpointFile, SEED_KEY, Training } from "./training";

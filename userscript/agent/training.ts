@@ -1,5 +1,5 @@
 import type { Game, GameLink, GameState } from "../game";
-import type { CheckpointMeta, LoadoutSpec } from "./protocol";
+import type { CheckpointMeta, LoadoutSpec } from "../../protocol/protocol";
 
 export const SEED_KEY = "tibobit.seed";
 

@@ -5,6 +5,7 @@
 import { readdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { USERSCRIPT } from "../paths";
 import { chromium } from "playwright-core";
 
 const args = process.argv.slice(2);
@@ -20,8 +21,7 @@ const bridge = option("bridge", "");
 // A profile folder keeps the game's own progress, such as unlocked Nightmare levels, across launches.
 const profile = option("profile", "");
 
-const root = path.resolve(import.meta.dir, "..");
-const userscript = Bun.file(path.join(root, "dist", "tibo-helper.user.js"));
+const userscript = Bun.file(USERSCRIPT);
 if (!(await userscript.exists())) throw new Error("dist/tibo-helper.user.js is missing; run bun run build");
 
 const shim = `window.GM_xmlhttpRequest = (d) => {

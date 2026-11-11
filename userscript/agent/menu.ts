@@ -1,4 +1,4 @@
-import type { GameMode } from "./protocol";
+import type { GameMode } from "../../protocol/protocol";
 
 // The game's own buttons; the helper's panel and port box are never pressed by an agent command.
 export function button(label: string | RegExp): HTMLButtonElement | undefined {

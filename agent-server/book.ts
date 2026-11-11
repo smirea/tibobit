@@ -1,8 +1,8 @@
 // The game's content as agents use it, built from the encyclopedia: English names and descriptions
 // by kind and id, recipes from the game's own weapon and item definitions, and dog definitions.
-import { type Catalog, type Combo, type Key, type Loadout, buildCatalog, combosUsing, comboProgress, idOf, nameOf, partner, toCombo } from "../src/catalog";
-import type { Content, Messages } from "../src/game";
-import type { Encyclopedia } from "../src/agent/protocol";
+import { type Catalog, type Combo, type Key, type Loadout, buildCatalog, combosUsing, comboProgress, idOf, nameOf, partner, toCombo } from "../userscript/catalog";
+import type { Content, Messages } from "../userscript/game";
+import type { Encyclopedia } from "../protocol/protocol";
 
 /** The game's content as the bot uses it: English names and descriptions, recipes, and the definitions by id. */
 export type Book = {

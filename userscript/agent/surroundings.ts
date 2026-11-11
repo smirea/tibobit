@@ -1,5 +1,5 @@
 import type { GameLink, GameState } from "../game";
-import { DIRECTIONS, type Direction, type Surroundings, type Threats } from "./protocol";
+import { DIRECTIONS, type Direction, type Surroundings, type Threats } from "../../protocol/protocol";
 
 // Volleys, attack zones and hazards farther than this from Tibo are left out.
 const REACH = 300;

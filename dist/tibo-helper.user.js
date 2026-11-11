@@ -11,7 +11,7 @@
 // @downloadURL  https://raw.githubusercontent.com/smirea/tibobit/master/dist/tibo-helper.user.js
 // ==/UserScript==
 (() => {
-  // src/agent/encyclopedia.ts
+  // userscript/agent/encyclopedia.ts
   function plain(value) {
     return JSON.parse(JSON.stringify(value, (_k, v) => v instanceof Map ? Object.fromEntries(v) : v instanceof Set ? [...v] : v));
   }
@@ -53,7 +53,7 @@
     };
   }
 
-  // src/agent/protocol.ts
+  // protocol/protocol.ts
   var BRIDGE_PORT = 7357;
   var bridgeOrigin = (port) => `http://127.0.0.1:${port}`;
   var BRIDGE_ORIGIN = bridgeOrigin(BRIDGE_PORT);
@@ -255,7 +255,7 @@
     }
   }
 
-  // src/agent/menu.ts
+  // userscript/agent/menu.ts
   function button(label) {
     return [...document.querySelectorAll("button")].find((b) => {
       if (b.closest("#tibo-helper, [class*='tbh-']"))
@@ -270,7 +270,7 @@
     return button("Leaderboard") === undefined ? "openWorld" : "daily";
   }
 
-  // src/agent/reflect.ts
+  // userscript/agent/reflect.ts
   var NOT_STATE = {
     "": ["rng", "spawnRng", "lootRng", "botRng", "hits", "hash", "buf", "scratch", "attack", "damageRing", "effects", "fx", "colors", "colorIndex", "sourceColors", "recordEvents", "events", "itemFx"],
     world: ["chunks", "activeChunks", "temp", "moist", "height", "biomeByBand"]
@@ -390,7 +390,7 @@
     return value(s, "");
   }
 
-  // src/agent/surroundings.ts
+  // userscript/agent/surroundings.ts
   var REACH = 300;
   var NEAR = 60;
   var TICKS_PER_SECOND = 60;
@@ -576,7 +576,7 @@
     return { enemies: { onScreen, near, byDirection }, bullets, volleys, attacks, hazards: { underfoot, byDirection: hazardPaths } };
   }
 
-  // src/agent/snapshot.ts
+  // userscript/agent/snapshot.ts
   var TICKS_PER_SECOND2 = 60;
   function choiceCards() {
     const cards = [...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")];
@@ -633,7 +633,7 @@
     };
   }
 
-  // src/agent/training.ts
+  // userscript/agent/training.ts
   var SEED_KEY = "tibobit.seed";
   function installSeedHook() {
     let want = null;
@@ -1013,7 +1013,7 @@
     game.taint();
   }
 
-  // src/agent/control.ts
+  // userscript/agent/control.ts
   var TICKS_PER_SECOND4 = 60;
   var STUCK_TICKS = 90;
   var KEEP_STATUSES = 10;
@@ -1396,7 +1396,7 @@
     }
   }
 
-  // src/agent/foresight.ts
+  // userscript/agent/foresight.ts
   var TICKS_PER_SECOND5 = 60;
   var SLICE_MS = 4;
   var SHARE = 0.75;
@@ -1609,7 +1609,7 @@
     }
   }
 
-  // src/agent/bridge.ts
+  // userscript/agent/bridge.ts
   var PORT_KEY = "tibobit.bridgePort";
   var SETTINGS_KEY = "tibobit.pilotSettings";
   function savedSettings() {
@@ -1885,7 +1885,7 @@
     };
   }
 
-  // src/discovery.ts
+  // userscript/discovery.ts
   var DISCOVERY_KEY = "tibo.discovery.v1";
   var EVOLUTIONS_KEY = "tibo.evolutions.v1";
   function parseDiscovery(raw) {
@@ -1940,7 +1940,7 @@
     }
   }
 
-  // src/game.ts
+  // userscript/game.ts
   var NO_RECORDER = { step() {}, choose() {}, dash() {}, taint() {}, log() {} };
   function cloneState(root, shared) {
     const memo = new Map;
@@ -2275,7 +2275,7 @@
     }
   }
 
-  // src/catalog.ts
+  // userscript/catalog.ts
   function titleCase(id) {
     return id.replace(/(^|-)(\w)/g, (_, dash, c) => `${dash ? " " : ""}${c.toUpperCase()}`);
   }
@@ -2400,7 +2400,7 @@
     return catalog.names[key] ?? titleCase(idOf(key));
   }
 
-  // src/icons.ts
+  // userscript/icons.ts
   var ring = (x, y, r) => `M${x - r} ${y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
   var dot = (x, y, r) => ({ fill: ring(x, y, r) });
   var ACTION_ICONS = {
@@ -2487,7 +2487,7 @@
     return turn === undefined ? svgIcon(STILL_ICON, className) : svgIcon(ARROW_ICON, className, turn);
   }
 
-  // src/chat.ts
+  // userscript/chat.ts
   var ROLE_LABELS = { planner: "Plan", action: "Action", system: "Bot" };
   var HIDE_DELAY_MS = 200;
   var MIN_SIDE_ROOM = 300;
@@ -2763,7 +2763,7 @@
     return box;
   }
 
-  // src/data.ts
+  // userscript/data.ts
   var data;
   var dataFrom;
   function liveData(link) {
@@ -2779,7 +2779,7 @@
     return data;
   }
 
-  // src/style.ts
+  // userscript/style.ts
   var css = `
 .tbh-panel {
   position: fixed; top: 52px; right: 8px; z-index: 2147483000;
@@ -2971,7 +2971,7 @@
 .tbh-ready-tag { color: #5ee8a0; font-weight: 700; }
 `;
 
-  // src/helper.ts
+  // userscript/helper.ts
   function isShown(el) {
     return el.getClientRects().length > 0;
   }
@@ -3286,7 +3286,7 @@
     schedule();
   }
 
-  // src/pickShow.ts
+  // userscript/pickShow.ts
   var SHOW_MS = 1500;
   var ARRIVE_MS = 700;
   var FRESH_MS = 8000;
@@ -3391,7 +3391,7 @@
     requestAnimationFrame(frame);
   }
 
-  // src/main.ts
+  // userscript/main.ts
   installSeedHook();
   var link = new GameLink;
   var discovery = new Discovery;

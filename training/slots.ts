@@ -4,10 +4,10 @@
 // time (tibo-bot.ts --trial). A gym is built the same way and saved at its time.
 import path from "node:path";
 import { closeSync, mkdirSync, openSync } from "node:fs";
-import type { CheckpointMeta, CommandStatus, LoadoutSpec, State } from "../src/agent/protocol";
-import { type Gym, type Templates, type Totals, clock, runStats } from "./gameplay";
+import { ENTRY, ROOT } from "../paths";
+import type { CheckpointMeta, CommandStatus, LoadoutSpec, State } from "../protocol/protocol";
+import { type Gym, type Templates, type Totals, clock, runStats } from "../rsi/gameplay";
 
-const ROOT = path.join(import.meta.dir, "..");
 export const DECISION_MODEL = "typesafe/jev-1.14-20261014";
 const GYM_STAGE_SECONDS = 300;
 const GYM_STAGE_TRIES = 3;
@@ -103,10 +103,10 @@ export class Slot {
     return slot;
   }
 
-  private spawn(script: string, args: string[], log: string): Child {
+  private spawn(entry: string, args: string[], log: string): Child {
     // Appended, so a restarted loop keeps the evidence of what went wrong before it.
     const out = openSync(log, "a");
-    const child = Bun.spawn([process.execPath, path.join(import.meta.dir, script), ...args], { cwd: ROOT, stdin: "ignore", stdout: out, stderr: out });
+    const child = Bun.spawn([process.execPath, entry, ...args], { cwd: ROOT, stdin: "ignore", stdout: out, stderr: out });
     // The child holds its own copy; the loop spawns a bot per game and would run out of descriptors.
     closeSync(out);
     this.children.push(child);
@@ -114,12 +114,12 @@ export class Slot {
   }
 
   private async launch() {
-    this.spawn("agent-server.ts", ["--port", String(this.serverPort)], path.join(this.logs, `${this.name}-agent-server.log`));
+    this.spawn(ENTRY.agentServer, ["--port", String(this.serverPort)], path.join(this.logs, `${this.name}-agent-server.log`));
     await this.startGame();
   }
 
   private async startGame() {
-    this.headless = this.spawn("headless.ts", ["--bridge", String(this.serverPort), "--port", String(this.gamePort), "--profile", this.profile], path.join(this.logs, `${this.name}-headless.log`));
+    this.headless = this.spawn(ENTRY.headless, ["--bridge", String(this.serverPort), "--port", String(this.gamePort), "--profile", this.profile], path.join(this.logs, `${this.name}-headless.log`));
     await this.connected(90_000);
     // The page reaches the agent server before the headless game serves its own API, which /eval needs.
     const end = Date.now() + 90_000;
@@ -245,7 +245,7 @@ export class Slot {
     const base = path.join(this.logs, id.replace(/[^\w.-]/g, "_"));
     await Bun.write(`${base}.templates.json`, JSON.stringify(templates));
     const bot = this.spawn(
-      "tibo-bot.ts",
+      ENTRY.bot,
       ["--server", this.server, "--reload", `${this.game}/reload`, "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--trial", String(seconds), "--templates", `${base}.templates.json`, "--result", `${base}.result.json`, "--log-dir", base],
       `${base}.bot.log`,
     );

@@ -1,8 +1,8 @@
 // The game as a live game needs it (LiveView in src/agent/protocol.ts), built by the agent server
 // from the page's snapshot (the game state, its surroundings and the sim forecast) and the game's
 // encyclopedia. Names and descriptions are the game's English; ids and kinds are the game's own.
-import { type Loadout, comboProgress, nameOf, partState, relevantCombos } from "../src/catalog";
-import { type Aim, type ChoiceOption, DIRECTIONS, type Direction, type DirectionView, type LiveView, type LoadoutItem, type Snapshot } from "../src/agent/protocol";
+import { type Loadout, comboProgress, nameOf, partState, relevantCombos } from "../userscript/catalog";
+import { type Aim, type ChoiceOption, DIRECTIONS, type Direction, type DirectionView, type LiveView, type LoadoutItem, type Snapshot } from "../protocol/protocol";
 import { type Book, line, pairings } from "./book";
 
 type Row = { uid: number; slot: number; x: number; y: number };

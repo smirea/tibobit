@@ -1,4 +1,4 @@
-import type { ChoiceAction, Target } from "./agent/protocol";
+import type { ChoiceAction, Target } from "../protocol/protocol";
 
 // Page-world access to the running game. tibo.dog ships native ES modules, and a module URL
 // imported a second time returns the instance the game already uses, so importing the game's

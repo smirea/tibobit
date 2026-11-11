@@ -8,11 +8,12 @@
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { lookup } from "node:dns/promises";
-import { type LoadoutSpec, ladderCleared, parseLoadout } from "../src/agent/protocol";
+import { ENTRY, GAMEPLAY, ROOT, RUNS, USERSCRIPT } from "../paths";
+import { type LoadoutSpec, ladderCleared, parseLoadout } from "../protocol/protocol";
 import { type HarnessName, checkHarness, jsonObject, runCoach } from "./coach";
 import * as loop from "./gameplay";
 import { type BeliefRow, type Checked, type Experiment, type Gym, type Playbook, type PromptKey, type Templates, clock } from "./gameplay";
-import { DECISION_MODEL, type GameResult, type GameSpec, type Start, Slot, freshSeed, onSlots } from "./slots";
+import { DECISION_MODEL, type GameResult, type GameSpec, type Start, Slot, freshSeed, onSlots } from "../training/slots";
 
 const USAGE = `usage: scripts/recursive-self-improvement.ts [--coach claude:<model>@<effort>] [--loops <n>] [--slots <n>] [--eval-seed <seed>]
 
@@ -24,7 +25,6 @@ const USAGE = `usage: scripts/recursive-self-improvement.ts [--coach claude:<mod
 
 The loop goes on from where the coach's state.json says it stopped. Ctrl-C stops it, the games and the servers.`;
 
-const ROOT = path.join(import.meta.dir, "..");
 const EXPERIMENT_ITERATIONS = 9;
 const MAX_GAMES = 5;
 const MAX_GAME_SECONDS = 300;
@@ -65,8 +65,8 @@ if (Bun.which("gai") === null) throw new Error("committing gameplay/ needs gai o
 // The notes of a full run name the coach and the model that coached it, which can change over time.
 const COACH_LABEL = `coach ${COMMITTER}`;
 await loop.checkLoopFiles();
-const RUNS = path.join(ROOT, ".runs", "rsi");
-mkdirSync(RUNS, { recursive: true });
+const LOGS = path.join(RUNS, "rsi");
+mkdirSync(LOGS, { recursive: true });
 
 // ---- Slots -------------------------------------------------------------------------------------
 
@@ -81,20 +81,19 @@ process.on("SIGINT", () => void shutdown(130));
 process.on("SIGTERM", () => void shutdown(143));
 
 const open = async (name: string, profile: string) => {
-  const slot = await Slot.open(name, profile, path.join(RUNS, "logs"));
+  const slot = await Slot.open(name, profile, path.join(LOGS, "logs"));
   opened.push(slot);
   return slot;
 };
-console.log(`the coach is ${coachSpec}, ${SLOTS} training slots, evaluation seed ${EVAL_SEED}; logs in ${path.relative(ROOT, RUNS)}`);
+console.log(`the coach is ${coachSpec}, ${SLOTS} training slots, evaluation seed ${EVAL_SEED}; logs in ${path.relative(ROOT, LOGS)}`);
 const [main, ...slots] = await Promise.all([
-  open("main", path.join(ROOT, ".runs", "coach-profile")),
-  ...Array.from({ length: SLOTS }, (_, i) => open(`slot${i + 1}`, path.join(ROOT, ".runs", `coach-profile-slot${i + 1}`))),
+  open("main", path.join(RUNS, "coach-profile")),
+  ...Array.from({ length: SLOTS }, (_, i) => open(`slot${i + 1}`, path.join(RUNS, `coach-profile-slot${i + 1}`))),
 ]);
 if (main === undefined) throw new Error("no main slot");
 
 // A rebuilt userscript reaches the games when they restart, which happens between iterations.
-const DIST = path.join(ROOT, "dist", "tibo-helper.user.js");
-let gamesBuilt = Bun.file(DIST).lastModified;
+let gamesBuilt = Bun.file(USERSCRIPT).lastModified;
 // An outage on 2026-11-09 burned three loops: every coach call failed fast and the headless tabs
 // stayed on Chrome's error page. The loop waits it out instead and then reloads the games.
 const NEEDED_HOSTS = ["api.anthropic.com", "openrouter.ai", "tibo.dog"];
@@ -129,8 +128,8 @@ async function playGame(slot: Slot, spec: GameSpec, gyms: Gym[], build: (gym: Gy
 
 async function refreshGames() {
   await waitOnline();
-  if (Bun.file(DIST).lastModified === gamesBuilt) return;
-  gamesBuilt = Bun.file(DIST).lastModified;
+  if (Bun.file(USERSCRIPT).lastModified === gamesBuilt) return;
+  gamesBuilt = Bun.file(USERSCRIPT).lastModified;
   console.log("the userscript was rebuilt; restarting the games");
   await Promise.all(opened.map((s) => s.restartGame()));
 }
@@ -169,14 +168,14 @@ const OFFERED = await (async () => {
 
 /** Asks the coach until a reply passes `check`: a harness failure is tried again, a rejected reply is asked again with the reasons. */
 async function ask<T>(tag: string, prompt: string, check: (raw: Record<string, unknown>) => Checked<T>): Promise<T | undefined> {
-  await Bun.write(path.join(RUNS, `${tag}.prompt.md`), prompt);
+  await Bun.write(path.join(LOGS, `${tag}.prompt.md`), prompt);
   let request = prompt;
   for (let attempt = 1; attempt <= 3 && !stopping; attempt++) {
     await waitOnline();
     const started = Date.now();
     const said = await runCoach(harness, model, request, COACH_TIMEOUT_MS, () => {}, effort);
     const seconds = Math.round((Date.now() - started) / 1000);
-    await Bun.write(path.join(RUNS, `${tag}.reply-${attempt}.md`), `${said.reasoning}\n\n---\n\n${said.text}\n\n---\n\n${said.error}\n${said.stderr}`);
+    await Bun.write(path.join(LOGS, `${tag}.reply-${attempt}.md`), `${said.reasoning}\n\n---\n\n${said.text}\n\n---\n\n${said.error}\n${said.stderr}`);
     const raw = jsonObject(said.text);
     if (raw === undefined) {
       console.error(`${tag}: no JSON from the coach after ${seconds}s${said.timedOut ? " (timed out)" : ""}: ${(said.error || said.text || said.stderr).slice(0, 400)}`);
@@ -229,7 +228,7 @@ const PLAYBOOK_CONTRACT = `"playbook": optional changes to your playbook: {"plan
 
 type LastGames = { tag: string; results: GameResult[]; gyms: string[] };
 async function lastGames(): Promise<LastGames | undefined> {
-  const f = Bun.file(path.join(RUNS, "last-games.json"));
+  const f = Bun.file(path.join(LOGS, "last-games.json"));
   return (await f.exists()) ? ((await f.json()) as LastGames) : undefined;
 }
 
@@ -668,7 +667,7 @@ async function experimentIteration(state: loop.CoachState) {
     });
   for (const r of results) if (r.spec.experiment !== undefined) await loop.addGames(r.spec.experiment, [gameEntry(r, gyms, false)]);
   for (const r of results) if (r.result !== undefined) await loop.recordHeld(r.spec.id, [...r.result.weapons, ...r.result.passives]);
-  await Bun.write(path.join(RUNS, "last-games.json"), JSON.stringify({ tag, results, gyms: gymLines } satisfies LastGames, null, 2));
+  await Bun.write(path.join(LOGS, "last-games.json"), JSON.stringify({ tag, results, gyms: gymLines } satisfies LastGames, null, 2));
   const lived = results.filter((r) => r.result !== undefined && !r.result.died).length;
   const played = [...new Set(results.map((r) => r.spec.experiment))].join(", ");
   // The games themselves are in their experiments' files; the log keeps what the coach made of them.
@@ -766,19 +765,19 @@ async function fullRun(state: loop.CoachState): Promise<string | undefined> {
   const final = await loop.readPlaybook();
   const intent = reply?.intent ?? "The coach gave no plan; the run plays the playbook as it stands.";
   await appendLog(state, "full run", reply?.summary ?? intent);
-  const templatesFile = path.join(RUNS, `${tag}.full-run.templates.json`);
+  const templatesFile = path.join(LOGS, `${tag}.full-run.templates.json`);
   await Bun.write(templatesFile, JSON.stringify(final.templates));
   await refreshGames();
   const startedAt = Date.now();
   // The bot plays the evaluation seed in a freshly loaded tab, as its first run there, and checks it.
   console.log(`${tag}: full run on Nightmare ${(await ladder()) + 1}, seed ${EVAL_SEED}`);
-  const out = Bun.file(path.join(RUNS, `${tag}.full-run.log`));
+  const out = Bun.file(path.join(LOGS, `${tag}.full-run.log`));
   const bot = Bun.spawn(
     [
       process.execPath,
-      path.join(import.meta.dir, "tibo-bot.ts"),
+      ENTRY.bot,
       ...["--server", main.server, "--reload", "", "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--difficulty", "highest", "--runs", "1", "--seed", EVAL_SEED],
-      ...["--notes", "--coach-label", COACH_LABEL, "--intent", intent, "--templates", templatesFile, ...(final.weapon === "" ? [] : ["--weapon", final.weapon]), "--log-dir", path.join(RUNS, "full-runs")],
+      ...["--notes", "--coach-label", COACH_LABEL, "--intent", intent, "--templates", templatesFile, ...(final.weapon === "" ? [] : ["--weapon", final.weapon]), "--log-dir", path.join(LOGS, "full-runs")],
     ],
     { cwd: ROOT, stdin: "ignore", stdout: out, stderr: out },
   );
@@ -869,7 +868,7 @@ async function reflect(state: loop.CoachState, notesFile: string | undefined) {
 /** Commits gameplay/ alone, under the lock so another coach's write is never half in it, and pushes. */
 async function commit(state: loop.CoachState, notesFile: string | undefined) {
   const run = (cmd: string[], env?: Record<string, string>) => {
-    const p = Bun.spawnSync(cmd, { cwd: loop.GAMEPLAY, stdout: "pipe", stderr: "pipe", env: { ...process.env, ...env } });
+    const p = Bun.spawnSync(cmd, { cwd: GAMEPLAY, stdout: "pipe", stderr: "pipe", env: { ...process.env, ...env } });
     return { ok: p.exitCode === 0, out: `${p.stdout.toString()}${p.stderr.toString()}`.trim() };
   };
   const lived = notesFile?.match(/lived-(\d+)-(\d+)/);

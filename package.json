@@ -3,10 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun scripts/build.ts",
+    "build": "bun userscript/build.ts",
     "check": "tsc --noEmit",
-    "server": "bun scripts/agent-server.ts",
-    "agent-server": "bun --watch scripts/agent-server.ts",
+    "agent-server": "bun --watch agent-server/main.ts",
     "test": "bun test"
   },
   "devDependencies": {

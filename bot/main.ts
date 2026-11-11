@@ -8,11 +8,12 @@
 import path from "node:path";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type ChoiceAction, type ChoiceOption, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type DirectionView, type CardOption, type Encyclopedia, type GameMode, type Inspect, ladderCleared, type MoveOption, type PilotPace, type State } from "../src/agent/protocol";
-import { type Book, line, readBook as bookOf } from "./book";
+import { ROOT, RUNS as RUNS_DIR } from "../paths";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type ChoiceAction, type ChoiceOption, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type DirectionView, type CardOption, type Encyclopedia, type GameMode, type Inspect, ladderCleared, type MoveOption, type PilotPace, type State } from "../protocol/protocol";
+import { type Book, line, readBook as bookOf } from "../agent-server/book";
 import { type Chest, type Sector, type Spot, type World, see } from "./world";
-import * as loop from "./gameplay";
-import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "./gameplay";
+import * as loop from "../rsi/gameplay";
+import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "../rsi/gameplay";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {
@@ -71,7 +72,7 @@ let SEED = option("seed", "").toUpperCase();
 // For "Grok take the wheel" and trials: play the run already in progress instead of starting a fresh one.
 const TAKEOVER = TRIAL !== undefined || args.includes("--takeover");
 const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
-const LOG = option("log", path.join(import.meta.dir, "..", ".runs", `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
+const LOG = option("log", path.join(RUNS_DIR, `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
 
 /**
  * `pace` is the panel's plan and action intervals, read every step so they can change mid-run, and
@@ -212,9 +213,9 @@ const MODE_NAME = MODE === "daily" ? "daily" : "world";
 const WIN_SECONDS = 1200;
 // Read once at startup: the code this process runs, whatever is committed while it plays.
 const BOT_CODE = (() => {
-  const git = (...a: string[]) => Bun.spawnSync(["git", ...a], { cwd: import.meta.dir }).stdout.toString().trim();
+  const git = (...a: string[]) => Bun.spawnSync(["git", ...a], { cwd: ROOT }).stdout.toString().trim();
   const head = git("log", "-1", "--format=%h %s");
-  return `${head || "unknown"}${git("status", "--porcelain", "--", ".") === "" ? "" : " (with uncommitted changes in scripts/)"}`;
+  return `${head || "unknown"}${git("status", "--porcelain", "--", ".", ":!gameplay") === "" ? "" : " (with uncommitted changes)"}`;
 })();
 
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;

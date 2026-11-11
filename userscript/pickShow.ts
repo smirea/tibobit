@@ -1,5 +1,5 @@
 import type { Bridge } from "./agent/bridge";
-import type { CardOption, ChatMessage } from "./agent/protocol";
+import type { CardOption, ChatMessage } from "../protocol/protocol";
 import { choiceCards } from "./agent/snapshot";
 import { moveIcon } from "./icons";
 

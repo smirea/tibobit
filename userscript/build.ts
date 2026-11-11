@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 import path from "node:path";
+import { ROOT, USERSCRIPT } from "../paths";
 import pkg from "../package.json";
 
-const root = path.resolve(import.meta.dir, "..");
-const outFile = path.join(root, "dist", "tibo-helper.user.js");
+const outFile = USERSCRIPT;
 const rawUrl = "https://raw.githubusercontent.com/smirea/tibobit/master/dist/tibo-helper.user.js";
 const { version } = pkg;
 
@@ -22,7 +22,7 @@ const header = `// ==UserScript==
 `;
 
 const result = await Bun.build({
-  entrypoints: [path.join(root, "src", "main.ts")],
+  entrypoints: [path.join(import.meta.dir, "main.ts")],
   target: "browser",
   format: "iife",
   minify: false,
@@ -34,4 +34,4 @@ if (!result.success) {
 const output = result.outputs[0];
 if (output === undefined) throw new Error("build produced no output");
 await Bun.write(outFile, header + (await output.text()));
-console.log(`wrote ${path.relative(root, outFile)} (${version})`);
+console.log(`wrote ${path.relative(ROOT, outFile)} (${version})`);

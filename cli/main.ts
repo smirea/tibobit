@@ -6,7 +6,7 @@ import {
   type State,
   bridgeOrigin,
   validPort,
-} from "../src/agent/protocol";
+} from "../protocol/protocol";
 
 const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
 

@@ -2,9 +2,10 @@
 import { mkdir, readdir, rename } from "node:fs/promises";
 import path from "node:path";
 import type { ServerWebSocket, Subprocess } from "bun";
+import { CHECKPOINTS, ENTRY, ROOT } from "../paths";
 import { type Book, readBook } from "./book";
-import { liveView } from "./view";
-import { BRIDGE_PORT, CHECKPOINT_NAME, type LiveView, parseRaw, rawParts, type State, type CheckpointMeta, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, DEFAULT_SETTINGS, type PilotChange, type PilotSettings, parseChatLine, parseCommand, parsePilotChange, trimChat } from "../src/agent/protocol";
+import { liveView } from "./live-view";
+import { BRIDGE_PORT, CHECKPOINT_NAME, type LiveView, parseRaw, rawParts, type State, type CheckpointMeta, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, DEFAULT_SETTINGS, type PilotChange, type PilotSettings, parseChatLine, parseCommand, parsePilotChange, trimChat } from "../protocol/protocol";
 
 const KEEPALIVE_MS = 5_000;
 const option = (name: string, fallback: string) => {
@@ -13,7 +14,6 @@ const option = (name: string, fallback: string) => {
 };
 const PORT = Number(option("port", String(BRIDGE_PORT)));
 const WAIT_LIMIT_MS = 120_000;
-const CHECKPOINTS = path.resolve(option("checkpoints", path.join(import.meta.dir, "..", ".runs", "checkpoints")));
 const checkpointFile = (name: string) => {
   if (!CHECKPOINT_NAME.test(name)) throw new Error("a checkpoint name is letters, digits, _ . @ or -");
   return { state: path.join(CHECKPOINTS, `${name}.json.gz`), meta: path.join(CHECKPOINTS, `${name}.meta.json`) };
@@ -72,9 +72,8 @@ function startPilot() {
   if (bot !== undefined) return;
   // One run: when it ends, the bot reviews it (unless incognito) and hands the wheel back.
   const args = ["--server", `http://127.0.0.1:${PORT}`, "--takeover", "--runs", "1", "--reload", "", ...PILOT_ARGS];
-  console.log(`pilot: tibo-bot.ts ${args.join(" ")}`);
-  // From the repo root, where Bun loads .env.local with the OpenRouter key.
-  const child = Bun.spawn([process.execPath, path.join(import.meta.dir, "tibo-bot.ts"), ...args], { cwd: path.join(import.meta.dir, ".."), stdin: "ignore", stdout: "inherit", stderr: "pipe" });
+  console.log(`pilot: bot ${args.join(" ")}`);
+  const child = Bun.spawn([process.execPath, ENTRY.bot, ...args], { cwd: ROOT, stdin: "ignore", stdout: "inherit", stderr: "pipe" });
   bot = child;
   chat.length = 0;
   setPilot({ state: "on" });

@@ -1,6 +1,6 @@
 import type { Game, GameLink, GameState } from "../game";
 import { type Controller, toward } from "./control";
-import { DIRECTIONS, type Ahead, type Direction, type Forecast, type Routes } from "./protocol";
+import { DIRECTIONS, type Ahead, type Direction, type Forecast, type Routes } from "../../protocol/protocol";
 import { directionOf, threats } from "./surroundings";
 
 const TICKS_PER_SECOND = 60;

@@ -15,7 +15,7 @@ import {
   unpaired,
 } from "./catalog";
 import type { Bridge } from "./agent/bridge";
-import { validPort } from "./agent/protocol";
+import { validPort } from "../protocol/protocol";
 import { chatBox } from "./chat";
 import { type Data, liveData } from "./data";
 import type { Discovery } from "./discovery";
