@@ -6,7 +6,8 @@ import { Foresight } from "./forecast";
 import { BRIDGE_PORT, bridgeOrigin, validPort } from "../../protocol/address";
 import { type ChatMessage, DEFAULT_SETTINGS, type PageLine, parsePilotChange, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../../protocol/pilot";
 import { parseCommand } from "../../protocol/commands";
-import { inRun, snapshot } from "./snapshot";
+import { inRun } from "../game/screen";
+import { snapshot } from "./snapshot";
 
 const PORT_KEY = "tibobit.bridgePort";
 const SETTINGS_KEY = "tibobit.pilotSettings";

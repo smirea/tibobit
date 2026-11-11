@@ -1,6 +1,6 @@
 import type { Bridge } from "../agent/bridge";
 import type { CardOption, ChatMessage } from "../../protocol/pilot";
-import { choiceCards } from "../agent/snapshot";
+import { choiceCards } from "../game/screen";
 import { moveIcon } from "./icons";
 
 // The bot waits 2 seconds (PICK_SHOW_MS in tibo-bot.ts) before taking the card; the pick glows a little before that.

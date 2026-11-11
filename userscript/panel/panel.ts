@@ -7,12 +7,9 @@ import type { Discovery } from "../combos/discovery";
 import type { GameLink } from "../game/link";
 import type { IconSheet } from "../game/types";
 import { css } from "./style";
+import { inRun, PANEL_ID } from "../game/screen";
 
 type View = { d: Data; discovery: Discovery; icons: IconSheet | undefined; loadout: Loadout; banished: ReadonlySet<string> };
-
-function isShown(el: Element): boolean {
-  return el.getClientRects().length > 0;
-}
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
@@ -276,7 +273,7 @@ function annotateCard(card: HTMLElement, v: View, version: number) {
  */
 export function guardPanelKeys() {
   for (const type of ["keydown", "keyup", "keypress"]) {
-    window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest("#tibo-helper") !== null && e.stopImmediatePropagation(), true);
+    window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest(`#${PANEL_ID}`) !== null && e.stopImmediatePropagation(), true);
   }
 }
 
@@ -287,7 +284,7 @@ function mount(chat: HTMLElement, footer: HTMLElement): { panel: HTMLElement; co
   const content = h("div", "tbh-content");
   // The port row sits above the bot's controls while it plays, and at the panel's foot otherwise.
   const panel = h("div", "tbh-panel", content, footer, chat);
-  panel.id = "tibo-helper";
+  panel.id = PANEL_ID;
   if (window.innerWidth < 700) panel.classList.add("tbh-collapsed");
   document.body.append(panel);
   return { panel, content };
@@ -316,9 +313,8 @@ export function startHelper(link: GameLink, discovery: Discovery, bridge: Bridge
 
   const update = () => {
     queued = false;
-    const hud = document.querySelector(".hud-weapons");
     const game = link.game;
-    const running = game !== undefined && !game.state.over && hud !== null && isShown(hud);
+    const running = game !== undefined && inRun(link);
     // Outside a run (title, mode select, end screens) the panel shows only the agent port box.
     panel.classList.toggle("tbh-idle", !running);
     dropStaleTip();

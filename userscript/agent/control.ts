@@ -1,10 +1,11 @@
 import type { Game, GameState } from "../game/types";
 import type { GameLink } from "../game/link";
-import type { Command, CommandStatus, Envelope, GameMode, Target } from "../../protocol/commands";
+import type { Command, CommandStatus, Envelope, GameMode } from "../../protocol/commands";
 import { STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
-import { button, modeScreen } from "../game/screen";
-import { inRun } from "./snapshot";
+import { button, inRun, modeScreen, press, until, wait } from "../game/screen";
 import { type CheckpointFile, SEED_KEY, Training } from "./training";
+import { pickDifficulty, pickWeapon } from "./menus";
+import { anchored, type Place, toward } from "./steering";
 
 /** Where checkpoints live: the agent server's disk, reached through the bridge. */
 export type CheckpointStore = { put(file: CheckpointFile): Promise<void>; get(name: string): Promise<CheckpointFile> };
@@ -24,87 +25,10 @@ type Active = {
   to?: Place;
 };
 
-/** A target that stays put as Tibo moves. */
-export type Place = Exclude<Target, { dx: number }>;
-
-function anchored(s: GameState, to: Target): Place {
-  return "dx" in to ? { x: (s.player.x[s.me] ?? 0) + to.dx, y: (s.player.y[s.me] ?? 0) + to.dy } : to;
-}
-
-/** The input that walks Tibo to a goal and stops on it. */
-export function toward(s: GameState, goal: { x: number; y: number; within: number } | undefined): { x: number; y: number } {
-  if (goal === undefined) return STILL;
-  const dx = goal.x - (s.player.x[s.me] ?? 0);
-  const dy = goal.y - (s.player.y[s.me] ?? 0);
-  const dist = Math.hypot(dx, dy);
-  return dist > goal.within ? { x: dx / dist, y: dy / dist } : STILL;
-}
 
 
-function wait(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
 
-// Some menu buttons only answer a click and others only a focused Enter, so try both.
-async function press(el: HTMLElement) {
-  el.click();
-  await wait(300);
-  if (!el.isConnected) return;
-  el.focus();
-  for (const type of ["keydown", "keyup"]) el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", bubbles: true }));
-}
 
-const byTestId = (id: string) => document.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`) ?? undefined;
-const locked = (b: HTMLButtonElement | undefined) => b === undefined || b.disabled || b.getAttribute("aria-disabled") === "true";
-
-/**
- * Picks a difficulty on the mode screen and returns what was picked, such as "hard" or
- * "nightmare-3". "highest" steps up while the game allows: to Nightmare, then up its levels, which
- * unlock as the profile plays them.
- */
-async function pickDifficulty(difficulty: string): Promise<string> {
-  if (difficulty === "highest") {
-    for (let i = 0; i < 10 && !locked(byTestId("pick-harder")); i++) await press(byTestId("pick-harder") as HTMLButtonElement);
-    for (let i = 0; i < 100 && !locked(byTestId("nightmare-higher")); i++) {
-      byTestId("nightmare-higher")?.click();
-      await wait(100);
-    }
-  } else {
-    const pick = button(new RegExp(`^${difficulty}$`, "i"));
-    if (pick === undefined) throw new Error(`no ${difficulty} difficulty button`);
-    pick.click();
-  }
-  await wait(200);
-  const chosen = document.querySelector<HTMLElement>('.run-picker-chip[aria-pressed="true"]')?.dataset.level;
-  if (chosen === undefined) throw new Error("no difficulty is picked on the mode screen");
-  const level = chosen === "nightmare" ? byTestId("nightmare-level")?.textContent?.match(/\d+/)?.[0] : undefined;
-  return level === undefined ? chosen : `${chosen}-${level}`;
-}
-
-/** Picks the starting weapon on the mode screen, or fails naming the ones the game offers. */
-async function pickWeapon(id: string) {
-  byTestId("start-pick-row")?.click();
-  await wait(400);
-  const option = document.querySelector<HTMLElement>(`[data-testid="start-pick-option-${id}"]`);
-  if (option === null) {
-    const offered = [...document.querySelectorAll<HTMLElement>('[data-testid^="start-pick-option-"]')].map((o) => o.dataset.testid?.slice("start-pick-option-".length)).filter((x) => x !== "random");
-    byTestId("start-pick-close")?.click();
-    throw new Error(`starting weapon ${id} is not offered; offered: ${offered.join(", ")}`);
-  }
-  option.click();
-  await wait(300);
-  const now = byTestId("start-pick-row")?.dataset.picked;
-  if (now !== id) throw new Error(`picked starting weapon ${id}, but the start screen shows ${now ?? "nothing"}`);
-}
-
-async function until(check: () => boolean, ms: number): Promise<boolean> {
-  const end = performance.now() + ms;
-  while (performance.now() < end) {
-    if (check()) return true;
-    await wait(100);
-  }
-  return check();
-}
 
 export class Controller {
   readonly statuses: CommandStatus[] = [];

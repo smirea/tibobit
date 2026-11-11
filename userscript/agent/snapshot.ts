@@ -1,5 +1,5 @@
 import type { GameLink } from "../game/link";
-import { modeScreen } from "../game/screen";
+import { inRun, modeScreen, pauseMenuOpen } from "../game/screen";
 import type { CommandStatus } from "../../protocol/commands";
 import type { Forecast, Snapshot } from "../../protocol/snapshot";
 import { reflect } from "./reflect";
@@ -7,34 +7,6 @@ import { surroundings } from "./surroundings";
 import { TICKS_PER_SECOND } from "../../protocol/geometry";
 
 
-/**
- * The open choice's cards and buttons in on-screen order, for the panel's pick overlay. Level-ups,
- * chests and shrines show cards; shops such as the vendor or the dog kennel show plain buttons.
- */
-export function choiceCards(): HTMLElement[] {
-  const cards = [...document.querySelectorAll<HTMLElement>("button.ui-card, .ui-card[data-tip]")];
-  // The other buttons of the overlay: Leave in a shop, Reroll and Skip on a level-up. Banish is
-  // left out because it only toggles a mode for the next click.
-  const buttons = [...document.querySelectorAll<HTMLButtonElement>("button")].filter(
-    (b) =>
-      !b.matches(".ui-card, .ui-pause-btn, .ui-sound") &&
-      !b.closest("#tibo-helper") &&
-      b.getClientRects().length > 0 &&
-      (b.textContent ?? "").trim() !== "" &&
-      !/^banish/i.test((b.textContent ?? "").trim()),
-  );
-  return [...cards, ...buttons];
-}
-
-/** The game's pause menu (Escape or P) stops the run without setting the sim's own paused flag. */
-function pauseMenuOpen(): boolean {
-  return [...document.querySelectorAll<HTMLButtonElement>("button")].some((b) => !b.closest("#tibo-helper") && b.textContent?.trim() === "Resume" && b.getClientRects().length > 0);
-}
-
-export function inRun(link: GameLink): boolean {
-  const hud = document.querySelector(".hud-weapons");
-  return link.game !== undefined && !link.game.state.over && hud !== null && hud.getClientRects().length > 0;
-}
 
 /** The game's own localStorage entries, parsed where they are JSON. */
 function gameStorage(): Record<string, unknown> {
