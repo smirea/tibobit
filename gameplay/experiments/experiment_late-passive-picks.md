@@ -2,23 +2,23 @@
 
 | Field | Value |
 | --- | --- |
-| Status | recheck |
-| Area | models |
+| Status | proposed |
+| Area | build |
 | Result | - |
 | Created | L6.I5 |
-| Updated | L6.I10 |
+| Updated | L7.I10 |
 
 ## Hypothesis
 
-After the first evolution the default planner.pick spends passive picks on utility passives (Peel Out, Slow Cooker, Big Bowl), so max HP and armor stay near 134 and 12. A pick text that takes Max HP, Armor, Recovery, Gravy Heart or Stuffed Skin before a utility passive already at level 3 or more raises max HP and armor by 8:00 and lowers health lost per minute 4:00-8:00, without cutting damage output much.
+After the first evolution the default planner.pick spends passive picks on utility passives, so max HP and armor stay near 134 and 12. A pick text that takes Gravy Heart, Starch Plating, Stuffed Skin or Root Network before utility passives raises max HP and armor.
 
 ## Method
 
-Gym playbook-nm1-240s (fresh seeker-sprouts built by the playbook to 4:00 this iteration), 240 s games to 8:00. 5 control games with the playbook against 5 with the defense-passives planner.pick. Metrics chosen first: max HP and armor at 8:00 (mean and spread), health lost per minute 4:00-8:00, alive at 8:00. Manipulation check: picks lines show Max HP, Armor, Recovery, Gravy Heart or Stuffed Skin taken over Peel Out, Slow Cooker, Big Bowl or Lean Lunch after the evolution. Gym games stay a lead; any gain would need fresh-seed confirmation from 0:00 on 10 paired seeds.
+Unchanged from L7.I1: fresh seeker-sprouts from 0:00, 300 s, s41-44, both arms, retried once games start reliably.
 
 ## Findings
 
-L6.I5-I9 played nothing (gym builds failed, then fresh games failed to start, seeded or not). The question stays open. Redo from 0:00 on fresh seeds s41-50, 300 s, both arms played now, only when games start.
+L6.I5-I9 and L7.I1-I9 (late-passive-picks-fresh) played nothing because games failed to start. Re-run on s41-50 at 240 s, playbook against defense-first pick text, once a small probe shows that games start. The question stays a one-run lead (B125).
 
 ## Games
 
