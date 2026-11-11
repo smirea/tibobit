@@ -8,37 +8,46 @@ Survive 20:00 on the Nightmare level named in the status (the ladder starts at 1
 
 ## What loop 1 taught
 
-- Tests on one seed, in 180 s games, or from loadouts handed over at 0:00 were misleading. Treat anything not played from 0:00 on at least 3 fresh seeds as a lead only.
+- Tests on one seed, in 180 s games, or from loadouts handed over at 0:00 were misleading. Treat anything not played from 0:00 on fresh seeds as a lead only.
 - The danger window on Nightmare 1 is 2:00-3:30 for thin builds. Survival follows chests opened and an evolution by about 2:00-3:30.
 
 ## What loop 2 taught
 
-- distrustSeconds 10 with forecastSeconds 1 and the seeker-sprouts start is confirmed: it lived 5:00 on 6 of 10 paired seeds against 2 of 10 for the old playbook. The full run reached 6:43.
-- Nothing built on top of the knobs beat them from 0:00 (spot-first, low-health, catalyst-first picks, focus picks, chest-first goal, hazard prompt, boss knobs). Arms of 4 games cannot separate differences below about 40 points. Default to not changing the playbook unless an arm wins on at least 4 of 5 paired seeds.
-- Gym leads from one game per arm flipped on fresh seeds three times. Use gyms to pin a moment, never to confirm a change. Gyms made from surviving builds also overstate strength: the 10:00 and 15:00 builds had 174 hp, while the full run's 5:00 build had 120 hp and four weapons at 1/8 and died at 6:43.
-- Chest rewards raised the top weapon (Broadside 1/8 to 8/8 before its evolution). The planner spreads level-up picks over new weapons. It also chose evade over chests at full health, and it spent no gold.
-- Open questions: starting weapons other than seeker-sprouts with the knobs, the 5:50-7:00 crowd window (Bog Toad, Blight Spore, Late Blight), the dash threshold (3 dashes, all after 6:30), max HP and armor, gold use, and 15:00-20:00 (Grease Fiend elites killed the 15:00 build at 18:23 with 15171 gold unspent).
+- distrustSeconds 10 with forecastSeconds 1 and the seeker-sprouts start is the playbook. It lived 5:00 on 6 of 10 paired seeds against 2 of 10 for the old default.
+- Nothing stacked on the knobs beat them from 0:00 (spot-first, low-health, catalyst-first picks, focus picks, chest-first goal, hazard prompt, boss knobs). Gym leads from one game per arm flipped on fresh seeds three times.
+- Chest rewards raise the top weapon; level-up picks spread across new weapons. Gold goes unspent. A 15:00 build died at 18:23 to tier 5 Grease Fiend elites.
+
+## What loop 3 taught
+
+- Nine iterations and 40+ games produced no playbook change. Every alternative tied or lost: other starts (starch-bolt 3/5, spud-lob 1/3, spud-cannon 0/3), exploreDistance 700, planEvery 10, autopilot 1 (1/5), eliteFrom 120 (2/5), hold-levels picks (1/3), distrust 20 and forecast 1.5 (2/5).
+- The playbook baseline pooled over fresh seeds is about 8 of 15 reaching 5:00. Full runs with it: 6:43 and 2:07. Arms of 5 games cannot tell 3/5 from 2/5; do not read ties or one-seed wins as evidence. A change needs at least 8 paired seeds and a clear margin, or a large visible mechanism.
+- Deaths cluster in the opening: an elite burst at 1:00-1:10 (79 health in 7 s, with 12 dash asks scoring 17-43% under the 0.5 threshold) or the 2:00 amusing boss, on 120 max hp with 0-1 chests and four weapons at 1/8.
+- Dashes only fire below about 35% health, after the damage is done. dashThreshold 0.3 was tested only on a strong 5:50 gym, never from 0:00.
+- Shrines (armor, max HP) were rarely charged. The games that took them had 140-149 max hp and armor 14-26.
+- A gym saved on an older build may not run, and a failed gym wastes games. Build and use a gym in the same iteration, or prefer fresh seeds from 0:00.
 
 ## Learning
 
 - Read the last iteration's games first and say what they showed before planning more.
-- Pick a focus for the iteration: one or two questions. Compare games that differ in one thing, from the same fresh seeds, so the difference means something. Use at least 3 seeds per arm (4-5 for anything that might enter the playbook).
-- Read the picks and goal logs, not only the outcome: weapon levels at 5:00, chests listed against opened with distances, how long evade ran at full health, dash scores against the threshold, gold unspent, max HP.
-- Give each iteration at least one question from an area not yet covered (map has 0 experiments; items, economy, bosses and hazards have 1-2).
-- Record what is good and bad as beliefs with evidence. One game is a lead; it takes a repeat to be sure.
+- Pick one question per iteration. Compare games that differ in one thing, on the same fresh seeds. Include the baseline on the same new seeds so the pooled baseline grows.
+- For opening questions play 240 s games on 8-10 seeds (31-45) rather than 300 s games on 5; opening deaths show by 2:30.
+- Read the log, not only the outcome: the goal running when each big health loss began, dash scores against the threshold, chests listed against opened with distances, weapon levels and max HP at 2:00, shrines charged, gold unspent.
+- Record beliefs with their evidence and the number of seeds. One game is a lead.
 - Generalize. What you learn has to hold on any map and seed.
 
 ## Explore first
 
-Start-weapon depth comes first: play spud-lob, starch-bolt and spud-cannon with the knobs on at least 3 fresh seeds each, against seeker-sprouts on the same seeds. Then test the 5:50-7:00 window (dash threshold, HP-first and hold-levels picks) and gold use. Check evolutions and levels in fresh games, not only from loadouts.
+1. dashThreshold 0.3 (with bossDashThreshold 0.3 and bossDashRange 250) from 0:00, paired with the playbook on seeds 31-40.
+2. Early Spud Shrine charging (planner.goal that rates shrines above exploring while health is above 60% and no elite is near) for armor and max HP, paired on the same seeds.
+3. Only then the 5:50-7:00 crowd window and 15:00-20:00, with a gym built in the same iteration.
 
 ## Gyms
 
-Keep gyms that pin down decisive moments: 1:50, the 350 s crowd window and 15:00. Prefer a gym built from this playbook's typical thin build over one from a lucky survivor. Retire gyms that no longer teach anything. A gym teaches little for prompt changes when its build is thin or unusual; for those, prefer fresh seeds from 0:00.
+A gym pins one moment on one map. Use it to look at a decision, never to confirm a change. Keep only gyms that will be used next iteration, built from a thin typical playbook build, and retire the rest. Do not plan games on a gym built in an earlier iteration unless the status marks it ready.
 
 ## The playbook
 
-Your playbook is what the full run plays. Change it only when the evidence says a change is better: an experiment confirmed with games from 0:00 on fresh seeds. Changing the starting weapon needs a baseline of at least 5 fresh seeds with the knobs on and the same seeds for the alternative. Say why for every change.
+Your playbook is what the full run plays. Change it only when an experiment confirmed with games from 0:00 on at least 8 fresh paired seeds says so. Changing the starting weapon needs the same. Say why for every change.
 
 # Full run
 
@@ -50,10 +59,10 @@ Survive 20:00. A win moves your Nightmare ladder up one level.
 
 ## Choosing the playbook
 
-- Use what your beliefs and experiments support, not what you hope works. If two choices are equally supported, keep the one that has already played well (the opening knobs and the seeker-sprouts start have reached 6:43).
-- A random starting weapon makes the result a coin flip. If an experiment confirmed on fresh seeds supports one start, set the playbook weapon to it.
-- Do not assume a build that survives the opening will scale. Gyms built from survivors say little about the typical 5:00 state (120 hp, several weapons at 1/8), which died at 6:43.
-- Write the plan so it can be checked afterwards: name the first chest time, the evolution and its time, the health at 5:00, and the most likely killer with its time window. Include the 5:30-7:00 window.
+- Use what your beliefs and experiments support, not what you hope works. If two choices are equally supported, keep the one that has already played well (seeker-sprouts with distrustSeconds 10 and forecastSeconds 1 has reached 5:00 on about 8 of 15 fresh seeds).
+- One full run is a single sample of a wide spread: the same playbook lived 6:43 and 2:07. Do not read a single run as a verdict on the playbook, and do not change the playbook because of one run.
+- Do not assume a build that survives the opening will scale. Gyms built from survivors say little about the typical 5:00 state (120 hp, several weapons at 1/8).
+- Write the plan so it can be checked afterwards: name the first chest time, the evolution and its time, the health at 5:00, and the most likely killer with its time window. Give a survival probability to 3:00, 5:00 and 7:00 from the pooled baseline, and include the 1:00-2:30 opening burst, the 2:00 amusing boss and the 5:30-7:00 window.
 
 ## Generalizing
 
@@ -65,12 +74,12 @@ The full run is over. Review it, then look back over the whole loop and at your 
 
 ## The review
 
-Write these sections: **Summary** (what happened and how far it got, and how it compared with the plan's checks), **What worked**, **What failed** (with game times and log rows), **Moments** that decided the run, and **Next loop** (what the next nine iterations should learn). Quote numbers, not impressions. Before judging, read these from the log: health lost per minute, weapon and passive levels and max HP at death, which catalysts were offered and taken, chests listed against opened with their distances and the longest stretch with no chest opened, how long evade ran at full health, dash scores against the threshold, gold earned and spent, and the goal that was running when each big health loss began.
+Write these sections: **Summary** (what happened and how far it got, and how it compared with the plan's checks), **What worked**, **What failed** (with game times and log rows), **Moments** that decided the run, and **Next loop** (what the next nine iterations should learn). Quote numbers, not impressions. Read these from the log: health lost per minute, weapon and passive levels and max HP at death, which catalysts were offered and taken, chests listed against opened with distances and the longest stretch with no chest opened, how long evade ran at full health, dash scores against the threshold (including the asks that stayed under it during a burst), gold earned and spent, shrines charged, and the goal that was running when each big health loss began. Remember one run is one sample: say what it adds to the pooled record, not what it proves.
 
 ## Your prompts
 
-Your three prompts (# Experiments, # Full run and # Reflect) are how you work. Look at what the loop did: which iterations taught something and which were wasted (including unusable replies), where you guessed instead of testing, which tests were on one seed, one game per arm, or a survivor-built gym and misled you, and where your full run went against the evidence. Rewrite the prompts so the next loop works better. Keep every ## section, and keep them short.
+Your three prompts (# Experiments, # Full run and # Reflect) are how you work. Look at what the loop did: which iterations taught something and which were wasted (including unusable replies and stale gyms), where you guessed instead of testing, which tests were on too few seeds, one game per arm, or a survivor-built gym and misled you, and where the full run went against the evidence. Check whether the sample sizes you used could have shown the effect you hoped for. Rewrite the prompts so the next loop works better. Keep every ## section, and keep them short.
 
 ## Beliefs and gyms
 
-Update the beliefs the full run bears on and add the new ones. Keep the gyms that will matter next loop (a gym from a thin typical build over a survivor's), and retire the rest.
+Update the beliefs the full run bears on and add the new ones, with the number of seeds behind each. Keep the gyms that will matter next loop (a thin typical build over a survivor's, and only if they can be used) and retire the rest.
