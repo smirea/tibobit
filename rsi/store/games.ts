@@ -40,6 +40,7 @@ export function gameEntry(r: GameResult, gyms: Gym[], full: boolean): string {
     ...(r.result?.totals === undefined ? [] : totalsLines(r.result.totals).map((l) => `- ${l}`)),
     ...(!full && r.economy !== undefined ? [`- Gold, spots and chests: ${r.economy}.`] : []),
     ...(!full && r.picks !== undefined ? [`- Picks, each with the planner's odds for the card taken and for the others offered: ${r.picks.join("; ") || "none"}.`] : []),
+    ...(!full && r.build !== undefined ? r.build.map((line) => `- ${line}`) : []),
     ...(full && r.stats !== undefined ? ["", r.stats] : []),
   ].join("\n");
 }

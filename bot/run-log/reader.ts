@@ -2,7 +2,7 @@
 // took it, when bosses and the first chest came, how goals ended, what Tibo gained, and dashes.
 
 import { csvField, parseCsv } from "../../csv";
-import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, hurtCell, listCell, LOG_COLUMNS, type LoggedRow, UNANSWERED, weighedCell } from "./cells";
+import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, heldCell, hurtCell, listCell, LOG_COLUMNS, type LoggedRow, statsCell, UNANSWERED, weighedCell } from "./cells";
 
 const goalKind = goalCell.kind;
 
@@ -130,6 +130,7 @@ export function runStats(csv: string): string {
     `- First chest listed: ${firstChest ?? "never"}. First time under 25% health: ${low ?? "never"}.`,
     `- Gold, spots and chests: ${economy(csv)}.`,
     `- Picks, each with the planner's odds for the card taken and for the others offered: ${picks(csv).join("; ") || "none"}.`,
+    ...buildLines(csv).map((line) => `- ${line}`),
     `- Goal changes, each with the planner's rating of the goal chosen and of the next two: ${goalChanges(csv).join("; ") || "none"}.`,
     `- Goals by kind (done / gave up / dropped): ${[...goals].map(([k, g]) => `${k} ${g.done}/${g.failed}/${g.dropped}`).join("; ") || "none"}.`,
     `- Dashes: ${dashes.length}${dashes.length === 0 ? "" : `: ${dashes.slice(0, 12).join("; ")}${dashes.length > 12 ? "; …" : ""}`}.`,
@@ -153,6 +154,51 @@ export function picks(csv: string): string[] {
       const others = offered.filter((o) => o !== taken).sort((a, z) => (z.percent ?? 0) - (a.percent ?? 0));
       return `${r.time} took ${taken === undefined ? r.action : rated(taken)}${others.length === 0 ? "" : ` over ${others.map(rated).join(", ")}`}`;
     });
+}
+
+const BUILD_MARKS = [60, 120, 180];
+const BUILD_STATS = ["maxHp", "armor", "damageMult", "recovery"];
+const PASSIVE_LEVELS = [1, 3, 5];
+
+/**
+ * What Tibo was at 1:00, 2:00 and 3:00 on the run's clock (those the game played through) and at
+ * its end, one line each: the level, the stats builds are compared by, and every weapon and
+ * passive with its level.
+ */
+export function buildOverTime(csv: string): string[] {
+  const live = (rowsOf(csv) ?? []).filter((r) => r.seconds !== "");
+  const first = live[0];
+  const last = live.at(-1);
+  if (first === undefined || last === undefined) return [];
+  const at = (r: LoggedRow) => Number(r.seconds);
+  const marks = BUILD_MARKS.filter((mark) => at(first) <= mark && mark < at(last)).flatMap((mark) => live.filter((r) => at(r) <= mark).at(-1) ?? []);
+  return [...marks, last].map((r) => {
+    const stats = statsCell.decode(r.stats);
+    return `${r.time} level ${r.level}, ${BUILD_STATS.map((name) => `${name} ${stats[name] ?? "?"}`).join(", ")}, ${[...listCell.decode(r.weapons), ...listCell.decode(r.passives)].join(", ")}`;
+  });
+}
+
+/** When each passive first reached levels 1, 3 and 5, such as `Starch Plating 1 at 0:32, 3 at 1:10`; "at the start" for a level the game began with. */
+export function passiveLevels(csv: string): string[] {
+  const live = (rowsOf(csv) ?? []).filter((r) => r.seconds !== "");
+  const reached = new Map<string, string[]>();
+  for (const [i, r] of live.entries())
+    for (const passive of listCell.decode(r.passives).flatMap((text) => heldCell.decode(text) ?? [])) {
+      const levels = reached.get(passive.name) ?? [];
+      reached.set(passive.name, levels);
+      for (const level of PASSIVE_LEVELS.slice(levels.length)) if (passive.level >= level) levels.push(`${level} ${i === 0 ? "at the start" : `at ${r.time}`}`);
+    }
+  return [...reached].map(([name, levels]) => `${name} ${levels.join(", ")}`);
+}
+
+/** The build over time and the passive levels, as the lines a game's record and its stats both carry. */
+export function buildLines(csv: string): string[] {
+  const build = buildOverTime(csv);
+  const passives = passiveLevels(csv);
+  return [
+    ...(build.length === 0 ? [] : [`Build at 1:00, 2:00, 3:00 and the end (level, effective stats, weapons and passives): ${build.join(" | ")}.`]),
+    ...(passives.length === 0 ? [] : [`Passive levels first reached: ${passives.join("; ")}.`]),
+  ];
 }
 
 /**

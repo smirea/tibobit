@@ -40,6 +40,7 @@ export const LOG_COLUMNS = [
   "elites",
   "elite_list",
   "spot",
+  "stats",
 ] as const;
 type LogColumn = (typeof LOG_COLUMNS)[number];
 /** A row as it is read back: every column as text, "" when the row left it out. */
@@ -48,6 +49,21 @@ export type LoggedRow = Record<LogColumn, string>;
 export const listCell = {
   encode: (parts: string[]) => parts.join("; "),
   decode: (cell: string | undefined) => (cell ?? "").split("; ").filter(Boolean),
+};
+
+/** A weapon or passive held, with its level of the most it can reach: `Starch Plating 3/5`. */
+export const heldCell = {
+  encode: (x: { name: string; level: number; max: number }) => `${x.name} ${x.level}/${x.max}`,
+  decode: (text: string) => {
+    const m = text.match(/^(.*) (\d+)\/(\d+)$/);
+    return m === null ? undefined : { name: m[1] ?? "", level: Number(m[2]), max: Number(m[3]) };
+  },
+};
+
+/** The effective stats by the game's own names: `maxHp 150; armor 12; damageMult 1.12`. */
+export const statsCell = {
+  encode: (stats: Record<string, number>) => listCell.encode(Object.entries(stats).map(([name, value]) => `${name} ${Math.round(value * 1000) / 1000}`)),
+  decode: (cell: string | undefined): Record<string, number> => Object.fromEntries(listCell.decode(cell).map((part) => [part.slice(0, part.lastIndexOf(" ")), Number(part.slice(part.lastIndexOf(" ") + 1))])),
 };
 
 type Where = { dist: number; dir: string };

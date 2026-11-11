@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bossCell, changeCell, changesCell, dashCell, eliteCell, goalCell, hurtCell, listCell, movesCell, weighedCell } from "./cells";
+import { bossCell, changeCell, changesCell, dashCell, eliteCell, goalCell, heldCell, hurtCell, listCell, movesCell, statsCell, weighedCell } from "./cells";
 
 test("a boss, an elite and a hurt source read back as written, names with spaces and brackets included", () => {
   expect(bossCell.decode(bossCell.encode({ name: "The Amusing (Bouche)", type: "amusing", dist: 119.6, dir: "down-left", hp: 3200, maxHp: 4000 }))).toEqual({ name: "The Amusing (Bouche)", type: "amusing", dist: 120, dir: "down-left", percent: 80, maxHp: 4000 });
@@ -43,4 +43,10 @@ test("the moves the action model weighed are written in words, never as objects"
       { move: "left", ruledOut: false },
     ]),
   ).toBe("up-left -12 hp hurt 2 useful 60%; stand still no damage hurt 0 useful 10%; down dead hurt - useful - (ruled out); left ? hurt - useful -");
+});
+
+test("what Tibo holds and its stats read back as written", () => {
+  expect(heldCell.decode(heldCell.encode({ name: "Starch Plating", level: 3, max: 5 }))).toEqual({ name: "Starch Plating", level: 3, max: 5 });
+  expect(heldCell.decode("Crit Chip x1")).toBeUndefined();
+  expect(statsCell.decode(statsCell.encode({ maxHp: 148.8, armor: 12, damageMult: 1.1204 }))).toEqual({ maxHp: 148.8, armor: 12, damageMult: 1.12 });
 });

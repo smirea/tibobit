@@ -3,7 +3,7 @@ import { groundSources, pct, said, spotLine } from "../phrasing";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import type { World } from "../world";
 import { clock } from "../../clock";
-import { bossCell, changeCell, changesCell, chestCell, eliteCell, hurtCell, listCell, LOG_COLUMNS, placeCell } from "./cells";
+import { bossCell, changeCell, changesCell, chestCell, eliteCell, heldCell, hurtCell, listCell, LOG_COLUMNS, placeCell, statsCell } from "./cells";
 import { csvField } from "../../csv";
 
 // One CSV row per model call and per goal that starts or ends, with the player's state at that
@@ -62,9 +62,10 @@ export class RunLog {
             spot: r.chests.some((c) => c.dir === "still") ? "chest" : (r.spots.find((p) => p.inside)?.name ?? ""),
             food: listCell.encode(r.food.slice(0, 2).map(at)),
             pois: listCell.encode(r.spots.filter((x) => x.chargeSeconds > 0).slice(0, 4).map((x) => `${x.name} ${at(x)}`)),
-            weapons: listCell.encode(r.weapons.map((w) => `${w.name} ${w.level}/${w.max}`)),
-            passives: listCell.encode(r.passives.map((w) => `${w.name} ${w.level}/${w.max}`)),
+            weapons: listCell.encode(r.weapons.map(heldCell.encode)),
+            passives: listCell.encode(r.passives.map(heldCell.encode)),
             items: listCell.encode(r.items.map((i) => `${i.name} x${i.count}`)),
+            stats: statsCell.encode(t.stats),
           };
     const values = { ...state, ...row, wall: new Date().toISOString().slice(11, 19) } as Record<string, string | number | undefined>;
     appendFileSync(this.file, `${LOG_COLUMNS.map((c) => csvField(String(values[c] ?? ""))).join(",")}\n`);
