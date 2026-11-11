@@ -14,9 +14,13 @@ mkdirSync(LOGS, { recursive: true });
 
 const opened: Slot[] = [];
 
+let closing: Promise<unknown> | undefined;
+
+/** Stops the games and the servers, then exits. A stop signal and the loop's own end can both ask; the slots are closed once and every caller waits for that. */
 export async function shutdown(code: number): Promise<never> {
   beginStop();
-  await Promise.all(opened.map((s) => s.close()));
+  closing ??= Promise.all(opened.map((s) => s.close()));
+  await closing;
   process.exit(code);
 }
 process.on("SIGINT", () => void shutdown(130));
