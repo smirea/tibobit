@@ -6,7 +6,7 @@
 import { knobs } from "./run-templates";
 import { GIVE_UP_SECONDS, HURT_SECONDS, PLAN_RANGE } from "./limits";
 import { onChest, plural, priceWords } from "./phrasing";
-import type { ActionTag, GoalResult, Inspect } from "../protocol/pilot";
+import { type ActionTag, type GoalResult, type Inspect, SPOT_TAGS } from "../protocol/pilot";
 import type { Direction } from "../protocol/geometry";
 import type { CommandStatus } from "../protocol/commands";
 import { recentLoss, type World } from "./world";
@@ -117,31 +117,6 @@ export function goalTitle(g: Goal, r: World): string {
       return "Keep away from enemies";
   }
 }
-
-// By the game's own point-of-interest kind; one the game adds later shows as a plain Spot.
-const SPOT_TAGS: Record<string, ActionTag> = {
-  dog: "Pet",
-  dogKennel: "Kennel",
-  paidChest: "Crate",
-  chargeShrine: "Shrine",
-  curseShrine: "Curse",
-  goldenShrine: "Golden",
-  crops: "Farm",
-  vendor: "Shop",
-  microwave: "Microwave",
-  eliteNest: "Nest",
-  bossLair: "Lair",
-  botDock: "Bot",
-  whetstone: "Whetstone",
-  dinnerBell: "Bell",
-  taterSlots: "Slots",
-  seedVault: "Vault",
-  taterMagnet: "Magnet",
-  rootTunnel: "Tunnel",
-  taterLantern: "Light",
-  spudFreezer: "Freezer",
-  frenzyFryer: "Fryer",
-};
 
 function goalTag(g: Goal, r: World): ActionTag {
   switch (g.kind) {

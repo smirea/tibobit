@@ -1,10 +1,11 @@
-import { PLAN_EVERY, SERVER, STEP } from "./config";
-import type { ChatLine, PilotPace } from "../protocol/pilot";
+import { SERVER } from "./config";
+import type { ChatLine } from "../protocol/pilot";
+import type { Drive } from "../protocol/drive";
 import type { Command } from "../protocol/commands";
 import { AgentServer } from "../agent-server/client";
 
-/** Seconds between planner calls while a goal is under way, and between steps. The panel sends them every step, so they can change mid-run. */
-export let pace: PilotPace = { planEvery: PLAN_EVERY, actEvery: STEP };
+/** The Full Self Driving instructions, which the panel sends every step, so they can change mid-run. */
+export let drive: Drive | undefined;
 
 /** Whether the panel started this bot, which someone is watching. */
 export let piloted = false;
@@ -48,8 +49,14 @@ export async function send(c: Command) {
 // results), the browser's storage (the Nightmare ladder), and the clock and level for a run that ended.
 export const RAW = "run,counters,storage,runClock,over,loadout.level,loadout.shrineTotals";
 
-/** The panel sends its pace only to a bot it started. */
-export function followPanel(sent: PilotPace | undefined) {
-  pace = sent ?? pace;
+/** The panel sends its instructions only to a bot it started. */
+export function followPanel(sent: Drive | undefined) {
+  drive = sent;
   piloted = sent !== undefined;
+}
+
+/** The game state as the planner can embed it, for the panel's list. Never awaited, like `say`. */
+export function showState(time: number, blocks: Record<string, string>) {
+  const body = JSON.stringify({ time, blocks });
+  chatQueue = chatQueue.then(() => fetch(`${SERVER}/pilot/state`, { method: "POST", headers: { "content-type": "application/json" }, body }).then(() => undefined, () => undefined));
 }

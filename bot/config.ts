@@ -83,7 +83,7 @@ export const INTENT = option("intent", "");
 // Without --templates, the bot plays as the coach would: its playbook's templates and starting weapon.
 export const WEAPON = has("weapon") ? option("weapon", "") : (BASE.weapon ?? "");
 
-// For "Grok take the wheel" and trials: play the run already in progress instead of starting a fresh one.
+// For Full Self Driving and trials: play the run already in progress instead of starting a fresh one.
 export const TAKEOVER = TRIAL !== undefined || has("takeover");
 
 // The headless game's own API reloads the tab; "" keeps the bot from ever reloading, as in a person's browser.

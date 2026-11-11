@@ -2,14 +2,15 @@
 // its template asks for, which the coach wrote for this run with the game knowledge in it. It
 // picks every level-up, chest and shrine option, and weighs every goal Tibo could take on next,
 // one question each; the most promising becomes the goal. It is asked when a goal ends, at every
-// choice, when a boss appears, and every pace.planEvery seconds, so a better goal can take over.
+// choice, when a boss appears, when its instructions change, and every planEvery() seconds, so a
+// better goal can take over.
 
 import { onChest, plural, priceWords, said, spotSaid } from "./phrasing";
 import { knobs, planEvery, templates } from "./run-templates";
-import { blocks, type Card, cards } from "./blocks";
+import { blocks, type Card, cards, renderBlocks } from "./blocks";
 import { PLAN_MODEL } from "./config";
 import { RunNotes } from "./run-notes";
-import { command, piloted, say } from "./server";
+import { command, piloted, say, showState } from "./server";
 import { decide, type Question } from "./decider";
 import { talliesOf, totalsBetween, totalsLines } from "./tallies";
 import { giveUps, type Goal, goalId, goalTitle, locate, outcomes, pursuit, setGoal } from "./goals";
@@ -73,6 +74,8 @@ export class Planner {
   calls = 0;
   /** A card was just taken, so the goal is planned again with it in hand. */
   picked = false;
+  /** Why the planner's instructions changed since it last ran, if they did. */
+  retold: string | undefined;
   private lastAsked = Number.NEGATIVE_INFINITY;
   /** Bosses already planned for, by id: each new one gets a plan the moment it shows up. */
   private seenBosses = new Set<string>();
@@ -86,7 +89,8 @@ export class Planner {
   due(r: World): string | undefined {
     const fresh = r.bosses.find((b) => !this.seenBosses.has(b.type));
     let why: string | undefined;
-    if (this.picked) why = "a card was just taken";
+    if (this.retold !== undefined) why = this.retold;
+    else if (this.picked) why = "a card was just taken";
     else if (fresh !== undefined) why = `a boss appeared: ${fresh.name}, ${Math.round(fresh.dist)} away to the ${fresh.dir}`;
     else if (knobs().planOnHurt > 0 && recentLoss(r) >= knobs().planOnHurt * r.maxHp && r.time - this.lastAsked >= HURT_SECONDS) why = `Tibo lost ${Math.round(recentLoss(r))} health in the last ${HURT_SECONDS} seconds`;
     else if (r.time - this.lastAsked >= planEvery()) why = `${planEvery()} seconds passed`;
@@ -97,8 +101,10 @@ export class Planner {
   /** Picks among `options` when a choice is open, and sets the next goal. */
   async plan(r: World, why: string, options?: Card[]): Promise<PlanAnswer> {
     this.lastAsked = r.time;
+    this.retold = undefined;
     if (options === undefined) this.picked = false;
     this.calls++;
+    if (piloted) showState(r.time, renderBlocks(r));
     const vars = { ...blocks(r, r.book), why: () => why };
     const state = render(templates.planner.state, vars);
     const goals = goalOptions(r);

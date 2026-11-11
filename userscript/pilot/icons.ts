@@ -58,7 +58,6 @@ export const ACTION_ICONS: Record<ActionTag, Icon> = {
   "Take over": [ring(12, 12, 9), ring(12, 12, 2.5), "M3.5 10.5l6 1M20.5 10.5l-6 1M12 14.5V21"],
   Over: ["M12 3a8 8 0 0 0-8 8c0 2.8 1.3 4.5 3 5.5V20a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3.5c1.7-1 3-2.7 3-5.5a8 8 0 0 0-8-8z", dot(9, 11.5, 1.9), dot(15, 11.5, 1.9), "M10 21v-2.5M14 21v-2.5"],
   Stopped: [{ fill: "M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" }],
-  Incognito: ["M3 11h18", "M6 11l1.5-6.5h9L18 11", ring(7.5, 16.5, 3), ring(16.5, 16.5, 3), "M10.5 16.5h3"],
 };
 
 /** A line the bot said without a tag, such as an error. */

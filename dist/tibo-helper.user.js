@@ -622,47 +622,46 @@
     };
   }
 
+  // protocol/drive.ts
+  var PLAN_EVERY = { min: 5, max: 30, initial: 10 };
+  function activeStep(steps, time) {
+    let at = 0;
+    for (const [i, s] of steps.entries())
+      if (s.at <= time)
+        at = i;
+    return at;
+  }
+
   // protocol/pilot.ts
-  var DEFAULT_PACE = { planEvery: 5, actEvery: 0.3 };
-  var PACE_LIMITS = { planEvery: { min: 0.5, max: 300, step: 0.5 }, actEvery: { min: 0.1, max: 5, step: 0.1 } };
-  var DEFAULT_SETTINGS = { pace: DEFAULT_PACE, incognito: false };
-  function snapPace(key, seconds) {
-    const { min, max, step } = PACE_LIMITS[key];
-    return Number((Math.round(Math.min(max, Math.max(min, seconds)) / step) * step).toFixed(1));
-  }
-  var applyChange = (settings, change) => ({
-    pace: { planEvery: change.planEvery ?? settings.pace.planEvery, actEvery: change.actEvery ?? settings.pace.actEvery },
-    incognito: change.incognito ?? settings.incognito
-  });
-  function parsePilotChange(input) {
-    const c = input ?? {};
-    const change = {};
-    for (const key of ["on", "incognito"]) {
-      if (c[key] === undefined)
-        continue;
-      if (typeof c[key] !== "boolean")
-        fail(`${key} must be true or false`);
-      change[key] = c[key];
-    }
-    for (const key of ["planEvery", "actEvery"]) {
-      if (c[key] === undefined)
-        continue;
-      const { min, max } = PACE_LIMITS[key];
-      const v = num(c[key], key);
-      if (v < min || v > max)
-        fail(`${key} must be from ${min} to ${max} seconds`);
-      change[key] = snapPace(key, v);
-    }
-    if (Object.keys(change).length === 0)
-      fail('send {"on": true|false}, {"incognito": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
-    return change;
-  }
   var PICK_SHOW_MS = 2000;
   var ACTION_TAGS = [
     ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
     ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
-    ...["Dash", "Start", "Take over", "Over", "Stopped", "Incognito"]
+    ...["Dash", "Start", "Take over", "Over", "Stopped"]
   ];
+  var SPOT_TAGS = {
+    dog: "Pet",
+    dogKennel: "Kennel",
+    paidChest: "Crate",
+    chargeShrine: "Shrine",
+    curseShrine: "Curse",
+    goldenShrine: "Golden",
+    crops: "Farm",
+    vendor: "Shop",
+    microwave: "Microwave",
+    eliteNest: "Nest",
+    bossLair: "Lair",
+    botDock: "Bot",
+    whetstone: "Whetstone",
+    dinnerBell: "Bell",
+    taterSlots: "Slots",
+    seedVault: "Vault",
+    taterMagnet: "Magnet",
+    rootTunnel: "Tunnel",
+    taterLantern: "Light",
+    spudFreezer: "Freezer",
+    frenzyFryer: "Fryer"
+  };
   var KEEP_PLANS = 500;
   var KEEP_OTHERS = 400;
   function trimChat(chat) {
@@ -675,30 +674,247 @@
     }
   }
 
-  // userscript/pilot/pilot.ts
-  var SETTINGS_KEY = "tibobit.pilotSettings";
-  function savedSettings() {
+  // bot/limits.ts
+  var GIVE_UP_SECONDS = 45;
+  var HURT_SECONDS = 3;
+
+  // bot/templates.ts
+  var BLOCKS = {
+    time: "game time as m:ss",
+    difficulty: "the run's difficulty, such as nightmare",
+    mode: "daily or world",
+    health: "health, its share of max and its trend over the last 30 seconds, e.g. 'Health 80/120 (67%, down from 90% 25 seconds ago).' It adds ', which is low' under 40%",
+    level: "level and the share of the way to the next",
+    gold: "gold held",
+    dash: "dash charges",
+    weapons: "weapons held (of 6 slots), each with its level and the game's description",
+    passives: "passives held (of 6 slots), each with its level and the game's description",
+    items: "items held with counts and the game's descriptions",
+    banished: "what was banished this run, which the game never offers again",
+    recipes: "every recipe that uses something held, with each part's state",
+    evolutions: "what the next chest evolves, or that no recipe is complete",
+    standing_on: "the chest or spot Tibo stands on and how far it is charged, and the ground damage sources standing still would take, by the forecast",
+    hurt_by: "damage taken in the last 3 seconds by source",
+    dps: "damage dealt a second over the last 3 seconds, e.g. 'Damage dealt a second over the last 3 seconds: 412.' (not part of {{state}})",
+    bosses: "bosses with distance, direction and health",
+    enemies: "enemies on screen, and the directions with the most and the fewest",
+    current_goal: "the goal under way and since when",
+    recent_goals: "the last 6 goals and how each ended",
+    weapon_damage: "damage dealt so far by each weapon held, most first, with its rate a minute, e.g. 'Damage dealt so far by weapon: Steam Vent 4012 (1783 a minute), Hash Hawk 2210 (982 a minute).' (not part of {{state}})",
+    stats: "every effective stat by the game's own name (damageMult, maxHp, armor, recovery, magnetRadius, luck and the rest), and what Spud Shrines have added",
+    resources: "rerolls, skips, banishes and revives left, and the curses held with the extra elites and bosses they add",
+    buffs: "timed boosts running (the game's gold rush, frenzy and the like), with seconds left",
+    schedule: "the next boss, elite and event, by the game's names, with the time each comes",
+    elites: "every elite alive: name, health, contact damage, distance and direction",
+    hazards: "within the forecast's horizon: the game's hazard kinds underfoot and in each direction's path, attack zones near Tibo (kind, shape, whether Tibo is inside, when a telegraph lands, which directions walk into it), and bullets that would hit a Tibo standing still",
+    pickups: "the total xp and gold on the ground, and the chests, food and other pickups with their distance and direction",
+    spots: "every unused spot on the loaded map, nearest first, with the game's name and description, distance, direction, charge, radius and price",
+    dogs: "each of Tibo's dogs: name, breed, the game's description, level, the game's own definition (ability, aura, levelUps and the rest) and what it has done so far by the game's counts",
+    events: "what the game showed in the last 15 seconds (boss arrivals, banners, chests), with the times",
+    counters: "every number in the game's counters and run that is not zero: distance, hits, crits, nearMisses, dodgePoints, peakEnemies, goldEarned, shrinesUsed and the rest",
+    state: "a short default, one per line: time, health, level, gold, dash, weapons, passives, items, banished (when any), recipes, evolutions, standing_on, hurt_by, bosses, enemies, current_goal and recent_goals. Every other block is left out unless a template names it"
+  };
+  var KNOBS = {
+    exploreDistance: { min: 100, max: 1500, about: "units an explore goal walks before it ends; it also ends at the first chest never listed before" },
+    evadeSeconds: { min: 2, max: 30, about: "seconds an evade goal lasts" },
+    stuckSeconds: { min: 2, max: 20, about: "seconds without getting closer (or charging) before a goal is given up" },
+    extraDamage: { min: 0, max: 0.25, about: "share of max health a move may cost over the cheapest move within the forecastSeconds horizon and still be taken: the page walks Tibo to the goal on its own while the way there costs no more than this over the cheapest, and the action model is never offered a move that costs more" },
+    safeMargin: { min: 0, max: 0.5, about: "how far above the safest move's hurt rating (as a share of the scale) a move may be and still compete on usefulness" },
+    distrustSeconds: { min: 0, max: 30, about: "after Tibo loses health on a step the forecast called free (a walk row), the action model is asked about every step for this many seconds instead of the page walking on its own; 0 trusts the forecast" },
+    bossOfferRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is offered every move, even those the one-second forecast prices above extraDamage, since boss attacks are not in that forecast; 0 keeps the usual rule" },
+    eliteSeconds: { min: 5, max: 60, about: "seconds a fight-the-elite goal lasts at most: Tibo heads for the elite and keeps it within reach of its weapons until it dies" },
+    forecastSeconds: { min: 0.1, max: 2, about: "how far ahead the game's own simulation prices each move, and how far surroundings look for bullets that would hit, attacks and hazards on each path, in seconds; the action model weighs moves by what they cost over this horizon" },
+    autopilot: { min: 0, max: 1, about: "1 takes every step without the action model: of the moves the forecast allows (those within extraDamage of the cheapest), Tibo takes the one nearest the way to the goal, and of two as near the cheaper; it never dashes and no action template is used. 0 asks the action model, as before. In the loop manager's own gym tests at minute 10, a mover that read only the forecast's prices lost no more health per trip than either action-model format, and it answers at once" },
+    planEvery: { min: 1, max: 60, about: "seconds between planner calls while a goal is under way (it is also asked whenever a goal ends, a choice opens, a card is taken or a boss appears); short re-plans switch goals often, long ones let a goal finish. A person watching in the panel sets this instead" },
+    distrustBossRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is asked about every step, since boss attacks from afar are not in the one-second forecast; 0 turns it off" },
+    dashThreshold: { min: 0.05, max: 0.95, about: "how sure the action model's answer to action.dash must be (a probability) for Tibo to dash; lower dashes more often" },
+    bossDashThreshold: { min: 0.05, max: 0.95, about: "the dash threshold instead of dashThreshold while a boss is within bossDashRange" },
+    bossDashRange: { min: 0, max: 600, about: "while a boss is within this many units, bossDashThreshold applies; 0 never" },
+    eliteFrom: { min: 0, max: 1200, about: "game seconds before which no fight-the-elite goal is offered, so the planner cannot pick one; 0 offers them from the start" },
+    eliteMinHp: { min: 0, max: 1, about: "share of max health below which no fight-the-elite goal is offered; 0 offers them at any health" },
+    holdAbortHurt: { min: 0, max: 0.5, about: `share of max health lost within the last ${HURT_SECONDS} seconds at which a goal that holds Tibo in place ends as given up and the planner is asked: standing on a chest, a shrine or another spot, or keeping an elite within reach. For ${GIVE_UP_SECONDS} seconds the planner then reads next to that target that Tibo gave up on it and why, like any goal given up; it can still pick it. 0 never ends a goal this way` },
+    planOnHurt: { min: 0, max: 0.5, about: `share of max health lost within the last ${HURT_SECONDS} seconds at which the planner is asked at once, whatever planEvery says, and at most once in ${HURT_SECONDS} seconds; the goal under way goes on unless the planner picks another. 0 never asks for this` }
+  };
+  var DEFAULT_TEMPLATES = {
+    planner: {
+      state: [
+        "You plan for Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own. Tibo walks wherever its goal takes it, and you choose the upgrades and what Tibo goes after next.",
+        "The aim: survive 20 minutes on {{difficulty}}.",
+        "Asked now because {{why}}. State now:",
+        "{{state}}"
+      ].join(`
+
+`),
+      goal: "If Tibo's next goal is to {{goal}}: is that the best thing for Tibo to do now, to survive and grow stronger?",
+      pick: "Tibo is at a {{choice}}. Which option makes Tibo strongest?"
+    },
+    action: {
+      state: `Tibo is a potato hero in a survivors game. Weapons fire on their own; Tibo only walks.
+Goal: {{goal}}.
+{{health}}`,
+      hurt: "If Tibo does this: {{move}}. How badly does it hurt Tibo?",
+      useful: "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
+      dash: "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
+    },
+    knobs: { exploreDistance: 300, evadeSeconds: 8, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1, distrustSeconds: 0, distrustBossRange: 0, planEvery: 5, eliteSeconds: 20, bossOfferRange: 0, dashThreshold: 0.5, bossDashThreshold: 0.5, bossDashRange: 0, eliteFrom: 0, eliteMinHp: 0, forecastSeconds: 0.5, autopilot: 0, holdAbortHurt: 0, planOnHurt: 0 }
+  };
+  var STATE_LIMIT = 8000;
+  var QUESTION_LIMIT = 800;
+
+  // bot/drive.ts
+  var EXTRA = { prompt: { why: "why the planner runs now: the run started, a goal ended, a card was taken, a boss appeared, the instructions changed or the interval passed" }, loadout: { choice: "level-up, chest or shrine" } };
+  var EMBEDS = { ...BLOCKS, ...EXTRA.prompt, ...EXTRA.loadout };
+  var embedded = (text) => [...text.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1] ?? "");
+  var plannerState = (drive, step) => [drive.prompt, drive.steps[step]?.text ?? ""].filter((t) => t.trim() !== "").join(`
+
+`);
+  function driveErrors(drive) {
+    const errors = [];
+    const unknown = (field, text, extra) => {
+      for (const name of new Set(embedded(text)))
+        if (!(name in BLOCKS) && !(name in extra))
+          errors.push({ field, message: `{{${name}}} is not part of the state` });
+      if (text.includes("~~~"))
+        errors.push({ field, message: "~~~ is not allowed" });
+    };
+    unknown("prompt", drive.prompt, EXTRA.prompt);
+    unknown("loadout", drive.loadout, EXTRA.loadout);
+    if (drive.loadout.trim() === "")
+      errors.push({ field: "loadout", message: "the picker needs a question" });
+    if (drive.loadout.length > QUESTION_LIMIT)
+      errors.push({ field: "loadout", message: `${drive.loadout.length} characters; keep it under ${QUESTION_LIMIT}` });
+    for (const [i, step] of drive.steps.entries()) {
+      unknown(i, step.text, EXTRA.prompt);
+      const state = plannerState(drive, i);
+      if (state === "")
+        errors.push({ field: i, message: "the planner gets no instructions here: write a prompt or this step" });
+      if (state.length > STATE_LIMIT)
+        errors.push({ field: i, message: `with the prompt this is ${state.length} characters; keep both under ${STATE_LIMIT}` });
+    }
+    return errors;
+  }
+
+  // clock.ts
+  var clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+
+  // userscript/fsd/draft.ts
+  var DEFAULT_DRAFT = {
+    prompt: DEFAULT_TEMPLATES.planner.state,
+    loadout: DEFAULT_TEMPLATES.planner.pick,
+    planEvery: PLAN_EVERY.initial,
+    steps: [{ id: 1, time: "0:00", text: "" }]
+  };
+  function parseTime(text) {
+    const t = text.trim();
+    const m = /^(\d{1,3})(?::([0-5]\d))?$/.exec(t);
+    if (m === null)
+      return;
+    return Number(m[1]) * 60 + Number(m[2] ?? 0);
+  }
+  function checkDraft(d) {
+    const steps = new Map(d.steps.map((s) => [s.id, []]));
+    const note = (id, message) => id !== undefined && steps.get(id)?.push(message);
+    let last = 0;
+    const ats = d.steps.map((s, i) => {
+      if (i === 0)
+        return 0;
+      const at = parseTime(s.time);
+      if (s.time.trim() === "")
+        note(s.id, "Set a time for these instructions");
+      else if (at === undefined)
+        note(s.id, "Write the time as m:ss, such as 2:30");
+      else if (at <= last)
+        note(s.id, `Must come after ${clock(last)}`);
+      else
+        last = at;
+      return at ?? 0;
+    });
+    const drive = { prompt: d.prompt, loadout: d.loadout, planEvery: d.planEvery, steps: d.steps.map((s, i) => ({ at: ats[i] ?? 0, text: s.text })) };
+    const check = { prompt: [], loadout: [], steps };
+    for (const e of driveErrors(drive)) {
+      if (e.field === "prompt" || e.field === "loadout")
+        check[e.field].push(e.message);
+      else
+        note(d.steps[e.field]?.id, e.message);
+    }
+    const clean = check.prompt.length === 0 && check.loadout.length === 0 && [...steps.values()].every((m) => m.length === 0);
+    return clean ? { ...check, drive } : check;
+  }
+  function moveStep(steps, from, to) {
+    const moved = steps[from];
+    if (moved === undefined || from === to)
+      return [...steps];
+    const wasFirst = steps[0]?.id;
+    const next = steps.filter((_, i) => i !== from);
+    next.splice(to, 0, moved);
+    const times = next.map((s, i) => i === 0 ? 0 : s.id === moved.id || s.id === wasFirst ? undefined : parseTime(s.time));
+    return next.map((s, i) => {
+      if (i === 0)
+        return { ...s, time: "0:00" };
+      if (s.id !== moved.id && s.id !== wasFirst)
+        return s;
+      const before = times.slice(0, i).filter((t) => t !== undefined).at(-1) ?? 0;
+      const after = times.slice(i + 1).find((t) => t !== undefined);
+      const at = parseTime(s.time);
+      return at !== undefined && at > before && (after === undefined || at < after) ? s : { ...s, time: "" };
+    });
+  }
+  function addStep(steps) {
+    const last = Math.max(0, ...steps.map((s) => parseTime(s.time) ?? 0));
+    return [...steps, { id: Math.max(0, ...steps.map((s) => s.id)) + 1, time: clock(last + 60), text: "" }];
+  }
+  var KEY = "tibobit.fsd";
+  function loadDraft() {
     try {
-      return applyChange(DEFAULT_SETTINGS, parsePilotChange(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null")));
+      const d = JSON.parse(localStorage.getItem(KEY) ?? "null");
+      if (d === null || typeof d.prompt !== "string" || typeof d.loadout !== "string" || typeof d.planEvery !== "number" || !Array.isArray(d.steps) || d.steps.length === 0)
+        return DEFAULT_DRAFT;
+      const steps = d.steps.filter((s) => typeof s?.id === "number" && typeof s.time === "string" && typeof s.text === "string");
+      if (steps.length === 0)
+        return DEFAULT_DRAFT;
+      const planEvery = Math.min(PLAN_EVERY.max, Math.max(PLAN_EVERY.min, Math.round(d.planEvery)));
+      return { prompt: d.prompt, loadout: d.loadout, planEvery, steps: steps.map((s, i) => i === 0 ? { ...s, time: "0:00" } : s) };
     } catch {
-      return DEFAULT_SETTINGS;
+      return DEFAULT_DRAFT;
     }
   }
-  var asChange = (s) => ({ ...s.pace, incognito: s.incognito });
+  function saveDraft(d) {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(d));
+    } catch {}
+  }
+
+  // userscript/pilot/pilot.ts
+  var SEND_AFTER_MS = 400;
 
   class Pilot {
     server;
     release;
-    settings = savedSettings();
-    current = { state: "off", ...this.settings };
+    current = { state: "off" };
+    written = loadDraft();
+    checked = checkDraft(this.written);
+    shown;
     messages = [];
     listeners = new Set;
+    sending;
     constructor(server, release) {
       this.server = server;
       this.release = release;
     }
     state() {
       return this.current;
+    }
+    draft() {
+      return this.written;
+    }
+    check() {
+      return this.checked;
+    }
+    connected() {
+      return this.server.connected();
+    }
+    preview() {
+      return this.shown;
     }
     chat() {
       return this.messages;
@@ -710,9 +926,32 @@
       for (const listener of this.listeners)
         listener();
     }
+    edit(next) {
+      this.written = next;
+      this.checked = checkDraft(next);
+      saveDraft(next);
+      clearTimeout(this.sending);
+      const drive = this.checked.drive;
+      if (drive !== undefined)
+        this.sending = setTimeout(() => this.ask({ drive }), SEND_AFTER_MS);
+      this.notify();
+    }
+    engage() {
+      const drive = this.checked.drive;
+      if (drive === undefined)
+        return false;
+      clearTimeout(this.sending);
+      this.ask({ drive, on: true });
+      return true;
+    }
+    stop() {
+      this.ask({ on: false });
+    }
     hello() {
       this.messages.length = 0;
-      this.server.ask(asChange(this.settings));
+      const drive = this.checked.drive;
+      if (drive !== undefined)
+        this.server.ask({ drive });
       this.notify();
     }
     receive(next) {
@@ -724,7 +963,7 @@
       this.notify();
     }
     disconnected() {
-      this.receive({ state: "off", ...this.settings });
+      this.receive({ state: "off" });
     }
     hear(message) {
       const at = this.messages.findIndex((m) => m.id === message.id);
@@ -735,22 +974,17 @@
       trimChat(this.messages);
       this.notify();
     }
-    set(change) {
-      const { on, ...rest } = change;
-      if (Object.keys(rest).length > 0) {
-        this.settings = applyChange(this.settings, rest);
-        this.current = { ...this.current, ...this.settings };
-        try {
-          localStorage.setItem(SETTINGS_KEY, JSON.stringify(asChange(this.settings)));
-        } catch {}
-        this.notify();
-      }
+    see(preview) {
+      this.shown = preview;
+      this.notify();
+    }
+    ask(change) {
       if (!this.server.connected())
         return;
       this.server.ask(change).then((ok) => {
         if (ok)
           return;
-        this.current = { ...this.current, detail: `the agent server on ${this.server.origin()} refused ${JSON.stringify(change)}; restart it with this version of agent-server/main.ts` };
+        this.current = { ...this.current, detail: `the agent server on ${this.server.origin()} refused the change; restart it with this version of agent-server/main.ts` };
         this.notify();
       });
     }
@@ -917,6 +1151,8 @@
               pilot.receive(envelope.pilot);
             else if ("chat" in envelope)
               pilot.hear(envelope.chat);
+            else if ("preview" in envelope)
+              pilot.see(envelope.preview);
             else
               controller.handle({ id: envelope.id, command: parseCommand(envelope.command) }, store);
           } catch (e) {
@@ -2274,11 +2510,8 @@
 .tbh-giveback { flex: 1; min-width: 0; padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: inherit; font-weight: 800; cursor: pointer; color: #ffd6d0; background: rgba(227,138,127,.12); border: 1px solid #e38a7f; border-radius: 4px; }
 .tbh-giveback:hover:not(:disabled) { color: #fff; background: rgba(227,138,127,.24); }
 .tbh-chatbox { border-top: 1px solid rgba(255,255,255,.08); }
-.tbh-pace-field { --role: #c9a0ff; flex: none; display: inline-flex; align-items: center; gap: 3px; }
-.tbh-pace-action { --role: #7fa8ff; }
-.tbh-pace-input { width: 2.8em; padding: 2px 3px; font: inherit; color: #f3e6c4; background: rgba(0,0,0,.35); border: 1px solid #6b5631; border-radius: 3px; }
-.tbh-pace-input:focus { outline: none; border-color: var(--role); }
-.tbh-pace-input:disabled { opacity: .5; }
+.tbh-fsd-open { flex: none; padding: 4px 8px; font: inherit; font-size: 10.5px; font-weight: 900; letter-spacing: .1em; cursor: pointer; color: #1d1530; background: linear-gradient(135deg, #c9a0ff, #ffd36b); border: 0; border-radius: 4px; }
+.tbh-fsd-open:hover { filter: brightness(1.1); }
 .tbh-plan { --role: #c9a0ff; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin: 6px 6px 0; padding: 5px 7px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(201,160,255,.1); overflow-wrap: anywhere; }
 .tbh-plan-label { color: var(--role); font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .tbh-plan-text { flex: 1 1 60%; min-width: 0; white-space: pre-wrap; }
@@ -2362,8 +2595,7 @@
     Start: [{ fill: "M7 4v16l13-8z" }],
     "Take over": [ring(12, 12, 9), ring(12, 12, 2.5), "M3.5 10.5l6 1M20.5 10.5l-6 1M12 14.5V21"],
     Over: ["M12 3a8 8 0 0 0-8 8c0 2.8 1.3 4.5 3 5.5V20a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3.5c1.7-1 3-2.7 3-5.5a8 8 0 0 0-8-8z", dot(9, 11.5, 1.9), dot(15, 11.5, 1.9), "M10 21v-2.5M14 21v-2.5"],
-    Stopped: [{ fill: "M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" }],
-    Incognito: ["M3 11h18", "M6 11l1.5-6.5h9L18 11", ring(7.5, 16.5, 3), ring(16.5, 16.5, 3), "M10.5 16.5h3"]
+    Stopped: [{ fill: "M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" }]
   };
   var NOTE_ICON = ["M4 5h16v11H9l-4 4v-4H4z", "M8 9h8M8 12h5"];
   var STILL_ICON = [ring(12, 12, 3.5)];
@@ -2455,9 +2687,6 @@
   var ARROWS = { ...Object.fromEntries(DIRECTIONS.map((d, i) => [d, ARROW_GLYPHS[i]])), still: "•" };
   var DIRECTION_WORDS = new RegExp(`(?<![\\w-])(${[...DIRECTIONS].sort((a, z) => z.length - a.length).join("|")})(?![\\w-])`, "g");
   var arrowed = (text) => text.replace(DIRECTION_WORDS, (d) => ARROWS[d] ?? d);
-
-  // clock.ts
-  var clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
   // userscript/pilot/inspector.ts
   var ROLE_LABELS = { planner: "Plan", action: "Action", system: "Bot" };
@@ -2632,28 +2861,16 @@
     el.dataset.id = String(m.id);
     return el;
   }
-  function botFeed(pilot) {
+  function botFeed(pilot, openFsd) {
     addStyle(css);
     const giveBack = h("button", "tbh-giveback");
     giveBack.type = "button";
-    giveBack.addEventListener("click", () => pilot.set({ on: false }));
-    const paceInput = (key) => {
-      const { min, max, step } = PACE_LIMITS[key];
-      const input = h("input", "tbh-pace-input");
-      Object.assign(input, { type: "number", min: String(min), max: String(max), step: String(step), inputMode: "decimal" });
-      input.addEventListener("change", () => {
-        const v = Number(input.value);
-        if (!Number.isFinite(v) || input.value === "")
-          return;
-        const clamped = snapPace(key, v);
-        input.value = String(clamped);
-        pilot.set({ [key]: clamped });
-      });
-      return input;
-    };
-    const planEvery = paceInput("planEvery");
-    const actEvery = paceInput("actEvery");
-    const tools = h("div", "tbh-chat-tools", giveBack, h("label", "tbh-pace-field", h("span", "tbh-plan-label", "Plan"), planEvery, "s"), h("label", "tbh-pace-field tbh-pace-action", h("span", "tbh-plan-label", "Action"), actEvery, "s"));
+    giveBack.addEventListener("click", () => pilot.stop());
+    const instructions = h("button", "tbh-fsd-open", "FSD");
+    instructions.type = "button";
+    instructions.title = "Edit the Full Self Driving instructions (pauses the game)";
+    instructions.addEventListener("click", () => openFsd(instructions));
+    const tools = h("div", "tbh-chat-tools", giveBack, instructions);
     const plan = h("div", "tbh-plan");
     const list = h("div", "tbh-actions");
     list.setAttribute("aria-live", "polite");
@@ -2666,14 +2883,6 @@
       if (giveBack.textContent !== label)
         giveBack.textContent = label;
       giveBack.disabled = now.state !== "on";
-      for (const [input, value] of [
-        [planEvery, now.pace.planEvery],
-        [actEvery, now.pace.actEvery]
-      ]) {
-        input.disabled = now.state !== "on";
-        if (document.activeElement !== input && input.value !== String(value))
-          input.value = String(value);
-      }
       const messages = pilot.chat();
       const latest = [...messages].reverse().find((m) => m.role === "planner");
       if (latest !== shownPlan || latest === undefined) {
@@ -2806,9 +3015,6 @@
   color: #f3e6c4; background: linear-gradient(180deg, #3b2f52, #2a2140); border: 1px solid #8e74c9; border-radius: 4px; }
 .tbh-wheel:hover:not(:disabled) { border-color: #c9a0ff; color: #fff; }
 .tbh-wheel:disabled, .tbh-giveback:disabled { opacity: .5; cursor: default; }
-.tbh-incognito { flex: none; padding: 2px 6px; white-space: nowrap; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; color: #a8977a; background: transparent; border: 1px dashed #6b5631; border-radius: 4px; }
-.tbh-incognito:hover { color: #f3e6c4; border-style: solid; }
-.tbh-incognito[aria-pressed="true"] { color: #3ddc84; background: rgba(61,220,132,.14); border: 1px solid #3ddc84; }
 .tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
 .tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chatbox { display: none; }
 `;
@@ -2965,7 +3171,7 @@
   }
 
   // userscript/panel/connection.ts
-  function connectionRow(bridge) {
+  function connectionRow(bridge, openFsd) {
     const input = h("input", "tbh-port");
     input.type = "number";
     input.min = "1";
@@ -2977,14 +3183,10 @@
     const dot = h("span", "tbh-dot");
     dot.setAttribute("aria-hidden", "true");
     const status = h("div", "tbh-conn-status");
-    const wheel = h("button", "tbh-wheel", "Grok take the wheel");
+    const wheel = h("button", "tbh-wheel", "Full Self Driving");
     wheel.type = "button";
-    wheel.addEventListener("click", () => bridge.pilot.set({ on: true }));
+    wheel.addEventListener("click", () => openFsd(wheel));
     const wheelNote = h("div", "tbh-wheel-note");
-    const incognito = h("button", "tbh-incognito", "Incognito");
-    incognito.type = "button";
-    incognito.title = "The bot just plays: no notes, no review after the run. Turning it on mid-run deletes that run's notes.";
-    incognito.addEventListener("click", () => bridge.pilot.set({ incognito: !bridge.pilot.state().incognito }));
     const refresh = () => {
       const s = bridge.status();
       const live = s.state === "connected";
@@ -2999,9 +3201,6 @@
       status.dataset.state = s.error === undefined ? "wait" : "error";
       const pilot = bridge.pilot.state();
       wheel.hidden = pilot.state !== "off";
-      wheel.disabled = !live;
-      wheel.title = live ? "" : "Start the agent server first: ./agent-server/main.ts";
-      incognito.setAttribute("aria-pressed", String(pilot.incognito));
       wheelNote.textContent = pilot.detail ?? "";
       wheelNote.hidden = pilot.detail === undefined;
     };
@@ -3013,7 +3212,7 @@
         return;
       bridge.connect(port);
     };
-    const row = h("form", "tbh-conn-row", incognito, h("span", "tbh-conn-label", "Agent port"), input, button, connected, dot);
+    const row = h("form", "tbh-conn-row", h("span", "tbh-conn-label", "Agent port"), input, button, connected, dot);
     row.noValidate = true;
     row.addEventListener("submit", connect);
     bridge.onChange(refresh);
@@ -3070,10 +3269,634 @@
     (card.querySelector(".ui-card-text") ?? card).append(box);
   }
 
+  // userscript/fsd/popup.css.ts
+  var css7 = `
+.tbh-fsd { --gold: #ffd36b; --text: #f3e6c4; --muted: #a8977a; --line: #6b5631; --violet: #c9a0ff; --bad: #ff8f80;
+  padding: 0; margin: auto; border: 0; background: transparent; color: var(--text); overflow: visible;
+  width: min(1180px, calc(100vw - 32px)); max-width: none; max-height: none;
+  font: 12.5px/1.45 ui-monospace, Menlo, Consolas, monospace; }
+.tbh-fsd::backdrop { background: rgba(8,6,14,.62); backdrop-filter: blur(3px); animation: tbh-fsd-fade .35s ease-out; }
+.tbh-fsd.tbh-fsd-leaving::backdrop { opacity: 0; transition: opacity .45s ease-in; }
+@keyframes tbh-fsd-fade { from { opacity: 0; } }
+.tbh-fsd-sheet { display: flex; flex-direction: column; max-height: calc(100vh - 32px); box-sizing: border-box; border-radius: 12px; overflow: hidden;
+  background: linear-gradient(180deg, #1d1726, #15110c 40%); border: 1px solid #8e74c9; box-shadow: 0 24px 80px rgba(0,0,0,.65), 0 0 0 1px rgba(201,160,255,.12) inset; }
+.tbh-fsd-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.tbh-fsd-title { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 15px; font-weight: 900; letter-spacing: .02em; color: var(--text); }
+.tbh-fsd-logo { padding: 2px 7px; border-radius: 5px; font-size: 12px; letter-spacing: .12em; color: #1d1530; background: linear-gradient(135deg, var(--violet), var(--gold)); }
+.tbh-fsd-status { flex: 1; min-width: 0; font-size: 11.5px; color: var(--muted); }
+.tbh-fsd-status[data-state="on"] { color: #7fe3a4; }
+.tbh-fsd-status[data-state="error"] { color: var(--bad); }
+.tbh-fsd-x { flex: none; width: 28px; height: 28px; font: inherit; font-size: 18px; line-height: 1; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+.tbh-fsd-x:hover { color: var(--text); border-color: var(--line); }
+.tbh-fsd-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(220px, 280px) 1fr; }
+.tbh-fsd-state { display: flex; flex-direction: column; gap: 6px; min-height: 0; padding: 12px; border-right: 1px solid rgba(255,255,255,.08); background: rgba(0,0,0,.18); overflow: hidden; }
+.tbh-fsd-blocks { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 2px; overscroll-behavior: contain; }
+.tbh-fsd-block { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; text-align: start; font: inherit; font-size: 11.5px; color: var(--text); background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.07); border-radius: 6px; cursor: copy; }
+.tbh-fsd-block:hover { border-color: var(--violet); background: rgba(201,160,255,.09); }
+.tbh-fsd-block[hidden] { display: none; }
+.tbh-fsd-block-head { display: flex; align-items: baseline; gap: 6px; }
+.tbh-fsd-block-head b { color: var(--violet); }
+.tbh-fsd-block-head i { font-size: 10px; color: var(--muted); }
+.tbh-fsd-block-count { margin-left: auto; font-size: 10.5px; font-weight: 800; color: var(--gold); }
+.tbh-fsd-block-used { border-color: rgba(255,211,107,.45); }
+.tbh-fsd-block-about { color: var(--muted); font-size: 10.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tbh-fsd-search { padding: 5px 8px; font: inherit; color: var(--text); background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 5px; }
+.tbh-fsd-search:focus { outline: none; border-color: var(--violet); }
+.tbh-fsd-main { min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; gap: 16px; padding: 14px 16px 18px; overscroll-behavior: contain; }
+.tbh-fsd-planner, .tbh-fsd-loadout, .tbh-fsd-world { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tbh-fsd-side { position: sticky; top: 0; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.tbh-fsd-entities { display: flex; flex-wrap: wrap; gap: 5px; }
+.tbh-fsd-entity { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 5px; font: inherit; font-size: 11.5px; color: var(--text); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); border-radius: 999px; cursor: copy; }
+.tbh-fsd-entity:hover { border-color: var(--gold); background: rgba(255,211,107,.1); }
+.tbh-fsd-entity-icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--gold); }
+.tbh-fsd-entity-icon .tbh-svg-fill { fill: currentColor; stroke: none; }
+.tbh-fsd-tip { position: fixed; z-index: 1; max-width: min(420px, calc(100vw - 16px)); max-height: 46vh; overflow: hidden; box-sizing: border-box; padding: 8px 10px; pointer-events: none;
+  background: #1b1622; border: 1px solid #8e74c9; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.6); font-size: 11.5px; }
+.tbh-fsd-tip[hidden] { display: none; }
+.tbh-fsd-tip-name { color: var(--violet); }
+.tbh-fsd-tip-about { margin-top: 3px; color: var(--muted); }
+.tbh-fsd-tip-label { margin-top: 7px; font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+.tbh-fsd-tip-value { margin: 3px 0 0; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 11px; color: #dbe6ff; background: rgba(0,0,0,.35); border-radius: 5px; }
+.tbh-fsd-field-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.tbh-fsd-label { margin: 0; font-size: 11px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+.tbh-fsd-hint { margin: 0; font-size: 11px; color: var(--muted); }
+.tbh-fsd-pace-field { display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
+.tbh-fsd-pace { width: 150px; accent-color: var(--violet); }
+.tbh-fsd-pace-out { min-width: 3.5ch; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.tbh-fsd-grow { display: grid; border: 1px solid var(--line); border-radius: 6px; background: rgba(0,0,0,.35); }
+.tbh-fsd-grow:focus-within { border-color: var(--violet); box-shadow: 0 0 0 2px rgba(201,160,255,.18); }
+.tbh-fsd-area, .tbh-fsd-mirror { grid-area: 1 / 1; box-sizing: border-box; min-height: 3.2em; margin: 0; padding: 8px 10px; border: 0; font: inherit; line-height: 1.5; letter-spacing: normal; white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; tab-size: 2; }
+.tbh-fsd-step .tbh-fsd-area, .tbh-fsd-step .tbh-fsd-mirror { min-height: 0; }
+.tbh-fsd-area { resize: none; overflow: hidden; color: var(--text); caret-color: var(--gold); background: transparent; outline: none; }
+.tbh-fsd-area::placeholder { color: #7d6d52; }
+.tbh-fsd-mirror { color: transparent; pointer-events: none; user-select: none; }
+.tbh-fsd-chip { color: transparent; background: rgba(201,160,255,.22); border-radius: 4px; box-shadow: 0 0 0 1px rgba(201,160,255,.55); }
+.tbh-fsd-chip-bad { background: rgba(255,143,128,.2); box-shadow: 0 0 0 1px var(--bad); }
+.tbh-fsd-errors { margin: 2px 0 0; padding: 0 0 0 16px; font-size: 11px; color: var(--bad); }
+.tbh-fsd-errors[hidden] { display: none; }
+.tbh-fsd-timeline { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.tbh-fsd-steps { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.tbh-fsd-step { display: grid; grid-template-columns: auto 74px minmax(0, 1fr) auto; align-items: start; gap: 6px; padding: 6px; border: 1px solid rgba(255,255,255,.07); border-radius: 8px; background: rgba(255,255,255,.03); }
+.tbh-fsd-step-bad { border-color: rgba(255,143,128,.6); background: rgba(255,143,128,.06); }
+.tbh-fsd-dragging { opacity: .35; border-style: dashed; }
+.tbh-fsd-handle { align-self: stretch; display: grid; place-items: center; width: 18px; color: var(--muted); cursor: grab; user-select: none; font-size: 14px; border-radius: 4px; }
+.tbh-fsd-handle:hover { color: var(--text); background: rgba(255,255,255,.06); }
+.tbh-fsd-time { box-sizing: border-box; width: 100%; margin: 0; padding: 8px 6px; font: inherit; line-height: 1.5; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; color: var(--gold); background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 6px; }
+.tbh-fsd-time:focus { outline: none; border-color: var(--violet); }
+.tbh-fsd-time[readonly] { color: var(--muted); border-style: dashed; }
+.tbh-fsd-time.tbh-fsd-invalid { color: var(--bad); border-color: var(--bad); background: rgba(255,143,128,.12); }
+.tbh-fsd-step-now { border-color: rgba(127,227,164,.55); box-shadow: inset 3px 0 0 #7fe3a4; }
+.tbh-fsd-step-now .tbh-fsd-time { color: #7fe3a4; }
+.tbh-fsd-remove { width: 26px; height: 26px; margin-top: 3px; font: inherit; font-size: 15px; line-height: 1; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 5px; cursor: pointer; }
+.tbh-fsd-remove:hover:not(:disabled) { color: var(--bad); border-color: rgba(255,143,128,.5); }
+.tbh-fsd-remove:disabled { visibility: hidden; }
+.tbh-fsd-step-errors { grid-column: 3 / 5; }
+.tbh-fsd-step-errors:empty { display: none; }
+.tbh-fsd-add { align-self: flex-start; padding: 6px 12px; font: inherit; font-weight: 800; color: var(--violet); background: transparent; border: 1px dashed rgba(201,160,255,.6); border-radius: 6px; cursor: pointer; }
+.tbh-fsd-add:hover { color: #fff; border-style: solid; background: rgba(201,160,255,.1); }
+.tbh-fsd-foot { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid rgba(255,255,255,.08); background: rgba(0,0,0,.25); }
+.tbh-fsd-saved { flex: 1; min-width: 0; font-size: 11px; color: var(--muted); }
+.tbh-fsd-saved-bad { color: var(--bad); }
+.tbh-fsd-stop { padding: 7px 14px; font: inherit; font-weight: 800; color: #ffd6d0; background: rgba(227,138,127,.12); border: 1px solid #e38a7f; border-radius: 6px; cursor: pointer; }
+.tbh-fsd-stop[hidden] { display: none; }
+.tbh-fsd-engage { min-width: 140px; padding: 8px 18px; font: inherit; font-size: 13px; font-weight: 900; letter-spacing: .04em; color: #1d1530; background: linear-gradient(135deg, var(--violet), var(--gold)); border: 0; border-radius: 6px; cursor: pointer; box-shadow: 0 4px 18px rgba(201,160,255,.25); }
+.tbh-fsd-engage:hover:not(:disabled) { filter: brightness(1.08); }
+.tbh-fsd-engage:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+@media (max-width: 860px) {
+  .tbh-fsd-body { grid-template-columns: 1fr; overflow-y: auto; }
+  .tbh-fsd-state { max-height: 32vh; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .tbh-fsd-main { grid-template-columns: 1fr; overflow: visible; }
+  .tbh-fsd-side { position: static; }
+  .tbh-fsd-pace { width: 110px; }
+}
+@media (max-width: 520px) {
+  .tbh-fsd { width: calc(100vw - 16px); }
+  .tbh-fsd-sheet { max-height: calc(100vh - 16px); }
+  .tbh-fsd-step { grid-template-columns: auto 64px minmax(0, 1fr) auto; }
+  .tbh-fsd-foot { flex-wrap: wrap; }
+  .tbh-fsd-saved { flex-basis: 100%; }
+  .tbh-fsd-engage { flex: 1; }
+}
+`;
+  // userscript/fsd/examples.json
+  var examples_default = {
+    time: "1:01",
+    difficulty: "nightmare-1",
+    mode: "daily",
+    health: "Health 119/130 (92%).",
+    level: "Level 4, 14% of the way to the next.",
+    gold: "Gold 0.",
+    dash: "Dash charges 1 of 1.",
+    weapons: `Weapons (2 of 6 slots):
+  - Fry Cook Sentry 2/8: Drops a fry-cook turret that shoots nearby enemies.
+  - Starch Puddle 1/8: Drops a puddle of charged starch on the nearest crowd. Pests standing in it are zapped and slowed until it dries.`,
+    passives: `Passives (1 of 6 slots):
+  - Gravy Splash 1/5: Every 0.5 s, the HP Tibo healed splashes out as damage to nearby enemies: 100% of it per level.`,
+    items: "Items: none",
+    banished: "Banished this run: nothing.",
+    recipes: "Recipes in reach: Fry Fortress: Fry Cook Sentry leveling 2/8 + Slow Cooker missing; Gratin Puddle: Starch Puddle leveling 1/8 + Butter Pat missing.",
+    evolutions: "No recipe is complete yet.",
+    standing_on: "Tibo stands on no chest or spot. Underfoot: thorns.",
+    hurt_by: "Hurt in the last 3 seconds by: Brambles 0.7.",
+    dps: "Damage dealt a second over the last 3 seconds: 193.",
+    bosses: "Bosses: none.",
+    enemies: "Enemies: 12 on screen. Most to the down-right (3), fewest to the up-left (0).",
+    current_goal: "Current goal: none.",
+    recent_goals: "Recent goals: 0:41 Keep away from enemies: the 8 seconds ran out, and Tibo lost 2 health during them; 0:45 Keep away from enemies: the planner chose another goal; 0:50 Charge the Beetle Nest: the planner chose another goal; 0:52 Explore up-left: the planner chose another goal; 0:57 Explore up: the planner chose another goal; 1:01 Explore left: found a chest 182 away to the down-right.",
+    weapon_damage: "Damage dealt so far by weapon: Fry Cook Sentry 1202 (1174 a minute), Starch Puddle 363 (355 a minute).",
+    stats: "Stats: damageMult 1, areaMult 1, cooldownMult 1, amountBonus 1, durationMult 1.25, projSpeedMult 1, moveSpeedMult 1.027, maxHp 130.125, recovery 0, armor 26.25, magnetRadius 40, luck 0, growthMult 1.575, greedMult 1.05, curse 0.1, critChance 0, critMult 2, evasion 0, knockbackMult 1, pierceBonus 0, revivals 0, eliteMult 1, healOnKill 0, explodeOnKillChance 0, thorns 0, chestPriceMult 1, dashCharges 0, dashCooldownMult 1, dashGraceSec 0. Added by shrines: curse 0.1.",
+    resources: "Rerolls 0, skips 0, banishes 0, revives 0; curses 1, which add 1 elites and 0.3 bosses.",
+    buffs: "Timed boosts: none.",
+    schedule: "Coming up: 2:00 boss The Festival Mascot; 2:00 event Fry Fly Swarm; 3:00 elite.",
+    elites: "Elites alive: Potato Beetle (potato-beetle) 452/574 hp, 185 away to the down-right; Wireworm Larva (wireworm-larva) 509/509 hp, 380 away to the down-right; Potato Beetle (potato-beetle) 509/509 hp, 390 away to the down-right.",
+    hazards: "Within 0.5 s: underfoot thorns; walking into nothing. Attacks near: none. Bullets that would hit a Tibo standing still: none.",
+    pickups: "On the ground: xp worth 95.6 and gold worth 13. Chests: 182 down-right. Food: none. Other pickups: banish 176 down-right.",
+    spots: `Spots on the loaded map, nearest first:
+  - Stray Dog (dog) 25 away to the up-left (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
+  - Moldy Shrine (curseShrine) 162 away to the up-right (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.
+  - Potato Crate (paidChest) 185 away to the right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
+  - Tater Lantern (taterLantern) 259 away to the left (break it for a surprise) Charged 0 of 1 s.
+  - Tater Lantern (taterLantern) 293 away to the up-left (break it for a surprise) Charged 0 of 1 s.
+  - Tater Magnet (taterMagnet) 319 away to the down-left (stand by it to pull in every gem and coin) Charged 0 of 1 s.
+  - Stray Dog (dog) 360 away to the down (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
+  - Root Tunnel (rootTunnel) 401 away to the up-right (stand by it to tunnel to a far place) Charged 0 of 2 s.
+  - Bot Dock (botDock) 503 away to the down-right (stand by it to call a swarm of grok bots) Charged 0 of 2 s.
+  - Spud Shrine (chargeShrine) 509 away to the up-left (stand inside to charge it, then pick a stat) Charged 0 of 5 s.
+  - Tater Lantern (taterLantern) 527 away to the down (break it for a surprise) Charged 0 of 1 s.
+  - Microwave (microwave) 534 away to the up (stand by it to charge it, then copy one of your items; the copy melts another item of the same rarity) Charged 0 of 1.5 s.
+  - Spud Shrine (chargeShrine) 542 away to the up-right (stand inside to charge it, then pick a stat) Charged 0 of 5 s.
+  - Microwave (microwave) 546 away to the up-right (stand by it to charge it, then copy one of your items; the copy melts another item of the same rarity) Charged 0 of 1.5 s.
+  - Potato Crate (paidChest) 558 away to the left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
+  - Fry Cart (vendor) 577 away to the down-left (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 0.
+  - Bot Dock (botDock) 581 away to the left (stand by it to call a swarm of grok bots) Charged 0 of 2 s.
+  - Tater Lantern (taterLantern) 601 away to the right (break it for a surprise) Charged 0 of 1 s.
+  - Fry Cart (vendor) 607 away to the right (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 0.
+  - Tater Slots (taterSlots) 651 away to the down (pay gold to spin; match two for an item) Charged 0 of 1.5 s; a spin costs 15 gold, and Tibo has 0.
+  - Tater Slots (taterSlots) 657 away to the down-right (pay gold to spin; match two for an item) Charged 0 of 1.5 s; a spin costs 15 gold, and Tibo has 0.
+  - Tater Lantern (taterLantern) 662 away to the up-left (break it for a surprise) Charged 0 of 1 s.
+  - Spud Shrine (chargeShrine) 674 away to the down (stand inside to charge it, then pick a stat) Charged 0 of 5 s.
+  - Crop Patch (crops) 772 away to the up-right (break it for gold and a snack) Charged 0 of 1 s.
+  - Potato Crate (paidChest) 793 away to the down (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
+  - Crop Patch (crops) 798 away to the down-left (break it for gold and a snack) Charged 0 of 1 s.
+  - Beetle Nest (eliteNest) 804 away to the right (an elite waits here; it drops a chest) Charged 0 of 1.5 s.
+  - Potato Crate (paidChest) 826 away to the down-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
+  - Tater Lantern (taterLantern) 872 away to the down (break it for a surprise) Charged 0 of 1 s.
+  - Moldy Shrine (curseShrine) 881 away to the right (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.
+  - Chili Bottle (chili-bottle) 891 away to the down (pick it up to breathe fire where tibo faces for 10 s; the fire grows with his damage and area) Charged 0 of 1.5 s.
+  - Golden Spud Shrine (goldenShrine) 926 away to the down-right (stand by it to charge it, then pick a big blessing) Charged 0 of 5 s.
+  - Potato Crate (paidChest) 1001 away to the down-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
+  - Potato Crate (paidChest) 1002 away to the up-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
+  - Tater Lantern (taterLantern) 1070 away to the down-right (break it for a surprise) Charged 0 of 1 s.
+  - Potato Crate (paidChest) 1140 away to the down-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.`,
+    dogs: "Dogs: none.",
+    events: "Recent game events: 0:52 levelUp; 0:52 announce; 0:59 grokBotHelp Zapper Bot; 1:00 chestDropped.",
+    counters: "What the game has counted this run: counters kills 85, hits 179, gems 18, shots 22; run timeSec 46.016666666666666, level 4, kills 85, distance 2896.634510416711, dodgePoints 566.1230461413402, dodgeSecond 61, curseSince 2362, elitesKilled 1, peakEnemies 31, grokBotHelps 2.",
+    state: `Time 1:01. Health 119/130 (92%). Level 4, 14% of the way to the next. Gold 0. Dash charges 1 of 1.
+Weapons (2 of 6 slots):
+  - Fry Cook Sentry 2/8: Drops a fry-cook turret that shoots nearby enemies.
+  - Starch Puddle 1/8: Drops a puddle of charged starch on the nearest crowd. Pests standing in it are zapped and slowed until it dries.
+Passives (1 of 6 slots):
+  - Gravy Splash 1/5: Every 0.5 s, the HP Tibo healed splashes out as damage to nearby enemies: 100% of it per level.
+Items: none
+Recipes in reach: Fry Fortress: Fry Cook Sentry leveling 2/8 + Slow Cooker missing; Gratin Puddle: Starch Puddle leveling 1/8 + Butter Pat missing.
+No recipe is complete yet.
+Tibo stands on no chest or spot. Underfoot: thorns.
+Hurt in the last 3 seconds by: Brambles 0.7.
+Bosses: none.
+Enemies: 12 on screen. Most to the down-right (3), fewest to the up-left (0).
+Current goal: none.
+Recent goals: 0:41 Keep away from enemies: the 8 seconds ran out, and Tibo lost 2 health during them; 0:45 Keep away from enemies: the planner chose another goal; 0:50 Charge the Beetle Nest: the planner chose another goal; 0:52 Explore up-left: the planner chose another goal; 0:57 Explore up: the planner chose another goal; 1:01 Explore left: found a chest 182 away to the down-right.`
+  };
+
+  // userscript/fsd/popup.ts
+  var ALLOWED = {
+    planner: new Set([...Object.keys(BLOCKS), "why"]),
+    loadout: new Set([...Object.keys(BLOCKS), "choice"])
+  };
+  var ONLY = { why: "planner and steps only", choice: "loadout only" };
+  var reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function growField(kind, placeholder, onInput) {
+    const area = h("textarea", "tbh-fsd-area");
+    area.classList.add(`tbh-fsd-area-${kind}`);
+    area.placeholder = placeholder;
+    area.spellcheck = false;
+    area.rows = 1;
+    area.dataset.kind = kind;
+    const mirror = h("div", "tbh-fsd-mirror");
+    mirror.setAttribute("aria-hidden", "true");
+    const wrap = h("div", "tbh-fsd-grow", mirror, area);
+    const paint = () => {
+      const parts = area.value.split(/(\{\{\w+\}\})/);
+      mirror.replaceChildren(...parts.map((part) => {
+        const name = /^\{\{(\w+)\}\}$/.exec(part)?.[1];
+        return name === undefined ? part : h("mark", `tbh-fsd-chip${ALLOWED[kind].has(name) ? "" : " tbh-fsd-chip-bad"}`, part);
+      }), " ");
+    };
+    area.addEventListener("input", () => {
+      paint();
+      onInput(area.value);
+    });
+    return {
+      wrap,
+      area,
+      chipAt(x, y) {
+        for (const mark of mirror.querySelectorAll("mark")) {
+          const box = [...mark.getClientRects()].find((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+          if (box !== undefined)
+            return { name: mark.textContent?.slice(2, -2) ?? "", box };
+        }
+        return;
+      },
+      set(value) {
+        if (area.value !== value)
+          area.value = value;
+        paint();
+      }
+    };
+  }
+  function errorList(messages) {
+    const el = h("ul", "tbh-fsd-errors", ...messages.map((m) => h("li", "", m)));
+    el.hidden = messages.length === 0;
+    return el;
+  }
+  function fsdPopup(pilot, game) {
+    addStyle(css7);
+    const dialog = h("dialog", "tbh-fsd");
+    dialog.setAttribute("aria-labelledby", "tbh-fsd-title");
+    let origin;
+    let pausedHere = false;
+    let closing = false;
+    let target;
+    const draft = () => pilot.draft();
+    const fields = new Map;
+    const registered = (field) => {
+      fields.set(field.area, field);
+      return field;
+    };
+    const edit = (change) => pilot.edit(change(draft()));
+    const title = h("h2", "tbh-fsd-title", h("span", "tbh-fsd-logo", "FSD"), "Full Self Driving");
+    title.id = "tbh-fsd-title";
+    const status = h("span", "tbh-fsd-status");
+    const closeX = h("button", "tbh-fsd-x", "×");
+    closeX.type = "button";
+    closeX.setAttribute("aria-label", "Close");
+    closeX.addEventListener("click", () => close());
+    const head = h("header", "tbh-fsd-head", title, status, closeX);
+    const tip = h("div", "tbh-fsd-tip");
+    tip.hidden = true;
+    tip.setAttribute("role", "tooltip");
+    let tipFor = "";
+    const showTip = (key, box, ...content) => {
+      if (tipFor !== key) {
+        tipFor = key;
+        tip.replaceChildren(...content);
+      }
+      tip.hidden = false;
+      const width = tip.offsetWidth;
+      const height = tip.offsetHeight;
+      const left = Math.max(8, Math.min(innerWidth - width - 8, box.left));
+      const below = box.bottom + 6 + height <= innerHeight - 8;
+      tip.style.left = `${left}px`;
+      tip.style.top = `${below ? box.bottom + 6 : Math.max(8, box.top - 6 - height)}px`;
+    };
+    const hideTip = () => {
+      tip.hidden = true;
+      tipFor = "";
+    };
+    const embedTip = (name, box) => {
+      const about = EMBEDS[name];
+      const live = pilot.preview();
+      const value = live?.blocks[name] ?? examples_default[name];
+      const label = live?.blocks[name] !== undefined ? `Last seen in a run, at ${clock(live.time)}` : value === undefined ? "" : "Example";
+      showTip(`embed:${name}:${live?.time ?? ""}`, box, h("b", "tbh-fsd-tip-name", `{{${name}}}`), h("div", "tbh-fsd-tip-about", about === undefined ? "Not part of the state: the planner cannot read this." : about), ...value === undefined ? [] : [h("div", "tbh-fsd-tip-label", label), h("pre", "tbh-fsd-tip-value", value)]);
+    };
+    const search = h("input", "tbh-fsd-search");
+    Object.assign(search, { type: "search", placeholder: "Filter the state…" });
+    search.setAttribute("aria-label", "Filter the state");
+    const blockList = h("div", "tbh-fsd-blocks");
+    const blockEls = new Map;
+    for (const [name, about] of Object.entries(EMBEDS)) {
+      const count = h("span", "tbh-fsd-block-count");
+      const el = h("button", "tbh-fsd-block", h("span", "tbh-fsd-block-head", h("b", "", `{{${name}}}`), ...ONLY[name] === undefined ? [] : [h("i", "", ONLY[name])], count), h("span", "tbh-fsd-block-about", about));
+      el.type = "button";
+      el.dataset.name = name;
+      el.addEventListener("mousedown", (e) => e.preventDefault());
+      el.addEventListener("click", () => insert(`{{${name}}}`));
+      el.addEventListener("pointerenter", () => embedTip(name, el.getBoundingClientRect()));
+      el.addEventListener("pointerleave", hideTip);
+      blockEls.set(name, { el, count });
+      blockList.append(el);
+    }
+    search.addEventListener("input", () => {
+      const q = search.value.trim().toLowerCase();
+      for (const [name, { el }] of blockEls)
+        el.hidden = q !== "" && !`${name} ${EMBEDS[name]}`.toLowerCase().includes(q);
+    });
+    const statePane = h("aside", "tbh-fsd-state", h("h3", "tbh-fsd-label", "Game state"), h("p", "tbh-fsd-hint", "Click to embed it where the caret is; hover for an example. The model reads only what you embed."), search, blockList);
+    const paceOut = h("output", "tbh-fsd-pace-out");
+    const pace = h("input", "tbh-fsd-pace");
+    Object.assign(pace, { type: "range", min: String(PLAN_EVERY.min), max: String(PLAN_EVERY.max), step: "1" });
+    pace.setAttribute("aria-label", "Seconds between planner runs");
+    pace.addEventListener("input", () => edit((d) => ({ ...d, planEvery: Number(pace.value) })));
+    const prompt = registered(growField("planner", "What should Tibo do? Embed the state the planner should read.", (value) => edit((d) => ({ ...d, prompt: value }))));
+    const promptErrors = h("div", "");
+    const plannerHead = h("div", "tbh-fsd-field-head", h("h3", "tbh-fsd-label", "Planner"), h("label", "tbh-fsd-pace-field", "runs every", pace, paceOut));
+    const plannerHint = h("p", "tbh-fsd-hint", "Sent every time the planner runs: on that interval, and whenever a goal ends, a card is taken, a boss shows up or the instructions change. It picks what the autopilot walks Tibo to next.");
+    const stepList = h("ol", "tbh-fsd-steps");
+    const addButton = h("button", "tbh-fsd-add", "+ Add instructions");
+    addButton.type = "button";
+    addButton.addEventListener("click", () => {
+      edit((d) => ({ ...d, steps: addStep(d.steps) }));
+      renderSteps();
+      stepRows.get(draft().steps.at(-1)?.id ?? -1)?.time.focus();
+    });
+    const timeline = h("section", "tbh-fsd-timeline", h("h3", "tbh-fsd-label", "Timeline"), h("p", "tbh-fsd-hint", "Added after the prompt from its game time on, until the next one takes over. Drag ⠿ to reorder."), stepList, addButton);
+    const planner = h("section", "tbh-fsd-planner", plannerHead, plannerHint, prompt.wrap, promptErrors, timeline);
+    const loadout = registered(growField("loadout", "How should the picker choose cards?", (value) => edit((d) => ({ ...d, loadout: value }))));
+    const loadoutErrors = h("div", "");
+    const loadoutPane = h("section", "tbh-fsd-loadout", h("div", "tbh-fsd-field-head", h("h3", "tbh-fsd-label", "Loadout")), h("p", "tbh-fsd-hint", "The picker's question at every level-up, chest and shrine. It also reads the planner's prompt."), loadout.wrap, loadoutErrors);
+    const entityList = h("div", "tbh-fsd-entities");
+    const entityPane = h("section", "tbh-fsd-world", h("h3", "tbh-fsd-label", "In the world"), h("p", "tbh-fsd-hint", "What the autopilot can walk Tibo to, by the names the planner reads. Click to add the name where the caret is."), entityList);
+    const renderEntities = () => {
+      const entities = game.entities();
+      entityList.replaceChildren(...entities.map((e) => {
+        const el = h("button", "tbh-fsd-entity", svgIcon(ACTION_ICONS[e.tag], "tbh-fsd-entity-icon"), e.name);
+        el.type = "button";
+        el.addEventListener("mousedown", (ev) => ev.preventDefault());
+        el.addEventListener("click", () => insert(e.name));
+        el.addEventListener("pointerenter", () => showTip(`entity:${e.name}`, el.getBoundingClientRect(), h("b", "tbh-fsd-tip-name", e.name), h("div", "tbh-fsd-tip-about", e.about || "No description in the game.")));
+        el.addEventListener("pointerleave", hideTip);
+        return el;
+      }), ...entities.length > 2 ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]);
+    };
+    const saved = h("span", "tbh-fsd-saved");
+    const stopButton = h("button", "tbh-fsd-stop", "Stop driving");
+    stopButton.type = "button";
+    stopButton.addEventListener("click", () => pilot.stop());
+    const engage = h("button", "tbh-fsd-engage");
+    engage.type = "button";
+    engage.addEventListener("click", () => {
+      if (pilot.state().state === "off" && !pilot.engage())
+        return;
+      close();
+    });
+    const foot = h("footer", "tbh-fsd-foot", saved, stopButton, engage);
+    const body = h("div", "tbh-fsd-body", statePane, h("div", "tbh-fsd-main", planner, h("div", "tbh-fsd-side", loadoutPane, entityPane)));
+    const sheet = h("div", "tbh-fsd-sheet", head, body, foot);
+    dialog.append(sheet, tip);
+    document.body.append(dialog);
+    dialog.addEventListener("focusin", (e) => {
+      if (e.target instanceof HTMLTextAreaElement)
+        target = e.target;
+    });
+    dialog.addEventListener("pointermove", (e) => {
+      const field = e.target instanceof HTMLTextAreaElement ? fields.get(e.target) : undefined;
+      if (field === undefined)
+        return;
+      const chip = field.chipAt(e.clientX, e.clientY);
+      if (chip === undefined) {
+        if (tipFor.startsWith("embed:"))
+          hideTip();
+      } else
+        embedTip(chip.name, chip.box);
+    });
+    dialog.addEventListener("pointerout", (e) => {
+      if (e.target instanceof HTMLTextAreaElement)
+        hideTip();
+    });
+    sheet.addEventListener("scroll", hideTip, true);
+    function insert(text) {
+      const field = target ?? prompt.area;
+      const start = field.selectionStart;
+      const before = field.value.slice(0, start);
+      const pad = before === "" || /\s$/.test(before) ? "" : " ";
+      field.setRangeText(`${pad}${text}`, start, field.selectionEnd, "end");
+      field.focus();
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    const stepRows = new Map;
+    let dragging;
+    const stepRow = (step) => {
+      const handle = h("span", "tbh-fsd-handle", "⠿");
+      handle.draggable = true;
+      handle.title = "Drag to reorder";
+      const time = h("input", "tbh-fsd-time");
+      Object.assign(time, { type: "text", placeholder: "m:ss", inputMode: "numeric" });
+      time.setAttribute("aria-label", "Game time these instructions start");
+      time.addEventListener("input", () => edit((d) => ({ ...d, steps: d.steps.map((s) => s.id === step.id ? { ...s, time: time.value } : s) })));
+      time.addEventListener("change", () => {
+        const at = parseTime(time.value);
+        if (at !== undefined && clock(at) !== time.value) {
+          time.value = clock(at);
+          time.dispatchEvent(new Event("input"));
+        }
+      });
+      const field = registered(growField("planner", "Instructions from this time on…", (value) => edit((d) => ({ ...d, steps: d.steps.map((s) => s.id === step.id ? { ...s, text: value } : s) }))));
+      const remove = h("button", "tbh-fsd-remove", "×");
+      remove.type = "button";
+      remove.setAttribute("aria-label", "Remove these instructions");
+      remove.addEventListener("click", () => {
+        edit((d) => ({ ...d, steps: d.steps.filter((s) => s.id !== step.id) }));
+        renderSteps();
+      });
+      const errors = h("div", "tbh-fsd-step-errors");
+      const li = h("li", "tbh-fsd-step", handle, time, field.wrap, remove, errors);
+      li.dataset.id = String(step.id);
+      handle.addEventListener("dragstart", (e) => {
+        dragging = step.id;
+        e.dataTransfer?.setData("text/plain", String(step.id));
+        if (e.dataTransfer !== null)
+          e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer?.setDragImage(li, 16, 16);
+        requestAnimationFrame(() => li.classList.add("tbh-fsd-dragging"));
+      });
+      handle.addEventListener("dragend", () => {
+        li.classList.remove("tbh-fsd-dragging");
+        dragging = undefined;
+        renderSteps();
+      });
+      return { li, time, field, errors };
+    };
+    stepList.addEventListener("dragover", (e) => {
+      if (dragging === undefined)
+        return;
+      e.preventDefault();
+      if (e.dataTransfer !== null)
+        e.dataTransfer.dropEffect = "move";
+      const moving = stepRows.get(dragging)?.li;
+      if (moving === undefined)
+        return;
+      const after = [...stepList.children].find((li) => li !== moving && e.clientY < li.getBoundingClientRect().top + li.getBoundingClientRect().height / 2);
+      if (after === undefined) {
+        if (stepList.lastElementChild !== moving)
+          stepList.append(moving);
+      } else if (moving.nextElementSibling !== after)
+        stepList.insertBefore(moving, after);
+    });
+    stepList.addEventListener("drop", (e) => {
+      if (dragging === undefined)
+        return;
+      e.preventDefault();
+      const id = dragging;
+      const from = draft().steps.findIndex((s) => s.id === id);
+      const to = [...stepList.children].findIndex((li) => li.dataset.id === String(id));
+      dragging = undefined;
+      if (from >= 0 && to >= 0)
+        edit((d) => ({ ...d, steps: moveStep(d.steps, from, to) }));
+    });
+    function renderSteps() {
+      const steps = draft().steps;
+      const ids = new Set(steps.map((s) => s.id));
+      for (const [id, row] of [...stepRows]) {
+        if (ids.has(id))
+          continue;
+        stepRows.delete(id);
+        fields.delete(row.field.area);
+      }
+      const lis = steps.map((s) => {
+        const row = stepRows.get(s.id) ?? stepRow(s);
+        stepRows.set(s.id, row);
+        return row.li;
+      });
+      if (lis.length !== stepList.children.length || lis.some((li, i) => stepList.children[i] !== li))
+        stepList.replaceChildren(...lis);
+      render();
+    }
+    function render() {
+      const d = draft();
+      const check = pilot.check();
+      const driving = pilot.state().state !== "off";
+      pace.value = String(d.planEvery);
+      paceOut.textContent = `${d.planEvery} s`;
+      prompt.set(d.prompt);
+      loadout.set(d.loadout);
+      promptErrors.replaceChildren(errorList(check.prompt));
+      loadoutErrors.replaceChildren(errorList(check.loadout));
+      const time = game.time();
+      const parsed = d.steps.map((s, i) => i === 0 ? 0 : parseTime(s.time) ?? Number.POSITIVE_INFINITY);
+      const active = time === undefined ? -1 : activeStep(parsed.map((at) => ({ at, text: "" })), time);
+      for (const [i, s] of d.steps.entries()) {
+        const row = stepRows.get(s.id);
+        if (row === undefined)
+          continue;
+        const errors = check.steps.get(s.id) ?? [];
+        if (document.activeElement !== row.time && row.time.value !== s.time)
+          row.time.value = s.time;
+        row.time.readOnly = i === 0;
+        row.time.title = i === 0 ? "The first instructions start the run" : "";
+        row.li.classList.toggle("tbh-fsd-step-bad", errors.length > 0);
+        row.time.classList.toggle("tbh-fsd-invalid", errors.some((m) => /time|after/i.test(m)));
+        row.field.set(s.text);
+        row.errors.replaceChildren(errorList(errors));
+        row.li.classList.toggle("tbh-fsd-step-now", i === active);
+        row.li.title = i === active ? "In effect now" : "";
+        row.li.querySelector(".tbh-fsd-remove")?.toggleAttribute("disabled", i === 0);
+      }
+      const used = (name) => [d.prompt, d.loadout, ...d.steps.map((s) => s.text)].join(`
+`).split(`{{${name}}}`).length - 1;
+      for (const [name, { el, count }] of blockEls) {
+        const n = used(name);
+        count.textContent = n === 0 ? "" : `×${n}`;
+        el.classList.toggle("tbh-fsd-block-used", n > 0);
+      }
+      const problems = check.prompt.length + check.loadout.length + [...check.steps.values()].reduce((n, m) => n + m.length, 0);
+      const connected = pilot.connected();
+      status.textContent = driving ? "Driving: changes reach the planner as you type" : connected ? "" : "The agent server is not connected";
+      status.dataset.state = driving ? "on" : connected ? "" : "error";
+      saved.textContent = problems === 0 ? "Saved in this browser" : `Saved in this browser · ${problems} to fix${driving ? " before the bot gets the change" : ""}`;
+      saved.classList.toggle("tbh-fsd-saved-bad", problems > 0);
+      stopButton.hidden = !driving;
+      engage.textContent = driving ? "Back to the game" : "Engage";
+      engage.disabled = !driving && (problems > 0 || !connected);
+      engage.title = driving ? "" : !connected ? "Start the agent server first: ./agent-server/main.ts" : problems > 0 ? "Fix what is marked red first" : "";
+    }
+    function flip(opening) {
+      const from = origin?.isConnected ? origin.getBoundingClientRect() : undefined;
+      if (from === undefined || from.width === 0 || reducedMotion()) {
+        const fade = [{ opacity: 0 }, { opacity: 1 }];
+        return sheet.animate(fade, { duration: 160, direction: opening ? "normal" : "reverse" }).finished;
+      }
+      const to = sheet.getBoundingClientRect();
+      const dx = from.left + from.width / 2 - (to.left + to.width / 2);
+      const dy = from.top + from.height / 2 - (to.top + to.height / 2);
+      const small = `perspective(1600px) translate(${dx}px, ${dy}px) scale(${from.width / to.width}, ${from.height / to.height}) rotateY(0deg)`;
+      const big = "perspective(1600px) translate(0px, 0px) scale(1, 1) rotateY(360deg)";
+      const frames = [
+        { transform: small, opacity: 0.5, offset: 0 },
+        { opacity: 1, offset: 0.35 },
+        { transform: big, opacity: 1, offset: 1 }
+      ];
+      return sheet.animate(frames, { duration: opening ? 820 : 520, direction: opening ? "normal" : "reverse", easing: opening ? "cubic-bezier(.2,.8,.25,1)" : "cubic-bezier(.75,0,.8,.2)" }).finished;
+    }
+    function close() {
+      if (!dialog.open || closing)
+        return;
+      closing = true;
+      hideTip();
+      dialog.classList.add("tbh-fsd-leaving");
+      flip(false).then(() => {
+        dialog.close();
+        dialog.classList.remove("tbh-fsd-leaving");
+        closing = false;
+        if (pausedHere)
+          game.resume();
+        pausedHere = false;
+      });
+    }
+    dialog.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      close();
+    });
+    dialog.addEventListener("click", (e) => {
+      if (e.target === dialog)
+        close();
+    });
+    pilot.onChange(() => {
+      if (dialog.open)
+        render();
+    });
+    return {
+      open(from) {
+        if (dialog.open)
+          return;
+        origin = from;
+        pausedHere = game.pause();
+        renderSteps();
+        renderEntities();
+        dialog.showModal();
+        target = undefined;
+        prompt.area.focus({ preventScroll: true });
+        prompt.area.setSelectionRange(prompt.area.value.length, prompt.area.value.length);
+        flip(true);
+      }
+    };
+  }
+
+  // userscript/fsd/entities.ts
+  function worldEntities(link) {
+    const spots = [];
+    for (const { kind } of link.table?.pois ?? []) {
+      const name = link.message(`content.poi.${kind}.name`);
+      if (kind !== "varietyPlace" && name !== undefined)
+        spots.push({ name, about: link.message(`content.poi.${kind}.desc`) ?? "", tag: SPOT_TAGS[kind] ?? "Spot" });
+    }
+    for (const key of Object.keys(link.messages)) {
+      const place = /^content\.varietyPlace\.([^.]+)\.name$/.exec(key)?.[1];
+      const name = place === undefined ? undefined : link.message(key);
+      if (name !== undefined)
+        spots.push({ name, about: link.message(`content.varietyPlace.${place}.desc`) ?? "", tag: "Spot" });
+    }
+    return [
+      { name: "chest", about: "A chest on the ground, from an elite or the map. Standing on it opens it for a free pick.", tag: "Loot" },
+      { name: "food", about: "Food on the ground, which heals Tibo.", tag: "Eat" },
+      ...spots.sort((a, b) => a.name.localeCompare(b.name))
+    ];
+  }
+
   // userscript/panel/panel.ts
   function guardPanelKeys() {
     for (const type of ["keydown", "keyup", "keypress"]) {
-      window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest(`#${PANEL_ID}`) !== null && e.stopImmediatePropagation(), true);
+      window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest(`#${PANEL_ID}, .tbh-fsd`) !== null && e.stopImmediatePropagation(), true);
     }
   }
   function mount(chat, footer) {
@@ -3087,8 +3910,26 @@
     document.body.append(panel);
     return { panel, content };
   }
+  function gameControl(link) {
+    return {
+      pause() {
+        const game = link.game;
+        if (game === undefined || !inRun(link) || game.state.paused || game.state.choiceQueue.length > 0 || pauseMenuOpen())
+          return false;
+        game.setPaused(true);
+        return true;
+      },
+      resume() {
+        if (inRun(link))
+          link.game?.setPaused(false);
+      },
+      time: () => link.game !== undefined && inRun(link) ? link.game.state.runClock : undefined,
+      entities: () => worldEntities(link)
+    };
+  }
   function startPanel(link, discovery, bridge) {
-    const { panel, content } = mount(botFeed(bridge.pilot), connectionRow(bridge));
+    const fsd = fsdPopup(bridge.pilot, gameControl(link));
+    const { panel, content } = mount(botFeed(bridge.pilot, fsd.open), connectionRow(bridge, fsd.open));
     let collapsedBefore;
     const followPilot = () => {
       const piloting = bridge.pilot.state().state !== "off";
@@ -3163,7 +4004,7 @@
   }
 
   // userscript/pilot/pick-overlay.css.ts
-  var css7 = `
+  var css8 = `
 .tbh-pick-layer { position: fixed; inset: 0; z-index: 2147482999; pointer-events: none; font: 800 12px/1.3 ui-monospace, Menlo, Consolas, monospace; }
 .tbh-pick-layer[hidden], .tbh-pick-layer [hidden] { display: none; }
 .tbh-pick-banner { position: fixed; transform: translate(-50%, -100%); box-sizing: border-box; padding: 5px 12px; text-align: center; color: #f3e6c4; background: rgba(42,33,64,.95); border: 1px solid #c9a0ff; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
@@ -3192,7 +4033,7 @@
   var ARRIVE_MS = 700;
   var FRESH_MS = 8000;
   function startPickOverlay(pilot) {
-    addStyle(css7);
+    addStyle(css8);
     const layer = h("div", "tbh-pick-layer");
     const banner = h("div", "tbh-pick-banner");
     const arrows = { down: moveIcon("down", "tbh-pick-arrow-icon"), right: moveIcon("right", "tbh-pick-arrow-icon") };

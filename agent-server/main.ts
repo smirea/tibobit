@@ -6,7 +6,8 @@ import { BRIDGE_PORT, localOrigin } from "../protocol/address";
 import { type CommandStatus, parseCommand } from "../protocol/commands";
 import { type LiveView, RAW_TOP, type Settled, type State } from "../protocol/view";
 import { parseRaw, rawParts } from "./raw";
-import { type PageLine, parsePilotChange, type PilotChange, type PilotSettings } from "../protocol/pilot";
+import { type PageLine, parsePilotChange, type PilotChange } from "../protocol/pilot";
+import { driveErrors } from "../bot/drive";
 import type { Encyclopedia, Snapshot } from "../protocol/snapshot";
 import { listCheckpoints, readCheckpoint, saveCheckpoint } from "./checkpoints";
 import { Pilot } from "./pilot";
@@ -19,7 +20,7 @@ const option = (name: string, fallback: string) => {
 };
 const PORT = Number(option("port", String(BRIDGE_PORT)));
 const WAIT_LIMIT_MS = 120_000;
-// What the bot "Grok take the wheel" starts is told: Jev plans and acts. Override with
+// What the bot Full Self Driving starts is told: Jev plans. Override with
 // --pilot "<the bot's flags>", such as --pilot "--model laya@q8_0" for LM Studio.
 const PILOT_ARGS: BotArgs = process.argv.includes("--pilot") ? parseBotArgs(option("pilot", "").split(/\s+/).filter(Boolean)) : { ...JEV, mode: "current", difficulty: "nightmare" };
 
@@ -49,10 +50,10 @@ async function jsonBody(req: Request): Promise<unknown> {
 function state(raw: string[] = []): State | undefined {
   if (latest === undefined) return undefined;
   const meta = Object.fromEntries(Object.entries(latest.snapshot).filter(([key]) => key !== "game" && !(RAW_TOP as readonly string[]).includes(key))) as Omit<Snapshot, "game" | (typeof RAW_TOP)[number]>;
-  // The settings tell a running bot, every step, how often to plan and act and whether to keep
-  // notes. Only a bot the panel started follows them; one started by hand keeps its own flags.
-  const settings: Partial<PilotSettings> = pilot.state.state === "off" ? {} : { pace: pilot.state.pace, incognito: pilot.state.incognito };
-  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, ...settings, ...meta, ...latest.view, ...rawParts(latest.snapshot, raw) };
+  // The panel's instructions reach a running bot every step, so edits take effect mid-run. Only a
+  // bot the panel started follows them; one started by hand keeps its own flags.
+  const drive = pilot.state.state === "off" || pilot.drive === undefined ? {} : { drive: pilot.drive };
+  return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, ...drive, ...meta, ...latest.view, ...rawParts(latest.snapshot, raw) };
 }
 
 function statusOf(id: number): CommandStatus | undefined {
@@ -104,11 +105,12 @@ GET  /state          the game as a live game needs it (LiveView in protocol/view
 WS   /ws?raw=...     pushes every snapshot, raw groups as for /state; send a JSON command to run it
 GET  /encyclopedia   every weapon, passive, item, recipe, enemy, boss, point of interest and biome
 POST /command        JSON command, see protocol/commands.ts; add ?wait=1 to block until it finishes
-POST /pilot          {"on": true} starts the bot for the tab ("Grok take the wheel"), {"on": false} stops it;
-                     {"planEvery": 5, "actEvery": 0.3} sets how often, in seconds, it plans and takes a step;
-                     {"incognito": true} has it just play: no notes, no review
+POST /pilot          {"drive": {...}} sets the Full Self Driving instructions (protocol/drive.ts), {"on": true}
+                     starts the bot for the tab with them, {"on": false} stops it
 GET  /checkpoints    the saved checkpoints' summaries, oldest first (see the checkpoint command)
 POST /pilot/say      the bot's chat line for the panel: {"role": "planner" | "action" | "system", "text", "detail"?, "model"?, "time"?}
+POST /pilot/state    the game state the bot last rendered, for the panel: {"time", "blocks": {"health": "...", ...}};
+                     GET returns it
 `;
 
 const server = Bun.serve<{ raw: string[] }>({
@@ -152,6 +154,7 @@ const server = Bun.serve<{ raw: string[] }>({
                 toPage({ hello: true });
                 toPage({ pilot: pilot.state });
                 for (const message of pilot.chat) toPage({ chat: message });
+                if (pilot.shown !== undefined) toPage({ preview: pilot.shown });
                 console.log("game tab connected");
                 const keepalive = setInterval(() => {
                   try {
@@ -209,15 +212,26 @@ const server = Bun.serve<{ raw: string[] }>({
           let change: PilotChange;
           try {
             change = parsePilotChange(await jsonBody(req));
+            const errors = change.drive === undefined ? [] : driveErrors(change.drive);
+            if (errors.length > 0) throw new Error(`the drive cannot be played: ${errors.map((e) => `${typeof e.field === "number" ? `step ${e.field + 1}` : e.field}: ${e.message}`).join("; ")}`);
+            pilot.change(change);
           } catch (e) {
             return errorResponse(e);
           }
-          pilot.change(change);
           return Response.json(pilot.state);
         }
         case "POST /pilot/say":
           try {
             pilot.say(await jsonBody(req));
+          } catch (e) {
+            return errorResponse(e);
+          }
+          return new Response(null, { status: 204 });
+        case "GET /pilot/state":
+          return pilot.shown === undefined ? errorResponse("the bot has rendered no state yet; let Full Self Driving plan once", 404) : Response.json(pilot.shown);
+        case "POST /pilot/state":
+          try {
+            pilot.preview(await jsonBody(req));
           } catch (e) {
             return errorResponse(e);
           }

@@ -3,11 +3,8 @@ export const css = `
 .tbh-giveback { flex: 1; min-width: 0; padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: inherit; font-weight: 800; cursor: pointer; color: #ffd6d0; background: rgba(227,138,127,.12); border: 1px solid #e38a7f; border-radius: 4px; }
 .tbh-giveback:hover:not(:disabled) { color: #fff; background: rgba(227,138,127,.24); }
 .tbh-chatbox { border-top: 1px solid rgba(255,255,255,.08); }
-.tbh-pace-field { --role: #c9a0ff; flex: none; display: inline-flex; align-items: center; gap: 3px; }
-.tbh-pace-action { --role: #7fa8ff; }
-.tbh-pace-input { width: 2.8em; padding: 2px 3px; font: inherit; color: #f3e6c4; background: rgba(0,0,0,.35); border: 1px solid #6b5631; border-radius: 3px; }
-.tbh-pace-input:focus { outline: none; border-color: var(--role); }
-.tbh-pace-input:disabled { opacity: .5; }
+.tbh-fsd-open { flex: none; padding: 4px 8px; font: inherit; font-size: 10.5px; font-weight: 900; letter-spacing: .1em; cursor: pointer; color: #1d1530; background: linear-gradient(135deg, #c9a0ff, #ffd36b); border: 0; border-radius: 4px; }
+.tbh-fsd-open:hover { filter: brightness(1.1); }
 .tbh-plan { --role: #c9a0ff; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin: 6px 6px 0; padding: 5px 7px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(201,160,255,.1); overflow-wrap: anywhere; }
 .tbh-plan-label { color: var(--role); font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .tbh-plan-text { flex: 1 1 60%; min-width: 0; white-space: pre-wrap; }

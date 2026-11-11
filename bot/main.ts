@@ -8,7 +8,7 @@ import { ladderCleared, type State } from "../protocol/view";
 import { type EndJson, see, type World } from "./world";
 import type { RunPlan, RunSetup } from "./notes";
 import { talliesOf, totalsBetween } from "./tallies";
-import { command, followPanel, pace, RAW, say, server, timed, timings } from "./server";
+import { command, drive, followPanel, piloted, RAW, say, server, showState, timed, timings } from "./server";
 import { BOT_CODE, MODE, MODE_NAME, setDifficulty } from "./run-context";
 import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG_DIR, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RESULT, RUN_COUNT, STEP, TAKEOVER, TRIAL, WEAPON } from "./config";
 import { RunNotes } from "./run-notes";
@@ -19,6 +19,9 @@ import { pursue } from "./pursue";
 import { latency, snapshotAges } from "./decider";
 import { RunLog } from "./run-log/writer";
 import { pursuit, resetGoals } from "./goals";
+import { driveTemplates } from "./drive";
+import { activeStep } from "../protocol/drive";
+import { renderBlocks } from "./blocks";
 import { clock } from "../clock";
 import type { TrialResult } from "./trial-result";
 import { type Book, bookFrom } from "../game/book";
@@ -93,6 +96,7 @@ async function main() {
   let planner: Planner | undefined;
   let runLog: RunLog | undefined;
   let last: World | undefined;
+  let shownPaused = false;
   // The previous run's notes wait for its share link, which appears while the next run starts.
   let awaitingLink: { notes: RunNotes; known: string | undefined } | undefined;
   console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, planner ${PLAN_MODEL}, templates from ${BASE.source}, run logs in ${LOG_DIR}`);
@@ -108,6 +112,7 @@ async function main() {
     if (notes !== undefined) await cutShort(notes, `the bot crashed (${e instanceof Error ? e.message : String(e)})`);
   };
   const now = await server.state(RAW);
+  followPanel(now.drive);
   // Every run the bot starts begins fresh, so a Daily always begins at tick 0 on its fixed seed.
   let adopted = TAKEOVER && now.tibo !== undefined && now.screen !== "over" && now.screen !== "title";
   if (TRIAL !== undefined && !adopted) throw new Error("--trial plays the run in progress, and there is none; start a run and load a checkpoint first");
@@ -154,9 +159,22 @@ async function main() {
     tag: adopted ? "Take over" : "Start",
     time: runClock(now),
     text: `${adopted ? `Taking over the run at ${clock(runClock(now))}` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}`}.`,
-    detail: `Planner ${PLAN_MODEL}, action model ${MODEL}, templates from ${BASE.source}. Run logs: ${LOG_DIR}`,
+    detail: drive === undefined ? `Planner ${PLAN_MODEL}, action model ${MODEL}, templates from ${BASE.source}. Run logs: ${LOG_DIR}` : `Full Self Driving: planner ${PLAN_MODEL} on your instructions, the autopilot steps. Run logs: ${LOG_DIR}`,
   });
-  const plan: RunPlan = { source: BASE.source, intent: INTENT, templates: BASE.templates, weapon: WEAPON };
+  const plan: RunPlan = { source: drive === undefined ? BASE.source : "Full Self Driving", intent: INTENT, templates: BASE.templates, weapon: WEAPON };
+  /** The Full Self Driving instructions the planner was last given, and the step of them then in effect. */
+  let told: { key: string; step: number } | undefined;
+  /** Gives the planner the panel's instructions as they stand, and has it run again when they change. */
+  const follow = (r: World, p: Planner) => {
+    if (drive === undefined) return;
+    const step = activeStep(drive.steps, r.time);
+    const templates = driveTemplates(drive, step);
+    const key = JSON.stringify(templates.planner);
+    if (key === told?.key) return;
+    if (told !== undefined) p.retold = step !== told.step ? `the instructions for ${clock(drive.steps[step]?.at ?? 0)} took effect` : "the instructions were edited";
+    told = { key, step };
+    setTemplates(templates);
+  };
   const prepareAndStart = () => start(WEAPON);
   if (!adopted) await prepareAndStart();
   runs = 1;
@@ -259,12 +277,12 @@ async function main() {
       await Bun.sleep(100);
       continue;
     }
-    followPanel(s.pace);
-    const incognito = s.incognito ?? false;
+    followPanel(s.drive);
     if (notes === undefined || planner === undefined || runLog === undefined) {
       const setup: RunSetup = { started: new Date(), difficulty: r.view.world.difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: String(r.run.seed), planner: PLAN_MODEL, action: MODEL, coach: COACH_LABEL, bot: BOT_CODE };
-      const skip = !NOTES ? "no --notes" : adopted ? "taken over mid-run" : incognito ? "incognito" : undefined;
+      const skip = !NOTES ? "no --notes" : adopted ? "taken over mid-run" : undefined;
       setTemplates(plan.templates);
+      told = undefined;
       notes = new RunNotes(setup, plan, skip === undefined);
       const first = r.weapons[0]?.id ?? "none";
       notes.started = startNote === "chosen" ? `${first} (chosen by the coach)` : `${first} (${startNote})`;
@@ -274,6 +292,7 @@ async function main() {
       resetGoals();
       console.log(`run seed ${String(r.run.seed)}${MODE === "daily" ? " (daily)" : ""}, ${skip === undefined ? "notes at the end" : `no notes (${skip})`}, templates from ${plan.source}, log ${notes.log}`);
     }
+    follow(r, planner);
     last = r;
     trialStart ??= r;
     if (TRIAL !== undefined && r.time - trialStart.time >= TRIAL) return endTrial(r, undefined);
@@ -287,17 +306,16 @@ async function main() {
     }
     steps++;
     timings.steps++;
-    if (incognito && notes.saved) {
-      notes.saved = false;
-      console.log("incognito: this run gets no notes and no review");
-      say({ role: "system", time: r.time, tag: "Incognito", text: "Incognito: this run gets no notes, and it will not be reviewed." });
-    }
     if (!modeSet) await setMode();
     // Live, the bot never pauses the game itself, so a pause is the player's: the models wait for it.
     if (s.screen === "paused") {
+      // The panel pauses the game while its instructions are open, and lists the state to embed.
+      if (piloted && !shownPaused) showState(r.time, renderBlocks(r));
+      shownPaused = true;
       await Bun.sleep(250);
       continue;
     }
+    shownPaused = false;
     const stepStarted = performance.now();
     beginStep();
     snapshotAges.push(s.ageMs);
@@ -310,7 +328,7 @@ async function main() {
     }
     // A move the action model chose was decided from a state already a few hundred ms old, so the
     // next one starts as soon as it lands; the page walks the cheap steps on its own anyway.
-    if (!modelSteered) await Bun.sleep(Math.max(0, pace.actEvery * 1000 - (performance.now() - stepStarted)));
+    if (!modelSteered) await Bun.sleep(Math.max(0, STEP * 1000 - (performance.now() - stepStarted)));
   }
 }
 

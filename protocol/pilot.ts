@@ -2,55 +2,38 @@
 import type { Envelope } from "./commands";
 import { fail, num } from "./parse";
 import type { Direction } from "./geometry";
+import { type Drive, parseDrive } from "./drive";
 
 /**
- * "Grok take the wheel": the agent server runs the bot (bot/main.ts) for the tab, and the bot's
- * models talk in the panel. The planner is the decision model choosing cards and goals (and, between
- * runs, the coach reviewing them); the action model is the decision model steering a step, and
- * action messages also report goals starting and ending.
+ * Full Self Driving: the agent server runs the bot (bot/main.ts) for the tab with the instructions
+ * written in the panel, and the bot's models talk in the panel. The planner is the decision model
+ * choosing cards and goals; action messages report goals starting and ending, and steps when a bot
+ * started by hand asks its action model.
  */
 const PILOT_ROLES = ["planner", "action", "system"] as const;
 export type PilotRole = (typeof PILOT_ROLES)[number];
-/** How often, in seconds, the bot asks its planner while a goal is under way, and takes a step. */
-export type PilotPace = { planEvery: number; actEvery: number };
-const DEFAULT_PACE: PilotPace = { planEvery: 5, actEvery: 0.3 };
-export const PACE_LIMITS = { planEvery: { min: 0.5, max: 300, step: 0.5 }, actEvery: { min: 0.1, max: 5, step: 0.1 } } as const;
-/** `incognito`: the bot just plays, keeping no notes and writing no review, so the run teaches nothing. */
-export type PilotSettings = { pace: PilotPace; incognito: boolean };
-export const DEFAULT_SETTINGS: PilotSettings = { pace: DEFAULT_PACE, incognito: false };
-export type PilotState = PilotSettings & { state: "off" | "on" | "stopping"; detail?: string };
-export type PilotChange = { on?: boolean; incognito?: boolean } & Partial<PilotPace>;
+export type PilotState = { state: "off" | "on" | "stopping"; detail?: string };
+/** `drive` replaces the instructions the bot plays by; `on` starts or stops it, and starting needs instructions. */
+export type PilotChange = { on?: boolean; drive?: Drive };
+
+/** The latest game state the bot rendered, by state block (bot/templates.ts BLOCKS), for the panel's state list. */
+export type StatePreview = { time: number; blocks: Record<string, string> };
 
 /** Validates a change to the pilot from the panel or a script; throws with a message a caller can act on. */
-/** A pace on its grid: inside its limits and a whole number of its steps. */
-export function snapPace(key: keyof PilotPace, seconds: number): number {
-  const { min, max, step } = PACE_LIMITS[key];
-  return Number((Math.round(Math.min(max, Math.max(min, seconds)) / step) * step).toFixed(1));
-}
-
-/** The settings with a change's pace and incognito over them; `on` is not a setting. */
-export const applyChange = (settings: PilotSettings, change: PilotChange): PilotSettings => ({
-  pace: { planEvery: change.planEvery ?? settings.pace.planEvery, actEvery: change.actEvery ?? settings.pace.actEvery },
-  incognito: change.incognito ?? settings.incognito,
-});
-
 export function parsePilotChange(input: unknown): PilotChange {
   const c = (input ?? {}) as Record<string, unknown>;
   const change: PilotChange = {};
-  for (const key of ["on", "incognito"] as const) {
-    if (c[key] === undefined) continue;
-    if (typeof c[key] !== "boolean") fail(`${key} must be true or false`);
-    change[key] = c[key] as boolean;
-  }
-  for (const key of ["planEvery", "actEvery"] as const) {
-    if (c[key] === undefined) continue;
-    const { min, max } = PACE_LIMITS[key];
-    const v = num(c[key], key);
-    if (v < min || v > max) fail(`${key} must be from ${min} to ${max} seconds`);
-    change[key] = snapPace(key, v);
-  }
-  if (Object.keys(change).length === 0) fail('send {"on": true|false}, {"incognito": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
+  if (c.on !== undefined) change.on = typeof c.on === "boolean" ? c.on : fail("on must be true or false");
+  if (c.drive !== undefined) change.drive = parseDrive(c.drive);
+  if (Object.keys(change).length === 0) fail('send {"on": true|false} and/or {"drive": {...}} (protocol/drive.ts)');
   return change;
+}
+
+export function parseStatePreview(input: unknown): StatePreview {
+  const p = (input ?? {}) as Record<string, unknown>;
+  const blocks = p.blocks as Record<string, unknown> | undefined;
+  if (typeof blocks !== "object" || blocks === null || Object.values(blocks).some((v) => typeof v !== "string")) fail("blocks must map each block name to its text");
+  return { time: num(p.time, "time"), blocks: blocks as Record<string, string> };
 }
 /** How long the bot shows its pick on a choice before taking the card, for someone watching. */
 export const PICK_SHOW_MS = 2000;
@@ -84,9 +67,34 @@ export type Inspect =
 const ACTION_TAGS = [
   ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
   ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
-  ...["Dash", "Start", "Take over", "Over", "Stopped", "Incognito"],
+  ...["Dash", "Start", "Take over", "Over", "Stopped"],
 ] as const;
 export type ActionTag = (typeof ACTION_TAGS)[number];
+// By the game's own point-of-interest kind; one the game adds later shows as a plain Spot.
+export const SPOT_TAGS: Record<string, ActionTag> = {
+  dog: "Pet",
+  dogKennel: "Kennel",
+  paidChest: "Crate",
+  chargeShrine: "Shrine",
+  curseShrine: "Curse",
+  goldenShrine: "Golden",
+  crops: "Farm",
+  vendor: "Shop",
+  microwave: "Microwave",
+  eliteNest: "Nest",
+  bossLair: "Lair",
+  botDock: "Bot",
+  whetstone: "Whetstone",
+  dinnerBell: "Bell",
+  taterSlots: "Slots",
+  seedVault: "Vault",
+  taterMagnet: "Magnet",
+  rootTunnel: "Tunnel",
+  taterLantern: "Light",
+  spudFreezer: "Freezer",
+  frenzyFryer: "Fryer",
+};
+
 /** How a goal ended; `dropped` means the planner chose another goal first. */
 const GOAL_RESULTS = ["done", "failed", "dropped"] as const;
 export type GoalResult = (typeof GOAL_RESULTS)[number];
@@ -114,7 +122,7 @@ export function trimChat(chat: ChatMessage[]) {
   }
 }
 /** One line of the server's held-open stream to the page. */
-export type PageLine = { hello: true } | { error: string } | Envelope | { chat: ChatMessage } | { pilot: PilotState };
+export type PageLine = { hello: true } | { error: string } | Envelope | { chat: ChatMessage } | { pilot: PilotState } | { preview: StatePreview };
 
 function optionalString(v: unknown, what: string): string | undefined {
   return v === undefined ? undefined : typeof v === "string" ? v : fail(`${what} must be a string`);

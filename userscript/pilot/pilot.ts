@@ -1,30 +1,24 @@
-import { applyChange, type ChatMessage, DEFAULT_SETTINGS, parsePilotChange, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../../protocol/pilot";
-
-const SETTINGS_KEY = "tibobit.pilotSettings";
-
-/** The bot settings chosen in this browser; the page sends them to every server it connects to. */
-function savedSettings(): PilotSettings {
-  try {
-    return applyChange(DEFAULT_SETTINGS, parsePilotChange(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null")));
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
-
-const asChange = (s: PilotSettings): PilotChange => ({ ...s.pace, incognito: s.incognito });
+import { type ChatMessage, type PilotChange, type PilotState, type StatePreview, trimChat } from "../../protocol/pilot";
+import { checkDraft, type Draft, type DraftCheck, loadDraft, saveDraft } from "../fsd/draft";
 
 /** The agent server as the pilot needs it: whether it is connected, where, and a way to ask it for a change, which resolves to whether it took it. */
 type PilotServer = { connected(): boolean; origin(): string; ask(change: PilotChange): Promise<boolean> };
 
+// Typing streams the instructions to a bot that is driving; this keeps it to a request per pause.
+const SEND_AFTER_MS = 400;
+
 /**
- * "Grok take the wheel" as this page knows it: whether the server's bot plays for this tab, what
- * the bot says, and the settings chosen in this browser.
+ * Full Self Driving as this page knows it: the instructions written in this browser, whether the
+ * server's bot drives this tab with them, what the bot says, and the state it last rendered.
  */
 export class Pilot {
-  private settings = savedSettings();
-  private current: PilotState = { state: "off", ...this.settings };
+  private current: PilotState = { state: "off" };
+  private written = loadDraft();
+  private checked = checkDraft(this.written);
+  private shown: StatePreview | undefined;
   private messages: ChatMessage[] = [];
   private listeners = new Set<() => void>();
+  private sending: ReturnType<typeof setTimeout> | undefined;
 
   /** `release` hands the game back to the keyboard when the bot lets go. */
   constructor(
@@ -34,6 +28,23 @@ export class Pilot {
 
   state(): PilotState {
     return this.current;
+  }
+
+  draft(): Draft {
+    return this.written;
+  }
+
+  check(): DraftCheck {
+    return this.checked;
+  }
+
+  connected(): boolean {
+    return this.server.connected();
+  }
+
+  /** The game state as the bot last rendered it, if it has. */
+  preview(): StatePreview | undefined {
+    return this.shown;
   }
 
   /** The bot's chat, oldest first; a message that is sent again keeps its id and position. */
@@ -49,14 +60,39 @@ export class Pilot {
     for (const listener of this.listeners) listener();
   }
 
-  /** A server has connected: it replays its chat from the start, and this browser's settings go up, so they survive its restarts. */
-  hello() {
-    this.messages.length = 0;
-    void this.server.ask(asChange(this.settings));
+  /** Keeps the instructions in this browser, and hands them to the server once they check, so a driving bot follows them. */
+  edit(next: Draft) {
+    this.written = next;
+    this.checked = checkDraft(next);
+    saveDraft(next);
+    clearTimeout(this.sending);
+    const drive = this.checked.drive;
+    if (drive !== undefined) this.sending = setTimeout(() => this.ask({ drive }), SEND_AFTER_MS);
     this.notify();
   }
 
-  /** The server says whether its bot plays for this tab. */
+  /** Starts driving with the instructions as written; false when they do not check yet. */
+  engage(): boolean {
+    const drive = this.checked.drive;
+    if (drive === undefined) return false;
+    clearTimeout(this.sending);
+    this.ask({ drive, on: true });
+    return true;
+  }
+
+  stop() {
+    this.ask({ on: false });
+  }
+
+  /** A server has connected: it replays its chat from the start, and this browser's instructions go up, so they survive its restarts. */
+  hello() {
+    this.messages.length = 0;
+    const drive = this.checked.drive;
+    if (drive !== undefined) void this.server.ask({ drive });
+    this.notify();
+  }
+
+  /** The server says whether its bot drives this tab. */
   receive(next: PilotState) {
     // The bot leaves the game paused at its own speed between steps.
     if (this.current.state !== "off" && next.state === "off") this.release();
@@ -68,7 +104,7 @@ export class Pilot {
 
   /** Without the server there is no bot, so nothing is driving the game any more. */
   disconnected() {
-    this.receive({ state: "off", ...this.settings });
+    this.receive({ state: "off" });
   }
 
   hear(message: ChatMessage) {
@@ -79,21 +115,16 @@ export class Pilot {
     this.notify();
   }
 
-  /** Asks the server to start or stop the bot, or to change its pace; the new state arrives over the stream. Settings are kept in this browser whether or not a server is connected. */
-  set(change: PilotChange) {
-    const { on, ...rest } = change;
-    if (Object.keys(rest).length > 0) {
-      this.settings = applyChange(this.settings, rest);
-      this.current = { ...this.current, ...this.settings };
-      try {
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(asChange(this.settings)));
-      } catch {}
-      this.notify();
-    }
+  see(preview: StatePreview) {
+    this.shown = preview;
+    this.notify();
+  }
+
+  private ask(change: PilotChange) {
     if (!this.server.connected()) return;
     void this.server.ask(change).then((ok) => {
       if (ok) return;
-      this.current = { ...this.current, detail: `the agent server on ${this.server.origin()} refused ${JSON.stringify(change)}; restart it with this version of agent-server/main.ts` };
+      this.current = { ...this.current, detail: `the agent server on ${this.server.origin()} refused the change; restart it with this version of agent-server/main.ts` };
       this.notify();
     });
   }

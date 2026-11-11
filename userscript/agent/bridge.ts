@@ -34,7 +34,7 @@ export type Bridge = {
   connect(port: number): void;
   /** Tells of a change to the connection: its port, whether it is up, its error. */
   onChange(listener: () => void): void;
-  /** The server's bot for this tab ("Grok take the wheel"). */
+  /** The server's bot for this tab (Full Self Driving). */
   readonly pilot: Pilot;
 };
 
@@ -216,6 +216,7 @@ export function startBridge(link: GameLink, controller: Controller, forecaster: 
             notify();
           } else if ("pilot" in envelope) pilot.receive(envelope.pilot);
           else if ("chat" in envelope) pilot.hear(envelope.chat);
+          else if ("preview" in envelope) pilot.see(envelope.preview);
           else controller.handle({ id: envelope.id, command: parseCommand(envelope.command) }, store);
         } catch (e) {
           console.error("[tibobit] bad command from the agent server", line, e);

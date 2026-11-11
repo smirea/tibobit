@@ -129,7 +129,7 @@ const said = (name: string, description?: string) => (description === undefined 
 
 /** The live view as a person or a model reads it: times as m:ss, health as hp/max, a line per thing. */
 function display(s: State): Record<string, unknown> {
-  const { connected: _c, ageMs: _a, capturedAt: _t, headless: _h, gameBuild: _g, commands, pace: _p, incognito: _i, time, world, tibo, directions, attacks, choice, ...rest } = s;
+  const { connected: _c, ageMs: _a, capturedAt: _t, headless: _h, gameBuild: _g, commands, drive: _d, time, world, tibo, directions, attacks, choice, ...rest } = s;
   const out: Record<string, unknown> = {};
   if (time !== undefined) out.time = clock(time);
   Object.assign(out, rest);

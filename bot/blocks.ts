@@ -123,6 +123,11 @@ export function blocks(r: World, b: Book): Record<BlockName, () => string> {
   return { ...v, state };
 }
 
+/** Every state block rendered now, for the panel to show what each embed holds. */
+export function renderBlocks(r: World): Record<BlockName, string> {
+  return Object.fromEntries(Object.entries(blocks(r, r.book)).map(([name, render]) => [name, render()])) as Record<BlockName, string>;
+}
+
 /** The values a template is rendered with: the state blocks and the slot's own, such as {{goal}}. */
 export function stateVars(r: World, extra: Record<string, string>): Record<string, () => string> {
   return { ...blocks(r, r.book), ...Object.fromEntries(Object.entries(extra).map(([k, x]) => [k, () => x])) };

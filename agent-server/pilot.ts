@@ -1,14 +1,18 @@
 import type { Subprocess } from "bun";
 import { ENTRY, ROOT } from "../paths";
-import { applyChange, type ChatMessage, DEFAULT_SETTINGS, type PageLine, parseChatLine, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../protocol/pilot";
+import { type ChatMessage, type PageLine, parseChatLine, parseStatePreview, type PilotChange, type PilotState, type StatePreview, trimChat } from "../protocol/pilot";
+import type { Drive } from "../protocol/drive";
 import { type BotArgs, botArgv } from "../bot/args";
 
 /**
- * "Grok take the wheel": the bot this server starts for its tab, and what the bot says in the
- * panel. The settings outlast the bot, so the next time it takes the wheel it plays the same way.
+ * Full Self Driving: the bot this server starts for its tab, the instructions it plays by, and what
+ * it says in the panel. The page sends its instructions whenever it connects or they change.
  */
 export class Pilot {
-  state: PilotState = { state: "off", ...DEFAULT_SETTINGS };
+  state: PilotState = { state: "off" };
+  drive: Drive | undefined;
+  /** The game state as the bot last rendered it, which the panel lists for embedding. */
+  shown: StatePreview | undefined;
   readonly chat: ChatMessage[] = [];
   private nextChatId = 1;
   private bot: Subprocess<"ignore", "inherit", "pipe"> | undefined;
@@ -36,13 +40,19 @@ export class Pilot {
     this.toPage({ chat: message });
   }
 
-  private set(next: Omit<PilotState, keyof PilotSettings> & Partial<PilotSettings>) {
-    this.state = { pace: this.state.pace, incognito: this.state.incognito, ...next };
+  preview(input: unknown) {
+    this.shown = parseStatePreview(input);
+    this.toPage({ preview: this.shown });
+  }
+
+  private set(next: PilotState) {
+    this.state = next;
     this.toPage({ pilot: this.state });
   }
 
-  change({ on, ...rest }: PilotChange) {
-    if (Object.keys(rest).length > 0) this.set({ ...this.state, ...applyChange(this.state, rest) });
+  change({ on, drive }: PilotChange) {
+    if (drive !== undefined) this.drive = drive;
+    if (on === true && this.drive === undefined) throw new Error("Full Self Driving needs instructions first: send a drive");
     if (on === true) this.start();
     if (on === false) this.stop();
   }

@@ -1,6 +1,6 @@
 import { css as feedCss } from "./feed.css";
 import { ACTION_ICONS, moveIcon, NOTE_ICON, RESULT_ICONS, svgIcon } from "./icons";
-import { type ChatMessage, PACE_LIMITS, type PilotPace, snapPace } from "../../protocol/pilot";
+import type { ChatMessage } from "../../protocol/pilot";
 import type { Direction } from "../../protocol/geometry";
 import { Pilot } from "./pilot";
 import { addStyle, h } from "../panel/dom";
@@ -37,33 +37,16 @@ function actionTile(m: ChatMessage): HTMLElement {
  * The bot's models while it plays: its latest plan pinned at the top, and the latest actions under
  * it, newest first. Hovering either shows what the model was asked and what it weighed.
  */
-export function botFeed(pilot: Pilot): HTMLElement {
+export function botFeed(pilot: Pilot, openFsd: (from: HTMLElement) => void): HTMLElement {
   addStyle(feedCss);
   const giveBack = h("button", "tbh-giveback");
   giveBack.type = "button";
-  giveBack.addEventListener("click", () => pilot.set({ on: false }));
-  const paceInput = (key: keyof PilotPace) => {
-    const { min, max, step } = PACE_LIMITS[key];
-    const input = h("input", "tbh-pace-input");
-    Object.assign(input, { type: "number", min: String(min), max: String(max), step: String(step), inputMode: "decimal" });
-    input.addEventListener("change", () => {
-      const v = Number(input.value);
-      if (!Number.isFinite(v) || input.value === "") return;
-      const clamped = snapPace(key, v);
-      input.value = String(clamped);
-      pilot.set({ [key]: clamped });
-    });
-    return input;
-  };
-  const planEvery = paceInput("planEvery");
-  const actEvery = paceInput("actEvery");
-  const tools = h(
-    "div",
-    "tbh-chat-tools",
-    giveBack,
-    h("label", "tbh-pace-field", h("span", "tbh-plan-label", "Plan"), planEvery, "s"),
-    h("label", "tbh-pace-field tbh-pace-action", h("span", "tbh-plan-label", "Action"), actEvery, "s"),
-  );
+  giveBack.addEventListener("click", () => pilot.stop());
+  const instructions = h("button", "tbh-fsd-open", "FSD");
+  instructions.type = "button";
+  instructions.title = "Edit the Full Self Driving instructions (pauses the game)";
+  instructions.addEventListener("click", () => openFsd(instructions));
+  const tools = h("div", "tbh-chat-tools", giveBack, instructions);
 
   const plan = h("div", "tbh-plan");
   const list = h("div", "tbh-actions");
@@ -77,14 +60,6 @@ export function botFeed(pilot: Pilot): HTMLElement {
     const label = now.state === "stopping" ? "Handing the wheel back…" : "I'll do it myself";
     if (giveBack.textContent !== label) giveBack.textContent = label;
     giveBack.disabled = now.state !== "on";
-    // Typing in a box is not interrupted by the server echoing the value back.
-    for (const [input, value] of [
-      [planEvery, now.pace.planEvery],
-      [actEvery, now.pace.actEvery],
-    ] as const) {
-      input.disabled = now.state !== "on";
-      if (document.activeElement !== input && input.value !== String(value)) input.value = String(value);
-    }
 
     const messages = pilot.chat();
     const latest = [...messages].reverse().find((m) => m.role === "planner");

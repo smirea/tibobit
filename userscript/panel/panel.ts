@@ -9,12 +9,14 @@ import { css as panelCss } from "./panel.css";
 import { css as connectionCss } from "./connection.css";
 import { css as spritesCss } from "./sprites.css";
 import { css as cardNotesCss } from "./card-notes.css";
-import { inRun, PANEL_ID } from "../link/screen";
+import { inRun, PANEL_ID, pauseMenuOpen } from "../link/screen";
 import { addStyle, h } from "./dom";
 import { startTips } from "./sprites";
 import { renderPanel, renderProblem, type View } from "./combos-list";
 import { connectionRow } from "./connection";
 import { annotateCard, offerKey } from "./card-notes";
+import { fsdPopup, type GameControl } from "../fsd/popup";
+import { worldEntities } from "../fsd/entities";
 
 /**
  * The game reads keys on the window, so typing a port would otherwise steer or pick cards. This has
@@ -22,7 +24,7 @@ import { annotateCard, offerKey } from "./card-notes";
  */
 export function guardPanelKeys() {
   for (const type of ["keydown", "keyup", "keypress"]) {
-    window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest(`#${PANEL_ID}`) !== null && e.stopImmediatePropagation(), true);
+    window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest(`#${PANEL_ID}, .tbh-fsd`) !== null && e.stopImmediatePropagation(), true);
   }
 }
 
@@ -37,8 +39,27 @@ function mount(chat: HTMLElement, footer: HTMLElement): { panel: HTMLElement; co
   return { panel, content };
 }
 
+/** The run as the Full Self Driving popup needs it: paused while the instructions are open. */
+function gameControl(link: GameLink): GameControl {
+  return {
+    pause() {
+      const game = link.game;
+      // A choice or the game's own pause menu already holds the run still.
+      if (game === undefined || !inRun(link) || game.state.paused || game.state.choiceQueue.length > 0 || pauseMenuOpen()) return false;
+      game.setPaused(true);
+      return true;
+    },
+    resume() {
+      if (inRun(link)) link.game?.setPaused(false);
+    },
+    time: () => (link.game !== undefined && inRun(link) ? link.game.state.runClock : undefined),
+    entities: () => worldEntities(link),
+  };
+}
+
 export function startPanel(link: GameLink, discovery: Discovery, bridge: Bridge) {
-  const { panel, content } = mount(botFeed(bridge.pilot), connectionRow(bridge));
+  const fsd = fsdPopup(bridge.pilot, gameControl(link));
+  const { panel, content } = mount(botFeed(bridge.pilot, fsd.open), connectionRow(bridge, fsd.open));
   // While the bot plays, its chat takes the corner and the combos fold to their header.
   let collapsedBefore: boolean | undefined;
   const followPilot = () => {

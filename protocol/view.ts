@@ -1,7 +1,7 @@
 // What the agent server sends its clients.
 import type { ChoiceAction, CommandStatus } from "./commands";
 import type { Direction } from "./geometry";
-import type { PilotPace } from "./pilot";
+import type { Drive } from "./drive";
 import type { Snapshot } from "./snapshot";
 
 /** The parts of a snapshot outside the game state that `raw` can name. */
@@ -13,7 +13,7 @@ export const RAW_TOP = ["storage", "surroundings", "forecast", "gameEvents"] as 
  */
 export type State = Pick<Snapshot, "capturedAt" | "screen" | "mode" | "lastRunLink" | "headless" | "gameBuild" | "commands" | "error"> &
   Partial<LiveView> &
-  Pick<Snapshot, "game" | (typeof RAW_TOP)[number]> & { connected: boolean; ageMs: number; pace?: PilotPace; incognito?: boolean };
+  Pick<Snapshot, "game" | (typeof RAW_TOP)[number]> & { connected: boolean; ageMs: number; drive?: Drive };
 
 /** A weapon, passive or dog Tibo has: the game's id and English name and description, and its level of the most it can reach. */
 export type LoadoutItem = { id: string; name: string; level: number; max: number; description: string };

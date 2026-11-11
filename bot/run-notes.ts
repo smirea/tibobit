@@ -18,7 +18,7 @@ export class RunNotes {
   file?: string;
   private end?: RunEnd;
 
-  /** A run the bot took over from a person is not saved, and neither is an incognito one. */
+  /** A run the bot took over from a person is not saved. */
   constructor(
     readonly setup: RunSetup,
     readonly plan: RunPlan,
