@@ -1,0 +1,438 @@
+{
+  "fry-knives": {
+    "games": 7,
+    "last": "L1.I9.G5"
+  },
+  "hot-potato": {
+    "games": 2,
+    "last": "L1.I1.G5"
+  },
+  "chip-shuriken": {
+    "games": 1,
+    "last": "L1.I1.G1"
+  },
+  "starch-puddle": {
+    "games": 2,
+    "last": "L1.I2.G2"
+  },
+  "root-cellar": {
+    "games": 3,
+    "last": "L1.I6.G5"
+  },
+  "spud-dice": {
+    "games": 2,
+    "last": "L1.I9.G2"
+  },
+  "hot-start": {
+    "games": 6,
+    "last": "L1.I5.G3"
+  },
+  "gpu": {
+    "games": 4,
+    "last": "L1.I4.G4"
+  },
+  "fry-lance": {
+    "games": 5,
+    "last": "L1.I8.G5"
+  },
+  "gravy-heart": {
+    "games": 9,
+    "last": "L1.I9.G4"
+  },
+  "chives": {
+    "games": 4,
+    "last": "L1.I8.G5"
+  },
+  "spud-sneakers": {
+    "games": 1,
+    "last": "L1.I1.G2"
+  },
+  "big-bowl": {
+    "games": 3,
+    "last": "L1.I9.G2"
+  },
+  "butter-socks": {
+    "games": 7,
+    "last": "L1.I9.G1"
+  },
+  "hash-boomerang": {
+    "games": 2,
+    "last": "L1.I3.G5"
+  },
+  "tot-stampede": {
+    "games": 2,
+    "last": "L1.I5.G4"
+  },
+  "mash-golem": {
+    "games": 2,
+    "last": "L1.I1.G4"
+  },
+  "potato-battery": {
+    "games": 5,
+    "last": "L1.I8.G1"
+  },
+  "spud-fence": {
+    "games": 2,
+    "last": "L1.I1.G5"
+  },
+  "skipping-cannonball": {
+    "games": 4,
+    "last": "L1.I9.G5"
+  },
+  "tater-mines": {
+    "games": 3,
+    "last": "L1.I9.G3"
+  },
+  "potato-rain": {
+    "games": 4,
+    "last": "L1.I9.G4"
+  },
+  "starch-bolt": {
+    "games": 3,
+    "last": "L1.I6.G1"
+  },
+  "peel-out": {
+    "games": 5,
+    "last": "L1.I9.G3"
+  },
+  "mezzaluna": {
+    "games": 1,
+    "last": "L1.I1.G5"
+  },
+  "rosti-disc": {
+    "games": 3,
+    "last": "L1.I9.G5"
+  },
+  "butter-streak": {
+    "games": 4,
+    "last": "L1.I9.G3"
+  },
+  "frying-pan": {
+    "games": 3,
+    "last": "L1.I5.G2"
+  },
+  "root-network": {
+    "games": 5,
+    "last": "L1.I6.G4"
+  },
+  "peeler": {
+    "games": 3,
+    "last": "L1.I9.G4"
+  },
+  "salt-line": {
+    "games": 1,
+    "last": "L1.I2.G1"
+  },
+  "skillet-flail": {
+    "games": 3,
+    "last": "L1.I6.G5"
+  },
+  "seeker-sprouts": {
+    "games": 4,
+    "last": "L1.I9.G3"
+  },
+  "gratin-arc": {
+    "games": 3,
+    "last": "L1.I6.G1"
+  },
+  "locked-gatling": {
+    "games": 2,
+    "last": "L1.I6.G2"
+  },
+  "harvest-moon": {
+    "games": 4,
+    "last": "L1.I9.G3"
+  },
+  "fertilizer": {
+    "games": 2,
+    "last": "L1.I3.G4"
+  },
+  "thick-skin": {
+    "games": 4,
+    "last": "L1.I6.G4"
+  },
+  "bacon-bits": {
+    "games": 4,
+    "last": "L1.I8.G3"
+  },
+  "hot-sauce": {
+    "games": 6,
+    "last": "L1.I8.G1"
+  },
+  "spud-cannon": {
+    "games": 7,
+    "last": "L1.I9.G2"
+  },
+  "comet-scythe": {
+    "games": 3,
+    "last": "L1.I6.G1"
+  },
+  "sprout-satellites": {
+    "games": 1,
+    "last": "L1.I2.G3"
+  },
+  "starch-plating": {
+    "games": 8,
+    "last": "L1.I9.G3"
+  },
+  "sprouting-eyes": {
+    "games": 4,
+    "last": "L1.I9.G4"
+  },
+  "hash-rush": {
+    "games": 2,
+    "last": "L1.I3.G5"
+  },
+  "pressure-cooker": {
+    "games": 1,
+    "last": "L1.I2.G5"
+  },
+  "mash-mallet": {
+    "games": 2,
+    "last": "L1.I9.G1"
+  },
+  "reset-button": {
+    "games": 3,
+    "last": "L1.I9.G1"
+  },
+  "gravy-splash": {
+    "games": 2,
+    "last": "L1.I4.G1"
+  },
+  "tot-toss": {
+    "games": 3,
+    "last": "L1.I9.G5"
+  },
+  "gem-sling": {
+    "games": 2,
+    "last": "L1.I5.G3"
+  },
+  "seed-potato": {
+    "games": 3,
+    "last": "L1.I6.G2"
+  },
+  "sprout-squad": {
+    "games": 2,
+    "last": "L1.I3.G3"
+  },
+  "potato-magnet": {
+    "games": 1,
+    "last": "L1.I3.G1"
+  },
+  "masher-grip": {
+    "games": 3,
+    "last": "L1.I5.G1"
+  },
+  "salt-shaker": {
+    "games": 3,
+    "last": "L1.I9.G1"
+  },
+  "hot-streak": {
+    "games": 2,
+    "last": "L1.I8.G3"
+  },
+  "mash-snowball": {
+    "games": 4,
+    "last": "L1.I8.G5"
+  },
+  "small-fry": {
+    "games": 2,
+    "last": "L1.I3.G3"
+  },
+  "whisk-vortex": {
+    "games": 3,
+    "last": "L1.I6.G1"
+  },
+  "lean-lunch": {
+    "games": 6,
+    "last": "L1.I8.G5"
+  },
+  "tater-trot": {
+    "games": 1,
+    "last": "L1.I3.G2"
+  },
+  "tater-twirl": {
+    "games": 3,
+    "last": "L1.I9.G2"
+  },
+  "mash-wave": {
+    "games": 4,
+    "last": "L1.I8.G5"
+  },
+  "grab-bag": {
+    "games": 3,
+    "last": "L1.I8.G1"
+  },
+  "packed-pan": {
+    "games": 2,
+    "last": "L1.I8.G5"
+  },
+  "couch-potato": {
+    "games": 1,
+    "last": "L1.I3.G3"
+  },
+  "hash-harrier": {
+    "games": 2,
+    "last": "L1.I5.G2"
+  },
+  "spud-decoy": {
+    "games": 1,
+    "last": "L1.I3.G4"
+  },
+  "potato-patch": {
+    "games": 1,
+    "last": "L1.I3.G4"
+  },
+  "spud-dynamo": {
+    "games": 3,
+    "last": "L1.I8.G1"
+  },
+  "frozen-fries": {
+    "games": 4,
+    "last": "L1.I5.G4"
+  },
+  "four-eyed-spud": {
+    "games": 1,
+    "last": "L1.I3.G4"
+  },
+  "mash-finisher": {
+    "games": 3,
+    "last": "L1.I8.G5"
+  },
+  "mash-landing": {
+    "games": 8,
+    "last": "L1.I8.G5"
+  },
+  "julienne-dash": {
+    "games": 2,
+    "last": "L1.I9.G3"
+  },
+  "afterburner-fries": {
+    "games": 2,
+    "last": "L1.I4.G1"
+  },
+  "root-spikes": {
+    "games": 1,
+    "last": "L1.I3.G5"
+  },
+  "spry-sprout": {
+    "games": 3,
+    "last": "L1.I5.G3"
+  },
+  "golden-fry": {
+    "games": 2,
+    "last": "L1.I4.G1"
+  },
+  "waffle-cut": {
+    "games": 1,
+    "last": "L1.I4.G1"
+  },
+  "deep-fryer": {
+    "games": 6,
+    "last": "L1.I6.G4"
+  },
+  "peel-lash": {
+    "games": 3,
+    "last": "L1.I9.G1"
+  },
+  "spud-lob": {
+    "games": 1,
+    "last": "L1.I4.G2"
+  },
+  "broadside": {
+    "games": 3,
+    "last": "L1.I8.G5"
+  },
+  "butter-pat": {
+    "games": 1,
+    "last": "L1.I4.G2"
+  },
+  "sour-cream": {
+    "games": 2,
+    "last": "L1.I5.G1"
+  },
+  "slow-cooker": {
+    "games": 4,
+    "last": "L1.I8.G2"
+  },
+  "tater-pup": {
+    "games": 2,
+    "last": "L1.I4.G4"
+  },
+  "hash-brown-shield": {
+    "games": 1,
+    "last": "L1.I4.G3"
+  },
+  "tailgate-fries": {
+    "games": 4,
+    "last": "L1.I6.G4"
+  },
+  "steam-vent": {
+    "games": 2,
+    "last": "L1.I9.G2"
+  },
+  "stuffed-skin": {
+    "games": 2,
+    "last": "L1.I8.G1"
+  },
+  "hearty-helping": {
+    "games": 1,
+    "last": "L1.I4.G3"
+  },
+  "aged-russet": {
+    "games": 2,
+    "last": "L1.I4.G4"
+  },
+  "rotten-spud": {
+    "games": 1,
+    "last": "L1.I4.G3"
+  },
+  "clean-plate": {
+    "games": 1,
+    "last": "L1.I4.G3"
+  },
+  "fry-fortress": {
+    "games": 1,
+    "last": "L1.I4.G4"
+  },
+  "gravy-boat": {
+    "games": 2,
+    "last": "L1.I8.G2"
+  },
+  "kettle-cyclone": {
+    "games": 1,
+    "last": "L1.I4.G4"
+  },
+  "peel-poltergeist": {
+    "games": 1,
+    "last": "L1.I5.G3"
+  },
+  "fry-sentry": {
+    "games": 4,
+    "last": "L1.I9.G4"
+  },
+  "hash-hawk": {
+    "games": 3,
+    "last": "L1.I9.G3"
+  },
+  "cast-iron": {
+    "games": 1,
+    "last": "L1.I6.G2"
+  },
+  "peel-phantom": {
+    "games": 2,
+    "last": "L1.I9.G2"
+  },
+  "bottomless-sack": {
+    "games": 1,
+    "last": "L1.I6.G5"
+  },
+  "starch-chain": {
+    "games": 2,
+    "last": "L1.I8.G4"
+  },
+  "tot-gatling": {
+    "games": 1,
+    "last": "L1.I8.G5"
+  }
+}
