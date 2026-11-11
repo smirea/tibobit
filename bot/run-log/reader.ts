@@ -138,17 +138,17 @@ export function economy(csv: string): string {
   if (header[0] !== "time") return "(no numbers: the log is damaged)";
   const rows = cells.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])) as Record<string, string>);
   const live = rows.filter((r) => r.seconds !== "");
-  // Gold goes when a shop's choice is taken, a moment after Tibo stood in the shop: the spend counts for the last spot he stood in within 5 seconds.
+  const titles = new Map(rows.filter((r) => r.event === "goal" && r.action === "start").map((r) => [r.goal ?? "", goalTitleCell.spotName(r.detail)]));
+  // Gold goes when a shop's choice is taken, a moment after Tibo stood in the shop. The spend counts for the spot his goal was after, else for the last spot he stood in within 5 seconds.
   const spent = new Map<string, number>();
   let last: { spot: string; at: number } | undefined;
   for (const [i, r] of live.entries()) {
     if ((r.spot ?? "") !== "") last = { spot: r.spot ?? "", at: Number(r.seconds) };
     const drop = Number(live[i - 1]?.gold) - Number(r.gold);
-    const where = last !== undefined && Number(r.seconds) - last.at <= 5 ? last.spot : "elsewhere";
+    const where = titles.get(r.goal ?? "") ?? (last !== undefined && Number(r.seconds) - last.at <= 5 ? last.spot : "elsewhere");
     if (drop > 0) spent.set(where, (spent.get(where) ?? 0) + drop);
   }
   const total = [...spent.values()].reduce((a, b) => a + b, 0);
-  const titles = new Map(rows.filter((r) => r.event === "goal" && r.action === "start").map((r) => [r.goal ?? "", goalTitleCell.spotName(r.detail)]));
   const used = new Map<string, number>();
   for (const r of rows.filter((x) => x.event === "goal" && x.action === "done")) {
     const name = titles.get(r.goal ?? "");
