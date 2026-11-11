@@ -141,9 +141,9 @@ async function send(c: unknown) {
 /** Whether this run's game has been set to play live; a new run starts paused at tick 0. */
 let modeSet = false;
 
-// Live, a move lands a while after the snapshot it was chosen from: the forecast was made up to 12
-// ticks before the snapshot (100ms on average), the snapshot is some ms old, and the action model
-// takes its time. Tibo keeps its current move meanwhile, so the page's forecast plays that first.
+// Live, a move lands a while after the snapshot it was chosen from: the page forecasts one move at a
+// time, so a move's forecast is half a round of nine old on average (about 100ms, more in a big
+// crowd), the snapshot is some ms old, and the action model takes its time. Tibo keeps its current move meanwhile, so the page's forecast plays that first.
 // Measured over 10,640 live steps, a move forecast as free lost health 14.5% of the time when it
 // turned Tibo and 1.4% when it kept the direction: the turn was planned from where Tibo no longer was.
 const FORECAST_REFRESH_LAG = 0.1;

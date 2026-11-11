@@ -2,6 +2,7 @@ import type { GameLink } from "../game";
 import type { Controller } from "./control";
 import type { CheckpointFile } from "./training";
 import { encyclopedia } from "./encyclopedia";
+import { Foresight } from "./foresight";
 import { BRIDGE_PORT, type ChatMessage, type PageLine, type PilotState, bridgeOrigin, DEFAULT_SETTINGS, parseCommand, parsePilotChange, type PilotChange, type PilotSettings, trimChat, validPort } from "./protocol";
 import { inRun, snapshot } from "./snapshot";
 
@@ -152,6 +153,7 @@ export function startBridge(link: GameLink, controller: Controller): Bridge {
   // The English text loads only when a run starts, after the content tables, so the encyclopedia
   // goes up again each time more of it has arrived: -1 means not sent to this server yet.
   let sentWithMessages = -1;
+  const foresight = new Foresight(link, controller);
   controller.store = {
     put: async (file) => {
       await gmCall("POST", `${origin}/bridge/checkpoint`, JSON.stringify(file));
@@ -279,12 +281,16 @@ export function startBridge(link: GameLink, controller: Controller): Bridge {
       }
     }
     let body;
+    let built = now;
     try {
-      body = JSON.stringify(snapshot(link, controller.statuses));
+      // A paused game's forecast is made on the spot; counted as the snapshot's cost it would space the next ones seconds apart.
+      const forecast = foresight.read();
+      built = performance.now();
+      body = JSON.stringify(snapshot(link, controller.statuses, forecast));
     } catch (e) {
       body = JSON.stringify({ capturedAt: Date.now(), screen: "title", commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` });
     }
-    snapshotMs = performance.now() - now;
+    snapshotMs = performance.now() - built;
     inFlight++;
     void post(origin, "/bridge/state", body).finally(() => inFlight--);
   }, RUN_INTERVAL_MS / 2);

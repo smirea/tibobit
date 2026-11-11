@@ -45,9 +45,13 @@ export type Command =
    * agent that does not pause between steps. Off, it only appears while the game is paused. `lag`
    * is the seconds between a snapshot and the agent's move landing: a running game's forecast first
    * plays the input held now for that long, then each direction. `seconds` is the horizon of both
-   * the forecast and `surroundings` (0.1 to 2; 0.5 until set).
+   * the forecast and `surroundings` (0.1 to 2; 0.5 until set). `route` prices whole trips to a place
+   * instead of single moves (see Routes): `stay` is how long Tibo must stand there for the trip to
+   * be done (0 to 5 seconds; 0 until set), `seconds` the most of a trip that is played (0.5 to 6; 4
+   * until set) and `leg` how long its first move is held (0.1 to 2; 0.5 until set). A forecast
+   * command without `route` goes back to single moves.
    */
-  | { type: "forecast"; live: boolean; lag?: number; seconds?: number }
+  | { type: "forecast"; live: boolean; lag?: number; seconds?: number; route?: { to: Target; stay?: number; seconds?: number; leg?: number } }
   /**
    * From the title screen, the end screen or mid-run, start a new run. `mode` "daily" plays
    * today's Daily, which has the same seed and build for everyone, so runs are comparable. The
@@ -86,12 +90,36 @@ export type Command =
 export const CHOICE_ACTIONS = ["pick", "banish", "buy", "reroll", "skip", "close", "accept", "continue", "endRun"] as const;
 export type ChoiceAction = { type: "pick" | "banish" | "buy"; index: number } | { type: "reroll" | "skip" | "close" | "accept" | "continue" | "endRun" };
 
+/** What one plan cost on a copy of the game taken at game tick `tick`; `bySource` uses the game's damage-by-source keys. */
+export type Outcome = { tick: number; damage: number; dead: boolean; bySource: Record<string, number> };
+
 /**
- * What the game's own simulation, run forward on a copy of the state, says each move would cost:
- * the eight directions and standing still, held for `seconds` after the agent's `lag`. `bySource`
- * uses the game's damage-by-source keys. This is a tool's output, not game state.
+ * Whole trips to the `forecast` command's `route.to`, each played on a copy of the game until it is
+ * done or `seconds` have passed: "straight" walks there and stands on it; a direction or "still" is
+ * held for `leg` seconds first; "dash <direction>" (only while a charge is ready) dashes first. The
+ * directions are the ones up to a quarter turn either side of the way there. `arrives` is the
+ * seconds until Tibo first stands on the place, and `done` the seconds until he has stood there for
+ * `stay`, or until the point of interest or pickup is used up; each is absent when the trip does
+ * not get that far. `damage` is what the trip costs up to `done`, so only trips that are done
+ * compare like for like.
  */
-export type Forecast = { lag: number; seconds: number; moves: Record<Direction | "still", { damage: number; dead: boolean; bySource: Record<string, number> }> };
+export type Routes = { seconds: number; leg: number; stay: number; options: Record<string, Outcome & { arrives?: number; done?: number }> };
+
+/**
+ * The game as it will stand `seconds` from game tick `tick`, when a move chosen now lands: a copy
+ * played forward with the movement command the page holds at that tick, so a command sent after
+ * the snapshot was taken is not in it. `player` uses the game's own player keys.
+ */
+export type Ahead = { tick: number; seconds: number; player: { x: number; y: number; hp: number; dashCharges: number }; threats: Threats };
+
+/**
+ * What the game's own simulation, run forward on copies of the state, says each plan would cost
+ * after the agent's `lag`: the eight directions and standing still held for `seconds`, or, with a
+ * `route`, whole trips. A running game is copied afresh for every plan, one plan after another, so
+ * each outcome carries the tick of its copy; `ahead` is made for every snapshot, from its own tick. This is a tool's
+ * output, not game state.
+ */
+export type Forecast = { lag: number; seconds: number; ahead: Ahead; moves?: Partial<Record<Direction | "still", Outcome>>; routes?: Routes };
 
 /** Where something is from Tibo, in world units. */
 export type Bearing = { dist: number; dir: Direction };
@@ -101,14 +129,20 @@ export type Bearing = { dist: number; dir: Direction };
  * and hazard (the snapshot's `raw` groups). A tool's output, not game state. `seconds` is the
  * horizon, the same as the forecast's.
  */
-export type Surroundings = {
+export type Surroundings = Threats & {
   seconds: number;
   /** Damage taken in the last 3 seconds, by the game's damage source keys. */
   hurtBy: Record<string, number>;
-  /** Enemies inside the game's camera view, in all and by direction from Tibo, and those within 60 units of him. */
-  enemies: { onScreen: number; near: number; byDirection: Record<Direction, number> };
   /** Every elite alive: the game's own enemy entries, nearest first, with where each is. */
   elites: (Record<string, unknown> & Bearing)[];
+  /** The game's pickups: how many of each kind, the total `value` of the xp and gold on the ground, and every pickup that is neither (chests, food, rerolls and the like) as the game's own entries, nearest first. */
+  pickups: { counts: Record<string, number>; value: { xp: number; gold: number }; items: (Record<string, unknown> & Bearing)[] };
+};
+
+/** What could hurt Tibo where he stands and along each direction, from the game's enemy, bullet, emitter, zone and hazard pools. */
+export type Threats = {
+  /** Enemies inside the game's camera view, in all and by direction from Tibo, and those within 60 units of him. */
+  enemies: { onScreen: number; near: number; byDirection: Record<Direction, number> };
   /** Enemy bullets on a straight path to hit Tibo within `seconds` if he stands still, soonest first: where each comes from, seconds to impact, its damage. */
   bullets: { from: Direction; in: number; damage: number }[];
   /** The game's bullet emitters within 300 units: seconds until they fire, bullets per burst, bursts left, damage. */
@@ -117,8 +151,6 @@ export type Surroundings = {
   attacks: (Bearing & { kind: string; shape: string; inside: boolean; landsIn?: number; enters: Direction[] })[];
   /** Terrain hazards (the game's world.activeHazards, by kind) Tibo stands in, and those each direction walks into within `seconds`. */
   hazards: { underfoot: string[]; byDirection: Partial<Record<Direction, string[]>> };
-  /** The game's pickups: how many of each kind, the total `value` of the xp and gold on the ground, and every pickup that is neither (chests, food, rerolls and the like) as the game's own entries, nearest first. */
-  pickups: { counts: Record<string, number>; value: { xp: number; gold: number }; items: (Record<string, unknown> & Bearing)[] };
 };
 
 /** The parts of a snapshot outside the game state that `raw` can name. */
@@ -374,6 +406,14 @@ function heading(v: unknown, what: string): Heading {
   return fail(`${what} must be one of ${DIRECTIONS.join(", ")} or degrees`);
 }
 
+function route(v: unknown): { to: Target; stay?: number; seconds?: number; leg?: number } {
+  const r = (v ?? {}) as Record<string, unknown>;
+  if (r.stay !== undefined && (num(r.stay, "route.stay") < 0 || num(r.stay, "route.stay") > 5)) fail("route.stay must be from 0 to 5 seconds");
+  if (r.seconds !== undefined && (num(r.seconds, "route.seconds") < 0.5 || num(r.seconds, "route.seconds") > 6)) fail("route.seconds must be from 0.5 to 6");
+  if (r.leg !== undefined && (num(r.leg, "route.leg") < 0.1 || num(r.leg, "route.leg") > 2)) fail("route.leg must be from 0.1 to 2");
+  return { to: target(r.to), ...(r.stay === undefined ? {} : { stay: num(r.stay, "route.stay") }), ...(r.seconds === undefined ? {} : { seconds: num(r.seconds, "route.seconds") }), ...(r.leg === undefined ? {} : { leg: num(r.leg, "route.leg") }) };
+}
+
 function target(v: unknown): Target {
   const t = (v ?? {}) as Record<string, unknown>;
   if ("poi" in t) return { poi: num(t.poi, "to.poi") };
@@ -445,7 +485,13 @@ export function parseCommand(input: unknown): Command {
       if (typeof c.live !== "boolean") fail("live must be true or false");
       if (c.lag !== undefined && (num(c.lag, "lag") < 0 || num(c.lag, "lag") > 1)) fail("lag must be from 0 to 1 seconds");
       if (c.seconds !== undefined && (num(c.seconds, "seconds") < 0.1 || num(c.seconds, "seconds") > 2)) fail("seconds must be from 0.1 to 2");
-      return { type: "forecast", live: c.live as boolean, ...(c.lag === undefined ? {} : { lag: num(c.lag, "lag") }), ...(c.seconds === undefined ? {} : { seconds: num(c.seconds, "seconds") }) };
+      return {
+        type: "forecast",
+        live: c.live as boolean,
+        ...(c.lag === undefined ? {} : { lag: num(c.lag, "lag") }),
+        ...(c.seconds === undefined ? {} : { seconds: num(c.seconds, "seconds") }),
+        ...(c.route === undefined ? {} : { route: route(c.route) }),
+      };
     case "dash":
       return c.dir === undefined ? { type: "dash" } : { type: "dash", dir: heading(c.dir, "dir") };
     case "start": {

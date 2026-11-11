@@ -19,9 +19,25 @@ type Active = {
   startTick?: number;
   arrivedTick?: number;
   best?: { dist: number; tick: number };
-  /** Relative targets are anchored where the player stood when the command started. */
-  anchor?: { x: number; y: number };
+  /** The goto's target, a relative one anchored where the player stood when the command started. */
+  to?: Place;
 };
+
+/** A target that stays put as Tibo moves. */
+export type Place = Exclude<Target, { dx: number }>;
+
+function anchored(s: GameState, to: Target): Place {
+  return "dx" in to ? { x: (s.player.x[s.me] ?? 0) + to.dx, y: (s.player.y[s.me] ?? 0) + to.dy } : to;
+}
+
+/** The input that walks Tibo to a goal and stops on it. */
+export function toward(s: GameState, goal: { x: number; y: number; within: number } | undefined): { x: number; y: number } {
+  if (goal === undefined) return STILL;
+  const dx = goal.x - (s.player.x[s.me] ?? 0);
+  const dy = goal.y - (s.player.y[s.me] ?? 0);
+  const dist = Math.hypot(dx, dy);
+  return dist > goal.within ? { x: dx / dist, y: dy / dist } : STILL;
+}
 
 function vector(dir: Heading): { x: number; y: number } {
   const degrees = typeof dir === "number" ? dir : DIRECTIONS.indexOf(dir) * 45;
@@ -125,6 +141,7 @@ export class Controller {
     this.link.liveForecast = false;
     this.link.forecastLagTicks = 0;
     this.link.forecastTicks = 30;
+    this.link.forecastRoute = undefined;
     if (inRun(this.link)) this.link.game?.setPaused(false);
   }
 
@@ -188,6 +205,10 @@ export class Controller {
         this.link.liveForecast = command.live;
         if (command.lag !== undefined) this.link.forecastLagTicks = Math.round(command.lag * 60);
         if (command.seconds !== undefined) this.link.forecastTicks = Math.round(command.seconds * 60);
+        this.link.forecastRoute =
+          command.route === undefined
+            ? undefined
+            : { to: anchored(this.game().state, command.route.to), stayTicks: Math.round((command.route.stay ?? 0) * TICKS_PER_SECOND), ticks: Math.round((command.route.seconds ?? 4) * TICKS_PER_SECOND), legTicks: Math.round((command.route.leg ?? 0.5) * TICKS_PER_SECOND) };
         this.finish(status, "done");
         return;
       case "start":
@@ -328,7 +349,8 @@ export class Controller {
       this.finish(status, "failed", "timeout");
       return STILL;
     }
-    const goal = this.resolve(s, command.to, active);
+    active.to ??= anchored(s, command.to);
+    const goal = this.place(s, active.to, command.within);
     if (goal === undefined) {
       if (command.stay === "done" && active.arrivedTick !== undefined) this.finish(status, "done", "used up");
       else this.finish(status, "failed", "the target is gone");
@@ -356,8 +378,23 @@ export class Controller {
     return STILL;
   }
 
-  private resolve(s: GameState, to: Target, active: Active): { x: number; y: number; within: number } | undefined {
-    const within = active.command.type === "goto" ? active.command.within : undefined;
+  /** What the movement command under way holds at each tick of a copy of the game; undefined when no command steers. */
+  course(): ((s: GameState) => { x: number; y: number }) | undefined {
+    const active = this.active;
+    const live = this.link.game?.state;
+    if (active === undefined || live === undefined) return undefined;
+    const { command } = active;
+    if (command.type === "move") {
+      const held = vector(command.dir);
+      const end = command.seconds === undefined ? Infinity : (active.startTick ?? live.tick) + command.seconds * TICKS_PER_SECOND;
+      return (s) => (s.tick >= end ? STILL : held);
+    }
+    const to = active.to ?? anchored(live, command.to);
+    return (s) => toward(s, this.place(s, to, command.within));
+  }
+
+  /** Where a target is in a game state, a copy included, and how close counts as there; undefined once it is gone. */
+  place(s: GameState, to: Place, within?: number): { x: number; y: number; within: number } | undefined {
     if ("poi" in to) {
       const poi = s.world.activePois.find((p) => p.state.uid === to.poi);
       if (poi === undefined || poi.state.used || poi.state.goneAt >= 0) return undefined;
@@ -370,10 +407,6 @@ export class Controller {
       const kind = this.link.enums?.pickupKinds[s.pickups.kind[slot] ?? -1] ?? "";
       const radius = s.cfg.activation.pickupRadius[kind];
       return { x: s.pickups.x[slot] ?? 0, y: s.pickups.y[slot] ?? 0, within: within ?? (radius === undefined ? 6 : radius * 0.5) };
-    }
-    if ("dx" in to) {
-      active.anchor ??= { x: (s.player.x[s.me] ?? 0) + to.dx, y: (s.player.y[s.me] ?? 0) + to.dy };
-      return { ...active.anchor, within: within ?? 6 };
     }
     return { x: to.x, y: to.y, within: within ?? 6 };
   }

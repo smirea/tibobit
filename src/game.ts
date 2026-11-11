@@ -1,4 +1,4 @@
-import type { ChoiceAction } from "./agent/protocol";
+import type { ChoiceAction, Target } from "./agent/protocol";
 
 // Page-world access to the running game. tibo.dog ships native ES modules, and a module URL
 // imported a second time returns the instance the game already uses, so importing the game's
@@ -196,9 +196,6 @@ export type IconPage = { url: string; width: number; height: number };
 /** The game's own icon sprite sheet, keyed by weapon, passive or item id. */
 export type IconSheet = IconPage & { frames: Map<string, IconFrame>; pageOf(frame: IconFrame): IconPage };
 
-/** What a copy of the game took when run forward with one input held. */
-export type Forecast = { damage: number; bySource: Record<string, number>; dead: boolean; x: number; y: number; hp: number };
-
 const NO_RECORDER = { step() {}, choose() {}, dash() {}, taint() {}, log() {} };
 
 // A deep copy that keeps prototypes (the game's pools are classes) and shared identity within the
@@ -345,20 +342,16 @@ export class GameLink {
   liveForecast = false;
   /** Pause the next new run before its first tick, so agents start every run from tick 0. */
   pauseAtStart = false;
-  /**
-   * Runs a copy of the game forward once per input, each held for `ticks`; the real game is untouched.
-   * With `lagTicks`, the copy first keeps the input the game holds now for that long, as the real
-   * game does while an agent decides, and counts damage only from when the input changes.
-   */
-  forecast: ((game: Game, inputs: { x: number; y: number }[], ticks: number, lagTicks?: number) => Forecast[]) | undefined;
   /** Ticks an agent takes to act on a forecast; the `forecast` command sets it. */
   forecastLagTicks = 0;
   /** How far the forecast and the surroundings look ahead, in ticks. */
   forecastTicks = 30;
+  /** The place the forecast prices whole trips to, when the `forecast` command names one. */
+  forecastRoute: { to: Exclude<Target, { dx: number }>; stayTicks: number; ticks: number; legTicks: number } | undefined;
   /** A deep copy of a game state that shares content definitions and rule modules with it, as the sim needs. */
   copyState: ((state: GameState) => GameState) | undefined;
-  /** A copy of the game that steps without recording, rendering or being taken for the live game. */
-  simulator: ((game: Game, state: GameState) => { sim: Game; step(): void }) | undefined;
+  /** A copy of the game that steps without recording, rendering or being taken for the live game; `setInput` holds a direction on it, past any agent's steering. */
+  simulator: ((game: Game, state: GameState) => { sim: Game; step(): void; setInput(x: number, y: number): void }) | undefined;
   /** The sim chunk's file name, which changes with every game build. */
   simBuild: string | undefined;
   /** The share link of the last finished run. The game puts it in the address bar (run=...&stats=...) on its summary. */
@@ -482,38 +475,10 @@ export class GameLink {
       const sim = Object.assign(Object.create(Object.getPrototypeOf(game) as object) as Game, game, { recorder: NO_RECORDER });
       sim.state = state;
       sim.state.paused = false;
-      return { sim, step: () => step.call(sim) };
+      return { sim, step: () => step.call(sim), setInput: (x: number, y: number) => setInput.call(sim, x, y) };
     };
     this.copyState = copyState;
     this.simulator = simulator;
-    this.forecast = (game, inputs, ticks, lagTicks = 0) => {
-      // The lag is the same for every input, so it runs once and each input starts from its end.
-      let start = game.state;
-      if (lagTicks > 0) {
-        const { sim, step: tick } = simulator(game, copyState(game.state));
-        for (let i = 0; i < lagTicks && !sim.state.over && sim.state.choiceQueue.length === 0; i++) tick();
-        start = sim.state;
-      }
-      return inputs.map(({ x, y }) => {
-        const sim = Object.assign(Object.create(Object.getPrototypeOf(game) as object) as Game, game, { recorder: NO_RECORDER });
-        sim.state = copyState(start);
-        sim.state.paused = false;
-        setInput.call(sim, x, y);
-        const before = new Map(sim.state.run.damageTakenBySource);
-        for (let i = 0; i < ticks && !sim.state.over && sim.state.choiceQueue.length === 0; i++) step.call(sim);
-        const bySource: Record<string, number> = {};
-        let damage = 0;
-        for (const [source, total] of sim.state.run.damageTakenBySource) {
-          const taken = total - (before.get(source) ?? 0);
-          if (taken <= 0) continue;
-          bySource[source] = taken;
-          damage += taken;
-        }
-        const { player, me } = sim.state;
-        return { damage, bySource, dead: sim.state.over, x: player.x[me] ?? 0, y: player.y[me] ?? 0, hp: player.hp[me] ?? 0 };
-      });
-    };
-
     const source = await (await fetch(url)).text();
     // The registry function is called as `x(e.bigUpdate).baseWeapons` and the global table as
     // `w.enemyAt(...)`. Their exported names are minified per build, so follow the import clauses.

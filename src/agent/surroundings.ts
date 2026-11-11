@@ -1,5 +1,5 @@
 import type { GameLink, GameState } from "../game";
-import { DIRECTIONS, type Direction, type Surroundings } from "./protocol";
+import { DIRECTIONS, type Direction, type Surroundings, type Threats } from "./protocol";
 
 // Volleys, attack zones and hazards farther than this from Tibo are left out.
 const REACH = 300;
@@ -47,9 +47,34 @@ function* alive(p: { pool: { count: number; slotAt(n: number): number; isAlive(s
 /**
  * What is around Tibo, worked out from the game state for agents that should not read every enemy,
  * bullet and hazard: counts, the elites, and what could hit Tibo or what Tibo would walk into within
- * `seconds`. Shapes use the game's own hit test for pools. `elites` are the game's own enemy entries.
+ * `seconds`. `elites` are the game's own enemy entries.
  */
 export function surroundings(link: GameLink, s: GameState, seconds: number, rows: { enemies: Record<string, unknown>[]; pickups: Record<string, unknown>[] }): Surroundings {
+  const px = s.player.x[s.me] ?? 0;
+  const py = s.player.y[s.me] ?? 0;
+  const elites = rows.enemies
+    .filter((e) => Array.isArray(e.flags) && (e.flags as string[]).includes("Elite"))
+    .map((e) => ({ ...e, ...bearing(Number(e.x) - px, Number(e.y) - py) }))
+    .sort((a, b) => a.dist - b.dist);
+
+  const counts: Record<string, number> = {};
+  const value = { xp: 0, gold: 0 };
+  const items: Surroundings["pickups"]["items"] = [];
+  for (const p of rows.pickups) {
+    const kind = String(p.kind);
+    counts[kind] = (counts[kind] ?? 0) + 1;
+    const dx = Number(p.x) - px;
+    const dy = Number(p.y) - py;
+    if (kind === "xp" || kind === "gold") value[kind] += Number(p.value) || 0;
+    else items.push({ ...p, ...bearing(dx, dy) });
+  }
+  items.sort((a, z) => a.dist - z.dist);
+
+  return { seconds, hurtBy: recentHurt(s), ...threats(link, s, seconds), elites, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
+}
+
+/** What could hit Tibo, or what Tibo would walk into within `seconds`, in any game state, a copy included. Shapes use the game's own hit test for pools. */
+export function threats(link: GameLink, s: GameState, seconds: number): Threats {
   const enums = link.enums;
   const me = s.me;
   const px = s.player.x[me] ?? 0;
@@ -73,13 +98,8 @@ export function surroundings(link: GameLink, s: GameState, seconds: number, rows
     byDirection[directionOf(dx, dy)]++;
   }
 
-  const elites = rows.enemies
-    .filter((e) => Array.isArray(e.flags) && (e.flags as string[]).includes("Elite"))
-    .map((e) => ({ ...e, ...bearing(Number(e.x) - px, Number(e.y) - py) }))
-    .sort((a, b) => a.dist - b.dist);
-
   // Straight paths: when each bullet passes closest to a Tibo who stands still, and whether that is a hit.
-  const bullets: Surroundings["bullets"] = [];
+  const bullets: Threats["bullets"] = [];
   const b = s.bullets;
   for (const i of alive(b)) {
     const dx = (b.x[i] ?? 0) - px;
@@ -95,7 +115,7 @@ export function surroundings(link: GameLink, s: GameState, seconds: number, rows
   }
   bullets.sort((x, y) => x.in - y.in);
 
-  const volleys: Surroundings["volleys"] = [];
+  const volleys: Threats["volleys"] = [];
   for (const i of alive(s.emitters)) {
     const dx = (s.emitters.x[i] ?? 0) - px;
     const dy = (s.emitters.y[i] ?? 0) - py;
@@ -113,7 +133,7 @@ export function surroundings(link: GameLink, s: GameState, seconds: number, rows
 
   const zoneKind = Object.fromEntries(Object.entries(enums?.zoneKinds ?? {}).map(([k, v]) => [v, k]));
   const zoneShape = Object.fromEntries(Object.entries(enums?.zoneShapes ?? {}).map(([k, v]) => [v, k]));
-  const attacks: Surroundings["attacks"] = [];
+  const attacks: Threats["attacks"] = [];
   for (const i of alive(s.zones)) {
     if (s.zones.hostile[i] !== 1) continue;
     const r = s.zones.radius[i] ?? 0;
@@ -164,18 +184,5 @@ export function surroundings(link: GameLink, s: GameState, seconds: number, rows
     }
   }
 
-  const counts: Record<string, number> = {};
-  const value = { xp: 0, gold: 0 };
-  const items: Surroundings["pickups"]["items"] = [];
-  for (const p of rows.pickups) {
-    const kind = String(p.kind);
-    counts[kind] = (counts[kind] ?? 0) + 1;
-    const dx = Number(p.x) - px;
-    const dy = Number(p.y) - py;
-    if (kind === "xp" || kind === "gold") value[kind] += Number(p.value) || 0;
-    else items.push({ ...p, ...bearing(dx, dy) });
-  }
-  items.sort((a, z) => a.dist - z.dist);
-
-  return { seconds, hurtBy: recentHurt(s), enemies: { onScreen, near, byDirection }, elites, bullets, volleys, attacks, hazards: { underfoot, byDirection: hazardPaths }, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
+  return { enemies: { onScreen, near, byDirection }, bullets, volleys, attacks, hazards: { underfoot, byDirection: hazardPaths } };
 }
