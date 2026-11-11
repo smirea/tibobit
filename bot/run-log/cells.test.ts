@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bossCell, changeCell, changesCell, dashCell, eliteCell, goalCell, hurtCell, listCell, weighedCell } from "./cells";
+import { bossCell, changeCell, changesCell, dashCell, eliteCell, goalCell, hurtCell, listCell, movesCell, weighedCell } from "./cells";
 
 test("a boss, an elite and a hurt source read back as written, names with spaces and brackets included", () => {
   expect(bossCell.decode(bossCell.encode({ name: "The Amusing (Bouche)", type: "amusing", dist: 119.6, dir: "down-left", hp: 3200, maxHp: 4000 }))).toEqual({ name: "The Amusing (Bouche)", type: "amusing", dist: 120, dir: "down-left", percent: 80, maxHp: 4000 });
@@ -32,4 +32,15 @@ test("what the planner weighed reads back as written, with and without a choice 
   const cards = [{ card: "Peeler", probability: 0.613 }, { card: "Root Cellar" }];
   expect(weighedCell.decode(weighedCell.encode(goals))).toEqual({ cards: [], goals: [{ card: "Open the chest (85 up)", percent: 71 }, { card: "Explore left", percent: 40 }] });
   expect(weighedCell.decode(weighedCell.encode(goals, cards)).cards).toEqual([{ card: "Peeler", percent: 61 }, { card: "Root Cellar", percent: undefined }]);
+});
+
+test("the moves the action model weighed are written in words, never as objects", () => {
+  expect(
+    movesCell.encode([
+      { move: "up-left", forecast: { damage: 11.6, dead: false }, hurt: 2, useful: 0.6, ruledOut: false },
+      { move: "still", forecast: { damage: 0, dead: false }, hurt: 0, useful: 0.1, ruledOut: false },
+      { move: "down", forecast: { damage: 90, dead: true }, ruledOut: true },
+      { move: "left", ruledOut: false },
+    ]),
+  ).toBe("up-left -12 hp hurt 2 useful 60%; stand still no damage hurt 0 useful 10%; down dead hurt - useful - (ruled out); left ? hurt - useful -");
 });

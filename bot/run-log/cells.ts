@@ -97,3 +97,18 @@ export const weighedCell = {
     return second === undefined ? { cards: [], goals: oddsCell.decode(first) } : { cards: oddsCell.decode(first), goals: oddsCell.decode(second) };
   },
 };
+
+/**
+ * The moves the action model weighed on one step, as a person reads them:
+ * `up-left -12 hp hurt 2 useful 60%; stand still no damage hurt 0 useful 10%; down dead hurt - useful - (ruled out)`.
+ * `hurt` is the model's score on its scale, from 0; a move ruled out before asking has none.
+ */
+export const movesCell = {
+  encode: (moves: { move: string; forecast?: { damage: number; dead: boolean }; hurt?: number; useful?: number; ruledOut: boolean }[]) =>
+    moves
+      .map((m) => {
+        const cost = m.forecast === undefined ? "?" : m.forecast.dead ? "dead" : m.forecast.damage === 0 ? "no damage" : `-${Math.round(m.forecast.damage)} hp`;
+        return `${m.move === "still" ? "stand still" : m.move} ${cost} hurt ${m.hurt ?? "-"} useful ${m.useful === undefined ? "-" : `${Math.round(m.useful * 100)}%`}${m.ruledOut ? " (ruled out)" : ""}`;
+      })
+      .join("; "),
+};

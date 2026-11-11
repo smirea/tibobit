@@ -12,7 +12,7 @@ import { stateVars } from "./blocks";
 import { RunLog } from "./run-log/writer";
 import type { MoveOption } from "../protocol/pilot";
 import { noteModelStep } from "./forecast-lag";
-import { dashCell, UNANSWERED } from "./run-log/cells";
+import { dashCell, movesCell, UNANSWERED } from "./run-log/cells";
 
 // Words, not percentages: on 50 replayed states Laya picked a move within 2% of the least
 // damaging one 90% of the time with these words, 80% with "would lose N%", and 38% when the
@@ -215,7 +215,7 @@ export async function steer(r: World, p: Pursuit, aim: Course, log: RunLog, why:
     reason: answered === undefined ? `${why}; the action model ${UNANSWERED}, so the forecast's cheapest move stands in` : why,
     goal: p.id,
     action: move,
-    options: weighed.map((w) => `${w.move} ${w.forecast ?? "?"} hurt ${w.hurt ?? "-"} useful ${w.useful === undefined ? "-" : Math.round(w.useful * 100)}%${w.outcome === "ruled out" ? " (ruled out)" : ""}`).join("; "),
+    options: movesCell.encode(weighed.map((w) => ({ ...w, hurt: w.hurt === undefined ? undefined : Math.round(w.hurt * (HURT_SCALE.length - 1)), ruledOut: w.outcome === "ruled out" }))),
     detail: dashWhy,
     ms,
   });
