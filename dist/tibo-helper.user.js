@@ -2244,6 +2244,48 @@
     }
   }
 
+  // userscript/pilot/feed.css.ts
+  var css = `
+.tbh-chat-tools { display: flex; align-items: center; gap: 6px; padding: 6px 6px 0; font-size: 11px; color: #c9b58a; }
+.tbh-giveback { flex: 1; min-width: 0; padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: inherit; font-weight: 800; cursor: pointer; color: #ffd6d0; background: rgba(227,138,127,.12); border: 1px solid #e38a7f; border-radius: 4px; }
+.tbh-giveback:hover:not(:disabled) { color: #fff; background: rgba(227,138,127,.24); }
+.tbh-chatbox { border-top: 1px solid rgba(255,255,255,.08); }
+.tbh-pace-field { --role: #c9a0ff; flex: none; display: inline-flex; align-items: center; gap: 3px; }
+.tbh-pace-action { --role: #7fa8ff; }
+.tbh-pace-input { width: 2.8em; padding: 2px 3px; font: inherit; color: #f3e6c4; background: rgba(0,0,0,.35); border: 1px solid #6b5631; border-radius: 3px; }
+.tbh-pace-input:focus { outline: none; border-color: var(--role); }
+.tbh-pace-input:disabled { opacity: .5; }
+.tbh-plan { --role: #c9a0ff; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin: 6px 6px 0; padding: 5px 7px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(201,160,255,.1); overflow-wrap: anywhere; }
+.tbh-plan-label { color: var(--role); font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.tbh-plan-text { flex: 1 1 60%; min-width: 0; white-space: pre-wrap; }
+/* The newest reasoning sits at the bottom; older lines scroll out of the top. */
+.tbh-plan-stream { flex-basis: 100%; max-height: 6em; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; white-space: pre-wrap; font-size: 10.5px; font-style: italic; color: #b9a6d9; }
+/* Eight columns of square tiles, eight rows deep; the rest are clipped. The newest spans 3x3 and the one before it 2x2, and the rest fill in around them in order. */
+.tbh-actions { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 3px; align-content: start; aspect-ratio: 1; overflow: hidden; padding: 6px; user-select: text; }
+.tbh-actions:empty { display: block; aspect-ratio: auto; }
+.tbh-actions:empty::before { content: "Waiting for the bot…"; color: #a8977a; line-height: 1.4; }
+.tbh-tile { --role: #7fa8ff; position: relative; display: grid; place-items: center; box-sizing: border-box; aspect-ratio: 1; min-width: 0; color: #dbe6ff; background: transparent; border-radius: 4px; }
+.tbh-tile-icon { display: block; width: 88%; height: 88%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tbh-svg-fill { fill: currentColor; stroke: none; }
+.tbh-tile-badge { position: absolute; top: 3%; right: 3%; width: 28%; height: 28%; padding: 3%; box-sizing: border-box; border-radius: 50%; background: rgba(10,8,20,.85); fill: none; stroke: currentColor; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+.tbh-tile-badge.tbh-result-done { color: #7fd88f; }
+.tbh-tile-badge.tbh-result-failed { color: #ff8f80; }
+.tbh-tile-badge.tbh-result-dropped { color: #a8977a; }
+.tbh-tile-badge.tbh-badge-dash { color: #ffd76a; }
+.tbh-tile-system { --role: #a8977a; color: #c9b58a; }
+.tbh-tile-hurt { --role: #e38a7f; color: #ffb4a8; }
+.tbh-tile-main { grid-column: span 3; grid-row: span 3; }
+.tbh-tile-prev { grid-column: span 2; grid-row: span 2; }
+.tbh-tile-inspectable { cursor: help; }
+.tbh-tile:hover { background: color-mix(in srgb, var(--role) 18%, transparent); }
+.tbh-row-time { flex: none; font-size: 10px; color: #8d7c5c; font-variant-numeric: tabular-nums; }
+.tbh-opt-arrow { font-size: 14px; min-width: 1.2em; }
+.tbh-row-inspectable { cursor: help; }
+.tbh-row-inspectable:hover { background: rgba(255,255,255,.05); outline: 1px solid color-mix(in srgb, var(--role) 55%, transparent); }
+.tbh-cursor { font-style: normal; font-weight: 400; color: var(--role); animation: tbh-blink 1s steps(1) infinite; }
+@keyframes tbh-blink { 50% { opacity: 0; } }
+`;
+
   // userscript/pilot/icons.ts
   var ring = (x, y, r) => `M${x - r} ${y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
   var dot = (x, y, r) => ({ fill: ring(x, y, r) });
@@ -2329,24 +2371,77 @@
     return move === "still" ? svgIcon(STILL_ICON, className) : svgIcon(ARROW_ICON, className, DIRECTIONS.indexOf(move) * 45);
   }
 
-  // userscript/pilot/feed.ts
-  var ROLE_LABELS = { planner: "Plan", action: "Action", system: "Bot" };
-  var HIDE_DELAY_MS = 200;
-  var MIN_SIDE_ROOM = 300;
-  var clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
-  var fine = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
-  var percent = (v) => `${Math.round(v * 100)}%`;
-  var costly = (f) => f.dead || f.damage > 0;
-  var ARROW_GLYPHS = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"];
-  var ARROWS = { ...Object.fromEntries(DIRECTIONS.map((d, i) => [d, ARROW_GLYPHS[i]])), still: "•" };
-  var DIRECTION_WORDS = new RegExp(`(?<![\\w-])(${[...DIRECTIONS].sort((a, z) => z.length - a.length).join("|")})(?![\\w-])`, "g");
-  var arrowed = (text) => text.replace(DIRECTION_WORDS, (d) => ARROWS[d] ?? d);
+  // userscript/panel/dom.ts
   function h(tag, className, ...children) {
     const el = document.createElement(tag);
     el.className = className;
     el.append(...children);
     return el;
   }
+  function addStyle(css) {
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.append(style);
+  }
+
+  // userscript/pilot/inspector.css.ts
+  var css2 = `
+.tbh-insp { position: fixed; z-index: 2147483002; box-sizing: border-box; overflow: auto; padding: 8px 10px 10px; background: rgba(17,14,10,.97); color: #f3e6c4; border: 1px solid #6b5631; border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.6); font: 11.5px/1.4 ui-monospace, Menlo, Consolas, monospace; user-select: text; overscroll-behavior: contain; }
+.tbh-insp[hidden] { display: none; }
+.tbh-insp-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; font-size: 10.5px; color: #8d7c5c; }
+.tbh-role-planner { --role: #c9a0ff; } .tbh-role-action { --role: #7fa8ff; } .tbh-role-system { --role: #a8977a; }
+.tbh-insp-section { margin-top: 8px; }
+.tbh-insp-section > h4 { margin: 0 0 4px; font: inherit; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #c9b58a; }
+.tbh-insp-pre { margin: 0; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 10.5px; background: rgba(255,255,255,.04); border-radius: 4px; }
+.tbh-insp-thought { color: #b9a6d9; font-style: italic; }
+.tbh-opt { padding: 4px 6px; margin-top: 3px; border-radius: 4px; border-left: 3px solid #4a3d29; background: rgba(255,255,255,.03); }
+.tbh-opt-chosen { border-left-color: #ffd36b; background: rgba(255,211,107,.1); }
+.tbh-opt-safe { border-left-color: #5ee8c0; }
+.tbh-opt-risky { border-left-color: #e3a07f; opacity: .8; }
+.tbh-opt-ruled-out { opacity: .5; }
+.tbh-opt-ruled-out .tbh-opt-name { text-decoration: line-through; }
+.tbh-opt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.tbh-opt-name { font-weight: 800; }
+.tbh-opt-outcome { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: #a8977a; }
+.tbh-opt-chosen .tbh-opt-outcome { color: #ffd36b; }
+.tbh-chip { padding: 0 5px; border-radius: 3px; font-size: 10px; background: rgba(227,138,127,.18); color: #f0b3aa; }
+.tbh-chip-ok { background: rgba(127,227,164,.14); color: #7fe3a4; }
+.tbh-opt-scores { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 10px; margin-left: auto; }
+.tbh-meter { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: #c9b58a; }
+.tbh-meter-track { width: 56px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+.tbh-meter-track > i { display: block; height: 100%; }
+.tbh-meter-hurt i { background: #e38a7f; } .tbh-meter-useful i { background: #7fa8ff; }
+.tbh-opt-desc { margin-top: 2px; font-size: 10.5px; color: #a8977a; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tbh-msg-role { color: var(--role); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.tbh-msg-model { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tbh-msg-time { font-variant-numeric: tabular-nums; }
+.tbh-insp-text { white-space: pre-wrap; font-weight: 700; }
+.tbh-insp-fold { margin-top: 8px; }
+.tbh-insp-fold > summary { cursor: pointer; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #c9b58a; }
+.tbh-insp-fold > .tbh-insp-pre { margin-top: 4px; }
+.tbh-insp-past { display: flex; gap: 6px; width: 100%; padding: 2px 4px; text-align: left; font: inherit; font-size: 10.5px; color: #e4d4ae; background: none; border: 0; border-radius: 3px; cursor: pointer; }
+.tbh-insp-past:hover { background: rgba(255,255,255,.06); }
+.tbh-insp-past-on { background: rgba(201,160,255,.14); }
+.tbh-meter-wide .tbh-meter-track { width: 120px; }
+`;
+
+  // userscript/pilot/arrows.ts
+  var ARROW_GLYPHS = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"];
+  var ARROWS = { ...Object.fromEntries(DIRECTIONS.map((d, i) => [d, ARROW_GLYPHS[i]])), still: "•" };
+  var DIRECTION_WORDS = new RegExp(`(?<![\\w-])(${[...DIRECTIONS].sort((a, z) => z.length - a.length).join("|")})(?![\\w-])`, "g");
+  var arrowed = (text) => text.replace(DIRECTION_WORDS, (d) => ARROWS[d] ?? d);
+
+  // clock.ts
+  var clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+
+  // userscript/pilot/inspector.ts
+  var ROLE_LABELS = { planner: "Plan", action: "Action", system: "Bot" };
+  var HIDE_DELAY_MS = 200;
+  var MIN_SIDE_ROOM = 300;
+  var fine = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
+  var percent = (v) => `${Math.round(v * 100)}%`;
+  var costly = (f) => f.dead || f.damage > 0;
   function meter(label, share, className) {
     const bar = h("i", "");
     bar.style.width = `${Math.round(Math.min(1, Math.max(0, share)) * 100)}%`;
@@ -2397,6 +2492,7 @@
     }
   }
   function inspector(panel, messages) {
+    addStyle(css2);
     const box = h("div", "tbh-insp");
     box.hidden = true;
     let showing;
@@ -2494,6 +2590,8 @@
       }
     };
   }
+
+  // userscript/pilot/feed.ts
   var FLOW_TILES = 60;
   function step(m) {
     if (m.role !== "action" || m.inspect?.kind !== "moves")
@@ -2511,6 +2609,7 @@
     return el;
   }
   function botFeed(pilot) {
+    addStyle(css);
     const giveBack = h("button", "tbh-giveback");
     giveBack.type = "button";
     giveBack.addEventListener("click", () => pilot.set({ on: false }));
@@ -2624,8 +2723,8 @@
     return data;
   }
 
-  // userscript/panel/style.ts
-  var css = `
+  // userscript/panel/panel.css.ts
+  var css3 = `
 .tbh-panel {
   position: fixed; top: 52px; right: 8px; z-index: 2147483000;
   width: min(320px, calc(100vw - 16px)); max-height: calc(100vh - 120px); overflow: auto;
@@ -2657,6 +2756,13 @@
 .tbh-colon { color: #8d7c5c; }
 .tbh-opts { display: flex; flex-wrap: wrap; gap: 3px; }
 .tbh-stale { margin: 0 6px 6px; padding: 4px 6px; border-radius: 4px; background: rgba(227,138,127,.15); color: #f0b3aa; font-size: 11px; }
+.tbh-badge { display: inline-block; padding: 0 4px; border-radius: 3px; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-align: center; }
+.tbh-badge-new { align-self: flex-start; background: #ff7ad9; color: #3d0630; margin: 0 0 2px; }
+.tbh-badge-evo { background: #ffd36b; color: #3a2600; }
+`;
+
+  // userscript/panel/connection.css.ts
+  var css4 = `
 .tbh-conn { padding: 6px 8px; border-top: 1px solid rgba(255,255,255,.08); user-select: auto; }
 .tbh-conn-row { display: flex; align-items: center; gap: 6px; }
 .tbh-conn-label { color: #c9b58a; flex: 1; white-space: nowrap; }
@@ -2671,119 +2777,20 @@
 @keyframes tbh-pulse { 70% { box-shadow: 0 0 0 7px rgba(61,220,132,0); } 100% { box-shadow: 0 0 0 0 rgba(61,220,132,0); } }
 :is(.tbh-dot, .tbh-wheel, .tbh-connected, .tbh-connect)[hidden] { display: none; }
 .tbh-conn-status { margin-top: 4px; font-size: 11px; color: #a8977a; overflow-wrap: anywhere; }
-.tbh-conn-status[data-state="ok"] { color: #7fe3a4; }
 .tbh-conn-status[data-state="error"] { color: #f0b3aa; }
 .tbh-wheel { display: block; width: 100%; margin-top: 6px; padding: 5px 8px; white-space: nowrap; font: inherit; font-weight: 800; letter-spacing: .02em; cursor: pointer;
   color: #f3e6c4; background: linear-gradient(180deg, #3b2f52, #2a2140); border: 1px solid #8e74c9; border-radius: 4px; }
 .tbh-wheel:hover:not(:disabled) { border-color: #c9a0ff; color: #fff; }
-.tbh-chat-tools { display: flex; align-items: center; gap: 6px; padding: 6px 6px 0; font-size: 11px; color: #c9b58a; }
-.tbh-giveback { flex: 1; min-width: 0; padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: inherit; font-weight: 800; cursor: pointer; color: #ffd6d0; background: rgba(227,138,127,.12); border: 1px solid #e38a7f; border-radius: 4px; }
-.tbh-giveback:hover:not(:disabled) { color: #fff; background: rgba(227,138,127,.24); }
 .tbh-wheel:disabled, .tbh-giveback:disabled { opacity: .5; cursor: default; }
 .tbh-incognito { flex: none; padding: 2px 6px; white-space: nowrap; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; color: #a8977a; background: transparent; border: 1px dashed #6b5631; border-radius: 4px; }
 .tbh-incognito:hover { color: #f3e6c4; border-style: solid; }
 .tbh-incognito[aria-pressed="true"] { color: #3ddc84; background: rgba(61,220,132,.14); border: 1px solid #3ddc84; }
 .tbh-wheel-note { margin-top: 4px; font-size: 11px; color: #f0b3aa; overflow-wrap: anywhere; }
 .tbh-wheel-note[hidden], .tbh-panel:not(.tbh-pilot) .tbh-chatbox { display: none; }
-.tbh-chatbox { border-top: 1px solid rgba(255,255,255,.08); }
-.tbh-pace-field { --role: #c9a0ff; flex: none; display: inline-flex; align-items: center; gap: 3px; }
-.tbh-pace-action { --role: #7fa8ff; }
-.tbh-pace-input { width: 2.8em; padding: 2px 3px; font: inherit; color: #f3e6c4; background: rgba(0,0,0,.35); border: 1px solid #6b5631; border-radius: 3px; }
-.tbh-pace-input:focus { outline: none; border-color: var(--role); }
-.tbh-pace-input:disabled { opacity: .5; }
-.tbh-plan { --role: #c9a0ff; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin: 6px 6px 0; padding: 5px 7px; border-left: 3px solid var(--role); border-radius: 0 5px 5px 0; background: rgba(201,160,255,.1); overflow-wrap: anywhere; }
-.tbh-plan-label { color: var(--role); font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
-.tbh-plan-text { flex: 1 1 60%; min-width: 0; white-space: pre-wrap; }
-/* The newest reasoning sits at the bottom; older lines scroll out of the top. */
-.tbh-plan-stream { flex-basis: 100%; max-height: 6em; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; white-space: pre-wrap; font-size: 10.5px; font-style: italic; color: #b9a6d9; }
-/* Eight columns of square tiles, eight rows deep; the rest are clipped. The newest spans 3x3 and the one before it 2x2, and the rest fill in around them in order. */
-.tbh-actions { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 3px; align-content: start; aspect-ratio: 1; overflow: hidden; padding: 6px; user-select: text; }
-.tbh-actions:empty { display: block; aspect-ratio: auto; }
-.tbh-actions:empty::before { content: "Waiting for the bot…"; color: #a8977a; line-height: 1.4; }
-.tbh-tile { --role: #7fa8ff; position: relative; display: grid; place-items: center; box-sizing: border-box; aspect-ratio: 1; min-width: 0; color: #dbe6ff; background: transparent; border-radius: 4px; }
-.tbh-tile-icon { display: block; width: 88%; height: 88%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.tbh-svg-fill { fill: currentColor; stroke: none; }
-.tbh-tile-badge { position: absolute; top: 3%; right: 3%; width: 28%; height: 28%; padding: 3%; box-sizing: border-box; border-radius: 50%; background: rgba(10,8,20,.85); fill: none; stroke: currentColor; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
-.tbh-tile-badge.tbh-result-done { color: #7fd88f; }
-.tbh-tile-badge.tbh-result-failed { color: #ff8f80; }
-.tbh-tile-badge.tbh-result-dropped { color: #a8977a; }
-.tbh-tile-badge.tbh-badge-dash { color: #ffd76a; }
-.tbh-tile-system { --role: #a8977a; color: #c9b58a; }
-.tbh-tile-hurt { --role: #e38a7f; color: #ffb4a8; }
-.tbh-tile-main { grid-column: span 3; grid-row: span 3; }
-.tbh-tile-prev { grid-column: span 2; grid-row: span 2; }
-.tbh-tile-inspectable { cursor: help; }
-.tbh-tile:hover { background: color-mix(in srgb, var(--role) 18%, transparent); }
-.tbh-row-time { flex: none; font-size: 10px; color: #8d7c5c; font-variant-numeric: tabular-nums; }
-.tbh-opt-arrow { font-size: 14px; min-width: 1.2em; }
-.tbh-row-inspectable { cursor: help; }
-.tbh-row-inspectable:hover { background: rgba(255,255,255,.05); outline: 1px solid color-mix(in srgb, var(--role) 55%, transparent); }
-.tbh-cursor { font-style: normal; font-weight: 400; color: var(--role); animation: tbh-blink 1s steps(1) infinite; }
-@keyframes tbh-blink { 50% { opacity: 0; } }
+`;
 
-.tbh-pick-layer { position: fixed; inset: 0; z-index: 2147482999; pointer-events: none; font: 800 12px/1.3 ui-monospace, Menlo, Consolas, monospace; }
-.tbh-pick-layer[hidden], .tbh-pick-layer [hidden] { display: none; }
-.tbh-pick-banner { position: fixed; transform: translate(-50%, -100%); box-sizing: border-box; padding: 5px 12px; text-align: center; color: #f3e6c4; background: rgba(42,33,64,.95); border: 1px solid #c9a0ff; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
-.tbh-pick-bar { position: fixed; display: flex; align-items: center; gap: 6px; box-sizing: border-box; padding: 0 2px; transition: opacity .3s; }
-.tbh-pick-track { flex: 1; height: 7px; border-radius: 4px; background: rgba(0,0,0,.55); box-shadow: 0 0 0 1px rgba(255,255,255,.15); overflow: hidden; }
-.tbh-pick-track > i { display: block; height: 100%; background: #7fa8ff; }
-.tbh-pick-pct { color: #fff; text-shadow: 0 1px 2px #000; }
-.tbh-pick-dim { opacity: .35; }
-.tbh-pick-frame { position: fixed; box-sizing: border-box; border: 3px solid transparent; border-radius: 10px; transition: border-color .08s, box-shadow .08s; }
-.tbh-pick-on { border-color: #ffd36b; box-shadow: 0 0 14px rgba(255,211,107,.7); }
-.tbh-pick-final { border-color: #ffd36b; box-shadow: 0 0 26px 4px rgba(255,211,107,.9); animation: tbh-pick-pulse .7s ease-in-out infinite alternate; }
-@keyframes tbh-pick-pulse { to { box-shadow: 0 0 10px 1px rgba(255,211,107,.5); } }
-/* Positioned by its tip end: above a card pointing down, or left of it pointing right. */
-.tbh-pick-arrow { position: fixed; width: 48px; height: 48px; transform: translate(-100%, -50%); color: #ffd36b; filter: drop-shadow(0 0 6px rgba(255,211,107,.8)) drop-shadow(0 2px 2px rgba(0,0,0,.8)); }
-.tbh-pick-arrow.tbh-pick-arrow-down { transform: translate(-50%, -100%); }
-.tbh-pick-arrow-icon { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.tbh-pick-arrived .tbh-pick-arrow-icon { animation: tbh-pick-bob-x .45s ease-in-out infinite alternate; }
-.tbh-pick-arrived.tbh-pick-arrow-down .tbh-pick-arrow-icon { animation-name: tbh-pick-bob-y; }
-@keyframes tbh-pick-bob-x { to { transform: translateX(-8px); } }
-@keyframes tbh-pick-bob-y { to { transform: translateY(-8px); } }
-@media (prefers-reduced-motion: reduce) { .tbh-pick-final, .tbh-pick-arrived .tbh-pick-arrow-icon { animation: none; } }
-.tbh-insp { position: fixed; z-index: 2147483002; box-sizing: border-box; overflow: auto; padding: 8px 10px 10px; background: rgba(17,14,10,.97); color: #f3e6c4; border: 1px solid #6b5631; border-radius: 6px;
-  box-shadow: 0 6px 24px rgba(0,0,0,.6); font: 11.5px/1.4 ui-monospace, Menlo, Consolas, monospace; user-select: text; overscroll-behavior: contain; }
-.tbh-insp[hidden] { display: none; }
-.tbh-insp-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; font-size: 10.5px; color: #8d7c5c; }
-.tbh-role-planner { --role: #c9a0ff; } .tbh-role-action { --role: #7fa8ff; } .tbh-role-system { --role: #a8977a; }
-.tbh-insp-section { margin-top: 8px; }
-.tbh-insp-section > h4 { margin: 0 0 4px; font: inherit; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #c9b58a; }
-.tbh-insp-pre { margin: 0; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 10.5px; background: rgba(255,255,255,.04); border-radius: 4px; }
-.tbh-insp-thought { color: #b9a6d9; font-style: italic; }
-.tbh-opt { padding: 4px 6px; margin-top: 3px; border-radius: 4px; border-left: 3px solid #4a3d29; background: rgba(255,255,255,.03); }
-.tbh-opt-chosen { border-left-color: #ffd36b; background: rgba(255,211,107,.1); }
-.tbh-opt-safe { border-left-color: #5ee8c0; }
-.tbh-opt-risky { border-left-color: #e3a07f; opacity: .8; }
-.tbh-opt-ruled-out { opacity: .5; }
-.tbh-opt-ruled-out .tbh-opt-name { text-decoration: line-through; }
-.tbh-opt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
-.tbh-opt-name { font-weight: 800; }
-.tbh-opt-outcome { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: #a8977a; }
-.tbh-opt-chosen .tbh-opt-outcome { color: #ffd36b; }
-.tbh-chip { padding: 0 5px; border-radius: 3px; font-size: 10px; background: rgba(227,138,127,.18); color: #f0b3aa; }
-.tbh-chip-ok { background: rgba(127,227,164,.14); color: #7fe3a4; }
-.tbh-opt-scores { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 10px; margin-left: auto; }
-.tbh-meter { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: #c9b58a; }
-.tbh-meter-track { width: 56px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
-.tbh-meter-track > i { display: block; height: 100%; }
-.tbh-meter-hurt i { background: #e38a7f; } .tbh-meter-useful i { background: #7fa8ff; }
-.tbh-opt-desc { margin-top: 2px; font-size: 10.5px; color: #a8977a; white-space: pre-wrap; overflow-wrap: anywhere; }
-.tbh-msg-role { color: var(--role); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.tbh-msg-model { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tbh-msg-time { font-variant-numeric: tabular-nums; }
-.tbh-insp-text { white-space: pre-wrap; font-weight: 700; }
-.tbh-insp-fold { margin-top: 8px; }
-.tbh-insp-fold > summary { cursor: pointer; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #c9b58a; }
-.tbh-insp-fold > .tbh-insp-pre { margin-top: 4px; }
-.tbh-insp-past { display: flex; gap: 6px; width: 100%; padding: 2px 4px; text-align: left; font: inherit; font-size: 10.5px; color: #e4d4ae; background: none; border: 0; border-radius: 3px; cursor: pointer; }
-.tbh-insp-past:hover { background: rgba(255,255,255,.06); }
-.tbh-insp-past-on { background: rgba(201,160,255,.14); }
-.tbh-meter-wide .tbh-meter-track { width: 120px; }
-.tbh-badge { display: inline-block; padding: 0 4px; border-radius: 3px; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-align: center; }
-.tbh-badge-new { align-self: flex-start; background: #ff7ad9; color: #3d0630; margin: 0 0 2px; }
-.tbh-badge-evo { background: #ffd36b; color: #3a2600; }
-
+  // userscript/panel/sprites.css.ts
+  var css5 = `
 .tbh-icon { --s: 1.5; position: relative; display: inline-block; flex: none; width: calc(16px * var(--s)); height: calc(16px * var(--s)); border-radius: 4px; background: rgba(255,255,255,.06); }
 .tbh-icon > i { position: absolute; left: 50%; top: 50%; width: calc(var(--w) * var(--s) * 1px); height: calc(var(--h) * var(--s) * 1px);
   margin: calc(var(--ay) * var(--s) * -1px) 0 0 calc(var(--ax) * var(--s) * -1px);
@@ -2801,13 +2808,15 @@
 .tbh-icon.tbh-banished::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
   background: linear-gradient(45deg, transparent 43%, #ff5a4a 43% 57%, transparent 57%), linear-gradient(-45deg, transparent 43%, #ff5a4a 43% 57%, transparent 57%); }
 .tbh-icon.tbh-fresh::after { content: ""; position: absolute; right: -2px; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: #ff7ad9; box-shadow: 0 0 0 1px rgba(17,14,10,.9); }
+`;
 
+  // userscript/panel/card-notes.css.ts
+  var css6 = `
 .ui-card.tbh-card-new { box-shadow: 0 0 0 2px #ff7ad9, 0 0 16px rgba(255,122,217,.6) !important; }
 .ui-card.tbh-card-evo { box-shadow: 0 0 0 2px #ffd36b, 0 0 14px rgba(255,211,107,.55) !important; }
 .ui-card.tbh-card-new.tbh-card-evo { box-shadow: 0 0 0 2px #ff7ad9, 0 0 0 4px #ffd36b, 0 0 16px rgba(255,211,107,.5) !important; }
 .tbh-card { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; font: clamp(11px, .6em, 16px)/1.3 ui-monospace, Menlo, Consolas, monospace; color: #c9b58a; text-align: start; }
 .tbh-line { display: flex; align-items: center; gap: 5px; }
-.tbh-line .tbh-icon { --s: 1.5; }
 .tbh-line.tbh-done > .tbh-icon:first-child { box-shadow: 0 0 0 1px #7fe3a4; }
 .tbh-line.tbh-leveling > .tbh-icon:first-child { box-shadow: 0 0 0 1px #ffcf5a; }
 .tbh-line.tbh-missing > .tbh-icon:first-child { opacity: .55; }
@@ -2816,13 +2825,7 @@
 .tbh-ready-tag { color: #5ee8a0; font-weight: 700; }
 `;
 
-  // userscript/panel/panel.ts
-  function h2(tag, className, ...children) {
-    const el = document.createElement(tag);
-    el.className = className;
-    el.append(...children);
-    return el;
-  }
+  // userscript/panel/sprites.ts
   function initials(name) {
     const words = name.split(/[\s-]+/).filter(Boolean);
     return (words.length > 1 ? `${words[0]?.[0]}${words[1]?.[0]}` : name.slice(0, 2)).toUpperCase();
@@ -2832,7 +2835,7 @@
     const id = idOf(key);
     const frame = v.icons?.frames.get(id);
     const banished = v.banished.has(id);
-    const box = h2("span", `tbh-icon ${className}${banished ? " tbh-banished" : ""}`.trim());
+    const box = h("span", `tbh-icon ${className}${banished ? " tbh-banished" : ""}`.trim());
     const notes = [...banished ? ["banished this run"] : [], ...note === "" ? [] : [note]].join(" · ");
     tips.set(box, { name: nameOf(v.d.catalog, key), note: notes, description: v.d.catalog.descriptions[key] });
     if (v.icons === undefined || frame === undefined) {
@@ -2841,7 +2844,7 @@
       return box;
     }
     const page = v.icons.pageOf(frame);
-    const art = h2("i", "");
+    const art = h("i", "");
     const s = art.style;
     s.setProperty("--sheet", `url("${page.url}")`);
     s.setProperty("--sw", String(page.width));
@@ -2851,25 +2854,8 @@
     box.append(art);
     return box;
   }
-  function partNeed(v, part) {
-    const max = v.d.catalog.maxLevel[part.key];
-    if (part.need !== "max" || max === undefined)
-      return "";
-    const have = v.loadout.get(part.key);
-    return `needs Lv${max}${have === undefined ? "" : `, have ${have}`}`;
-  }
-  function partTitle(v, part) {
-    const need = partNeed(v, part);
-    return `${nameOf(v.d.catalog, part.key)}${need === "" ? "" : ` (${need})`}`;
-  }
-  function resultNote(v, combo) {
-    return `makes ${nameOf(v.d.catalog, combo.result)}${v.discovery.made(combo.result) ? "" : " (never made)"}`;
-  }
-  function pairingNote(v, part, combo) {
-    return [partNeed(v, part), resultNote(v, combo)].filter(Boolean).join(" · ");
-  }
   function startTips() {
-    const tip = h2("div", "tbh-tip");
+    const tip = h("div", "tbh-tip");
     tip.hidden = true;
     document.body.append(tip);
     let anchor;
@@ -2879,7 +2865,7 @@
     };
     const show = (el, content) => {
       anchor = el;
-      tip.replaceChildren(h2("div", "tbh-tip-name", content.name), ...content.note === "" ? [] : [h2("div", "tbh-tip-note", content.note)], ...content.description === undefined ? [] : [h2("div", "tbh-tip-desc", content.description)]);
+      tip.replaceChildren(h("div", "tbh-tip-name", content.name), ...content.note === "" ? [] : [h("div", "tbh-tip-note", content.note)], ...content.description === undefined ? [] : [h("div", "tbh-tip-desc", content.description)]);
       tip.hidden = false;
       const at = el.getBoundingClientRect();
       const size = tip.getBoundingClientRect();
@@ -2906,8 +2892,27 @@
         hide();
     };
   }
+
+  // userscript/panel/combos-list.ts
+  function partNeed(v, part) {
+    const max = v.d.catalog.maxLevel[part.key];
+    if (part.need !== "max" || max === undefined)
+      return "";
+    const have = v.loadout.get(part.key);
+    return `needs Lv${max}${have === undefined ? "" : `, have ${have}`}`;
+  }
+  function partTitle(v, part) {
+    const need = partNeed(v, part);
+    return `${nameOf(v.d.catalog, part.key)}${need === "" ? "" : ` (${need})`}`;
+  }
+  function resultNote(v, combo) {
+    return `makes ${nameOf(v.d.catalog, combo.result)}${v.discovery.made(combo.result) ? "" : " (never made)"}`;
+  }
+  function pairingNote(v, part, combo) {
+    return [partNeed(v, part), resultNote(v, combo)].filter(Boolean).join(" · ");
+  }
   function header(panel, count) {
-    const el = h2("div", "tbh-header", h2("span", "", "Combos"), h2("span", "tbh-count", count));
+    const el = h("div", "tbh-header", h("span", "", "Combos"), h("span", "tbh-count", count));
     el.addEventListener("click", () => panel.classList.toggle(panel.classList.contains("tbh-choice") ? "tbh-peek" : "tbh-collapsed"));
     return el;
   }
@@ -2915,15 +2920,15 @@
     const rows = unpaired(v.d.combos, v.loadout);
     const paired = relevantCombos(v.d.combos, v.loadout).filter((c) => c.parts.every((p) => v.loadout.has(p.key)));
     const ready = paired.filter((c) => comboProgress(c, v.loadout, v.d.catalog).every((s) => s === "done"));
-    const body = h2("div", "tbh-body");
+    const body = h("div", "tbh-body");
     if (rows.length === 0)
-      body.append(h2("div", "tbh-empty", paired.length > 0 ? "Everything you hold is paired." : "Nothing you hold has a combo."));
+      body.append(h("div", "tbh-empty", paired.length > 0 ? "Everything you hold is paired." : "Nothing you hold has a combo."));
     for (const { held, options } of rows) {
       const fresh = options.some((o) => !v.discovery.made(o.combo.result));
-      const opts = h2("span", "tbh-opts");
+      const opts = h("span", "tbh-opts");
       for (const o of options)
         opts.append(icon(v, o.partner.key, pairingNote(v, o.partner, o.combo), v.discovery.made(o.combo.result) ? "" : "tbh-fresh"));
-      body.append(h2("div", "tbh-need", fresh ? h2("span", "tbh-badge tbh-badge-evo", "NEW") : h2("span", ""), icon(v, held), h2("span", "tbh-colon", ":"), opts));
+      body.append(h("div", "tbh-need", fresh ? h("span", "tbh-badge tbh-badge-evo", "NEW") : h("span", ""), icon(v, held), h("span", "tbh-colon", ":"), opts));
     }
     const counts = [`${rows.length} open`, `${paired.length} paired`, ...ready.length > 0 ? [`${ready.length} ready`] : []].join(" · ");
     const head = header(panel, counts);
@@ -2932,25 +2937,27 @@
     content.replaceChildren(head, body);
   }
   function renderProblem(panel, content, message) {
-    content.replaceChildren(header(panel, "offline"), h2("div", "tbh-stale", message));
+    content.replaceChildren(header(panel, "offline"), h("div", "tbh-stale", message));
   }
+
+  // userscript/panel/connection.ts
   function connectionRow(bridge) {
-    const input = h2("input", "tbh-port");
+    const input = h("input", "tbh-port");
     input.type = "number";
     input.min = "1";
     input.max = "65535";
     input.value = String(bridge.status().port);
     input.setAttribute("aria-label", "Agent server port");
-    const button = h2("button", "tbh-connect", "Connect");
-    const connected = h2("span", "tbh-connected", "connected");
-    const dot = h2("span", "tbh-dot");
+    const button = h("button", "tbh-connect", "Connect");
+    const connected = h("span", "tbh-connected", "connected");
+    const dot = h("span", "tbh-dot");
     dot.setAttribute("aria-hidden", "true");
-    const status = h2("div", "tbh-conn-status");
-    const wheel = h2("button", "tbh-wheel", "Grok take the wheel");
+    const status = h("div", "tbh-conn-status");
+    const wheel = h("button", "tbh-wheel", "Grok take the wheel");
     wheel.type = "button";
     wheel.addEventListener("click", () => bridge.pilot.set({ on: true }));
-    const wheelNote = h2("div", "tbh-wheel-note");
-    const incognito = h2("button", "tbh-incognito", "Incognito");
+    const wheelNote = h("div", "tbh-wheel-note");
+    const incognito = h("button", "tbh-incognito", "Incognito");
     incognito.type = "button";
     incognito.title = "The bot just plays: no notes, no review after the run. Turning it on mid-run deletes that run's notes.";
     incognito.addEventListener("click", () => bridge.pilot.set({ incognito: !bridge.pilot.state().incognito }));
@@ -2982,7 +2989,7 @@
         return;
       bridge.connect(port);
     };
-    const row = h2("form", "tbh-conn-row", incognito, h2("span", "tbh-conn-label", "Agent port"), input, button, connected, dot);
+    const row = h("form", "tbh-conn-row", incognito, h("span", "tbh-conn-label", "Agent port"), input, button, connected, dot);
     row.noValidate = true;
     row.addEventListener("submit", connect);
     bridge.onChange(refresh);
@@ -2992,8 +2999,10 @@
       refresh();
     });
     refresh();
-    return h2("div", "tbh-conn", row, status, wheel, wheelNote);
+    return h("div", "tbh-conn", row, status, wheel, wheelNote);
   }
+
+  // userscript/panel/card-notes.ts
   function offerKey(card) {
     const tip = card.dataset.tip ?? "";
     const offer = tip.match(/^(weapon|passive)-offer:([a-z0-9-]+):(\d+)$/);
@@ -3025,28 +3034,29 @@
       card.classList.add("tbh-card-evo");
     if (!isNew && uses.length === 0)
       return;
-    const box = h2("div", "tbh-card");
+    const box = h("div", "tbh-card");
     if (isNew)
-      box.append(h2("span", "tbh-badge tbh-badge-new", "UNSEEN"));
+      box.append(h("span", "tbh-badge tbh-badge-new", "UNSEEN"));
     for (const combo of uses) {
       const other = partner(combo, offer.key);
       const ready = comboProgress(combo, after, v.d.catalog).every((s) => s === "done");
       const fresh = !v.discovery.made(combo.result);
-      box.append(h2("div", `tbh-line tbh-${partState(other, v.loadout, v.d.catalog)}`, icon(v, other.key, partNeed(v, other)), h2("span", "tbh-arrow", "→"), icon(v, combo.result, fresh ? "never made" : "", fresh ? "tbh-fresh" : ""), h2("span", "tbh-result", nameOf(v.d.catalog, combo.result)), ...ready ? [h2("span", "tbh-ready-tag", "READY")] : []));
+      box.append(h("div", `tbh-line tbh-${partState(other, v.loadout, v.d.catalog)}`, icon(v, other.key, partNeed(v, other)), h("span", "tbh-arrow", "→"), icon(v, combo.result, fresh ? "never made" : "", fresh ? "tbh-fresh" : ""), h("span", "tbh-result", nameOf(v.d.catalog, combo.result)), ...ready ? [h("span", "tbh-ready-tag", "READY")] : []));
     }
     (card.querySelector(".ui-card-text") ?? card).append(box);
   }
+
+  // userscript/panel/panel.ts
   function guardPanelKeys() {
     for (const type of ["keydown", "keyup", "keypress"]) {
       window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest(`#${PANEL_ID}`) !== null && e.stopImmediatePropagation(), true);
     }
   }
   function mount(chat, footer) {
-    const style = document.createElement("style");
-    style.textContent = css;
-    document.head.append(style);
-    const content = h2("div", "tbh-content");
-    const panel = h2("div", "tbh-panel", content, footer, chat);
+    for (const css of [css3, css4, css5, css6])
+      addStyle(css);
+    const content = h("div", "tbh-content");
+    const panel = h("div", "tbh-panel", content, footer, chat);
     panel.id = PANEL_ID;
     if (window.innerWidth < 700)
       panel.classList.add("tbh-collapsed");
@@ -3128,21 +3138,41 @@
     schedule();
   }
 
+  // userscript/pilot/pick-overlay.css.ts
+  var css7 = `
+.tbh-pick-layer { position: fixed; inset: 0; z-index: 2147482999; pointer-events: none; font: 800 12px/1.3 ui-monospace, Menlo, Consolas, monospace; }
+.tbh-pick-layer[hidden], .tbh-pick-layer [hidden] { display: none; }
+.tbh-pick-banner { position: fixed; transform: translate(-50%, -100%); box-sizing: border-box; padding: 5px 12px; text-align: center; color: #f3e6c4; background: rgba(42,33,64,.95); border: 1px solid #c9a0ff; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+.tbh-pick-bar { position: fixed; display: flex; align-items: center; gap: 6px; box-sizing: border-box; padding: 0 2px; transition: opacity .3s; }
+.tbh-pick-track { flex: 1; height: 7px; border-radius: 4px; background: rgba(0,0,0,.55); box-shadow: 0 0 0 1px rgba(255,255,255,.15); overflow: hidden; }
+.tbh-pick-track > i { display: block; height: 100%; background: #7fa8ff; }
+.tbh-pick-pct { color: #fff; text-shadow: 0 1px 2px #000; }
+.tbh-pick-dim { opacity: .35; }
+.tbh-pick-frame { position: fixed; box-sizing: border-box; border: 3px solid transparent; border-radius: 10px; transition: border-color .08s, box-shadow .08s; }
+.tbh-pick-on { border-color: #ffd36b; box-shadow: 0 0 14px rgba(255,211,107,.7); }
+.tbh-pick-final { border-color: #ffd36b; box-shadow: 0 0 26px 4px rgba(255,211,107,.9); animation: tbh-pick-pulse .7s ease-in-out infinite alternate; }
+@keyframes tbh-pick-pulse { to { box-shadow: 0 0 10px 1px rgba(255,211,107,.5); } }
+/* Positioned by its tip end: above a card pointing down, or left of it pointing right. */
+.tbh-pick-arrow { position: fixed; width: 48px; height: 48px; transform: translate(-100%, -50%); color: #ffd36b; filter: drop-shadow(0 0 6px rgba(255,211,107,.8)) drop-shadow(0 2px 2px rgba(0,0,0,.8)); }
+.tbh-pick-arrow.tbh-pick-arrow-down { transform: translate(-50%, -100%); }
+.tbh-pick-arrow-icon { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.tbh-pick-arrived .tbh-pick-arrow-icon { animation: tbh-pick-bob-x .45s ease-in-out infinite alternate; }
+.tbh-pick-arrived.tbh-pick-arrow-down .tbh-pick-arrow-icon { animation-name: tbh-pick-bob-y; }
+@keyframes tbh-pick-bob-x { to { transform: translateX(-8px); } }
+@keyframes tbh-pick-bob-y { to { transform: translateY(-8px); } }
+@media (prefers-reduced-motion: reduce) { .tbh-pick-final, .tbh-pick-arrived .tbh-pick-arrow-icon { animation: none; } }
+`;
+
   // userscript/pilot/pick-overlay.ts
   var SHOW_MS = PICK_SHOW_MS - 500;
   var ARRIVE_MS = 700;
   var FRESH_MS = 8000;
-  function el(className, text = "") {
-    const d = document.createElement("div");
-    d.className = className;
-    d.textContent = text;
-    return d;
-  }
   function startPickOverlay(pilot) {
-    const layer = el("tbh-pick-layer");
-    const banner = el("tbh-pick-banner");
+    addStyle(css7);
+    const layer = h("div", "tbh-pick-layer");
+    const banner = h("div", "tbh-pick-banner");
     const arrows = { down: moveIcon("down", "tbh-pick-arrow-icon"), right: moveIcon("right", "tbh-pick-arrow-icon") };
-    const arrow = el("tbh-pick-arrow");
+    const arrow = h("div", "tbh-pick-arrow");
     layer.append(banner, arrow);
     document.body.append(layer);
     let show;
@@ -3172,13 +3202,13 @@
       bars.clear();
       for (const c of options) {
         const fill = document.createElement("i");
-        const label = el("tbh-pick-pct", `${Math.round((c.probability ?? 0) * 100)}%`);
-        const bar = el("tbh-pick-bar");
-        const track = el("tbh-pick-track");
+        const label = h("div", "tbh-pick-pct", `${Math.round((c.probability ?? 0) * 100)}%`);
+        const bar = h("div", "tbh-pick-bar");
+        const track = h("div", "tbh-pick-track");
         track.append(fill);
         fill.style.width = `${Math.round((c.probability ?? 0) * 100)}%`;
         bar.append(track, label);
-        const frame = el("tbh-pick-frame");
+        const frame = h("div", "tbh-pick-frame");
         layer.append(bar, frame);
         bars.set(c.index ?? 0, { bar, frame });
       }

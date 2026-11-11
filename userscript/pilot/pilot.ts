@@ -18,7 +18,7 @@ function savedSettings(): PilotSettings {
 const asChange = (s: PilotSettings): PilotChange => ({ ...s.pace, incognito: s.incognito });
 
 /** The agent server as the pilot needs it: whether it is connected, where, and a way to ask it for a change, which resolves to whether it took it. */
-export type PilotServer = { connected(): boolean; origin(): string; ask(change: PilotChange): Promise<boolean> };
+type PilotServer = { connected(): boolean; origin(): string; ask(change: PilotChange): Promise<boolean> };
 
 /**
  * "Grok take the wheel" as this page knows it: whether the server's bot plays for this tab, what

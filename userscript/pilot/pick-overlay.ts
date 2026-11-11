@@ -1,7 +1,9 @@
+import { css as overlayCss } from "./pick-overlay.css";
 import { type CardOption, type ChatMessage, PICK_SHOW_MS } from "../../protocol/pilot";
 import { choiceCards } from "../link/screen";
 import { moveIcon } from "./icons";
 import { Pilot } from "./pilot";
+import { addStyle, h } from "../panel/dom";
 
 // The bot waits PICK_SHOW_MS before taking the card; the pick glows until a little before that.
 const SHOW_MS = PICK_SHOW_MS - 500;
@@ -13,24 +15,18 @@ const FRESH_MS = 8000;
 
 type Show = { id: number; seen: number; text: string; options: CardOption[]; chosen: number };
 
-function el(className: string, text = ""): HTMLDivElement {
-  const d = document.createElement("div");
-  d.className = className;
-  d.textContent = text;
-  return d;
-}
-
 /**
  * While the bot has the wheel and picks at a level-up, chest or shrine, shows its plan above the
  * cards, its odds above each card, and an arrow that glides to its pick.
  */
 export function startPickOverlay(pilot: Pilot) {
-  const layer = el("tbh-pick-layer");
-  const banner = el("tbh-pick-banner");
+  addStyle(overlayCss);
+  const layer = h("div", "tbh-pick-layer");
+  const banner = h("div", "tbh-pick-banner");
   // Cards side by side get the arrow above them pointing down, under the plan and over the odds
   // (the game's own buttons sit under them); cards stacked get it to their left pointing right.
   const arrows = { down: moveIcon("down", "tbh-pick-arrow-icon"), right: moveIcon("right", "tbh-pick-arrow-icon") };
-  const arrow = el("tbh-pick-arrow");
+  const arrow = h("div", "tbh-pick-arrow");
   layer.append(banner, arrow);
   document.body.append(layer);
   let show: Show | undefined;
@@ -59,13 +55,13 @@ export function startPickOverlay(pilot: Pilot) {
     bars.clear();
     for (const c of options) {
       const fill = document.createElement("i");
-      const label = el("tbh-pick-pct", `${Math.round((c.probability ?? 0) * 100)}%`);
-      const bar = el("tbh-pick-bar");
-      const track = el("tbh-pick-track");
+      const label = h("div", "tbh-pick-pct", `${Math.round((c.probability ?? 0) * 100)}%`);
+      const bar = h("div", "tbh-pick-bar");
+      const track = h("div", "tbh-pick-track");
       track.append(fill);
       fill.style.width = `${Math.round((c.probability ?? 0) * 100)}%`;
       bar.append(track, label);
-      const frame = el("tbh-pick-frame");
+      const frame = h("div", "tbh-pick-frame");
       layer.append(bar, frame);
       bars.set(c.index ?? 0, { bar, frame });
     }
