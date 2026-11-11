@@ -42,6 +42,7 @@ export const LOG_COLUMNS = [
   "spot",
   "stats",
   "counts",
+  "target",
 ] as const;
 type LogColumn = (typeof LOG_COLUMNS)[number];
 /** A row as it is read back: every column as text, "" when the row left it out. */
@@ -124,6 +125,18 @@ export const changeCell = {
   evolution: (text: string) => / 1\/1 new/.test(text),
 };
 export const changesCell = { encode: (parts: string[]) => parts.join(", "), decode: (cell: string | undefined) => (cell ?? "").split(", ").filter(Boolean) };
+
+/** What a goal is after as it starts, by the game's own kind, and where it is: `eliteNest 180 left`. */
+export const targetCell = {
+  encode: (t: Where & { kind: string }) => `${t.kind} ${where(t)}`,
+  decode: (cell: string | undefined) => {
+    const m = (cell ?? "").match(/^(\S+) (\d+) (\S+)$/);
+    return m === null ? undefined : { kind: m[1] ?? "", dist: Number(m[2]), dir: m[3] ?? "" };
+  },
+};
+
+/** The game's kinds of spot that call something to Tibo when used: an elite, a boss, a ring of pests, a swarm of Grok Bots. */
+export const SUMMONING_SPOTS = ["eliteNest", "bossLair", "dinnerBell", "botDock"];
 
 /** Why a goal that held Tibo in place was given up for the health it cost (knob holdAbortHurt): `Tibo lost 32 health in 3 seconds while this goal kept it in place`. */
 export const hurtLeaveCell = {

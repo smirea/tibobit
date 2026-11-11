@@ -13,7 +13,7 @@ import { csvField } from "../../csv";
 /** `walk`: the page walked Tibo toward its goal without asking a model, and Tibo lost health on the way. `loadout`: what Tibo holds changed. */
 type LogEvent = "plan" | "pick" | "move" | "walk" | "goal" | "loadout" | "run_end";
 
-type LogRow = { event: LogEvent; model?: string; reason?: string; goal?: string; action?: string; options?: string; detail?: string; ms?: number };
+type LogRow = { event: LogEvent; model?: string; reason?: string; goal?: string; action?: string; options?: string; detail?: string; ms?: number; target?: string };
 
 export class RunLog {
   /** Health at the previous row, for `hp_lost` and `hp_gained`. */

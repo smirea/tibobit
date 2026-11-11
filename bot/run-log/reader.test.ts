@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { hurtLeaveCell, LOG_COLUMNS } from "./cells";
+import { eliteCell, hurtLeaveCell, listCell, LOG_COLUMNS, targetCell } from "./cells";
 import { buildOverTime, economy, passiveLevels, runStats } from "./reader";
 
 const log = (rows: Record<string, string>[]) => [LOG_COLUMNS.join(","), ...rows.map((r) => LOG_COLUMNS.map((c) => r[c] ?? "").join(","))].join("\n");
@@ -44,4 +44,21 @@ test("goals left for the health they cost are listed apart, with whether the pla
     goal(133, "2:13", "C9", "failed", hurtLeaveCell.encode(18, 3)),
   ]);
   expect(runStats(csv)).toContain("(holdAbortHurt): 2: 1:37 Charge the Spud Shrine (32 health lost), picked again at 2:00 | 2:13 Open the chest (18 health lost), not picked again within 45 s.");
+});
+
+test("a goal for a summoning spot says what followed its use, and other spots are left out", () => {
+  const counts = (elitesKilled: number, bossChests: number) => `bossChests ${bossChests}; paidChests 0; elitesKilled ${elitesKilled}; bossesKilled 0; shrinesUsed 0`;
+  const move = (seconds: number, time: string, elite_list: string, c: string) => ({ seconds: String(seconds), time, event: "move", elite_list, counts: c });
+  const elite = (id: number, dist: number) => eliteCell.encode({ id, name: "Potato Beetle", type: "potato-beetle", hp: 900, maxHp: 900, dist, dir: "left" });
+  const csv = log([
+    move(20, "0:20", elite(3, 400), counts(0, 0)),
+    { seconds: "27", time: "0:27", event: "goal", goal: "P5", action: "start", detail: "Charge the Beetle Nest", hp: "110", max_hp: "120", target: targetCell.encode({ kind: "eliteNest", dist: 180.4, dir: "left" }), counts: counts(0, 0) },
+    { seconds: "28", time: "0:28", event: "goal", goal: "P6", action: "start", detail: "Charge the Spud Shrine", hp: "110", max_hp: "120", target: targetCell.encode({ kind: "chargeShrine", dist: 90, dir: "up" }), counts: counts(0, 0) },
+    { seconds: "33", time: "0:33", event: "goal", goal: "P5", action: "done", detail: "charged and used", counts: counts(0, 0) },
+    move(35, "0:35", listCell.encode([elite(3, 380), elite(9, 60)]), counts(0, 0)),
+    { ...move(50, "0:50", "", counts(1, 0)), chests: "C77 12 left" },
+    move(52, "0:52", "", counts(1, 1)),
+    move(120, "2:00", "", counts(2, 2)),
+  ]);
+  expect(runStats(csv)).toContain("(the game's kinds eliteNest, bossLair, dinnerBell, botDock): 0:27 Beetle Nest (eliteNest) picked 180 away at 110/120 health, used at 0:33; elites first seen in the 20 s after: 0:35 Potato Beetle 60 left; in the 60 s after: elites killed at 0:50, bosses killed at none, chests first listed at 0:50, chests opened at 0:52.");
 });

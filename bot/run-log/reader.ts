@@ -3,7 +3,7 @@
 
 import { csvField, parseCsv } from "../../csv";
 import { GIVE_UP_SECONDS } from "../limits";
-import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, heldCell, hurtCell, hurtLeaveCell, listCell, LOG_COLUMNS, type LoggedRow, numbersCell, type RunCount, UNANSWERED, weighedCell } from "./cells";
+import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, heldCell, hurtCell, hurtLeaveCell, listCell, LOG_COLUMNS, type LoggedRow, numbersCell, type RunCount, SUMMONING_SPOTS, targetCell, UNANSWERED, weighedCell } from "./cells";
 
 const goalKind = goalCell.kind;
 
@@ -34,6 +34,40 @@ function hurtLeaves(rows: LoggedRow[]): string[] {
     const title = starts.filter((s) => s.goal === r.goal && Number(s.seconds) <= at).at(-1)?.detail ?? r.goal;
     const again = starts.find((s) => s.goal === r.goal && Number(s.seconds) > at && Number(s.seconds) <= at + GIVE_UP_SECONDS);
     return `${r.time} ${title} (${left.lost} health lost), ${again === undefined ? `not picked again within ${GIVE_UP_SECONDS} s` : `picked again at ${again.time}`}`;
+  });
+}
+
+const NEW_ELITE_SECONDS = 20;
+const AFTER_SUMMON_SECONDS = 60;
+
+/**
+ * Every goal for a spot that calls something to Tibo (SUMMONING_SPOTS), one line each: when it was
+ * picked, from how far and at what health, how it ended, the elites first seen in the 20 seconds
+ * after it was used, and the elites and bosses killed, the chests first listed and the chests
+ * opened in the 60 seconds after. The log cannot tell which elite dropped which chest, so what
+ * followed is given by time alone.
+ */
+function summons(rows: LoggedRow[]): string[] {
+  const live = rows.filter((r) => r.seconds !== "");
+  const at = (r: LoggedRow) => Number(r.seconds);
+  const elites = (r: LoggedRow) => listCell.decode(r.elite_list).flatMap((cell) => eliteCell.decode(cell) ?? []);
+  const within = (count: RunCount, from: number) => rises(live, count).filter((r) => at(r) > from && at(r) <= from + AFTER_SUMMON_SECONDS).map((r) => r.time).join(", ") || "none";
+  return rows.flatMap((start) => {
+    const target = start.event === "goal" && start.action === "start" ? targetCell.decode(start.target) : undefined;
+    if (target === undefined || !SUMMONING_SPOTS.includes(target.kind)) return [];
+    const end = rows.find((r) => r.event === "goal" && r.goal === start.goal && r.action !== "start" && at(r) >= at(start));
+    const picked = `${start.time} ${goalTitleCell.spotName(start.detail) ?? start.detail} (${target.kind}) picked ${target.dist} away at ${start.hp}/${start.max_hp} health`;
+    if (end === undefined) return `${picked}, still under way at the end`;
+    if (end.action !== "done") return `${picked}, ${end.action === "failed" ? "given up" : "dropped"} at ${end.time} (${end.detail})`;
+    const known = new Set(live.filter((r) => at(r) < at(end)).flatMap((r) => elites(r).map((e) => e.uid)));
+    const fresh = new Map<string, string>();
+    for (const r of live.filter((x) => at(x) >= at(end) && at(x) <= at(end) + NEW_ELITE_SECONDS))
+      for (const e of elites(r)) if (!known.has(e.uid) && !fresh.has(e.uid)) fresh.set(e.uid, `${r.time} ${e.name} ${e.dist} ${e.dir}`);
+    const listedBefore = new Set(live.filter((r) => at(r) < at(end)).flatMap((r) => listCell.decode(r.chests).map(chestCell.uid)));
+    const listed = new Map<string, string>();
+    for (const r of live.filter((x) => at(x) >= at(end) && at(x) <= at(end) + AFTER_SUMMON_SECONDS))
+      for (const chest of listCell.decode(r.chests).map(chestCell.uid)) if (!listedBefore.has(chest) && !listed.has(chest)) listed.set(chest, r.time);
+    return `${picked}, used at ${end.time}; elites first seen in the ${NEW_ELITE_SECONDS} s after: ${[...fresh.values()].join(", ") || "none"}; in the ${AFTER_SUMMON_SECONDS} s after: elites killed at ${within("elitesKilled", at(end))}, bosses killed at ${within("bossesKilled", at(end))}, chests first listed at ${[...listed.values()].join(", ") || "none"}, chests opened at ${within("bossChests", at(end))}`;
   });
 }
 
@@ -112,6 +146,7 @@ export function runStats(csv: string): string {
   }
   const firstChest = live.find((r) => (r.chests ?? "") !== "")?.time;
   const left = hurtLeaves(rows);
+  const called = summons(rows);
   const opened = rises(live, "bossChests");
   const times = (count: RunCount) => rises(live, count).map((r) => r.time).join(", ") || "none";
   const atTwo = live.filter((r) => num(r.seconds) <= 120).at(-1) ?? lastRow;
@@ -157,6 +192,7 @@ export function runStats(csv: string): string {
     ...buildLines(csv).map((line) => `- ${line}`),
     `- Goal changes, each with the planner's rating of the goal chosen and of the next two: ${goalChanges(csv).join("; ") || "none"}.`,
     `- Goals by kind (done / gave up / dropped): ${[...goals].map(([k, g]) => `${k} ${g.done}/${g.failed}/${g.dropped}`).join("; ") || "none"}.`,
+    `- Goals for spots that call something to Tibo (the game's kinds ${SUMMONING_SPOTS.join(", ")}): ${called.join(" | ") || "none"}.`,
     `- Of the goals given up, those left for the health they cost while they held Tibo in place (holdAbortHurt): ${left.length}${left.length === 0 ? "" : `: ${left.join(" | ")}`}.`,
     `- Dashes: ${dashes.length}${dashes.length === 0 ? "" : `: ${dashes.slice(0, 12).join("; ")}${dashes.length > 12 ? "; …" : ""}`}.`,
     `- Model calls: ${calls("plan").length} plans, ${calls("pick").length} picks, ${calls("move").length} moves (mean ${meanMs(calls("move"))}ms); the page walked through ${calls("walk").length} hits on its own. Calls the model never answered in time, where the bot went on without it: ${rows.filter((r) => (r.reason ?? "").includes(UNANSWERED)).length}.`,

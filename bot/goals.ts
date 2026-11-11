@@ -12,7 +12,7 @@ import type { CommandStatus } from "../protocol/commands";
 import { recentLoss, type World } from "./world";
 import { say } from "./server";
 import { RunLog } from "./run-log/writer";
-import { goalCell, goalTitleCell, hurtLeaveCell } from "./run-log/cells";
+import { goalCell, goalTitleCell, hurtLeaveCell, targetCell } from "./run-log/cells";
 
 export type Goal = { kind: "chest" | "poi" | "food" | "elite"; uid: number } | { kind: "explore"; dir: Direction } | { kind: "evade" };
 
@@ -198,8 +198,17 @@ export function aimAt(p: Pursuit, r: World): Course | Ended {
   }
 }
 
+/** What a goal is after, by the game's kind for a spot or an elite, and where it is now. */
+function targetOf(goal: Goal, r: World): { kind: string; dist: number; dir: string } | undefined {
+  if (!("uid" in goal)) return undefined;
+  const at = locate(r, goal);
+  const kind = goal.kind === "poi" ? r.spots.find((x) => x.id === goal.uid)?.type : goal.kind === "elite" ? r.elites.find((x) => x.id === goal.uid)?.type : goal.kind;
+  return at === undefined || kind === undefined ? undefined : { kind, dist: at.dist, dir: at.dir };
+}
+
 function begin(goal: Goal, r: World, log: RunLog, decision: Inspect) {
   const title = goalTitle(goal, r);
+  const target = targetOf(goal, r);
   const p: Pursuit = {
     goal,
     id: goalId(goal),
@@ -219,7 +228,7 @@ function begin(goal: Goal, r: World, log: RunLog, decision: Inspect) {
   const seconds = goal.kind === "evade" ? knobs().evadeSeconds : goal.kind === "elite" ? knobs().eliteSeconds : "left" in aim && aim.left !== undefined ? aim.left / GOAL_SPEED : 0;
   p.deadline = r.time + seconds + GOAL_SLACK;
   pursuit = p;
-  log.write(r, { event: "goal", goal: p.id, action: "start", detail: title });
+  log.write(r, { event: "goal", goal: p.id, action: "start", detail: title, ...(target === undefined ? {} : { target: targetCell.encode(target) }) });
   say({ role: "action", model: "goal", time: r.time, text: title, tag: p.tag, detail: "done" in aim ? aim.done : aim.progress, inspect: decision });
 }
 
