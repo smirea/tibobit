@@ -110,6 +110,8 @@ export class Controller {
       case "dash": {
         const game = this.game();
         const me = game.state.me;
+        // The game ignores a dash without a charge; saying so keeps a caller from counting it as done.
+        if ((game.state.player.dashCharges[me] ?? 0) <= 0) throw new Error("Tibo has no dash charge");
         const v = command.dir === undefined ? { x: game.state.player.fx[me] ?? 1, y: game.state.player.fy[me] ?? 0 } : unitOf(command.dir);
         game.dash(v.x, v.y);
         this.finish(status, "done");

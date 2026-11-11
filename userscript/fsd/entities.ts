@@ -5,9 +5,9 @@ import type { GameLink } from "../link/game-link";
 export type Entity = { name: string; about: string; tag: ActionTag };
 
 /**
- * Every kind of thing the autopilot can be sent to: a dropped chest, food, and each spot kind the
+ * Every kind of thing the autopilot can be sent to: a dropped chest, food, a magnet, and each spot kind the
  * game has, named in the game's own English as the live view names them. The English arrives with
- * the first run, so before then only the chest and food are known.
+ * the first run, so before then only the chest, food and magnet are known.
  */
 export function worldEntities(link: GameLink): Entity[] {
   const spots: Entity[] = [];
@@ -22,7 +22,8 @@ export function worldEntities(link: GameLink): Entity[] {
   }
   return [
     { name: "chest", about: "A chest on the ground, from an elite or the map. Standing on it opens it for a free pick.", tag: "Loot" },
-    { name: "food", about: "Food on the ground, which heals Tibo.", tag: "Eat" },
+    { name: "food", about: "Food on the ground (the game's heal pickup), which gives Tibo back health.", tag: "Eat" },
+    { name: "magnet", about: "The game's magnet pickup on the ground.", tag: "Magnet" },
     ...spots.sort((a, b) => a.name.localeCompare(b.name)),
   ];
 }

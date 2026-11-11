@@ -10,7 +10,7 @@ import { knobs, planEvery, templates } from "./run-templates";
 import { blocks, type Card, cards, renderBlocks } from "./blocks";
 import { PLAN_MODEL } from "./config";
 import { RunNotes } from "./run-notes";
-import { command, piloted, say, showState } from "./server";
+import { command, drive, piloted, say, showState } from "./server";
 import { decide, type Question } from "./decider";
 import { talliesOf, totalsBetween, totalsLines } from "./tallies";
 import { giveUps, type Goal, goalId, goalTitle, locate, outcomes, pursuit, setGoal } from "./goals";
@@ -64,9 +64,25 @@ function goalOptions(r: World): GoalOption[] {
       goal: { kind: "explore" as const, dir: s.dir },
       text: `explore ${s.dir}: walk ${knobs().exploreDistance} units that way, stopping at the first new chest, toward ${plural(s.enemies, "enemy")} on screen that way`,
     })),
-    { goal: { kind: "evade" }, text: `keep away from enemies for ${knobs().evadeSeconds} seconds` },
+    ...(drive === undefined ? [{ goal: { kind: "evade" as const }, text: `keep away from enemies for ${knobs().evadeSeconds} seconds` }] : fsdOptions(r)),
   ];
 }
+
+/** Full Self Driving's goals beyond the loop's: magnets on the ground, standing still, and a dash each way while Tibo has a charge. */
+function fsdOptions(r: World): GoalOption[] {
+  const charges = r.view.tibo.dash.charges;
+  return [
+    ...r.pickups
+      .filter((x) => x.type === "magnet" && x.dist < PLAN_RANGE)
+      .slice(0, GOAL_OPTIONS.magnets)
+      .map((x) => ({ goal: { kind: "pickup" as const, uid: x.id }, text: `walk to the magnet ${Math.round(x.dist)} away to the ${x.dir} and pick it up` })),
+    { goal: { kind: "still" }, text: "stand still where Tibo is until the planner picks another goal, stepping aside only when standing would cost more health than moving" },
+    ...(charges === 0 ? [] : r.sectors.map((s) => ({ goal: { kind: "dash" as const, dir: s.dir }, text: `dash ${s.dir} at once, a quick burst that way, using one of Tibo's ${charges} dash charges; ${plural(s.enemies, "enemy")} on screen that way` }))),
+  ];
+}
+
+/** What Tibo does when the planner gives no answer and no goal is under way. */
+const idle = (): Goal => (drive === undefined ? { kind: "evade" } : { kind: "still" });
 
 type PlanAnswer = { pick?: Card; goal: Goal; ms: number; cards?: CardOption[]; goals: CardOption[] };
 
@@ -123,15 +139,15 @@ export class Planner {
     const answers = await decide(state, questions, PLAN_MODEL, options !== undefined);
     const ms = Math.round(performance.now() - started);
     if (answers === undefined) {
-      // The goal under way stands; with none, Tibo keeps away from enemies until the planner is asked again.
-      if (pursuit === undefined) setGoal({ kind: "evade" }, r, this.log, { kind: "plan", prompt: state, goals: [] });
+      // The goal under way stands; with none, Tibo idles until the planner is asked again.
+      if (pursuit === undefined) setGoal(idle(), r, this.log, { kind: "plan", prompt: state, goals: [] });
       this.log.write(r, { event: "plan", model: PLAN_MODEL, reason: `${why}; the planner ${UNANSWERED}`, goal: pursuit?.id ?? "", action: "kept the goal", ms });
-      return { goal: pursuit?.goal ?? { kind: "evade" }, ms, goals: [] };
+      return { goal: pursuit?.goal ?? idle(), ms, goals: [] };
     }
 
     const score = (i: number) => answers[`goal:${i}`]?.noul ?? 0;
     const best = goals.map((_, i) => i).sort((x, y) => score(y) - score(x))[0] ?? goals.length - 1;
-    const goal = goals[best]?.goal ?? { kind: "evade" };
+    const goal = goals[best]?.goal ?? idle();
     const pickKey = answers.pick?.choice;
     const pick = options === undefined ? undefined : (keys.get(pickKey ?? "") ?? [...keys].find(([k]) => k.split(":")[0] === (pickKey ?? "").split(":")[0])?.[1] ?? options[0]);
     const cards: CardOption[] | undefined =

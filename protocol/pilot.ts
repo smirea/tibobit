@@ -67,7 +67,7 @@ export type Inspect =
 const ACTION_TAGS = [
   ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
   ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
-  ...["Dash", "Start", "Take over", "Over", "Stopped"],
+  ...["Dash", "Hold", "Start", "Take over", "Over", "Stopped"],
 ] as const;
 export type ActionTag = (typeof ACTION_TAGS)[number];
 // By the game's own point-of-interest kind; one the game adds later shows as a plain Spot.

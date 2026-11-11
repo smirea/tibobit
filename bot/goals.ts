@@ -14,7 +14,8 @@ import { say } from "./server";
 import { RunLog } from "./run-log/writer";
 import { goalCell, goalTitleCell, hurtLeaveCell, targetCell } from "./run-log/cells";
 
-export type Goal = { kind: "chest" | "poi" | "food" | "elite"; uid: number } | { kind: "explore"; dir: Direction } | { kind: "evade" };
+/** `pickup` is something the game drops on the ground other than xp, gold, chests and food, such as a magnet. `still` lasts until the planner picks another goal. */
+export type Goal = { kind: "chest" | "poi" | "food" | "elite" | "pickup"; uid: number } | { kind: "explore" | "dash"; dir: Direction } | { kind: "evade" } | { kind: "still" };
 
 type TargetGoal = Extract<Goal, { uid: number }>;
 
@@ -92,6 +93,10 @@ export function locate(r: World, g: TargetGoal): Located | undefined {
     const e = r.elites.find((x) => x.id === g.uid);
     return e === undefined ? undefined : { dist: e.dist, dir: e.dir, arrived: e.dist <= ELITE_REACH, charging: 0, progress: `${e.hp} health left, ${Math.round(e.dist)} away to the ${e.dir}`, name: `the ${e.name}` };
   }
+  if (g.kind === "pickup") {
+    const x = r.pickups.find((y) => y.id === g.uid);
+    return x === undefined ? undefined : { dist: x.dist, dir: x.dir, arrived: false, charging: 0, progress: "", name: `the ${x.type}` };
+  }
   const f = r.food.find((x) => x.id === g.uid);
   return f === undefined ? undefined : { dist: f.dist, dir: f.dir, arrived: false, charging: 0, progress: "", name: "the food" };
 }
@@ -99,7 +104,7 @@ export function locate(r: World, g: TargetGoal): Located | undefined {
 // Close enough for most weapons to reach an elite; nearer, each step is the action model's.
 export const ELITE_REACH = 70;
 
-const TARGET_DONE = { chest: "opened", poi: "charged and used", food: "eaten", elite: "killed" } as const;
+const TARGET_DONE = { chest: "opened", poi: "charged and used", food: "eaten", elite: "killed", pickup: "picked up" } as const;
 
 export function goalTitle(g: Goal, r: World): string {
   switch (g.kind) {
@@ -115,6 +120,12 @@ export function goalTitle(g: Goal, r: World): string {
       return `Explore ${g.dir}`;
     case "evade":
       return "Keep away from enemies";
+    case "pickup":
+      return `Pick up the ${r.pickups.find((x) => x.id === g.uid)?.type ?? "pickup"}`;
+    case "dash":
+      return `Dash ${g.dir}`;
+    case "still":
+      return "Stand still";
   }
 }
 
@@ -134,6 +145,12 @@ function goalTag(g: Goal, r: World): ActionTag {
       return "Wander";
     case "evade":
       return "Run";
+    case "pickup":
+      return "Magnet";
+    case "dash":
+      return "Dash";
+    case "still":
+      return "Hold";
   }
 }
 
@@ -143,7 +160,8 @@ export function aimAt(p: Pursuit, r: World): Course | Ended {
   switch (g.kind) {
     case "chest":
     case "poi":
-    case "food": {
+    case "food":
+    case "pickup": {
       const t = locate(r, g);
       if (t === undefined) return p.seen ? { done: TARGET_DONE[g.kind], success: true } : { done: "it is not there", success: false };
       p.seen = true;
@@ -170,6 +188,11 @@ export function aimAt(p: Pursuit, r: World): Course | Ended {
         return { done: lost > 0 ? `the ${knobs().evadeSeconds} seconds ran out, and Tibo lost ${lost} health during them` : `kept clear for ${knobs().evadeSeconds} seconds without losing health`, success: true };
       }
       return { progress: `${Math.ceil(knobs().evadeSeconds - age)}s left` };
+    // The dash itself is sent once by pursue(); until then Tibo heads that way.
+    case "dash":
+      return { heading: g.dir, progress: `dashing ${g.dir}` };
+    case "still":
+      return { heading: "stay", progress: `standing still for ${Math.round(age)}s, until the planner picks another goal` };
   }
 }
 
@@ -177,7 +200,7 @@ export function aimAt(p: Pursuit, r: World): Course | Ended {
 function targetOf(goal: Goal, r: World): { kind: string; dist: number; dir: string } | undefined {
   if (!("uid" in goal)) return undefined;
   const at = locate(r, goal);
-  const kind = goal.kind === "poi" ? r.spots.find((x) => x.id === goal.uid)?.type : goal.kind === "elite" ? r.elites.find((x) => x.id === goal.uid)?.type : goal.kind;
+  const kind = goal.kind === "poi" ? r.spots.find((x) => x.id === goal.uid)?.type : goal.kind === "elite" ? r.elites.find((x) => x.id === goal.uid)?.type : goal.kind === "pickup" ? r.pickups.find((x) => x.id === goal.uid)?.type : goal.kind;
   return at === undefined || kind === undefined ? undefined : { kind, dist: at.dist, dir: at.dir };
 }
 
@@ -201,7 +224,7 @@ function begin(goal: Goal, r: World, log: RunLog, decision: Inspect) {
   };
   const aim = aimAt(p, r);
   const seconds = goal.kind === "evade" ? knobs().evadeSeconds : goal.kind === "elite" ? knobs().eliteSeconds : "left" in aim && aim.left !== undefined ? aim.left / GOAL_SPEED : 0;
-  p.deadline = r.time + seconds + GOAL_SLACK;
+  p.deadline = goal.kind === "still" ? Number.POSITIVE_INFINITY : r.time + seconds + GOAL_SLACK;
   pursuit = p;
   log.write(r, { event: "goal", goal: p.id, action: "start", detail: title, ...(target === undefined ? {} : { target: targetCell.encode(target) }) });
   say({ role: "action", model: "goal", time: r.time, text: title, tag: p.tag, detail: "done" in aim ? aim.done : aim.progress, inspect: decision });

@@ -238,7 +238,7 @@ export function fsdPopup(pilot: Pilot, game: GameControl): { open(from: HTMLElem
         el.addEventListener("pointerleave", hideTip);
         return el;
       }),
-      ...(entities.length > 2 ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]),
+      ...(entities.length > 3 ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]),
     );
   };
 

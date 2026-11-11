@@ -159,8 +159,9 @@ export const dashCell = {
 
 /** A goal's id says what it is after: `C12` a chest, `P7` a spot, `F3` food, `E9` an elite, `explore left`, or the kind alone. */
 export const goalCell = {
-  encode: (g: { kind: string; uid?: number; dir?: string }) => (g.kind === "chest" ? `C${g.uid}` : g.kind === "poi" ? `P${g.uid}` : g.kind === "food" ? `F${g.uid}` : g.kind === "elite" ? `E${g.uid}` : g.kind === "explore" ? `explore ${g.dir}` : g.kind),
-  kind: (id: string) => (/^C\d/.test(id) ? "chest" : /^P\d/.test(id) ? "spot" : /^F\d/.test(id) ? "food" : /^E\d/.test(id) ? "elite" : id.split(" ")[0] || "?"),
+  encode: (g: { kind: string; uid?: number; dir?: string }) =>
+    g.kind === "chest" ? `C${g.uid}` : g.kind === "poi" ? `P${g.uid}` : g.kind === "food" ? `F${g.uid}` : g.kind === "elite" ? `E${g.uid}` : g.kind === "pickup" ? `K${g.uid}` : g.kind === "explore" || g.kind === "dash" ? `${g.kind} ${g.dir}` : g.kind,
+  kind: (id: string) => (/^C\d/.test(id) ? "chest" : /^P\d/.test(id) ? "spot" : /^F\d/.test(id) ? "food" : /^E\d/.test(id) ? "elite" : /^K\d/.test(id) ? "pickup" : id.split(" ")[0] || "?"),
 };
 
 /** What a row's reason ends with when the model it names never answered and the bot went on without it. */

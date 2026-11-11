@@ -2,7 +2,7 @@ import { aimAt, type Course, distrusted, ending, everListed, finish, goalId, out
 import { knobs } from "./run-templates";
 import { cheapestMove, dashOnTheWay, dashWorthAsking, moveCost, steer } from "./action-model";
 import type { Command, CommandStatus } from "../protocol/commands";
-import { send } from "./server";
+import { command, send } from "./server";
 import type { World } from "./world";
 import { RunLog } from "./run-log/writer";
 import type { Planner } from "./planner";
@@ -29,6 +29,12 @@ export async function pursue(s: State, r: World, log: RunLog, planner: Planner) 
     if (pursuit === undefined) await planner.plan(r, outcomes.length === 0 ? "the run started" : "the last goal ended");
     const p = pursuit as Pursuit | undefined;
     if (p === undefined) throw new Error("the planner set no goal");
+    if (p.goal.kind === "dash") {
+      const dashed = await command({ type: "dash", dir: p.goal.dir });
+      finish(r, log, dashed.state === "done" ? `dashed ${p.goal.dir}` : `the game said: ${dashed.detail ?? dashed.state}`, dashed.state === "done" ? "done" : "failed");
+      // `r` still shows the charge just spent, so the next goal is planned on the next step's state.
+      return;
+    }
     const status = p.commandId === undefined ? undefined : s.commands.find((c) => c.id === p.commandId);
     const aim = aimAt(p, r);
     const ended = ending(p, r, aim, status);

@@ -637,7 +637,7 @@
   var ACTION_TAGS = [
     ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
     ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
-    ...["Dash", "Start", "Take over", "Over", "Stopped"]
+    ...["Dash", "Hold", "Start", "Take over", "Over", "Stopped"]
   ];
   var SPOT_TAGS = {
     dog: "Pet",
@@ -2055,6 +2055,8 @@ Goal: {{goal}}.
         case "dash": {
           const game = this.game();
           const me = game.state.me;
+          if ((game.state.player.dashCharges[me] ?? 0) <= 0)
+            throw new Error("Tibo has no dash charge");
           const v = command.dir === undefined ? { x: game.state.player.fx[me] ?? 1, y: game.state.player.fy[me] ?? 0 } : unitOf(command.dir);
           game.dash(v.x, v.y);
           this.finish(status, "done");
@@ -2592,6 +2594,7 @@ Goal: {{goal}}.
     Freezer: ["M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7", "M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5", "M3.6 10.5l3.5-.8-1-3.4M20.4 13.5l-3.5.8 1 3.4M3.6 13.5l3.5.8-1 3.4M20.4 10.5l-3.5-.8 1-3.4"],
     Fryer: ["M5.5 10h13l-1.8 11H7.3z", "M8 10V4.5M10.7 10V3M13.3 10V3.5M16 10V5"],
     Dash: [{ fill: "M13 2 4 14h7l-1 8 9-12h-7z" }],
+    Hold: [{ fill: "M6.5 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM14.5 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" }],
     Start: [{ fill: "M7 4v16l13-8z" }],
     "Take over": [ring(12, 12, 9), ring(12, 12, 2.5), "M3.5 10.5l6 1M20.5 10.5l-6 1M12 14.5V21"],
     Over: ["M12 3a8 8 0 0 0-8 8c0 2.8 1.3 4.5 3 5.5V20a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3.5c1.7-1 3-2.7 3-5.5a8 8 0 0 0-8-8z", dot(9, 11.5, 1.9), dot(15, 11.5, 1.9), "M10 21v-2.5M14 21v-2.5"],
@@ -3627,7 +3630,7 @@ Recent goals: 0:41 Keep away from enemies: the 8 seconds ran out, and Tibo lost 
         el.addEventListener("pointerenter", () => showTip(`entity:${e.name}`, el.getBoundingClientRect(), h("b", "tbh-fsd-tip-name", e.name), h("div", "tbh-fsd-tip-about", e.about || "No description in the game.")));
         el.addEventListener("pointerleave", hideTip);
         return el;
-      }), ...entities.length > 2 ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]);
+      }), ...entities.length > 3 ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]);
     };
     const saved = h("span", "tbh-fsd-saved");
     const stopButton = h("button", "tbh-fsd-stop", "Stop driving");
@@ -3888,7 +3891,8 @@ Recent goals: 0:41 Keep away from enemies: the 8 seconds ran out, and Tibo lost 
     }
     return [
       { name: "chest", about: "A chest on the ground, from an elite or the map. Standing on it opens it for a free pick.", tag: "Loot" },
-      { name: "food", about: "Food on the ground, which heals Tibo.", tag: "Eat" },
+      { name: "food", about: "Food on the ground (the game's heal pickup), which gives Tibo back health.", tag: "Eat" },
+      { name: "magnet", about: "The game's magnet pickup on the ground.", tag: "Magnet" },
       ...spots.sort((a, b) => a.name.localeCompare(b.name))
     ];
   }
