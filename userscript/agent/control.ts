@@ -1,13 +1,13 @@
 import type { Game, GameState } from "../../game/types";
 import type { GameLink } from "../link/game-link";
-import { type Command, CommandFailure, type CommandStatus, type Envelope, type GameMode } from "../../protocol/commands";
+import { type Command, CommandFailure, type CommandStatus, type Envelope } from "../../protocol/commands";
 import { STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
-import { button, inRun, modeScreen, press, until, wait } from "../link/screen";
+import { inRun } from "../link/screen";
 import { type CheckpointFile, Checkpoints } from "./checkpoint";
-import { pickDifficulty, pickWeapon } from "./menus";
+import { showSummary, startRun } from "./menus";
 import { anchored, place, type Place, toward } from "./targets";
 import { applyLoadout } from "./loadout";
-import { clearSeed, requestSeed } from "./seed";
+import { requestSeed } from "./seed";
 import { Forecaster } from "./forecast";
 
 /** Where checkpoints live: the agent server's disk, reached through the bridge. */
@@ -129,10 +129,10 @@ export class Controller {
         this.finish(status, "done");
         return;
       case "start":
-        this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy", command.weapon).catch((e) => this.fail(status, e));
+        startRun(this.link, command.mode ?? "openWorld", command.difficulty ?? "easy", command.weapon).then((picked) => this.finish(status, "done", picked), (e) => this.fail(status, e));
         return;
       case "summary":
-        this.summary(status).catch((e) => this.fail(status, e));
+        showSummary(this.link).then(() => this.finish(status, "done"), (e) => this.fail(status, e));
         return;
       case "seed":
         requestSeed(command.seed);
@@ -173,75 +173,6 @@ export class Controller {
 
   // Only forward buttons: the summary sits right after the death screens, and anything else
   // ("Try Grok Bot", "Main menu") would leave it before its link is read.
-  private async summary(status: CommandStatus) {
-    if (inRun(this.link)) throw new Error("the run is still going");
-    const before = this.link.runLink;
-    for (let i = 0; i < 12; i++) {
-      this.link.noteRunLink();
-      if (this.link.runLink !== undefined && this.link.runLink !== before) return this.finish(status, "done");
-      const next = button(/^(Next|Continue|Skip)$/i);
-      if (next !== undefined) await press(next);
-      await wait(1000);
-    }
-    throw new Error("the run summary did not show a share link");
-  }
-
-  private async start(status: CommandStatus, mode: GameMode, difficulty: string, weapon: string | undefined) {
-    const entry = mode === "daily" ? /^Daily/ : "Open World";
-    if (inRun(this.link)) {
-      // Leave the current run through the pause menu: Main menu, then confirm. An agent's lockstep
-      // pause is not the menu, and Escape does not open the menu over it.
-      this.link.game?.setPaused(false);
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
-      if (!(await until(() => button("Main menu") !== undefined, 3000))) throw new Error("the pause menu did not open");
-      for (let i = 0; i < 2 && button(entry) === undefined; i++) {
-        const menu = button("Main menu");
-        if (menu !== undefined) await press(menu);
-        await wait(1500);
-      }
-    }
-    this.link.noteRunLink();
-    // After a death the game walks through a few screens (a promo, a summary) before the title.
-    // Advance through them, never pressing anything that leaves the game, such as "Try Grok Bot".
-    for (let i = 0; i < 15 && button(entry) === undefined && modeScreen() !== mode; i++) {
-      if (i === 14) {
-        const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
-        throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
-      }
-      // "Not now" closes the daily board's name picker without posting a name.
-      const next = button(/^(Not now|Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
-      this.link.noteRunLink();
-      if (next !== undefined) await press(next);
-      else {
-        // Some end screens (the run summary) have no button and listen for keys instead.
-        for (const key of ["Escape", "Enter"]) {
-          for (const type of ["keydown", "keyup"]) window.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
-          await wait(400);
-        }
-      }
-      await wait(1200);
-    }
-    if (modeScreen() !== mode) {
-      const open = button(entry);
-      if (open === undefined) throw new Error(`no ${mode} button on the title screen`);
-      await press(open);
-      if (!(await until(() => button("Start") !== undefined, 5000))) throw new Error(`the ${mode} screen did not open`);
-    }
-    const picked = await pickDifficulty(difficulty);
-    if (weapon !== undefined) await pickWeapon(weapon);
-    const before = this.link.game;
-    this.link.pauseAtStart = true;
-    button("Start")?.click();
-    // The opening cutscene is skipped by holding Space.
-    await wait(2500);
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true }));
-    const started = await until(() => inRun(this.link) && this.link.game !== before, 20000);
-    window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", bubbles: true }));
-    if (!started) throw new Error("the run did not start within 20 seconds");
-    clearSeed();
-    this.finish(status, "done", picked);
-  }
-
   private steer(game: Game): { x: number; y: number } | undefined {
     const active = this.active;
     if (active === undefined) return undefined;

@@ -50,7 +50,7 @@ export const goalTitleCell = {
 };
 
 /** One change to what Tibo holds: `Peeler 3/8 to 7/8`, `Spud Lob 1/8 new (the game's description)` or `Peeler gone`. */
-export type Change = { name: string; now?: string; before?: string; said?: string };
+type Change = { name: string; now?: string; before?: string; said?: string };
 export const changeCell = {
   encode: (c: Change) => (c.now === undefined ? `${c.name} gone` : c.before === undefined ? `${c.name} ${c.now} new${c.said ?? ""}` : `${c.name} ${c.before} to ${c.now}`),
   /** Whether the change is a card gained or lost, or a jump of `jump` or more levels at once, which only a chest gives. */

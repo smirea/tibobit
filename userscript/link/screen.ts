@@ -20,31 +20,6 @@ export function modeScreen(): GameMode | undefined {
   return button("Leaderboard") === undefined ? "openWorld" : "daily";
 }
 
-export function wait(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-// Some menu buttons only answer a click and others only a focused Enter, so try both.
-export async function press(el: HTMLElement) {
-  el.click();
-  await wait(300);
-  if (!el.isConnected) return;
-  el.focus();
-  for (const type of ["keydown", "keyup"]) el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", bubbles: true }));
-}
-
-export const byTestId = (id: string) => document.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`) ?? undefined;
-export const locked = (b: HTMLButtonElement | undefined) => b === undefined || b.disabled || b.getAttribute("aria-disabled") === "true";
-
-export async function until(check: () => boolean, ms: number): Promise<boolean> {
-  const end = performance.now() + ms;
-  while (performance.now() < end) {
-    if (check()) return true;
-    await wait(100);
-  }
-  return check();
-}
-
 /**
  * The open choice's cards and buttons in on-screen order, for the pilot's pick overlay. Level-ups,
  * chests and shrines show cards; shops such as the vendor or the dog kennel show plain buttons.

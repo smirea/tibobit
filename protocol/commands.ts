@@ -105,7 +105,7 @@ const SEED = /^[0-9A-Z]{1,7}$/;
 
 type CommandState = "running" | "done" | "failed" | "replaced";
 /** The failures a program acts on, by name; `detail` says the same to a person. */
-export type Failure = "weaponNotOffered" | "noRun" | "timeout" | "targetGone";
+type Failure = "weaponNotOffered" | "noRun" | "timeout" | "targetGone";
 
 /** `offered` comes with weaponNotOffered: the starting weapons the game offers this profile. */
 export type CommandStatus = { id: number; command: Command; state: CommandState; detail?: string; failure?: Failure; offered?: string[]; at: number };

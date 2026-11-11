@@ -304,29 +304,6 @@
       return;
     return button("Leaderboard") === undefined ? "openWorld" : "daily";
   }
-  function wait(ms) {
-    return new Promise((r) => setTimeout(r, ms));
-  }
-  async function press(el) {
-    el.click();
-    await wait(300);
-    if (!el.isConnected)
-      return;
-    el.focus();
-    for (const type of ["keydown", "keyup"])
-      el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", bubbles: true }));
-  }
-  var byTestId = (id) => document.querySelector(`[data-testid="${id}"]`) ?? undefined;
-  var locked = (b) => b === undefined || b.disabled || b.getAttribute("aria-disabled") === "true";
-  async function until(check, ms) {
-    const end = performance.now() + ms;
-    while (performance.now() < end) {
-      if (check())
-        return true;
-      await wait(100);
-    }
-    return check();
-  }
   function choiceCards() {
     const cards = [...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")];
     const buttons = [...document.querySelectorAll("button")].filter((b) => !b.matches(".ui-card, .ui-pause-btn, .ui-sound") && !b.closest(OURS) && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "" && !/^banish/i.test((b.textContent ?? "").trim()));
@@ -1504,6 +1481,35 @@
     }
   }
 
+  // userscript/agent/seed.ts
+  var SEED_KEY = "tibobit.seed";
+  function installSeedHook() {
+    let want = null;
+    try {
+      want = sessionStorage.getItem(SEED_KEY);
+    } catch {}
+    if (want === null)
+      return;
+    const n = parseInt(want, 36);
+    const page = typeof unsafeWindow === "undefined" ? window : unsafeWindow;
+    const real = page.crypto.getRandomValues.bind(page.crypto);
+    page.crypto.getRandomValues = (a) => {
+      if (a !== null && a.constructor.name === "Uint32Array" && a.length === 1) {
+        a[0] = n;
+        return a;
+      }
+      return real(a);
+    };
+  }
+  function requestSeed(seed) {
+    sessionStorage.setItem(SEED_KEY, seed);
+  }
+  function clearSeed() {
+    try {
+      sessionStorage.removeItem(SEED_KEY);
+    } catch {}
+  }
+
   // userscript/agent/menus.ts
   async function pickDifficulty(difficulty) {
     if (difficulty === "highest") {
@@ -1541,6 +1547,98 @@
     if (now !== id)
       throw new Error(`picked starting weapon ${id}, but the start screen shows ${now ?? "nothing"}`);
   }
+  async function showSummary(link) {
+    if (inRun(link))
+      throw new Error("the run is still going");
+    const before = link.runLink;
+    for (let i = 0;i < 12; i++) {
+      link.noteRunLink();
+      if (link.runLink !== undefined && link.runLink !== before)
+        return;
+      const next = button(/^(Next|Continue|Skip)$/i);
+      if (next !== undefined)
+        await press(next);
+      await wait(1000);
+    }
+    throw new Error("the run summary did not show a share link");
+  }
+  async function startRun(link, mode, difficulty, weapon) {
+    const entry = mode === "daily" ? /^Daily/ : "Open World";
+    if (inRun(link)) {
+      link.game?.setPaused(false);
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+      if (!await until(() => button("Main menu") !== undefined, 3000))
+        throw new Error("the pause menu did not open");
+      for (let i = 0;i < 2 && button(entry) === undefined; i++) {
+        const menu = button("Main menu");
+        if (menu !== undefined)
+          await press(menu);
+        await wait(1500);
+      }
+    }
+    link.noteRunLink();
+    for (let i = 0;i < 14 && button(entry) === undefined && modeScreen() !== mode; i++) {
+      const next = button(/^(Not now|Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
+      link.noteRunLink();
+      if (next !== undefined)
+        await press(next);
+      else {
+        for (const key of ["Escape", "Enter"]) {
+          for (const type of ["keydown", "keyup"])
+            window.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
+          await wait(400);
+        }
+      }
+      await wait(1200);
+    }
+    if (modeScreen() !== mode) {
+      const open = button(entry);
+      if (open === undefined) {
+        const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
+        throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
+      }
+      await press(open);
+      if (!await until(() => button("Start") !== undefined, 5000))
+        throw new Error(`the ${mode} screen did not open`);
+    }
+    const picked = await pickDifficulty(difficulty);
+    if (weapon !== undefined)
+      await pickWeapon(weapon);
+    const before = link.game;
+    link.pauseAtStart = true;
+    button("Start")?.click();
+    await wait(2500);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true }));
+    const started = await until(() => inRun(link) && link.game !== before, 20000);
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", bubbles: true }));
+    if (!started)
+      throw new Error("the run did not start within 20 seconds");
+    clearSeed();
+    return picked;
+  }
+  function wait(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+  async function press(el) {
+    el.click();
+    await wait(300);
+    if (!el.isConnected)
+      return;
+    el.focus();
+    for (const type of ["keydown", "keyup"])
+      el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", bubbles: true }));
+  }
+  var byTestId = (id) => document.querySelector(`[data-testid="${id}"]`) ?? undefined;
+  var locked = (b) => b === undefined || b.disabled || b.getAttribute("aria-disabled") === "true";
+  async function until(check, ms) {
+    const end = performance.now() + ms;
+    while (performance.now() < end) {
+      if (check())
+        return true;
+      await wait(100);
+    }
+    return check();
+  }
 
   // userscript/agent/targets.ts
   function anchored(s, to) {
@@ -1570,35 +1668,6 @@
       return { x: s.pickups.x[slot] ?? 0, y: s.pickups.y[slot] ?? 0, within: within ?? (radius === undefined ? 6 : radius * 0.5) };
     }
     return { x: to.x, y: to.y, within: within ?? 6 };
-  }
-
-  // userscript/agent/seed.ts
-  var SEED_KEY = "tibobit.seed";
-  function installSeedHook() {
-    let want = null;
-    try {
-      want = sessionStorage.getItem(SEED_KEY);
-    } catch {}
-    if (want === null)
-      return;
-    const n = parseInt(want, 36);
-    const page = typeof unsafeWindow === "undefined" ? window : unsafeWindow;
-    const real = page.crypto.getRandomValues.bind(page.crypto);
-    page.crypto.getRandomValues = (a) => {
-      if (a !== null && a.constructor.name === "Uint32Array" && a.length === 1) {
-        a[0] = n;
-        return a;
-      }
-      return real(a);
-    };
-  }
-  function requestSeed(seed) {
-    sessionStorage.setItem(SEED_KEY, seed);
-  }
-  function clearSeed() {
-    try {
-      sessionStorage.removeItem(SEED_KEY);
-    } catch {}
   }
 
   // userscript/agent/control.ts
@@ -1711,10 +1780,10 @@
           this.finish(status, "done");
           return;
         case "start":
-          this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy", command.weapon).catch((e) => this.fail(status, e));
+          startRun(this.link, command.mode ?? "openWorld", command.difficulty ?? "easy", command.weapon).then((picked) => this.finish(status, "done", picked), (e) => this.fail(status, e));
           return;
         case "summary":
-          this.summary(status).catch((e) => this.fail(status, e));
+          showSummary(this.link).then(() => this.finish(status, "done"), (e) => this.fail(status, e));
           return;
         case "seed":
           requestSeed(command.seed);
@@ -1749,77 +1818,6 @@
         this.finish(this.active.status, "replaced");
       this.checkpoints.load(game, name, file);
       this.finish(status, "done", `${Math.round(game.state.runClock * 10) / 10}s`);
-    }
-    async summary(status) {
-      if (inRun(this.link))
-        throw new Error("the run is still going");
-      const before = this.link.runLink;
-      for (let i = 0;i < 12; i++) {
-        this.link.noteRunLink();
-        if (this.link.runLink !== undefined && this.link.runLink !== before)
-          return this.finish(status, "done");
-        const next = button(/^(Next|Continue|Skip)$/i);
-        if (next !== undefined)
-          await press(next);
-        await wait(1000);
-      }
-      throw new Error("the run summary did not show a share link");
-    }
-    async start(status, mode, difficulty, weapon) {
-      const entry = mode === "daily" ? /^Daily/ : "Open World";
-      if (inRun(this.link)) {
-        this.link.game?.setPaused(false);
-        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
-        if (!await until(() => button("Main menu") !== undefined, 3000))
-          throw new Error("the pause menu did not open");
-        for (let i = 0;i < 2 && button(entry) === undefined; i++) {
-          const menu = button("Main menu");
-          if (menu !== undefined)
-            await press(menu);
-          await wait(1500);
-        }
-      }
-      this.link.noteRunLink();
-      for (let i = 0;i < 15 && button(entry) === undefined && modeScreen() !== mode; i++) {
-        if (i === 14) {
-          const seen = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter(Boolean);
-          throw new Error(`no way back to the title; buttons on screen: ${seen.join(", ") || "none"}`);
-        }
-        const next = button(/^(Not now|Next|Continue|Skip|Done|Close|OK|Menu|Main menu|Title|Back to title|Back|Home)$/i);
-        this.link.noteRunLink();
-        if (next !== undefined)
-          await press(next);
-        else {
-          for (const key of ["Escape", "Enter"]) {
-            for (const type of ["keydown", "keyup"])
-              window.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
-            await wait(400);
-          }
-        }
-        await wait(1200);
-      }
-      if (modeScreen() !== mode) {
-        const open = button(entry);
-        if (open === undefined)
-          throw new Error(`no ${mode} button on the title screen`);
-        await press(open);
-        if (!await until(() => button("Start") !== undefined, 5000))
-          throw new Error(`the ${mode} screen did not open`);
-      }
-      const picked = await pickDifficulty(difficulty);
-      if (weapon !== undefined)
-        await pickWeapon(weapon);
-      const before = this.link.game;
-      this.link.pauseAtStart = true;
-      button("Start")?.click();
-      await wait(2500);
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true }));
-      const started = await until(() => inRun(this.link) && this.link.game !== before, 20000);
-      window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", bubbles: true }));
-      if (!started)
-        throw new Error("the run did not start within 20 seconds");
-      clearSeed();
-      this.finish(status, "done", picked);
     }
     steer(game) {
       const active = this.active;

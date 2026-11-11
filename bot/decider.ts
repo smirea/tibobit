@@ -19,7 +19,7 @@ export const snapshotAges: number[] = [];
 // 59. An answer this late is given up on, and the next step asks afresh about the game as it is then.
 const LIVE_ANSWER_MS = 1200;
 /** How many decisions asked while the game ran were given up on, for the run's end summary. */
-export const unanswered = { count: 0 };
+const unanswered = { count: 0 };
 
 /**
  * Asks the decision model. `frozen` says the game is stopped on a choice, where a slow answer costs
