@@ -20,7 +20,7 @@ export function standardGyms(next: number): Gym[] {
   ];
 }
 
-export const building = new Map<string, Promise<Gym>>();
+const building = new Map<string, Promise<Gym>>();
 
 /** Builds a gym on a slot and records the outcome; one build per gym at a time in this process. */
 export function buildGym(slot: Slot, gym: Gym, templates: Templates): Promise<Gym> {

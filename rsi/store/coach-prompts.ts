@@ -20,7 +20,7 @@ export const PROMPT_TITLES = { experiments: "Experiments", fullRun: "Full run", 
 
 export type PromptKey = keyof typeof PROMPT_TITLES;
 
-export const PROMPT_KEYS = Object.keys(PROMPT_TITLES) as PromptKey[];
+const PROMPT_KEYS = Object.keys(PROMPT_TITLES) as PromptKey[];
 
 export function splitPrompts(text: string): Record<PromptKey, string> {
   const parts = text.split(/^(?=# )/m).map((p) => p.trim()).filter(Boolean);

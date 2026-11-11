@@ -49,7 +49,7 @@ export type ChoiceOption = { action: ChoiceAction; name: string; description?: s
 
 /**
  * The game as a live game needs it, built by the agent server from the game state and the game's
- * encyclopedia (scripts/view.ts). Times are run seconds; distances world units.
+ * encyclopedia (agent-server/live-view.ts). Times are run seconds; distances world units.
  */
 export type LiveView = {
   time: number;

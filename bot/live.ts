@@ -12,16 +12,16 @@ export let modeSet = false;
 // crowd), the snapshot is some ms old, and the action model takes its time. Tibo keeps its current move meanwhile, so the page's forecast plays that first.
 // Measured over 10,640 live steps, a move forecast as free lost health 14.5% of the time when it
 // turned Tibo and 1.4% when it kept the direction: the turn was planned from where Tibo no longer was.
-export const FORECAST_REFRESH_LAG = 0.1;
+const FORECAST_REFRESH_LAG = 0.1;
 
-export let decideSeconds = 0.18;
+let decideSeconds = 0.18;
 
 /** This step asked the action model, so the next one does not wait out the step time. */
 export let modelSteered = false;
 
-export let lagSent = -1;
+let lagSent = -1;
 
-export function lagNow(ageMs: number): number {
+function lagNow(ageMs: number): number {
   return Math.min(1, Math.max(0, ageMs / 1000 + decideSeconds + FORECAST_REFRESH_LAG));
 }
 

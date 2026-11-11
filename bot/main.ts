@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 // Plays tibo.dog through the agent server with prompt templates the coach wrote (--templates, else
-// its playbook; scripts/recursive-self-improvement.ts runs the coach). In the
-// game, a decision model plans (picks every card
+// its playbook; rsi/main.ts runs the coach). In the game, a decision model plans (picks every card
 // and sets short-term goals) and acts (steps around danger on the way to the goal). The file removes
 // only options the game itself rules out: cards Tibo cannot take, and moves the game's own
 // simulation says cost clearly more health over its horizon (the forecastSeconds knob) than the cheapest one.
@@ -16,7 +15,7 @@ import { command, followPanel, pace, RAW, say, server, type Snap, timed, timings
 import { BOT_CODE, difficulty, MODE, MODE_NAME, setDifficulty, WIN_SECONDS } from "./run-context";
 import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RUN_COUNT, STEP, TAKEOVER, TRIAL, TRIAL_RESULT, WEAPON } from "./flags";
 import { RunNotes } from "./run-notes";
-import { setTemplates, templates } from "./playing";
+import { setTemplates } from "./playing";
 import { choose, loadoutLines, Planner } from "./planner";
 import { beginStep, forgetMode, modelSteered, modeSet, setMode, tellLag } from "./live";
 import { pursue } from "./pursue";
@@ -28,7 +27,6 @@ import { clock } from "../format";
 // The first run plays this Open World seed in a freshly reloaded tab, or the bot stops rather than play another.
 let SEED = option("seed", "").toUpperCase();
 
-const ON_CHEST = 14;
 
 let rescuedLink: string | undefined;
 

@@ -937,7 +937,7 @@
         post(origin, "/pilot", change).then((ok) => {
           if (ok)
             return;
-          pilot = { ...pilot, detail: `the agent server on ${origin} refused ${JSON.stringify(change)}; restart it with this version of scripts/agent-server.ts` };
+          pilot = { ...pilot, detail: `the agent server on ${origin} refused ${JSON.stringify(change)}; restart it with this version of agent-server/main.ts` };
           notify();
         });
       },
@@ -2918,7 +2918,7 @@
       const pilot = bridge.pilot();
       wheel.hidden = pilot.state !== "off";
       wheel.disabled = !live;
-      wheel.title = live ? "" : "Start the agent server first: ./scripts/agent-server.ts";
+      wheel.title = live ? "" : "Start the agent server first: ./agent-server/main.ts";
       incognito.setAttribute("aria-pressed", String(pilot.incognito));
       wheelNote.textContent = pilot.detail ?? "";
       wheelNote.hidden = pilot.detail === undefined;

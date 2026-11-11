@@ -3,7 +3,7 @@
 
 import { csvField, parseCsv } from "../../csv";
 
-export const goalKind = (id: string) => (id.startsWith("C") ? "chest" : id.startsWith("P") ? "spot" : id.startsWith("F") ? "food" : /^E\d/.test(id) ? "elite" : id.split(" ")[0] || "?");
+const goalKind = (id: string) => (id.startsWith("C") ? "chest" : id.startsWith("P") ? "spot" : id.startsWith("F") ? "food" : /^E\d/.test(id) ? "elite" : id.split(" ")[0] || "?");
 
 /** A Markdown summary of a run from its CSV log. */
 export function runStats(csv: string): string {

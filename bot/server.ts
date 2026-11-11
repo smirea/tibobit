@@ -18,7 +18,7 @@ export let piloted = false;
 
 export const PICK_SHOW_MS = 2000;
 
-export let chatQueue = Promise.resolve();
+let chatQueue = Promise.resolve();
 
 /**
  * A line for the panel's chat, shown while the bot has the wheel. Never awaited, so the chat cannot

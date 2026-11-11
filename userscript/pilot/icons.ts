@@ -62,7 +62,7 @@ export const ACTION_ICONS: Record<ActionTag, Icon> = {
 
 /** A line the bot said without a tag, such as an error. */
 export const NOTE_ICON: Icon = ["M4 5h16v11H9l-4 4v-4H4z", "M8 9h8M8 12h5"];
-export const STILL_ICON: Icon = [ring(12, 12, 3.5)];
+const STILL_ICON: Icon = [ring(12, 12, 3.5)];
 const ARROW_ICON: Icon = ["M4 12h15", "M13 6l6 6-6 6"];
 const DIRECTION_TURNS: Record<string, number> = { right: 0, "down-right": 45, down: 90, "down-left": 135, left: 180, "up-left": 225, up: 270, "up-right": 315 };
 export const RESULT_ICONS: Record<GoalResult, Icon> = { done: ["M5 12.5l4.5 4.5L19 7.5"], failed: ["M6 6l12 12M18 6 6 18"], dropped: ["M6 12h12"] };

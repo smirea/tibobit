@@ -45,12 +45,12 @@ export const PLAYBOOK_CONTRACT = `"playbook": optional changes to your playbook:
 
 export type LastGames = { tag: string; results: GameResult[]; gyms: string[] };
 
-export async function lastGames(): Promise<LastGames | undefined> {
+async function lastGames(): Promise<LastGames | undefined> {
   const f = Bun.file(path.join(LOGS, "last-games.json"));
   return (await f.exists()) ? ((await f.json()) as LastGames) : undefined;
 }
 
-export const describeStart = (from: Start, gyms: Gym[]) => {
+const describeStart = (from: Start, gyms: Gym[]) => {
   if ("gym" in from) {
     const name = from.gym;
     const g = gyms.find((x) => x.name === name);
@@ -128,7 +128,7 @@ export async function facts(state: CoachState, playbook: Playbook): Promise<stri
   ].join("\n\n");
 }
 
-export function catalog(): string {
+function catalog(): string {
   const slots = (Object.entries(SLOTS) as [TemplateSlot, (typeof SLOTS)[TemplateSlot]][]).map(
     ([slot, s]) => `- ${slot}: ${s.about}. Extra values: ${Object.entries(s.vars).map(([k, v]) => `{{${k}}} (${v})`).join(", ")}.${s.required.length > 0 ? ` Must use ${s.required.map((x) => `{{${x}}}`).join(", ")}.` : ""}`,
   );
@@ -145,7 +145,7 @@ export function catalog(): string {
 }
 
 /** How the game and the bot work. Only code changes this; the coach asks through infrastructure requests. */
-export function botFacts(models: { planner: string; action: string }): string {
+function botFacts(models: { planner: string; action: string }): string {
   return [
     "tibo.dog is a survivors-like game. Weapons fire on their own; the player only walks, dashes, and picks level-up upgrades, chest rewards and shrine options. Tibo has 6 weapon and 6 passive slots. A base weapon at max level plus its catalyst (a passive or an item) evolves at the next chest; evolved weapons are much stronger, and two evolved weapons can sometimes fuse into a union.",
     `Two in-game models play, and which models they are is fixed: the planner (${models.planner}) and the action model (${models.action}). They are small, fast decision models that never write text. Each call sends one state text and a set of questions, all answered against that state: a yes/no question answered as a probability from 0 to 1 (noul), a score on a named scale, or a choice among keys. The templates are that state text and those questions.`,

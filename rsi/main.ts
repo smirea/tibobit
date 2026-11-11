@@ -5,7 +5,6 @@
 // evaluation seed in a reloaded tab, with the coach's best playbook. After the full run the coach
 // reviews it, reflects on its own prompts and rewrites them, and the loop commits gameplay/.
 // Everything the coach knows between calls is in gameplay/ (see rsi/store/).
-import path from "node:path";
 import { updateGyms } from "./store/gyms";
 import { EXPERIMENT_ITERATIONS } from "./rules";
 import { readCoachState, tagOf } from "./store/coach-log";

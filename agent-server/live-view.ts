@@ -1,4 +1,4 @@
-// The game as a live game needs it (LiveView in src/agent/protocol.ts), built by the agent server
+// The game as a live game needs it (LiveView in protocol/view.ts), built by the agent server
 // from the page's snapshot (the game state, its surroundings and the sim forecast) and the game's
 // encyclopedia. Names and descriptions are the game's English; ids and kinds are the game's own.
 import { comboProgress, type Loadout, nameOf, partState, relevantCombos } from "../game/catalog";
@@ -64,7 +64,7 @@ const UNDER = 14;
 const round = (n: number) => Math.round(n * 10) / 10;
 
 
-export function loadoutOf(weapons: { id: string; level: number }[], passives: { id: string; level: number }[], items: { id: string; count: number }[]): Loadout {
+function loadoutOf(weapons: { id: string; level: number }[], passives: { id: string; level: number }[], items: { id: string; count: number }[]): Loadout {
   const l: Loadout = new Map();
   for (const w of weapons) l.set(`weapon:${w.id}`, w.level);
   for (const p of passives) l.set(`passive:${p.id}`, p.level);
@@ -73,7 +73,7 @@ export function loadoutOf(weapons: { id: string; level: number }[], passives: { 
 }
 
 /** A damage source ("enemy:<id>", "boss:<id>" or a ground name such as "Hot oil") in the game's English where it names it. */
-export function sourceName(b: Book, source: string): string {
+function sourceName(b: Book, source: string): string {
   const [kind, id = ""] = source.split(":");
   return kind === "enemy" || kind === "boss" ? (line(b, kind, id) ?? source) : source;
 }

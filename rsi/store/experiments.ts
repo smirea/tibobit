@@ -29,7 +29,7 @@ export const EXPERIMENT_STATUSES = ["proposed", "running", "done", "recheck", "r
 
 export const EXPERIMENT_RESULTS = ["", "confirmed", "refuted", "inconclusive"] as const;
 
-export type Area = keyof typeof AREAS;
+type Area = keyof typeof AREAS;
 
 export type Experiment = {
   name: string;
@@ -48,13 +48,13 @@ export type Experiment = {
 
 export const EXPERIMENT_TEXT = ["hypothesis", "method", "findings"] as const;
 
-export const EXPERIMENT_FIELDS = ["status", "area", "result", "created", "updated"] as const;
+const EXPERIMENT_FIELDS = ["status", "area", "result", "created", "updated"] as const;
 
 export const EXPERIMENT_NAME = /^[a-z0-9]+(-[a-z0-9]+){0,7}$/;
 
 export const experimentFile = (name: string) => path.join(EXPERIMENTS_DIR, `experiment_${name}.md`);
 
-export const title = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const title = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function renderExperiment(e: Experiment): string {
   return [
@@ -136,16 +136,14 @@ export function coverage(rows: Experiment[]): string {
 /** The loops an experiment had games in, from its game ids (L4.I3.G2). */
 export const gameLoops = (e: Experiment) => [...e.games.matchAll(/^### L(\d+)\.I\d+\.G\d+/gm)].map((m) => Number(m[1]));
 
-/** The ids of an experiment's games, such as L4.I3.G2. */
-export const gameIds = (e: Experiment) => [...e.games.matchAll(/^### (L\d+\.I\d+\.G\d+)/gm)].map((m) => m[1] ?? "");
 
-export const lastLoopTested = (rows: Experiment[], area: Area) => Math.max(0, ...rows.filter((r) => r.area === area).flatMap(gameLoops));
+const lastLoopTested = (rows: Experiment[], area: Area) => Math.max(0, ...rows.filter((r) => r.area === area).flatMap(gameLoops));
 
 /**
  * The areas every loop has to look at. One that had no games this loop or the last is overdue,
  * and while any is, each iteration plays at least one game for an overdue area.
  */
-export const REQUIRED_AREAS = ["build", "items", "economy", "bosses", "movement", "spots", "models"] as const satisfies readonly Area[];
+const REQUIRED_AREAS = ["build", "items", "economy", "bosses", "movement", "spots", "models"] as const satisfies readonly Area[];
 
 export const overdueAreas = (rows: Experiment[], loop: number) => REQUIRED_AREAS.filter((a) => lastLoopTested(rows, a) < loop - 1);
 

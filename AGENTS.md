@@ -6,4 +6,4 @@ The owner's Tampermonkey loads `dist/tibo-helper.user.js` straight from this che
 
 ## Action icons
 
-Each action tile in the bot panel shows an icon for its tag. The tags are `ACTION_TAGS` in `src/agent/protocol.ts`, and the icons are `ACTION_ICONS` in `src/icons.ts`. A new tag does not type-check until it has an icon. Draw it on the same 24x24 grid as the others: round-capped 2-unit strokes, plus filled shapes where they read better. If you cannot draw a recognisable one by hand, have Codex generate the SVG paths. Then render every tag in a real browser and look at the new icon next to the others before you commit.
+Each action tile in the bot panel shows an icon for its tag. The tags are `ACTION_TAGS` in `protocol/pilot.ts`, and the icons are `ACTION_ICONS` in `userscript/pilot/icons.ts`. A new tag does not type-check until it has an icon. Draw it on the same 24x24 grid as the others: round-capped 2-unit strokes, plus filled shapes where they read better. If you cannot draw a recognisable one by hand, have Codex generate the SVG paths. Then render every tag in a real browser and look at the new icon next to the others before you commit.

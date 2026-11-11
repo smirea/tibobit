@@ -13,7 +13,7 @@ export const option = (name: string, fallback: string) => {
 
 export const MODEL = option("model", "h2o-lightning-4b@q8_0");
 
-// A trial (a training game, scripts/slots.ts) plays the run in progress, usually a loaded checkpoint, for this many
+// A trial (a training game, rsi/training/slots.ts) plays the run in progress, usually a loaded checkpoint, for this many
 // seconds of game time with the templates in --templates, then writes what happened to --result and
 // exits: no plan, notes, review or commit.
 export const TRIAL = args.includes("--trial") ? Number(option("trial", "")) : undefined;
@@ -41,7 +41,7 @@ export const SERVER = option("server", process.env.TIBO_SERVER ?? BRIDGE_ORIGIN)
 
 // A System One decisions endpoint: LM Studio locally, or OpenRouter's (`--decider openrouter`),
 // which serves TypeSafe's Jev models and needs OPENROUTER_API_KEY.
-export const DECIDERS: Record<string, string> = { lmstudio: "http://localhost:1234/v1/systemone", openrouter: "https://openrouter.ai/api/alpha/decisions" };
+const DECIDERS: Record<string, string> = { lmstudio: "http://localhost:1234/v1/systemone", openrouter: "https://openrouter.ai/api/alpha/decisions" };
 
 export const DECIDER = DECIDERS[option("decider", "lmstudio")] ?? option("decider", "lmstudio");
 
@@ -68,7 +68,7 @@ export const MODE_ARG: GameMode | "current" = (() => {
   return mode;
 })();
 
-export const CRUTCH = "lockstep is a crutch: it pauses the game while the models think, which no player can do. Every game plays live, as a person plays it. Do not enable it.";
+const CRUTCH = "lockstep is a crutch: it pauses the game while the models think, which no player can do. Every game plays live, as a person plays it. Do not enable it.";
 if (args.includes("--lockstep") || args.includes("--speed")) throw new Error(CRUTCH);
 
 // Notes are for full runs only: --notes writes one to gameplay/notes when the run ends, under

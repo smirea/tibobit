@@ -22,7 +22,7 @@ export const explores = (spec: GameSpec, open: Set<string>) =>
   [...("fresh" in spec.from ? [spec.from.fresh.weapon] : []), ...(spec.loadout?.weapons ?? []).map((w) => w.id), ...(spec.loadout?.passives ?? []).map((p) => p.id)].filter((id) => open.has(id));
 
 
-export function checkLoadout(raw: unknown, at: string, errors: string[]): LoadoutSpec | undefined {
+function checkLoadout(raw: unknown, at: string, errors: string[]): LoadoutSpec | undefined {
   if (raw === undefined) return undefined;
   try {
     const l = parseLoadout(raw as Record<string, unknown>);
@@ -37,13 +37,13 @@ export function checkLoadout(raw: unknown, at: string, errors: string[]): Loadou
   }
 }
 
-export const startWeapon = (v: unknown, at: string, errors: string[]): string => {
+const startWeapon = (v: unknown, at: string, errors: string[]): string => {
   if (v === undefined || v === "random" || v === "") return "";
   if (typeof v !== "string" || !IDS.base.has(v)) errors.push(`${at} must be "random" or a base weapon id: ${[...IDS.base].join(", ")}`);
   return String(v);
 };
 
-export function describeChanges(raw: { planner?: unknown; action?: unknown; knobs?: unknown } | undefined): string {
+function describeChanges(raw: { planner?: unknown; action?: unknown; knobs?: unknown } | undefined): string {
   if (raw === undefined) return "";
   return [
     ...Object.entries((raw.knobs as Record<string, unknown>) ?? {}).map(([k, v]) => `${k} ${v}`),

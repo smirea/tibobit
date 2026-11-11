@@ -1,5 +1,5 @@
 import path from "node:path";
-/** The run's notes, written to gameplay/notes when the run ends; scripts/gameplay.ts has the format. */
+/** The run's notes, written to gameplay/notes when the run ends; bot/notes.ts has the format. */
 import { keyNumbers, runStats } from "./run-log/stats";
 import { NOTES_DIR, notesName, renderNotes, type RunEnd, runId, type RunPlan, type RunSetup } from "./notes";
 import { existsSync } from "node:fs";

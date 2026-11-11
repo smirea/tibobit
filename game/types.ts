@@ -1,14 +1,14 @@
 
-export type WeaponDef = {
+type WeaponDef = {
   id: string;
   tier: "base" | "evolved" | "union";
   levels?: unknown[];
   from?: string | string[];
   catalyst?: string;
 };
-export type PassiveDef = { id: string; maxLevel: number; stat?: string; perLevel?: number };
-export type ItemDef = { id: string; tier: "base" | "evolved"; from?: string; catalyst?: string; rarity?: number };
-export type EnemyDef = { id: string; hp: number; speed: number; damage: number; radius: number };
+type PassiveDef = { id: string; maxLevel: number; stat?: string; perLevel?: number };
+type ItemDef = { id: string; tier: "base" | "evolved"; from?: string; catalyst?: string; rarity?: number };
+type EnemyDef = { id: string; hp: number; speed: number; damage: number; radius: number };
 
 export type Content = {
   baseWeapons: WeaponDef[];
@@ -36,14 +36,14 @@ export type Table = Content & {
   botHelps: { id: string }[];
 };
 
-export type Offer = { type: "weapon" | "passive" | "item"; id: string; level?: number; isNew?: boolean };
-export type Choice = { kind: string; offers?: Offer[]; rewards?: unknown[]; level?: number; gold?: number };
+type Offer = { type: "weapon" | "passive" | "item"; id: string; level?: number; isNew?: boolean };
+type Choice = { kind: string; offers?: Offer[]; rewards?: unknown[]; level?: number; gold?: number };
 
 type Column<T = number> = { [index: number]: T | undefined; length: number };
-export type SlotPool = { count: number; slotAt(n: number): number; isAlive(slot: number): boolean; id(slot: number): number; has(id: number): boolean };
-export type Pool<F extends string> = { pool: SlotPool } & Record<F, Column>;
+type SlotPool = { count: number; slotAt(n: number): number; isAlive(slot: number): boolean; id(slot: number): number; has(id: number): boolean };
+type Pool<F extends string> = { pool: SlotPool } & Record<F, Column>;
 
-export type Poi = {
+type Poi = {
   id: string;
   kind: string;
   x: number;
@@ -54,7 +54,7 @@ export type Poi = {
   varietyPlace?: string;
   variant?: { kind: string };
 };
-export type Hazard = { kind: string; x: number; y: number; radius: number; strength: number; poolShape: number; turn: number };
+type Hazard = { kind: string; x: number; y: number; radius: number; strength: number; poolShape: number; turn: number };
 
 /** The game's hit test for a shaped pool: is the point (dx, dy) from its centre inside, with `pad` of slack? */
 export type InPool = (poolShape: number, turn: number, dx: number, dy: number, radius: number, pad: number) => boolean;

@@ -9,7 +9,7 @@ import { INFRA_COLUMNS, readInfra } from "./infra";
 import { BELIEFS_CSV, INFRA_CSV } from "./paths";
 import { type Checked, isText } from "../../protocol/parse";
 
-export type ExperimentEdit = Partial<Omit<Experiment, "games" | "created" | "updated">> & { name: string };
+type ExperimentEdit = Partial<Omit<Experiment, "games" | "created" | "updated">> & { name: string };
 
 export type LoopEdits = { experiments?: ExperimentEdit[]; beliefs?: BeliefRow[]; infra?: { request: string; why: string }[] };
 
@@ -18,7 +18,7 @@ export type Tables = { beliefs: BeliefRow[]; experiments: Experiment[] };
 
 export const readTables = async (): Promise<Tables> => ({ beliefs: await readBeliefs(), experiments: await readExperiments() });
 
-export function checkExperimentEdits(raw: unknown, before: Experiment[], errors: string[]): ExperimentEdit[] | undefined {
+function checkExperimentEdits(raw: unknown, before: Experiment[], errors: string[]): ExperimentEdit[] | undefined {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw)) {
     errors.push("experiments must be an array of the experiments to add or change");

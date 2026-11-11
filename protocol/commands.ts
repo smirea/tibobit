@@ -73,7 +73,7 @@ export type Command =
   | ({ type: "loadout" } & LoadoutSpec);
 
 /** The actions the game's `choose` accepts, as its run recorder logs them. */
-export const CHOICE_ACTIONS = ["pick", "banish", "buy", "reroll", "skip", "close", "accept", "continue", "endRun"] as const;
+const CHOICE_ACTIONS = ["pick", "banish", "buy", "reroll", "skip", "close", "accept", "continue", "endRun"] as const;
 export type ChoiceAction = { type: "pick" | "banish" | "buy"; index: number } | { type: "reroll" | "skip" | "close" | "accept" | "continue" | "endRun" };
 
 export type LoadoutSpec = {
@@ -103,12 +103,12 @@ export type CheckpointMeta = {
 export const CHECKPOINT_NAME = /^[\w.@-]{1,100}$/;
 const SEED = /^[0-9A-Z]{1,7}$/;
 
-export type CommandState = "running" | "done" | "failed" | "replaced";
+type CommandState = "running" | "done" | "failed" | "replaced";
 export type CommandStatus = { id: number; command: Command; state: CommandState; detail?: string; at: number };
 
 export type Envelope = { id: number; command: Command };
 
-export const GAME_MODES = ["openWorld", "daily"] as const;
+const GAME_MODES = ["openWorld", "daily"] as const;
 export type GameMode = (typeof GAME_MODES)[number];
 
 /** What a run can be started on; "highest" is the hardest the game allows, up through the unlocked Nightmare levels. */

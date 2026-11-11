@@ -15,10 +15,10 @@ import type { EndJson, World } from "./world";
 import { RunLog } from "./run-log/writer";
 import { clock } from "../format";
 
-export type GoalOption = { goal: Goal; text: string };
+type GoalOption = { goal: Goal; text: string };
 
 /** Every goal Tibo could take on next, in words the model can weigh one at a time. */
-export function goalOptions(r: World): GoalOption[] {
+function goalOptions(r: World): GoalOption[] {
   const given = (id: string) => {
     const until = giveUps.get(id);
     const last = [...outcomes].reverse().find((o) => o.id === id && !o.success);
@@ -61,7 +61,7 @@ export function goalOptions(r: World): GoalOption[] {
   ];
 }
 
-export type PlanAnswer = { pick?: Card; goal: Goal; ms: number; cards?: CardOption[]; goals: CardOption[] };
+type PlanAnswer = { pick?: Card; goal: Goal; ms: number; cards?: CardOption[]; goals: CardOption[] };
 
 export class Planner {
   calls = 0;
@@ -192,7 +192,7 @@ export const loadoutLines = (r: World) => [
 
 // Picks that did nothing (an item Tibo cannot afford, say) for the choice now open, so they are
 // not taken again and again.
-export let deadPicks: { signature: string; names: Set<string> } = { signature: "", names: new Set() };
+let deadPicks: { signature: string; names: Set<string> } = { signature: "", names: new Set() };
 
 export async function choose(r: World, planner: Planner, log: RunLog) {
   const b = await readBook();

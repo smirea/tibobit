@@ -9,7 +9,7 @@ export const NOTES_DIR = path.join(GAMEPLAY, "notes");
 // The bot writes the facts, the plan and the prompts; the coach writes the review between the
 // review markers. `--review` and the next plan read a notes file back from these same headings.
 
-export type Surface = "headless" | "browser";
+type Surface = "headless" | "browser";
 
 /** `bot` is the commit of the bot code that played, so a review can tell whether a fix had landed. */
 export type RunSetup = { started: Date; difficulty: string; mode: "daily" | "world"; surface: Surface; seed: string; planner: string; action: string; coach: string; bot: string };
@@ -20,9 +20,9 @@ export type RunPlan = { source: string; intent: string; templates: Templates; we
 export type RunEnd = { lived: number; level?: number; kills?: number; ending: string; outcome: string[] };
 
 /** `started` is what Tibo actually started with, which says whether the coach's choice was offered. */
-export type NotesContent = { setup: RunSetup; plan: RunPlan; end: RunEnd; link: string; log: string; prompts: string; picks: string[]; review: string; started: string; stats: string; key: string };
+type NotesContent = { setup: RunSetup; plan: RunPlan; end: RunEnd; link: string; log: string; prompts: string; picks: string[]; review: string; started: string; stats: string; key: string };
 
-export const pad = (n: number) => String(n).padStart(2, "0");
+const pad = (n: number) => String(n).padStart(2, "0");
 
 /** The run's id: local start time, the start of its notes and log file names. */
 export function runId(started: Date): string {
@@ -34,9 +34,9 @@ export function notesName(setup: RunSetup, lived: number): string {
   return `${runId(setup.started)}_lived-${clockPadded(lived, "-")}_${setup.difficulty}_${setup.mode}_${setup.surface}.md`;
 }
 
-export const REVIEW_START = "<!-- review: written by the coach after the run -->";
+const REVIEW_START = "<!-- review: written by the coach after the run -->";
 
-export const REVIEW_END = "<!-- /review -->";
+const REVIEW_END = "<!-- /review -->";
 
 export function renderNotes(n: NotesContent): string {
   const { setup, plan, end } = n;

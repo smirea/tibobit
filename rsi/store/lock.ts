@@ -5,9 +5,9 @@ export const today = () => new Date().toISOString().slice(0, 10);
 
 // The loop and a person answering infrastructure requests can write gameplay/ at once, so every
 // read-modify-write of its files holds this lock.
-export const LOCK = path.join(GAMEPLAY, ".lock");
+const LOCK = path.join(GAMEPLAY, ".lock");
 
-export const STALE_LOCK_MS = 30_000;
+const STALE_LOCK_MS = 30_000;
 
 export async function withLock<T>(work: () => Promise<T>): Promise<T> {
   for (;;) {

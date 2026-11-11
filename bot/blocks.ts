@@ -19,7 +19,7 @@ import { clock } from "../format";
 
 export type Card = { action: ChoiceAction; name: string; notes: string[]; text: string };
 
-export function slotWords(r: World, type: string, id: string): string {
+function slotWords(r: World, type: string, id: string): string {
   const held = (type === "weapon" ? r.weapons : r.passives).find((x) => x.id === id);
   if (type === "weapon") return held === undefined ? `new weapon, fills weapon slot ${r.weapons.length + 1} of 6` : `weapon upgrade to level ${held.level + 1} of ${held.max}`;
   if (type === "passive") return held === undefined ? `new passive, fills passive slot ${r.passives.length + 1} of 6` : `passive upgrade to level ${held.level + 1} of ${held.max}`;
@@ -40,7 +40,7 @@ export function cards(r: World): Card[] {
   });
 }
 
-/** Every state block a template may use (see BLOCKS in scripts/gameplay.ts), rendered only when used. */
+/** Every state block a template may use (see BLOCKS in bot/templates.ts), rendered only when used. */
 export function blocks(r: World, b: Book): Record<BlockName, () => string> {
   const v_ = r.view;
   const t = v_.tibo;
@@ -136,9 +136,9 @@ export function stateVars(r: World, extra: Record<string, string>): Record<strin
   return { ...blocks(r, book), ...Object.fromEntries(Object.entries(extra).map(([k, x]) => [k, () => x])) };
 }
 
-export const healthHistory: { time: number; hp: number }[] = [];
+const healthHistory: { time: number; hp: number }[] = [];
 
-export function healthTrend(r: World): string {
+function healthTrend(r: World): string {
   const now = pct(r.hp, r.maxHp);
   if (healthHistory.length > 0 && (healthHistory.at(-1)?.time ?? 0) > r.time) healthHistory.length = 0;
   healthHistory.push({ time: r.time, hp: now });

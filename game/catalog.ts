@@ -62,7 +62,7 @@ export function buildCatalog(content: Content, messages: Messages): Catalog {
 
 // "max" mirrors the game: a base weapon must be maxed to evolve, and an item evolves
 // only once its catalyst passive is maxed. Everything else just has to be held.
-export type Need = "own" | "max";
+type Need = "own" | "max";
 export type Part = { key: Key; need: Need };
 export type Combo = { recipe: Recipe; result: Key; parts: [Part, Part] };
 
@@ -109,7 +109,7 @@ export function readLoadout(state: GameState): Loadout {
   return loadout;
 }
 
-export type PartState = "done" | "leveling" | "missing";
+type PartState = "done" | "leveling" | "missing";
 
 export function partState(part: Part, loadout: Loadout, catalog: Catalog): PartState {
   const have = loadout.get(part.key);
@@ -136,8 +136,8 @@ export function relevantCombos(combos: Combo[], loadout: Loadout): Combo[] {
   return combos.filter((c) => !loadout.has(c.result) && c.parts.some((p) => loadout.has(p.key)));
 }
 
-export type Pairing = { partner: Part; combo: Combo };
-export type Unpaired = { held: Key; options: Pairing[] };
+type Pairing = { partner: Part; combo: Combo };
+type Unpaired = { held: Key; options: Pairing[] };
 
 /**
  * Every held weapon, passive or item that has recipes left but none of whose partners is held,

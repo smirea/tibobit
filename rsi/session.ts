@@ -12,7 +12,7 @@ export const LOGS = path.join(RUNS, "rsi");
 mkdirSync(LOGS, { recursive: true });
 
 
-export const opened: Slot[] = [];
+const opened: Slot[] = [];
 
 export async function shutdown(code: number): Promise<never> {
   beginStop();
@@ -22,7 +22,7 @@ export async function shutdown(code: number): Promise<never> {
 process.on("SIGINT", () => void shutdown(130));
 process.on("SIGTERM", () => void shutdown(143));
 
-export const open = async (name: string, profile: string) => {
+const open = async (name: string, profile: string) => {
   const slot = await Slot.open(name, profile, path.join(LOGS, "logs"));
   opened.push(slot);
   return slot;
@@ -39,7 +39,7 @@ export const main = first;
 export const slots = rest;
 
 // A rebuilt userscript reaches the games when they restart, which happens between iterations.
-export let gamesBuilt = Bun.file(USERSCRIPT).lastModified;
+let gamesBuilt = Bun.file(USERSCRIPT).lastModified;
 
 export async function waitOnline() {
   if (await waitForHosts()) await Promise.all(opened.map((s) => s.restartGame()));
@@ -64,7 +64,7 @@ export async function refreshGames() {
 }
 
 // The game sends its encyclopedia once a run has loaded its content.
-export async function encyclopedia(): Promise<Encyclopedia> {
+async function encyclopedia(): Promise<Encyclopedia> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const book = await main.agent.encyclopedia().catch(() => undefined);
     if (book !== undefined) return book;
@@ -76,7 +76,7 @@ export async function encyclopedia(): Promise<Encyclopedia> {
 
 export const BOOK = await encyclopedia();
 
-export const idsOf = (section: "weapons" | "passives" | "items", keep: (x: Record<string, unknown>) => boolean = () => true) =>
+const idsOf = (section: "weapons" | "passives" | "items", keep: (x: Record<string, unknown>) => boolean = () => true) =>
   new Set((BOOK[section] as Record<string, unknown>[]).filter((x) => typeof x.id === "string" && keep(x)).map((x) => x.id as string));
 
 export const IDS = { weapons: idsOf("weapons"), base: idsOf("weapons", (w) => w.tier === "base"), evolved: idsOf("weapons", (w) => w.tier !== "base"), passives: idsOf("passives"), items: idsOf("items") };

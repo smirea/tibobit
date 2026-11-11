@@ -41,7 +41,7 @@ function initialOrigin(): string {
   return (globalThis as { __tiboBridgeOrigin?: string }).__tiboBridgeOrigin ?? bridgeOrigin(savedPort() ?? BRIDGE_PORT);
 }
 
-export type BridgeStatus = { port: number; state: "connected" | "connecting"; error: string | undefined };
+type BridgeStatus = { port: number; state: "connected" | "connecting"; error: string | undefined };
 
 export type Bridge = {
   status(): BridgeStatus;
@@ -327,7 +327,7 @@ export function startBridge(link: GameLink, controller: Controller, forecaster: 
       if (!connected) return;
       void post(origin, "/pilot", change).then((ok) => {
         if (ok) return;
-        pilot = { ...pilot, detail: `the agent server on ${origin} refused ${JSON.stringify(change)}; restart it with this version of scripts/agent-server.ts` };
+        pilot = { ...pilot, detail: `the agent server on ${origin} refused ${JSON.stringify(change)}; restart it with this version of agent-server/main.ts` };
         notify();
       });
     },

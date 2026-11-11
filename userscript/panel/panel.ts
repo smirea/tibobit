@@ -190,7 +190,7 @@ function connectionRow(bridge: Bridge): HTMLElement {
     // While the bot plays, its controls sit at the top of its chat.
     wheel.hidden = pilot.state !== "off";
     wheel.disabled = !live;
-    wheel.title = live ? "" : "Start the agent server first: ./scripts/agent-server.ts";
+    wheel.title = live ? "" : "Start the agent server first: ./agent-server/main.ts";
     incognito.setAttribute("aria-pressed", String(pilot.incognito));
     wheelNote.textContent = pilot.detail ?? "";
     wheelNote.hidden = pilot.detail === undefined;

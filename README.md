@@ -18,7 +18,7 @@ The recipe rules mirror the game's own code. A base weapon evolves at its max le
 
 ## Grok take the wheel
 
-**Grok take the wheel**, under the agent port box, hands the game to the bot. The agent server starts `scripts/tibo-bot.ts` for the tab (`./scripts/agent-server.ts` must be running and `OPENROUTER_API_KEY` set). During a run the bot takes over where you are. On the title or end screen it starts a new run on Nightmare in the mode the game is on: the mode screen you have open, else the mode of the run you just played (an Open World run is followed by Open World), else today's Daily. It plays that one run with the playbook a coach of the learning loop updated last, then hands the wheel back. **I'll do it myself**, at the top of the bot's chat, stops it sooner and resumes the game at normal speed. To use other bot flags, start the server with `--pilot "<flags>"`, for example `--pilot "--model laya@q8_0"` for LM Studio.
+**Grok take the wheel**, under the agent port box, hands the game to the bot. The agent server starts `bot/main.ts` for the tab (`./agent-server/main.ts` must be running and `OPENROUTER_API_KEY` set). During a run the bot takes over where you are. On the title or end screen it starts a new run on Nightmare in the mode the game is on: the mode screen you have open, else the mode of the run you just played (an Open World run is followed by Open World), else today's Daily. It plays that one run with the playbook a coach of the learning loop updated last, then hands the wheel back. **I'll do it myself**, at the top of the bot's chat, stops it sooner and resumes the game at normal speed. To use other bot flags, start the server with `--pilot "<flags>"`, for example `--pilot "--model laya@q8_0"` for LM Studio.
 
 While the bot plays, the combos panel folds to its header, the agent port row sits under it, then **I'll do it myself** with the **Plan** and **Action** boxes beside it, and under those the bot's decisions:
 
@@ -38,23 +38,23 @@ The bot plays live: the game runs at normal speed the whole time, and each move 
 The same userscript lets a program play the game. A local server exposes the game state and accepts commands, and the userscript relays both between the server and the tibo.dog tab.
 
 ```sh
-./scripts/agent-server.ts     # listens on http://127.0.0.1:7357
+./agent-server/main.ts     # listens on http://127.0.0.1:7357
 bun run agent-server          # the same, restarting whenever its code changes
-./scripts/tibo.ts state       # the snapshot as a tree (game state under the game's own keys); a path such as game.loadout shows one part; --format json for raw
+./cli/main.ts state       # the snapshot as a tree (game state under the game's own keys); a path such as game.loadout shows one part; --format json for raw
 ```
 
 Keep one tibo.dog tab open with the userscript installed. It connects within a few seconds of the server starting and reconnects on its own, including to a run already in progress.
 
-To use a server on another port, type the port into **Agent port** and press **Connect** (or Enter). The box sits at the bottom of the Combos panel during a run, and alone in the upper right on the title and other screens outside a run. The tab remembers the port. While the tab is connected, a pulsing green dot follows the box, and **Connect** reads "connected" until you type a different port. When it is not connected, the line under the box says whether it is still trying or was refused because another tab holds that server. Point the CLI at the same server with `./scripts/tibo.ts --port <port> <command>`, or `--server <url>`, or `TIBO_SERVER`.
+To use a server on another port, type the port into **Agent port** and press **Connect** (or Enter). The box sits at the bottom of the Combos panel during a run, and alone in the upper right on the title and other screens outside a run. The tab remembers the port. While the tab is connected, a pulsing green dot follows the box, and **Connect** reads "connected" until you type a different port. When it is not connected, the line under the box says whether it is still trying or was refused because another tab holds that server. Point the CLI at the same server with `./cli/main.ts --port <port> <command>`, or `--server <url>`, or `TIBO_SERVER`.
 
 | Endpoint | What it does |
 | --- | --- |
-| `GET /state` | The game as a live game needs it (`LiveView` in `src/agent/protocol.ts`), built by the server from the page's game state and the encyclopedia: `time`, `screen`, `world` (difficulty, biome and landmark, curses and the extra elites and bosses they add, the enemy `scale`, prices for a crate, a Fry Cart item, a Tater Slots spin and the Dog Kennel, the xp and gold on the ground, enemies on screen, the next boss, elite and event, timed boosts, recent events), `tibo` (life, level, gold, dash, status, rerolls, skips, banishes, revives, weapons, passives, items and dogs with the game's descriptions, stats, shrine totals, what the next chest evolves, recipes in reach, recent damage by source, damage dealt a second), `directions` (for each way and for standing still: enemies, the damage the game's own simulation says the move costs over `horizonMilliseconds` and its main sources, bullets coming from that side, hazards and attack zones it walks into, and the bosses, elites, chests, food, spots and pickups that lie that way by `id` and `type`), `attacks` (bullets that would hit a Tibo standing still, attack zones, volleys) and, while one is open, `choice` (by its kind, each option with the game action `choose` takes). `?raw=` adds the game's own state under `game`, by its own keys: `enemies`, `pickups`, `bullets`, `zones`, `world.activeHazards`, `run`, `counters`, `cfg` and the like, or `storage` (the game's own localStorage, such as `tibo.ladder.v1`), `surroundings`, `forecast`, or `all`; it is large and mostly noise for play. Beside them: `mode`, `gameBuild`, `lastRunLink` and the commands. |
+| `GET /state` | The game as a live game needs it (`LiveView` in `protocol/view.ts`), built by the server from the page's game state and the encyclopedia: `time`, `screen`, `world` (difficulty, biome and landmark, curses and the extra elites and bosses they add, the enemy `scale`, prices for a crate, a Fry Cart item, a Tater Slots spin and the Dog Kennel, the xp and gold on the ground, enemies on screen, the next boss, elite and event, timed boosts, recent events), `tibo` (life, level, gold, dash, status, rerolls, skips, banishes, revives, weapons, passives, items and dogs with the game's descriptions, stats, shrine totals, what the next chest evolves, recipes in reach, recent damage by source, damage dealt a second), `directions` (for each way and for standing still: enemies, the damage the game's own simulation says the move costs over `horizonMilliseconds` and its main sources, bullets coming from that side, hazards and attack zones it walks into, and the bosses, elites, chests, food, spots and pickups that lie that way by `id` and `type`), `attacks` (bullets that would hit a Tibo standing still, attack zones, volleys) and, while one is open, `choice` (by its kind, each option with the game action `choose` takes). `?raw=` adds the game's own state under `game`, by its own keys: `enemies`, `pickups`, `bullets`, `zones`, `world.activeHazards`, `run`, `counters`, `cfg` and the like, or `storage` (the game's own localStorage, such as `tibo.ladder.v1`), `surroundings`, `forecast`, or `all`; it is large and mostly noise for play. Beside them: `mode`, `gameBuild`, `lastRunLink` and the commands. |
 | `GET /encyclopedia` | The game's content tables: weapons, passives, items, enemies, bosses, dogs, pois, events, botHelps and biomes, each entry the game's own definition with all its English lines (`name`, `desc` and the like), plus `messages`: the game's English for content kinds without a table, such as shrine stat labels and rarities, under the game's own keys. The run's rules are `game.cfg` in the state. |
 | `POST /command` | Runs one JSON command. Add `?wait=1` to block until it finishes. |
 | `WS /ws` | Pushes every snapshot as it arrives, with `?raw=` as for `/state`. Send a JSON command to run it. |
 
-Commands, also available as `./scripts/tibo.ts <verb>`:
+Commands, also available as `./cli/main.ts <verb>`:
 
 - `{"type":"move","dir":"left","seconds":2}` holds a direction. `dir` is one of the eight compass words (`up-left` and so on) or degrees, where 0 is right and 90 is down. Without `seconds` it holds until the next movement command.
 - `{"type":"goto","to":{"x":120,"y":-40}}` walks to a world position. `to` can also be `{"dx","dy"}` relative to where you stand, `{"poi":uid}` for a point of interest, or `{"pickup":uid}` for a chest or other pickup. `stay` holds still after arriving, either for a number of seconds or with `"done"` until the target is used up. Shrines, chests and most points of interest only open after you stand on them for their kind's seconds in `game.cfg.activation.seconds`, so `{"type":"goto","to":{"poi":16},"stay":"done"}` is the usual way to take one.
@@ -76,34 +76,36 @@ The server only listens on 127.0.0.1 and sends no CORS headers, so other website
 
 ## Headless play and the decision-model bot
 
-The scripts split the work this way:
+The repository is split by program:
 
-| Script | What it is |
+| Folder | What it is |
 | --- | --- |
-| `scripts/agent-server.ts` | The relay between the game tab and everything else: the HTTP API above, and **Grok take the wheel**. |
-| `scripts/tibo.ts` | A command line for that API, for a person or an agent at a terminal: one command per call (`state`, `move`, `start highest`, ...). It has no models and no memory. |
-| `scripts/headless.ts` | tibo.dog in a headless Chromium with the userscript, so nothing needs a visible browser. |
-| `scripts/tibo-bot.ts` | The player: the planner and the action model in the game, with the templates a coach wrote. |
-| `scripts/coach.ts`, `scripts/gameplay.ts` | The coach harnesses, and the formats of the files in `gameplay/`. |
-| `scripts/recursive-self-improvement.ts` | The learning loop for one coach: nine experiment iterations in the training ground, then a full run, a reflection and a commit, over and over. |
-| `scripts/slots.ts` | The training ground's game slots: a server and headless game each, playing fresh games and gyms side by side. |
+| `userscript/` | What runs in the tibo.dog page: the Combos panel, the bot's live view, and the page side of the agent API. `userscript/build.ts` bundles it into `dist/`. |
+| `protocol/` | The contract between the page, the agent server and its clients: commands, the snapshot, the live view, the pilot's chat. |
+| `game/` | What the game is, as every program needs it: the shapes of its state and content, the catalog of names and recipes, and the book built from the encyclopedia. |
+| `agent-server/` | The relay between the game tab and everything else: the HTTP API above, the checkpoint store, and **Grok take the wheel**. `agent-server/client.ts` is that API for a program. |
+| `cli/` | A command line for that API, for a person or an agent at a terminal: one command per call (`state`, `move`, `start highest`, ...). It has no models and no memory. |
+| `headless/` | tibo.dog in a headless Chromium with the userscript, so nothing needs a visible browser. |
+| `bot/` | The player: the planner and the action model in the game, with the templates a coach wrote, and the formats of what it writes (run log, notes, trial result). |
+| `rsi/` | The learning loop for one coach: nine experiment iterations in the training ground, then a full run, a reflection and a commit, over and over. `rsi/store/` owns the formats of the files in `gameplay/`, `rsi/coach/` talks to the coach, and `rsi/training/` runs the game slots: a server and headless game each, playing fresh games and gyms side by side. |
+| `gameplay/` | What the coach has learned and written: its prompts, beliefs, experiments, gyms, playbook and notes. |
 
 ### Running the loop unattended
 
 ```sh
-./scripts/recursive-self-improvement.ts                                         # the coach on Sonnet 5.5 at high effort
-./scripts/recursive-self-improvement.ts --loops 1 --slots 3                      # one loop, three games at a time
+./rsi/main.ts                                         # the coach on Sonnet 5.5 at high effort
+./rsi/main.ts --loops 1 --slots 3                      # one loop, three games at a time
 ```
 
 There is one coach, iterated on over time: its prompts, playbook and log carry from loop to loop, whichever model runs it. `--coach <harness>:<model>@<effort>` picks that model (the effort is for `claude` only, and must be `high` or more). The loop opens a main game slot (an agent server and a headless game with the profile `.runs/coach-profile`, which holds the coach's Nightmare ladder) and `--slots` training slots (5 by default, each with its own profile), then plays loops until stopped or `--loops` is done. Where it stands is the last entry of `gameplay/coach-log.md`, so a restarted loop goes on from the iteration it was in. Logs, every prompt and reply, and each game's bot log go to `.runs/rsi/`. Every write to `gameplay/` holds a lock (`gameplay/.lock`), so a person answering an infrastructure request does not write over the loop.
 
-The coach harnesses are `claude` (run without your settings, hooks, MCP servers or tools), `grok`, `codex`, `opencode` and `cursor` (see `scripts/coach.ts`).
+The coach harnesses are `claude` (run without your settings, hooks, MCP servers or tools), `grok`, `codex`, `opencode` and `cursor` (see `rsi/coach/harnesses.ts`).
 
 ### Headless game and the bot
 
-`./scripts/headless.ts` runs tibo.dog in a headless Chromium with the userscript, so a bot can play without a visible browser. It reuses the newest Playwright headless shell on the machine, and serves `GET http://127.0.0.1:7358/screenshot` for a look at the game. `--profile <dir>` keeps the browser's profile, and with it the game's progress, in that folder; without it every launch starts fresh.
+`./headless/main.ts` runs tibo.dog in a headless Chromium with the userscript, so a bot can play without a visible browser. It reuses the newest Playwright headless shell on the machine, and serves `GET http://127.0.0.1:7358/screenshot` for a look at the game. `--profile <dir>` keeps the browser's profile, and with it the game's progress, in that folder; without it every launch starts fresh.
 
-`./scripts/tibo-bot.ts` plays through the agent server in three layers. In the game, everything is one System One decision model in two personas, the planner and the action model: TypeSafe's Jev through OpenRouter (`--decider openrouter --model typesafe/jev-1.14-20261014`, needs `OPENROUTER_API_KEY` in `.env.local`, managed by env-manager) or a local model in LM Studio (`--model laya@q8_0`, the default decider). `--plan-model` gives the planner a different model. grok only works between runs.
+`./bot/main.ts` plays through the agent server in three layers. In the game, everything is one System One decision model in two personas, the planner and the action model: TypeSafe's Jev through OpenRouter (`--decider openrouter --model typesafe/jev-1.14-20261014`, needs `OPENROUTER_API_KEY` in `.env.local`, managed by env-manager) or a local model in LM Studio (`--model laya@q8_0`, the default decider). `--plan-model` gives the planner a different model. grok only works between runs.
 
 - **Templates.** The prompts both in-game models play with, and the knobs, come from `--templates <file>` (any of `planner`, `action` and `knobs` over the defaults), else from the playbook a coach of the learning loop updated last. No model outside the decision model runs during a game. `--notes` writes a notes file when the run ends (the loop's full runs), `--weapon` picks the starting weapon.
 - **Planner.** Before every decision the decision model reads the state its prompt asks for. The default prompt has the whole player state: health and its trend, level, gold, weapons, passives and items with the game's description of each, recipes in reach, what Tibo stands on, bosses and enemies around, and how recent goals ended. It takes every level-up, chest and shrine pick, each card described in the option itself. It also rates, one question each, every goal Tibo could take on next: a nearby chest to open, a shrine or other spot to charge, food to eat, the xp gems nearby, exploring one of the eight directions for 300 units (stopping at the first new chest), or keeping away from enemies for 8 seconds. The best-rated goal wins. It is asked when the run starts, when a goal ends, at every choice and again right after the pick lands, when a boss appears, and every 5 seconds (`--plan-every`), so a better goal can take over. Jev answers in about a quarter of a second.
@@ -131,7 +133,7 @@ What is in `gameplay/`:
 - `infrastructure_feedback.csv`: requests for changes to the code, which the coach cannot make, `date,run,status,request,why`.
 - `notes/`: one file per full run, named `<start>_lived-<mm-ss>_<difficulty>_<mode>_<surface>.md`, with the outcome and every stat the game counted (damage taken by source, damage dealt and kills by weapon, bosses, elites, chests, shrines, gold, what was evolved), stats worked out from the log, the plan, the picks, the prompts and the coach's review.
 
-`scripts/gameplay.ts` checks every edit and turns away one that would break a file or a template (an unknown `{{name}}`, a weapon id the encyclopedia does not have, a prompt rewrite that drops a section), and the coach gets another try with the reasons.
+`rsi/store/` checks every edit and turns away one that would break a file or a template (an unknown `{{name}}`, a weapon id the encyclopedia does not have, a prompt rewrite that drops a section), and the coach gets another try with the reasons.
 
 Live, a decision lands about 0.2 to 0.3 seconds after the snapshot it was made from. The bot measures that lag (snapshot age plus the decision model's recent answer time) and sends it with the `forecast` command, so the forecast first plays the move Tibo holds now for that long: in an A/B of four live runs a side, that halved the turns the forecast called free but that cost two or more health within 0.35 seconds (13.2% to 6.7%). After a step the action model chose, the next step starts at once instead of waiting out the step time, so a model-steered stretch decides about every 0.2 seconds.
 
@@ -141,20 +143,20 @@ Every run writes a CSV log to `/tmp/tibobit/<start>_<difficulty>_<mode>_<headles
 
 ### The training ground
 
-A whole run takes minutes to reach the moment a question is about, and luck decides much of what happens there. The training ground skips both. A game starts either fresh, on any Nightmare level and any seed but the evaluation seed (a slot's ladder is set just below the level, then the tab reloads into the seed), or from a gym, a checkpoint of a whole game. A gym replays the same game state every time, so two games from one gym differ only in what the models chose. Either way the build can be swapped at the start, and the bot plays for the game's seconds with `tibo-bot.ts --trial <seconds> --templates <file> --result <file>`, which plays the run in progress, then writes how long Tibo lived and everything the game counted meanwhile. A weapon a slot's profile has not unlocked is swapped in at 0:00.
+A whole run takes minutes to reach the moment a question is about, and luck decides much of what happens there. The training ground skips both. A game starts either fresh, on any Nightmare level and any seed but the evaluation seed (a slot's ladder is set just below the level, then the tab reloads into the seed), or from a gym, a checkpoint of a whole game. A gym replays the same game state every time, so two games from one gym differ only in what the models chose. Either way the build can be swapped at the start, and the bot plays for the game's seconds with `bot/main.ts --trial <seconds> --templates <file> --result <file>`, which plays the run in progress, then writes how long Tibo lived and everything the game counted meanwhile. A weapon a slot's profile has not unlocked is swapped in at 0:00.
 
 A gym is built by playing a fresh game with the coach's playbook to its time and saving it there, or saved from the end of a game that lived. Its recipe stays in `gyms.jsonl`, so when a new game build cannot load its checkpoint, it is built again.
 
 ```sh
-./scripts/tibo.ts checkpoint save before-boss      # by hand: save, load and rebuild a run
-./scripts/tibo.ts checkpoint load before-boss
-./scripts/tibo.ts loadout w:peeler:8 w:spud-lob:8 p:butter-socks:5 i:baked-buckler hp:full
-./scripts/tibo.ts seed 1SXG9XB                     # the next Open World run plays this seed
+./cli/main.ts checkpoint save before-boss      # by hand: save, load and rebuild a run
+./cli/main.ts checkpoint load before-boss
+./cli/main.ts loadout w:peeler:8 w:spud-lob:8 p:butter-socks:5 i:baked-buckler hp:full
+./cli/main.ts seed 1SXG9XB                     # the next Open World run plays this seed
 ```
 
 Checkpoints live in `.runs/checkpoints/` and only load on the game build they were saved on. tibo.dog ships new builds often, and a headless game keeps the build it loaded until it restarts.
 
-To run several games side by side, give each its own server port: `./scripts/agent-server.ts --port 7367`, `./scripts/headless.ts --bridge 7367 --port 7368`, then `./scripts/tibo-bot.ts --server http://127.0.0.1:7367 --reload http://127.0.0.1:7368/reload` (or `./scripts/tibo.ts --port 7367 state`). LM Studio must keep each model loaded (`lms load <model>`), or loading one on demand can cancel the other. A second copy of a model (`lms load laya@q8_0 --identifier laya-b`) did not speed up two bots: they share the GPU.
+To run several games side by side, give each its own server port: `./agent-server/main.ts --port 7367`, `./headless/main.ts --bridge 7367 --port 7368`, then `./bot/main.ts --server http://127.0.0.1:7367 --reload http://127.0.0.1:7368/reload` (or `./cli/main.ts --port 7367 state`). LM Studio must keep each model loaded (`lms load <model>`), or loading one on demand can cancel the other. A second copy of a model (`lms load laya@q8_0 --identifier laya-b`) did not speed up two bots: they share the GPU.
 
 ## How it reads the game
 

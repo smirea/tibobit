@@ -6,7 +6,7 @@ export const ENGLISH_CHUNK = /\/assets\/i18n-en-[\w.-]+\.js$/;
 
 type GamePrototype = { step(): unknown; setInput(x: number, y: number): unknown; choose: unknown; drainEvents(): GameEvent[] };
 
-export function isGameClass(value: unknown): value is { prototype: GamePrototype } {
+function isGameClass(value: unknown): value is { prototype: GamePrototype } {
   if (typeof value !== "function") return false;
   const proto = value.prototype as Partial<GamePrototype> | undefined;
   return typeof proto?.step === "function" && typeof proto.setInput === "function" && typeof proto.choose === "function" && typeof proto.drainEvents === "function";

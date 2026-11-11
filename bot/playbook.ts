@@ -1,7 +1,7 @@
 import path from "node:path";
 import { checkTemplates, DEFAULT_TEMPLATES, type Templates } from "./templates";
 import { GAMEPLAY } from "../paths";
-export const PLAYBOOK_JSON = path.join(GAMEPLAY, "playbook.json");
+const PLAYBOOK_JSON = path.join(GAMEPLAY, "playbook.json");
 
 /** The templates and starting weapon ("" for the game's Random) the coach currently plays best with. */
 export type Playbook = { templates: Templates; weapon: string; updated: string; why: string };

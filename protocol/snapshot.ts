@@ -7,7 +7,7 @@ import type { Direction } from "./geometry";
  * with `bySource` in the game's damage-by-source keys, and the damage he dealt a second while the
  * plan played, by the game's `run.damageBySource` tally.
  */
-export type Outcome = { tick: number; damage: number; dead: boolean; bySource: Record<string, number>; dps: number };
+type Outcome = { tick: number; damage: number; dead: boolean; bySource: Record<string, number>; dps: number };
 
 /**
  * Whole trips to the `forecast` command's `route.to`, each played on a copy of the game until it is
@@ -38,7 +38,7 @@ export type Ahead = { tick: number; seconds: number; player: { x: number; y: num
 export type Forecast = { lag: number; seconds: number; ahead: Ahead; moves?: Partial<Record<Direction | "still", Outcome>>; routes?: Routes };
 
 /** Where something is from Tibo, in world units. */
-export type Bearing = { dist: number; dir: Direction };
+type Bearing = { dist: number; dir: Direction };
 
 /**
  * What is around Tibo, worked out from the game state so an agent need not read every enemy, bullet
@@ -74,9 +74,9 @@ export type Threats = {
 export type Snapshot = {
   capturedAt: number;
   screen: "title" | "run" | "choice" | "paused" | "over";
-  /** The game's state object, under the game's own keys (see src/agent/reflect.ts); present once a game exists, including one that just ended. */
+  /** The game's state object, under the game's own keys (see userscript/agent/reflect.ts); present once a game exists, including one that just ended. */
   game?: Record<string, unknown>;
-  /** What the game recorded for its renderer since the run began, newest last, as the game wrote it (the rarer kinds only; see NOISY_EVENTS in src/game.ts). */
+  /** What the game recorded for its renderer since the run began, newest last, as the game wrote it (the rarer kinds only; see NOISY_EVENTS in userscript/link/game-link.ts). */
   gameEvents?: Record<string, unknown>[];
   /** What the game keeps in this browser's localStorage, by the game's own keys (those starting "tibo."), parsed. */
   storage?: Record<string, unknown>;
@@ -88,7 +88,7 @@ export type Snapshot = {
   forecast?: Forecast;
   /** See Surroundings; present during a run. */
   surroundings?: Surroundings;
-  /** Whether the page runs under automation (navigator.webdriver), as in scripts/headless.ts. */
+  /** Whether the page runs under automation (navigator.webdriver), as in the headless game. */
   headless?: boolean;
   /** The game's sim chunk; a checkpoint loads only on the build it was saved on. */
   gameBuild?: string;

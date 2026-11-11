@@ -3,7 +3,7 @@
 // what changed between its start and its end; a full run reports the whole run.
 
 /** The game's own tallies, taken from a snapshot's `game`. */
-export type Tallies = { run: Record<string, unknown>; counters: Record<string, unknown>; shrineTotals: Record<string, unknown> };
+type Tallies = { run: Record<string, unknown>; counters: Record<string, unknown>; shrineTotals: Record<string, unknown> };
 
 export const talliesOf = (game: { run: unknown; counters: unknown; loadout: { shrineTotals: unknown } }): Tallies => ({
   run: game.run as Record<string, unknown>,
@@ -14,7 +14,7 @@ export const talliesOf = (game: { run: unknown; counters: unknown; loadout: { sh
 /** What changed between two tallies, with the game's keys: numbers by how much, lists by what is new, the rest when different. */
 export type Totals = Record<string, unknown>;
 
-export function changed(end: unknown, start: unknown): unknown {
+function changed(end: unknown, start: unknown): unknown {
   if (typeof end === "number") {
     const d = Math.round((end - (typeof start === "number" ? start : 0)) * 1000) / 1000;
     return d === 0 ? undefined : d;

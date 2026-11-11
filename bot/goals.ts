@@ -15,7 +15,7 @@ import { RunLog } from "./run-log/writer";
 
 export type Goal = { kind: "chest" | "poi" | "food" | "elite"; uid: number } | { kind: "explore"; dir: Direction } | { kind: "evade" };
 
-export type TargetGoal = Extract<Goal, { uid: number }>;
+type TargetGoal = Extract<Goal, { uid: number }>;
 
 export type Pursuit = {
   goal: Goal;
@@ -46,17 +46,17 @@ export type Pursuit = {
 /** Where a goal points now. `heading` is absent while evading, which always asks the action model. */
 export type Course = { heading?: Direction | "stay"; left?: number; progress: string; to?: { pickup: number } | { poi: number } };
 
-export type Ended = { done: string; success: boolean };
+type Ended = { done: string; success: boolean };
 
-export type Outcome = { time: number; id: string; title: string; outcome: string; success: boolean };
+type Outcome = { time: number; id: string; title: string; outcome: string; success: boolean };
 
-export const GOAL_SPEED = 45;
+const GOAL_SPEED = 45;
 
-export const GOAL_SLACK = 10;
+const GOAL_SLACK = 10;
 
 // A goto that runs out its time, and food collected on touch ("gone" before the goto counts it as
 // reached), end without saying how the goal went; the next step's look at the target tells.
-export const STEP_OVER = new Set(["timeout", "the target is gone"]);
+const STEP_OVER = new Set(["timeout", "the target is gone"]);
 
 export let pursuit: Pursuit | undefined;
 
@@ -93,7 +93,7 @@ export function goalId(g: Goal): string {
   }
 }
 
-export type Located = { dist: number; dir: Direction | "still"; arrived: boolean; charging: number; progress: string; name: string };
+type Located = { dist: number; dir: Direction | "still"; arrived: boolean; charging: number; progress: string; name: string };
 
 export function locate(r: World, g: TargetGoal): Located | undefined {
   if (g.kind === "poi") {
@@ -117,7 +117,7 @@ export function locate(r: World, g: TargetGoal): Located | undefined {
 // Close enough for most weapons to reach an elite; nearer, each step is the action model's.
 export const ELITE_REACH = 70;
 
-export const TARGET_DONE = { chest: "opened", poi: "charged and used", food: "eaten", elite: "killed" } as const;
+const TARGET_DONE = { chest: "opened", poi: "charged and used", food: "eaten", elite: "killed" } as const;
 
 export function goalTitle(g: Goal, r: World): string {
   switch (g.kind) {
@@ -137,7 +137,7 @@ export function goalTitle(g: Goal, r: World): string {
 }
 
 // By the game's own point-of-interest kind; one the game adds later shows as a plain Spot.
-export const SPOT_TAGS: Record<string, ActionTag> = {
+const SPOT_TAGS: Record<string, ActionTag> = {
   dog: "Pet",
   dogKennel: "Kennel",
   paidChest: "Crate",
@@ -161,7 +161,7 @@ export const SPOT_TAGS: Record<string, ActionTag> = {
   frenzyFryer: "Fryer",
 };
 
-export function goalTag(g: Goal, r: World): ActionTag {
+function goalTag(g: Goal, r: World): ActionTag {
   switch (g.kind) {
     case "chest":
       return "Loot";
@@ -216,7 +216,7 @@ export function aimAt(p: Pursuit, r: World): Course | Ended {
   }
 }
 
-export function begin(goal: Goal, r: World, log: RunLog, decision: Inspect) {
+function begin(goal: Goal, r: World, log: RunLog, decision: Inspect) {
   const title = goalTitle(goal, r);
   const p: Pursuit = {
     goal,
@@ -241,7 +241,7 @@ export function begin(goal: Goal, r: World, log: RunLog, decision: Inspect) {
   say({ role: "action", model: "goal", time: r.time, text: title, tag: p.tag, detail: "done" in aim ? aim.done : aim.progress, inspect: decision });
 }
 
-export const RESULT_WORDS: Record<GoalResult, string> = { done: "done", failed: "gave up", dropped: "dropped" };
+const RESULT_WORDS: Record<GoalResult, string> = { done: "done", failed: "gave up", dropped: "dropped" };
 
 export function finish(r: World, log: RunLog, outcome: string, result: GoalResult) {
   const p = pursuit;
@@ -282,7 +282,7 @@ export function setDistrust(since: NonNullable<typeof distrusted>) {
 }
 
 /** Why a goal stopped making progress, in the words the planner reads in its recent goals. */
-export function stuckWords(p: Pursuit, r: World, aim: Course): string {
+function stuckWords(p: Pursuit, r: World, aim: Course): string {
   const seconds = knobs().stuckSeconds;
   const off = p.steppedOff === 0 ? "" : `; the action model stepped off it ${plural(p.steppedOff, "time")} to dodge`;
   if (aim.heading !== "stay") return `no closer for ${seconds} seconds${off}`;

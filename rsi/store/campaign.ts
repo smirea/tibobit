@@ -3,9 +3,9 @@ import path from "node:path";
 import { NOTES_DIR, notesField, notesFiles } from "../../bot/notes";
 import { clock } from "../../format";
 
-export type RunRecord = { name: string; coach: string; difficulty: string; level: number; mode: string; lived: number; won: boolean; text: string };
+type RunRecord = { name: string; coach: string; difficulty: string; level: number; mode: string; lived: number; won: boolean; text: string };
 
-export async function runRecords(): Promise<RunRecord[]> {
+async function runRecords(): Promise<RunRecord[]> {
   const out: RunRecord[] = [];
   for (const name of await notesFiles()) {
     const m = name.match(/_lived-(\d+)-(\d+)_(.+)_(daily|world)_(headless|browser)\.md$/);
@@ -28,7 +28,7 @@ export async function campaign(): Promise<string> {
 }
 
 /** Runs from before this one played in lockstep, which is banned now. */
-export const LIVE_SINCE = "2026-11-08_07-5";
+const LIVE_SINCE = "2026-11-08_07-5";
 
 export async function latestNotes(count: number): Promise<string> {
   const out: string[] = [];

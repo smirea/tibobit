@@ -5,16 +5,16 @@ import type { Aim, DirectionView, LiveView, LoadoutItem, State } from "../protoc
 import { type Direction, DIRECTIONS } from "../protocol/geometry";
 
 /** Where a target is: its distance, and the way to walk to it, or "still" when Tibo stands on or in it. */
-export type Placed = { dist: number; dir: Direction | "still" };
-export type Target = Aim & Placed;
+type Placed = { dist: number; dir: Direction | "still" };
+type Target = Aim & Placed;
 export type Chest = Target & { charged: number; chargeSeconds: number };
-export type Fighter = Target & { hp: number; maxHp: number };
+type Fighter = Target & { hp: number; maxHp: number };
 export type Spot = Target & { charged: number; chargeSeconds: number; inside: boolean };
 /** One direction from Tibo: enemies on screen that way, and bullets coming from it within the horizon. */
 export type Sector = { dir: Direction; enemies: number; bullets: number };
 
 /** The game's own run tallies the bot reads, under the game's keys (`raw=run,counters`). */
-export type RunJson = Record<string, unknown> & { seed: string; kills: number; killer: string; damageTakenBySource: Record<string, number>; damageBySource: Record<string, number>; elitesKilled: number };
+type RunJson = Record<string, unknown> & { seed: string; kills: number; killer: string; damageTakenBySource: Record<string, number>; damageBySource: Record<string, number>; elitesKilled: number };
 
 export type World = {
   state: State;

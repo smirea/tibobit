@@ -1,7 +1,7 @@
 // The training ground's game slots: each slot is an agent server and a headless game of its own, so
 // several games play side by side. A game starts fresh (any Nightmare level, any seed but the
 // evaluation seed) or from a gym, optionally with the build swapped, and the bot plays it for a set
-// time (tibo-bot.ts --trial). A gym is built the same way and saved at its time.
+// time (the bot with --trial). A gym is built the same way and saved at its time.
 import path from "node:path";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { ENTRY, ROOT } from "../../paths";
@@ -19,8 +19,8 @@ export const DECISION_MODEL = "typesafe/jev-1.14-20261014";
 const GYM_STAGE_SECONDS = 300;
 const GYM_STAGE_TRIES = 3;
 
-/** What tibo-bot.ts --trial writes. */
-export type TrialResult = {
+/** What the bot writes with --trial. */
+type TrialResult = {
   survived: number;
   died: boolean;
   start: number;

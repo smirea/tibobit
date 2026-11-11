@@ -3,12 +3,12 @@ import path from "node:path";
 /** What one event line adds to the coach's reasoning or reply, or the error it reports. */
 import { mkdtempSync, rmSync } from "node:fs";
 
-export type Delta = { thought?: string; text?: string; error?: string };
+type Delta = { thought?: string; text?: string; error?: string };
 
 // Claude Code and Cursor end with a result event, which carries the error when the call failed.
-export const resultError = (e: Record<string, unknown>): Delta => (e.type === "result" && e.is_error === true ? { error: str(e.result) ?? JSON.stringify(e).slice(0, 500) } : {});
+const resultError = (e: Record<string, unknown>): Delta => (e.type === "result" && e.is_error === true ? { error: str(e.result) ?? JSON.stringify(e).slice(0, 500) } : {});
 
-export type Harness = {
+type Harness = {
   /** The model when none is named; undefined leaves it to the harness's own setting. */
   model?: string;
   /** The command line; the prompt goes on stdin unless `argv` puts it in the command. `effort` is a reasoning effort only Claude Code takes. */
@@ -17,11 +17,11 @@ export type Harness = {
   read: (event: Record<string, unknown>) => Delta;
 };
 
-export const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+const str = (v: unknown) => (typeof v === "string" ? v : undefined);
 
-export const content = (e: Record<string, unknown>) => ((e.message as { content?: unknown } | undefined)?.content ?? []) as { type?: string; text?: unknown; thinking?: unknown }[];
+const content = (e: Record<string, unknown>) => ((e.message as { content?: unknown } | undefined)?.content ?? []) as { type?: string; text?: unknown; thinking?: unknown }[];
 
-export const HARNESSES = {
+const HARNESSES = {
   grok: {
     model: "grok-4.7-build-fast",
     argv: true,
@@ -75,7 +75,7 @@ export const HARNESSES = {
 
 export type HarnessName = keyof typeof HARNESSES;
 
-export const isHarness = (name: string): name is HarnessName => name in HARNESSES;
+const isHarness = (name: string): name is HarnessName => name in HARNESSES;
 
 /** Throws at startup when the harness is unknown or its CLI is not installed. */
 export function checkHarness(name: string): HarnessName {
@@ -85,28 +85,25 @@ export function checkHarness(name: string): HarnessName {
   return name;
 }
 
-export const defaultModel = (name: HarnessName): string | undefined => (HARNESSES[name] as Harness).model;
-
-export type Stream = { reasoning: string; text: string };
+type Stream = { reasoning: string; text: string };
 
 /** What came back besides the reply: errors the harness reported, and the tail of what it printed that was not an event. */
-export type Said = Stream & { timedOut: boolean; error: string; stderr: string };
+type Said = Stream & { timedOut: boolean; error: string; stderr: string };
 
 // A bot stopped mid-review exits at once; the coach it was waiting on must not keep running alone.
-export const running = new Set<ReturnType<typeof Bun.spawn>>();
+const running = new Set<ReturnType<typeof Bun.spawn>>();
 process.on("exit", () => {
   for (const proc of running) proc.kill();
 });
 
 /**
- * Runs the harness once and returns everything it said, calling `onUpdate` as it streams. Stops it
- * after `timeoutMs`; `timedOut` says whether it did.
+ * Runs the harness once and returns everything it said. Stops it after `timeoutMs`; `timedOut`
+ * says whether it did.
  */
-export async function runCoach(name: HarnessName, model: string | undefined, prompt: string, timeoutMs: number, onUpdate: (s: Stream) => void, effort?: string): Promise<Said> {
+export async function runCoach(name: HarnessName, model: string | undefined, prompt: string, timeoutMs: number, effort?: string): Promise<Said> {
   const h: Harness = HARNESSES[name];
-  if (effort !== undefined && name !== "claude") throw new Error(`only the claude harness takes a reasoning effort, not ${name}`);
   const cwd = mkdtempSync(path.join(os.tmpdir(), "tibo-coach-"));
-  const proc = Bun.spawn(h.command(model, prompt, effort), { cwd, stdin: h.argv ? "ignore" : new Blob([prompt]), stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawn(h.command(model ?? h.model, prompt, effort), { cwd, stdin: h.argv ? "ignore" : new Blob([prompt]), stdout: "pipe", stderr: "pipe" });
   running.add(proc);
   let timedOut = false;
   const timer = setTimeout(() => {
@@ -135,7 +132,6 @@ export async function runCoach(name: HarnessName, model: string | undefined, pro
           if (d.error !== undefined) error = `${error} ${d.error}`.trim();
         } catch {}
       }
-      onUpdate(out);
     }
     const stderr = (await new Response(proc.stderr).text()).trim();
     return { ...out, timedOut, error, stderr: [other.trim(), stderr.slice(-2000), `exit ${await proc.exited}`].filter(Boolean).join("\n") };

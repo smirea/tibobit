@@ -20,7 +20,7 @@ import { ENTRY, ROOT } from "../paths";
 import { buildClaimed, buildGym, claimPending } from "./gym-builds";
 import { stopping } from "./stop";
 import { logForPrompt } from "../bot/run-log/stats";
-export type ExperimentReply = { summary: string; edits: LoopEdits; games: GameSpec[]; gyms: GymRequest; playbook?: Playbook };
+type ExperimentReply = { summary: string; edits: LoopEdits; games: GameSpec[]; gyms: GymRequest; playbook?: Playbook };
 
 export async function experimentIteration(state: CoachState) {
   const tag = tagOf(state);
@@ -145,10 +145,10 @@ export async function experimentIteration(state: CoachState) {
   await appendLog(state, "experiments", `${reply.summary}\n\nGames: ${results.length}, ${lived} lived, for ${played || "no experiment"}.${gymLines.length === 0 ? "" : ` ${gymLines.join(" ")}`}`);
 }
 
-export type FullRunReply = { summary: string; intent: string; edits: LoopEdits };
+type FullRunReply = { summary: string; intent: string; edits: LoopEdits };
 
 /** The playbook the last full run played, from its notes: what a candidate playbook has to beat. */
-export async function lastFullRunPlaybook(): Promise<{ templates: Templates; weapon: string; from: string } | undefined> {
+async function lastFullRunPlaybook(): Promise<{ templates: Templates; weapon: string; from: string } | undefined> {
   for (const name of await notesFiles()) {
     const text = await Bun.file(path.join(NOTES_DIR, name)).text();
     const t = notesTemplates(text);
@@ -160,7 +160,7 @@ export async function lastFullRunPlaybook(): Promise<{ templates: Templates; wea
   return undefined;
 }
 
-export type Rehearsal = { text: string; reverted: boolean };
+type Rehearsal = { text: string; reverted: boolean };
 
 /**
  * Before the full run: the playbook as it stands against the last full run's, on the same fresh
@@ -168,7 +168,7 @@ export type Rehearsal = { text: string; reverted: boolean };
  * (sonnet-medium's loop 2 tuned minutes 16 to 20 and its full run died at 6:42), so a candidate
  * that lives in fewer games than the old playbook is set aside, and the full run plays the old one.
  */
-export async function rehearse(state: CoachState, playbook: Playbook): Promise<Rehearsal> {
+async function rehearse(state: CoachState, playbook: Playbook): Promise<Rehearsal> {
   const tag = tagOf(state);
   const level = (await ladder()) + 1;
   await refreshGames();
@@ -261,7 +261,7 @@ export async function fullRun(state: CoachState): Promise<string | undefined> {
   return undefined;
 }
 
-export type ReflectReply = { review: string; summary: string; edits: LoopEdits; prompts: Partial<Record<PromptKey, string>>; gyms: GymRequest; playbook?: Playbook };
+type ReflectReply = { review: string; summary: string; edits: LoopEdits; prompts: Partial<Record<PromptKey, string>>; gyms: GymRequest; playbook?: Playbook };
 
 export async function reflect(state: CoachState, notesFile: string | undefined) {
   const tag = `${tagOf(state)}.reflect`;

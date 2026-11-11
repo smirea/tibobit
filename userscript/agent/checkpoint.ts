@@ -7,7 +7,7 @@ import { pick, WEAPON_SLOTS } from "./loadout";
 
 type Encoded = number | string | boolean | null | { u: 1 } | { n: string } | { b: string } | { s: string } | { r: number };
 type Node = { T: string; d: string } | { A: Encoded[] } | { M: [Encoded, Encoded][] } | { S: Encoded[] } | { O: Record<string, Encoded>; P?: string; z?: 1 };
-export type StateData = { root: Encoded; nodes: Node[] };
+type StateData = { root: Encoded; nodes: Node[] };
 export type CheckpointFile = { meta: CheckpointMeta; state: StateData };
 
 const b64 = (u8: Uint8Array) => {

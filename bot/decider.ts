@@ -6,7 +6,7 @@ export type Question =
   | { type: "noul"; instructions: string }
   | { type: "score"; instructions: string; criteria: string[] };
 
-export type Answer = { choice?: string; probabilities?: Record<string, number>; confidence?: number; noul?: number; score?: number };
+type Answer = { choice?: string; probabilities?: Record<string, number>; confidence?: number; noul?: number; score?: number };
 
 export const latency: number[] = [];
 

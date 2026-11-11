@@ -5,14 +5,14 @@ import type { State } from "../protocol/view";
 import { AgentServer, Unreachable } from "../agent-server/client";
 import { clock } from "../format";
 
-const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
+const USAGE = `usage: cli/main.ts [--port <port> | --server <url>] <command>
 
   state [path] [--format text|json] [--raw=<paths>]
                                   the game as a live game needs it: time, screen, world, tibo, each
                                   direction (enemies, the damage the game's own simulation says it
                                   costs over horizonMilliseconds, and what lies that way by id and
                                   type), attacks and the open choice (LiveView in
-                                  src/agent/protocol.ts). A path such as tibo or directions.left shows
+                                  protocol/view.ts). A path such as tibo or directions.left shows
                                   only that part; text reads as m:ss and hp/max, json is it all.
                                   --raw adds the game's own state under game, by its own keys:
                                   enemies, pickups, bullets, zones, world.activeHazards, run, counters,

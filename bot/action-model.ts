@@ -17,15 +17,15 @@ import { noteModelStep } from "./live";
 // Words, not percentages: on 50 replayed states Laya picked a move within 2% of the least
 // damaging one 90% of the time with these words, 80% with "would lose N%", and 38% when the
 // number stood alone.
-export function hurtWords(share: number): string {
+function hurtWords(share: number): string {
   if (share <= 3) return "get scratched";
   if (share <= 9) return "get badly hurt";
   return "get very badly hurt";
 }
 
-export const forecastFor = (r: World, heading: Direction | "stay"): DirectionView | undefined => r.view.directions[heading === "stay" ? "still" : heading];
+const forecastFor = (r: World, heading: Direction | "stay"): DirectionView | undefined => r.view.directions[heading === "stay" ? "still" : heading];
 
-export function outlook(r: World, f: DirectionView): string {
+function outlook(r: World, f: DirectionView): string {
   const sources = f.damageFrom ?? [];
   const within = `within ${r.view.directions.horizonMilliseconds / 1000} seconds`;
   if (f.dead) return `Tibo would die ${within}${sources.length === 0 ? "" : `, killed by ${sources.join(" and ")}`}`;
@@ -34,7 +34,7 @@ export function outlook(r: World, f: DirectionView): string {
   return `Tibo would ${hurtWords(share)} ${within}, by ${sources.join(" and ")}`;
 }
 
-export function bearing(dir: Direction, goal: Direction | "stay" | undefined): string {
+function bearing(dir: Direction, goal: Direction | "stay" | undefined): string {
   if (goal === undefined) return "";
   if (goal === "stay") return "off the spot Tibo is holding for its goal";
   const i = DIRECTIONS.indexOf(dir);
@@ -45,7 +45,7 @@ export function bearing(dir: Direction, goal: Direction | "stay" | undefined): s
 
 // Only what the next steps need: the forecast first (the models weigh the start of a description
 // most), then what it cannot see, and where the goal lies.
-export function describe(r: World, s: Sector, goal: Direction | "stay" | undefined): string {
+function describe(r: World, s: Sector, goal: Direction | "stay" | undefined): string {
   const boss = r.bosses.find((b) => b.dir === s.dir);
   const f = forecastFor(r, s.dir);
   return [
@@ -60,7 +60,7 @@ export function describe(r: World, s: Sector, goal: Direction | "stay" | undefin
 }
 
 // "Stand still" must carry the threats around Tibo too, or it reads as the safest move in a swarm.
-export function standing(r: World, goal: Direction | "stay" | undefined): string {
+function standing(r: World, goal: Direction | "stay" | undefined): string {
   const crowd = onScreen(r) > 0 ? ` with ${plural(onScreen(r), "enemy")} on screen` : "";
   const still = r.view.directions.still;
   const forecast = still === undefined ? "" : `, where ${outlook(r, still).replace(/^Tibo /, "it ")}`;
@@ -86,11 +86,11 @@ export function cheapestMove(r: World): number | undefined {
 // for a yes/no danger question (which, like Laya, rated a fatal move safest when its description
 // listed few threats). Only moves rated about as safe as the safest, and safe outright, compete
 // on usefulness: letting any near-safest move through doubled the health lost per step.
-export const HURT_SCALE = ["takes no damage", "gets scratched", "gets badly hurt", "gets very badly hurt", "dies"];
+const HURT_SCALE = ["takes no damage", "gets scratched", "gets badly hurt", "gets very badly hurt", "dies"];
 
-export const SAFE_ENOUGH = 0.5;
+const SAFE_ENOUGH = 0.5;
 
-export function goalWords(p: Pursuit, aim: Course): string {
+function goalWords(p: Pursuit, aim: Course): string {
   if (p.goal.kind === "evade") return "keep away from enemies";
   if (p.goal.kind === "explore") return `walk ${p.goal.dir} to look for chests and shrines`;
   if (p.goal.kind === "elite") return `${p.title.toLowerCase()}: keep it within ${ELITE_REACH} units so Tibo's weapons kill it, without touching it; it has ${aim.progress}`;
@@ -104,7 +104,7 @@ export function dashWorthAsking(r: World): boolean {
 }
 
 /** How sure the action model must be to dash: lower while a boss is close, if the knobs say so. */
-export function dashBar(r: World): number {
+function dashBar(r: World): number {
   const k = knobs();
   return k.bossDashRange > 0 && r.bosses.some((b) => b.dist <= k.bossDashRange) ? k.bossDashThreshold : k.dashThreshold;
 }

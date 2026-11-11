@@ -3,7 +3,7 @@
 import { stopping } from "./stop";
 import { lookup } from "node:dns/promises";
 
-export const NEEDED_HOSTS = ["api.anthropic.com", "openrouter.ai", "tibo.dog"];
+const NEEDED_HOSTS = ["api.anthropic.com", "openrouter.ai", "tibo.dog"];
 
 export async function offlineHost(): Promise<string | undefined> {
   for (const host of NEEDED_HOSTS) if (!(await lookup(host).then(() => true, () => false))) return host;

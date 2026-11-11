@@ -1,5 +1,5 @@
 /** Why the action model is asked even though the forecast calls the way to the goal cheap, if it is. */
-import { aimAt, type Course, distrusted, ending, everListed, finish, outcomes, type Pursuit, pursuit, setDistrust } from "./goals";
+import { aimAt, type Course, distrusted, ending, everListed, finish, outcomes, pursuit, type Pursuit, setDistrust } from "./goals";
 import { knobs } from "./playing";
 import { cheapestMove, dashOnTheWay, dashWorthAsking, moveCost, steer } from "./action-model";
 import type { Command, CommandStatus } from "../protocol/commands";
@@ -9,7 +9,7 @@ import { RunLog } from "./run-log/writer";
 import type { Planner } from "./planner";
 import { clock } from "../format";
 
-export function distrustReason(r: World): string | undefined {
+function distrustReason(r: World): string | undefined {
   if (distrusted !== undefined && r.time < distrusted.until) return `the forecast was not trusted: Tibo lost ${distrusted.lost} health on a step it called free at ${clock(distrusted.at)}`;
   const range = knobs().distrustBossRange;
   const boss = range > 0 ? r.bosses.find((b) => b.dist <= range) : undefined;
@@ -48,14 +48,14 @@ export async function pursue(s: Snap, r: World, log: RunLog, planner: Planner) {
         if (knobs().distrustSeconds > 0) setDistrust({ until: r.time + knobs().distrustSeconds, lost: Math.round(lost), at: r.time });
       }
       if (aim.heading !== undefined && aim.heading !== "stay" && dashWorthAsking(r)) await dashOnTheWay(r, p, aim.heading, log);
-      return walkOn(p, r, aim, status, log);
+      return walkOn(p, r, aim, status);
     }
     p.sent = undefined;
     return steer(r, p, aim, log, distrust ?? `the way to the goal (${aim.heading ?? "none"}) costs more than the safest move`);
   }
 }
 
-export async function walkOn(p: Pursuit, r: World, aim: Course, status: CommandStatus | undefined, log: RunLog) {
+async function walkOn(p: Pursuit, r: World, aim: Course, status: CommandStatus | undefined) {
   const order: Command = aim.to !== undefined ? { type: "goto", to: aim.to, stay: "done" } : aim.heading === undefined || aim.heading === "stay" ? { type: "stop" } : { type: "move", dir: aim.heading };
   // One command steers until the goal changes; it is only sent again if it changes or ends.
   const key = JSON.stringify(order);

@@ -15,7 +15,7 @@ export async function ask<T>(tag: string, prompt: string, check: (raw: Record<st
   for (let attempt = 1; attempt <= 3 && !stopping; attempt++) {
     await waitOnline();
     const started = Date.now();
-    const said = await runCoach(harness, model, request, COACH_TIMEOUT_MS, () => {}, effort);
+    const said = await runCoach(harness, model, request, COACH_TIMEOUT_MS, effort);
     const seconds = Math.round((Date.now() - started) / 1000);
     await Bun.write(path.join(LOGS, `${tag}.reply-${attempt}.md`), `${said.reasoning}\n\n---\n\n${said.text}\n\n---\n\n${said.error}\n${said.stderr}`);
     const raw = jsonObject(said.text);

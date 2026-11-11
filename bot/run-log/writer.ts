@@ -4,14 +4,14 @@ import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { option } from "../flags";
 import type { World } from "../world";
 import { clock } from "../../format";
-export const csvField = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+const csvField = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 
 // One CSV row per model call and per goal that starts or ends, with the player's state at that
 // moment, so a run can be read back decision by decision. The post-run review reads it.
 export const LOG_DIR = option("log-dir", "/tmp/tibobit");
 
 // Numbers first and free text last, so a reader splitting on commas gets the numbers right.
-export const LOG_COLUMNS = [
+const LOG_COLUMNS = [
   "time",
   "seconds",
   "wall",
@@ -50,9 +50,9 @@ export const LOG_COLUMNS = [
 ] as const;
 
 /** `walk`: the page walked Tibo toward its goal without asking a model, and Tibo lost health on the way. `loadout`: what Tibo holds changed. */
-export type LogEvent = "plan" | "pick" | "move" | "walk" | "goal" | "loadout" | "run_end";
+type LogEvent = "plan" | "pick" | "move" | "walk" | "goal" | "loadout" | "run_end";
 
-export type LogRow = { event: LogEvent; model?: string; reason?: string; goal?: string; action?: string; options?: string; detail?: string; ms?: number };
+type LogRow = { event: LogEvent; model?: string; reason?: string; goal?: string; action?: string; options?: string; detail?: string; ms?: number };
 
 export class RunLog {
   /** Health at the previous row, for `hp_lost` and `hp_gained`. */

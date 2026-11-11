@@ -10,7 +10,6 @@ import { type PageLine, parsePilotChange, type PilotChange, type PilotSettings }
 import type { Encyclopedia, Snapshot } from "../protocol/snapshot";
 import { listCheckpoints, readCheckpoint, saveCheckpoint } from "./checkpoints";
 import { Pilot } from "./pilot";
-import path from "node:path";
 
 const KEEPALIVE_MS = 5_000;
 const option = (name: string, fallback: string) => {
@@ -20,7 +19,7 @@ const option = (name: string, fallback: string) => {
 const PORT = Number(option("port", String(BRIDGE_PORT)));
 const WAIT_LIMIT_MS = 120_000;
 // The bot "Grok take the wheel" runs: Jev moves and picks, grok plans. Override with
-// --pilot "<tibo-bot.ts flags>", such as --pilot "--model laya@q8_0" for LM Studio.
+// --pilot "<the bot's flags>", such as --pilot "--model laya@q8_0" for LM Studio.
 const PILOT_ARGS = option("pilot", "--decider openrouter --model typesafe/jev-1.14-20261014 --mode current --difficulty nightmare").split(/\s+/).filter(Boolean);
 
 let latest: { snapshot: Snapshot; view?: LiveView } | undefined;
@@ -99,12 +98,12 @@ function errorResponse(e: unknown, status = 400) {
 
 const HELP = `tibo.dog agent server
 
-GET  /state          the game as a live game needs it (LiveView in src/agent/protocol.ts), the screen and the
+GET  /state          the game as a live game needs it (LiveView in protocol/view.ts), the screen and the
                      commands; ?raw=enemies,cfg,run,world.activeHazards,storage,surroundings,forecast or all adds
                      the game's own state under \`game\`. It is large and mostly noise for play: read the view first
 WS   /ws?raw=...     pushes every snapshot, raw groups as for /state; send a JSON command to run it
 GET  /encyclopedia   every weapon, passive, item, recipe, enemy, boss, point of interest and biome
-POST /command        JSON command, see src/agent/protocol.ts; add ?wait=1 to block until it finishes
+POST /command        JSON command, see protocol/commands.ts; add ?wait=1 to block until it finishes
 POST /pilot          {"on": true} starts the bot for the tab ("Grok take the wheel"), {"on": false} stops it;
                      {"planEvery": 5, "actEvery": 0.3} sets how often, in seconds, it plans and takes a step;
                      {"incognito": true} has it just play: no notes, no review

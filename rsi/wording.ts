@@ -1,6 +1,6 @@
 import { SLOTS, slotText, type Templates, type TemplateSlot } from "../bot/templates";
 
-export function wordDistance(a: string[], b: string[]): number {
+function wordDistance(a: string[], b: string[]): number {
   let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
   for (let i = 1; i <= a.length; i++) {
     const row = [i];

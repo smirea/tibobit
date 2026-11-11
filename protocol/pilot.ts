@@ -3,16 +3,16 @@ import type { Envelope } from "./commands";
 import { fail, num } from "./parse";
 
 /**
- * "Grok take the wheel": the agent server runs scripts/tibo-bot.ts for the tab, and the bot's
+ * "Grok take the wheel": the agent server runs the bot (bot/main.ts) for the tab, and the bot's
  * models talk in the panel. The planner is the decision model choosing cards and goals (and, between
  * runs, the coach reviewing them); the action model is the decision model steering a step, and
  * action messages also report goals starting and ending.
  */
-export const PILOT_ROLES = ["planner", "action", "system"] as const;
+const PILOT_ROLES = ["planner", "action", "system"] as const;
 export type PilotRole = (typeof PILOT_ROLES)[number];
 /** How often, in seconds, the bot asks its planner while a goal is under way, and takes a step. */
 export type PilotPace = { planEvery: number; actEvery: number };
-export const DEFAULT_PACE: PilotPace = { planEvery: 5, actEvery: 0.3 };
+const DEFAULT_PACE: PilotPace = { planEvery: 5, actEvery: 0.3 };
 export const PACE_LIMITS = { planEvery: { min: 0.5, max: 300, step: 0.5 }, actEvery: { min: 0.1, max: 5, step: 0.1 } } as const;
 /** `incognito`: the bot just plays, keeping no notes and writing no review, so the run teaches nothing. */
 export type PilotSettings = { pace: PilotPace; incognito: boolean };
@@ -67,17 +67,17 @@ export type Inspect =
  * reasoning so far until the final text replaces it.
  */
 /**
- * What a non-step action is, which picks its tile's icon in the panel (src/icons.ts). A new tag
+ * What a non-step action is, which picks its tile's icon in the panel (userscript/pilot/icons.ts). A new tag
  * needs an icon there before it type-checks.
  */
-export const ACTION_TAGS = [
+const ACTION_TAGS = [
   ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
   ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
   ...["Dash", "Start", "Take over", "Over", "Stopped", "Incognito"],
 ] as const;
 export type ActionTag = (typeof ACTION_TAGS)[number];
 /** How a goal ended; `dropped` means the planner chose another goal first. */
-export const GOAL_RESULTS = ["done", "failed", "dropped"] as const;
+const GOAL_RESULTS = ["done", "failed", "dropped"] as const;
 export type GoalResult = (typeof GOAL_RESULTS)[number];
 export type ChatLine = { role: PilotRole; text: string; tag?: ActionTag; result?: GoalResult; detail?: string; model?: string; time?: number; key?: string; stream?: string; inspect?: Inspect };
 export type ChatMessage = ChatLine & { id: number; at: number };

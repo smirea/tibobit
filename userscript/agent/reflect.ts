@@ -14,7 +14,7 @@ import type { GameState, Table } from "../../game/types";
  * - Maps become objects, Sets and typed arrays become lists, and functions are left out.
  * Nothing is renamed and nothing is computed.
  */
-export type Reflection = Record<string, unknown>;
+type Reflection = Record<string, unknown>;
 
 // Engine internals that are not the state of the game: per-tick scratch space and spatial indexes the
 // sim rebuilds every tick, what only the renderer reads, random number generators, the renderer's
