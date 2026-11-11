@@ -1,10 +1,10 @@
 // The bot plays live, as a person does: the game runs in real time and never pauses for the models,
 // and each move is held until the next decision replaces it. A level-up or chest still stops the
 // game, as it does for a person.
-/** Whether this run's game has been set to play live; a new run starts paused at tick 0. */
 import { command, send } from "./server";
 import { knobs } from "./run-templates";
 
+/** Whether this run's game has been set to play live; a new run starts paused at tick 0. */
 export let modeSet = false;
 
 // Live, a move lands a while after the snapshot it was chosen from: the page forecasts one move at a

@@ -1,4 +1,3 @@
-/** Fails at startup when the coach's prompts are missing or a loop file is unreadable. */
 import { readInfra } from "./infra";
 import { readExperiments } from "./experiments";
 import { readPrompts } from "./coach-prompts";
@@ -10,6 +9,7 @@ import { readHeld } from "./held";
 import { EXPERIMENTS_DIR } from "./paths";
 import { readGyms } from "./gyms";
 
+/** Fails at startup when the coach's prompts are missing or a loop file is unreadable. */
 export async function checkLoopFiles() {
   mkdirSync(NOTES_DIR, { recursive: true });
   mkdirSync(EXPERIMENTS_DIR, { recursive: true });

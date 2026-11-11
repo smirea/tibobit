@@ -28,7 +28,7 @@ const WARM_UP_TICKS = 3 * TICKS_PER_SECOND;
 const MAX_CACHED = 3;
 
 /**
- * Saves and restores whole game states, and swaps the loadout, inside a run. A state is the game's
+ * Saves and restores whole game states inside a run. A state is the game's
  * own object graph: content definitions and rule modules are shared with the page and stored by
  * their path from the content table, and class instances by their class, so the page that loads it
  * must run the same build.

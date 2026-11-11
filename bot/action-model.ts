@@ -1,9 +1,8 @@
-// Health samples by game time, to tell the planner whether Tibo is bleeding.
 import { type Course, ELITE_REACH, type Pursuit } from "./goals";
 import { knobs, templates } from "./run-templates";
 import { command, say, send } from "./server";
 import type { DirectionView } from "../protocol/view";
-import { dashCharges, onScreen, plural, spotLine } from "./phrasing";
+import { plural, spotLine } from "./phrasing";
 import { decide, type Question } from "./decider";
 import { type Direction, DIRECTIONS } from "../protocol/geometry";
 import type { Sector, World } from "./world";
@@ -61,7 +60,7 @@ function describe(r: World, s: Sector, goal: Direction | "stay" | undefined): st
 
 // "Stand still" must carry the threats around Tibo too, or it reads as the safest move in a swarm.
 function standing(r: World, goal: Direction | "stay" | undefined): string {
-  const crowd = onScreen(r) > 0 ? ` with ${plural(onScreen(r), "enemy")} on screen` : "";
+  const crowd = r.view.world.enemiesOnScreen > 0 ? ` with ${plural(r.view.world.enemiesOnScreen, "enemy")} on screen` : "";
   const still = r.view.directions.still;
   const forecast = still === undefined ? "" : `, where ${outlook(r, still).replace(/^Tibo /, "it ")}`;
   const spot = spotLine(r);
@@ -100,7 +99,7 @@ function goalWords(p: Pursuit, aim: Course): string {
 /** A dash charge, a dash template, and an enemy or bullet close enough that dashing could matter. */
 export function dashWorthAsking(r: World): boolean {
   const still = r.view.directions.still;
-  return templates.action.dash.trim() !== "" && dashCharges(r) > 0 && (r.view.attacks.bullets.length > 0 || (still !== undefined && (still.dead === true || still.estimatedDamage > 0)));
+  return templates.action.dash.trim() !== "" && r.view.tibo.dash.charges > 0 && (r.view.attacks.bullets.length > 0 || (still !== undefined && (still.dead === true || still.estimatedDamage > 0)));
 }
 
 /** How sure the action model must be to dash: lower while a boss is close, if the knobs say so. */
@@ -163,7 +162,7 @@ export async function steer(r: World, p: Pursuit, aim: Course, log: RunLog, why:
   const dashWhy =
     templates.action.dash.trim() === ""
       ? "dash not asked: the template is empty"
-      : dashCharges(r) === 0
+      : r.view.tibo.dash.charges === 0
         ? "dash not asked: no charge"
         : !canDash
           ? "dash not asked: nothing close"

@@ -19,7 +19,6 @@ export const unexplored = (held: Held) => new Set([...untried(IDS.base, held), .
 export const explores = (spec: GameSpec, open: Set<string>) =>
   [...("fresh" in spec.from ? [spec.from.fresh.weapon] : []), ...(spec.loadout?.weapons ?? []).map((w) => w.id), ...(spec.loadout?.passives ?? []).map((p) => p.id)].filter((id) => open.has(id));
 
-
 function checkLoadout(raw: unknown, at: string, errors: string[]): LoadoutSpec | undefined {
   if (raw === undefined) return undefined;
   try {

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { book, groundSources, onScreen, pct, said, spotLine } from "../phrasing";
+import { book, groundSources, pct, said, spotLine } from "../phrasing";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { option } from "../config";
 import type { World } from "../world";
@@ -89,7 +89,7 @@ export class RunLog {
             x: Math.round(r.x),
             y: Math.round(r.y),
             dash: t.dash.charges,
-            enemies: onScreen(r),
+            enemies: r.view.world.enemiesOnScreen,
             bosses: r.bosses.map((b) => `${b.name} (${b.type}) ${at(b)} ${pct(b.hp, b.maxHp)}% of ${Math.round(b.maxHp)}`).join("; "),
             dealt: Math.round(Object.values(r.run.damageBySource).reduce((a, b) => a + b, 0)),
             elites: r.run.elitesKilled,

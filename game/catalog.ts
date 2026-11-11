@@ -22,7 +22,6 @@ function titleCase(id: string): string {
 /** The game's own cap: a base weapon tops out at min(8, levels + 1), anything else at 1. */
 export const maxWeaponLevel = (w: { tier: string; levels?: unknown[] }) => (w.tier === "base" ? Math.min(8, (w.levels?.length ?? 0) + 1) : 1);
 
-
 export function buildCatalog(content: Content, messages: Messages): Catalog {
   const names: Record<Key, string> = {};
   const descriptions: Record<Key, string> = {};

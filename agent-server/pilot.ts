@@ -84,7 +84,6 @@ export class Pilot {
   private stop() {
     if (this.bot === undefined) return this.set({ state: "off" });
     this.set({ state: "stopping" });
-    // The bot marks an unfinished run aborted in its notes on SIGTERM, then exits.
     this.bot.kill("SIGTERM");
   }
 

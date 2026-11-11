@@ -1,5 +1,4 @@
 import path from "node:path";
-/** Asks the coach until a reply passes `check`: a harness failure is tried again, a rejected reply is asked again with the reasons. */
 import { stopping } from "../stop";
 import { COACH_TIMEOUT_MS } from "../rules";
 import { LOGS, waitOnline } from "../session";
@@ -9,6 +8,7 @@ import type { Checked } from "../../protocol/parse";
 import { offlineHost, UNREACHABLE } from "../network";
 import { runCoach } from "./harnesses";
 
+/** Asks the coach until a reply passes `check`: a harness failure is tried again, a rejected reply is asked again with the reasons. */
 export async function ask<T>(tag: string, prompt: string, check: (raw: Record<string, unknown>) => Checked<T>): Promise<T | undefined> {
   await Bun.write(path.join(LOGS, `${tag}.prompt.md`), prompt);
   let request = prompt;

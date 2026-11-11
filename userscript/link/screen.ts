@@ -5,7 +5,7 @@ export const PANEL_ID = "tibo-helper";
 /** Everything this script adds to the page: the panel, and the port box and overlays outside it. */
 const OURS = `#${PANEL_ID}, [class*='tbh-']`;
 
-// The game's own buttons; the helper's panel and port box are never pressed by an agent command.
+// The game's own buttons; nothing this script adds is ever pressed by an agent command.
 export function button(label: string | RegExp): HTMLButtonElement | undefined {
   return [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => {
     if (b.closest(OURS)) return false;
@@ -46,7 +46,7 @@ export async function until(check: () => boolean, ms: number): Promise<boolean> 
 }
 
 /**
- * The open choice's cards and buttons in on-screen order, for the panel's pick overlay. Level-ups,
+ * The open choice's cards and buttons in on-screen order, for the pilot's pick overlay. Level-ups,
  * chests and shrines show cards; shops such as the vendor or the dog kennel show plain buttons.
  */
 export function choiceCards(): HTMLElement[] {

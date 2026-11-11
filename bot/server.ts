@@ -1,16 +1,9 @@
-/**
- * `pace` is the panel's plan and action intervals, read every step so they can change mid-run, and
- * sent only to a bot the panel started.
- */
 import { PLAN_EVERY, SERVER, STEP } from "./config";
 import type { ChatLine, PilotPace } from "../protocol/pilot";
 import type { Command } from "../protocol/commands";
 import { AgentServer } from "../agent-server/client";
-import type { State } from "../protocol/view";
 
-export type Snap = State;
-
-/** Seconds between planner calls while a goal is under way, and between steps. */
+/** Seconds between planner calls while a goal is under way, and between steps. The panel sends them every step, so they can change mid-run. */
 export let pace: PilotPace = { planEvery: PLAN_EVERY, actEvery: STEP };
 
 /** Whether the panel started this bot, which someone is watching. */

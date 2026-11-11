@@ -5,8 +5,6 @@ import type { Forecast, Snapshot } from "../../protocol/snapshot";
 import { reflect } from "./reflect";
 import { surroundings } from "./surroundings";
 
-
-
 /** The game's own localStorage entries, parsed where they are JSON. */
 function gameStorage(): Record<string, unknown> {
   const out: Record<string, unknown> = {};

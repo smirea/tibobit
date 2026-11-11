@@ -16,7 +16,7 @@ export async function writeTable<C extends readonly string[]>(file: string, colu
 
 /**
  * A table the coach rewrites whole. Its rows are never deleted, only moved to `retire`, so nothing
- * the loop learned is lost; `stamps` are columns the bot fills, never the coach.
+ * the loop learned is lost; `stamps` are columns the loop fills, never the coach.
  */
 export type CsvTable<C extends readonly string[]> = {
   name: string;

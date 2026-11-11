@@ -1,10 +1,10 @@
+import type { Checked } from "../../protocol/parse";
+import { COACH_MD } from "./paths";
+
 /**
  * Why a new coach prompt would lose what the current one holds, if it would. Composer once replaced
  * the whole plan prompt with a note about one experiment; a section can be rewritten but not dropped.
  */
-import type { Checked } from "../../protocol/parse";
-import { COACH_MD } from "./paths";
-
 export function promptLoss(now: string, next: string, file: string): string | undefined {
   const headings = (t: string) => [...t.matchAll(/^## .+$/gm)].map((m) => m[0].trim());
   const dropped = headings(now).filter((h) => !headings(next).includes(h));

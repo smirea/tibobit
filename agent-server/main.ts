@@ -19,7 +19,7 @@ const option = (name: string, fallback: string) => {
 };
 const PORT = Number(option("port", String(BRIDGE_PORT)));
 const WAIT_LIMIT_MS = 120_000;
-// The bot "Grok take the wheel" runs: Jev moves and picks, grok plans. Override with
+// What the bot "Grok take the wheel" starts is told: Jev plans and acts. Override with
 // --pilot "<the bot's flags>", such as --pilot "--model laya@q8_0" for LM Studio.
 const PILOT_ARGS: BotArgs = process.argv.includes("--pilot") ? parseBotArgs(option("pilot", "").split(/\s+/).filter(Boolean)) : { ...JEV, mode: "current", difficulty: "nightmare" };
 
@@ -37,7 +37,6 @@ const encoder = new TextEncoder();
 
 const toPage = (line: PageLine) => page?.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
 const pilot = new Pilot(`http://127.0.0.1:${PORT}`, PILOT_ARGS, toPage);
-
 
 // A JSON content type forces a CORS preflight, which this server never answers, so another
 // website open in the browser cannot start the bot with a plain form post.

@@ -6,15 +6,10 @@ import { cloneState, isRuleModule, NO_RECORDER, reachable } from "./clone";
 // imported a second time returns the instance the game already uses, so importing the game's
 // own chunks gives live access to its classes and content tables without parsing anything.
 
-
-
-
-
 const KEEP_EVENTS = 40;
 // Every few seconds or faster, and they would push the rare events out; the snapshot already says
 // what they do (hurtBy, dash charges, the boss's position).
 const NOISY_EVENTS = new Set(["playerHit", "hitStop", "dodge", "dashed", "block", "throttle", "reelStop", "dogAbility", "bossLanding"]);
-
 
 export class GameLink {
   game: Game | undefined;
@@ -98,7 +93,7 @@ export class GameLink {
     this.seen.add(url);
     if (SIM_CHUNK.test(url)) this.attachSim(url).catch((e) => this.fail(e));
     else if (BOOT_CHUNK.test(url))
-      // Icons are decoration: without them the helper falls back to initials, so a miss only warns.
+      // Icons are decoration: without them the panel falls back to initials, so a miss only warns.
       this.loadIcons(url).catch((e) => console.warn("[tibobit] no game icons:", e instanceof Error ? e.message : e));
     else if (ENGLISH_CHUNK.test(url)) this.loadMessages(url).catch((e) => this.fail(e));
   }

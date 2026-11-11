@@ -1,10 +1,10 @@
 // The loop wants every weapon and passive tried before the coach settles on a build, so it counts
 // the games that ended holding each one. A weapon or passive no game has held is untried.
 
-/** By weapon or passive id: how many games ended holding it, and the last of them. */
 import { HELD_JSON } from "./paths";
 import { withLock } from "./lock";
 
+/** By weapon or passive id: how many games ended holding it, and the last of them. */
 export type Held = Record<string, { games: number; last: string }>;
 
 export const readHeld = async (): Promise<Held> => ((await Bun.file(HELD_JSON).exists()) ? ((await Bun.file(HELD_JSON).json()) as Held) : {});

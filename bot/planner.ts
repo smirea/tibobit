@@ -1,3 +1,9 @@
+// The planner is the decision model in a second persona. Before every decision it reads the state
+// its template asks for, which the coach wrote for this run with the game knowledge in it. It
+// picks every level-up, chest and shrine option, and weighs every goal Tibo could take on next,
+// one question each; the most promising becomes the goal. It is asked when a goal ends, at every
+// choice, when a boss appears, and every pace.planEvery seconds, so a better goal can take over.
+
 import { book, onChest, plural, priceWords, readBook, said, spotSaid } from "./phrasing";
 import { knobs, planEvery, templates } from "./run-templates";
 import { blocks, type Card, cards } from "./blocks";
@@ -164,7 +170,7 @@ export class Planner {
     return { ...(pick === undefined ? {} : { pick }), goal, ms, ...(cards === undefined ? {} : { cards }), goals: weighed };
   }
 
-  /** The run ended: its notes are written, then the coach reviews it. */
+  /** The run ended: its notes are written. */
   async finish(end: EndJson, last: World | undefined, ladder: number | undefined, healed: number) {
     const lived = Math.round(end.runClock * 10) / 10;
     const kills = Number(end.run.kills ?? 0);

@@ -18,7 +18,7 @@ type Reflection = Record<string, unknown>;
 
 // Engine internals that are not the state of the game: per-tick scratch space and spatial indexes the
 // sim rebuilds every tick, what only the renderer reads, random number generators, the renderer's
-// event queue (drained into the snapshot's `events`), and the terrain noise and chunk caches the
+// event queue (drained into the snapshot's `gameEvents`), and the terrain noise and chunk caches the
 // world is generated from (its spots and hazards are in `world.activePois` and `world.activeHazards`).
 const NOT_STATE: Record<string, readonly string[]> = {
   "": ["rng", "spawnRng", "lootRng", "botRng", "hits", "hash", "buf", "scratch", "attack", "damageRing", "effects", "fx", "colors", "colorIndex", "sourceColors", "recordEvents", "events", "itemFx"],

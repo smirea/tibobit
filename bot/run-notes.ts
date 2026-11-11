@@ -1,10 +1,10 @@
 import path from "node:path";
-/** The run's notes, written to gameplay/notes when the run ends; bot/notes.ts has the format. */
 import { keyNumbers, runStats } from "./run-log/reader";
 import { NOTES_DIR, notesName, renderNotes, type RunEnd, runId, type RunPlan, type RunSetup } from "./notes";
 import { existsSync } from "node:fs";
 import { LOG_DIR } from "./run-log/writer";
 
+/** The run's notes, written to gameplay/notes when the run ends; bot/notes.ts has the format. */
 export class RunNotes {
   readonly id: string;
   /** The run's CSV log, one row per model call; outside the repo, see LOG_DIR. */
@@ -21,8 +21,6 @@ export class RunNotes {
   constructor(
     readonly setup: RunSetup,
     readonly plan: RunPlan,
-    /** Which coach prompts, by hash, planned and reviewed the run. */
-    public prompts: string,
     public saved: boolean,
   ) {
     // Ids have one-second steps, and two bots can start a run in the same second; a later one moves on.
@@ -45,6 +43,6 @@ export class RunNotes {
     const csv = (await log.exists()) ? await log.text() : "";
     const stats = csv === "" ? "(no log)" : runStats(csv);
     const key = csv === "" ? "(no log)" : keyNumbers(csv);
-    await Bun.write(this.file, renderNotes({ setup: this.setup, plan: this.plan, end: this.end, link: this.link, log: this.log, prompts: this.prompts, picks: this.picks, review: this.review, started: this.started, stats, key }));
+    await Bun.write(this.file, renderNotes({ setup: this.setup, plan: this.plan, end: this.end, link: this.link, log: this.log, picks: this.picks, review: this.review, started: this.started, stats, key }));
   }
 }

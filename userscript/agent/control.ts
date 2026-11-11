@@ -5,7 +5,7 @@ import { STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
 import { button, inRun, modeScreen, press, until, wait } from "../link/screen";
 import { type CheckpointFile, Checkpoints } from "./checkpoint";
 import { pickDifficulty, pickWeapon } from "./menus";
-import { anchored, type Place, place, toward } from "./targets";
+import { anchored, place, type Place, toward } from "./targets";
 import { applyLoadout } from "./loadout";
 import { clearSeed, requestSeed } from "./seed";
 import { Forecaster } from "./forecast";
@@ -27,11 +27,6 @@ type Active = {
   /** The goto's target, a relative one anchored where the player stood when the command started. */
   to?: Place;
 };
-
-
-
-
-
 
 export class Controller {
   readonly statuses: CommandStatus[] = [];

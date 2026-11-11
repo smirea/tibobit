@@ -1,8 +1,8 @@
 import path from "node:path";
-/** A finished run as the ladder sees it, read from its notes file name and header. */
 import { NOTES_DIR, notesField, notesFiles } from "../../bot/notes";
 import { clock } from "../../clock";
 
+/** A finished run as the ladder sees it, read from its notes file name and header. */
 type RunRecord = { name: string; coach: string; difficulty: string; level: number; mode: string; lived: number; won: boolean; text: string };
 
 async function runRecords(): Promise<RunRecord[]> {
@@ -17,8 +17,7 @@ async function runRecords(): Promise<RunRecord[]> {
   return out;
 }
 
-
-/** Every full run, newest first, with the coach that planned it; runs before the coach was one (sonnet-medium, sonnet-high) count too. */
+/** Every full run, newest first, with the coach that planned it. */
 export async function campaign(): Promise<string> {
   const records = (await runRecords()).filter((r) => r.mode === "world" && r.level > 0);
   if (records.length === 0) return "No Open World Nightmare run yet.";

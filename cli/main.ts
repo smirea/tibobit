@@ -20,8 +20,8 @@ const USAGE = `usage: cli/main.ts [--port <port> | --server <url>] <command>
                                   large and mostly noise for play; the view already says what in it
                                   matters. Ask for it only to look into something the view cannot show.
   watch [path] [--raw=<groups>]   the text state, refreshed 4 times a second
-  encyclopedia [section]          JSON of the game's content: weapons, passives, items, recipes, enemies,
-                                  bosses, dogs, pois, events, botHelps, biomes, glossary, rules
+  encyclopedia [section]          JSON of the game's content: weapons, passives, items, enemies, bosses,
+                                  dogs, pois, events, botHelps, biomes
   move <dir|degrees> [seconds]    dir: up, down, left, right, up-left, up-right, down-left, down-right
   goto <x> <y>                    walk to a world position
   goto rel <dx> <dy>              walk relative to where you stand
@@ -30,7 +30,7 @@ const USAGE = `usage: cli/main.ts [--port <port> | --server <url>] <command>
       [--stay <seconds|done>] [--within <units>] [--timeout <seconds>]
   stop | pause | resume
   choose <action> [index]         the game's own action on the open choice: pick, banish or buy with
-                                  the offer's index in game.choiceQueue[0], or reroll, skip, close,
+                                  the option's index in the open choice, or reroll, skip, close,
                                   accept, continue or endRun
   dash [dir|degrees]
   start [easy|normal|hard|nightmare|highest] [daily]   daily plays today's fixed-seed Daily; highest
@@ -48,7 +48,6 @@ training ground:
 
 Commands wait until they finish (except move without seconds); add --no-wait to return at once.
 The agent server defaults to $TIBO_SERVER, then ${DEFAULT_ORIGIN}; --port picks another one on 127.0.0.1.`;
-
 
 let server = new AgentServer(DEFAULT_ORIGIN);
 

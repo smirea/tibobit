@@ -1,4 +1,3 @@
-/** The gyms the loop keeps from the start: the opening and the first boss on the next ladder level and on the goal level, and minutes 5 and 10 on the next level. */
 import { stopping } from "./stop";
 import { EVAL_SEED } from "./flags";
 import type { Templates } from "../bot/templates";
@@ -8,6 +7,7 @@ import { slots } from "./session";
 import { GOAL_LEVEL } from "./rules";
 import { clockPadded } from "../clock";
 
+/** The gyms the loop keeps from the start: the opening and the first boss on the next ladder level and on the goal level, and minutes 5 and 10 on the next level. */
 export function standardGyms(next: number): Gym[] {
   const gym = (name: string, difficulty: number, at: number, purpose: string): Gym => ({ name, status: "pending", purpose, coach: "loop", created: "start", difficulty, at, weapon: "", seed: "", source: `built from a fresh game to ${clockPadded(at)}` });
   return [

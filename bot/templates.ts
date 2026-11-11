@@ -1,9 +1,9 @@
 // The planner's and the action model's prompts are templates the coach writes before every run.
 // `{{name}}` takes a piece of the game state, which the bot renders only when a template uses it.
 
-/** State blocks every template may use. The bot renders each from the live game. */
 import type { Checked } from "../protocol/parse";
 
+/** State blocks every template may use. The bot renders each from the live game. */
 export const BLOCKS = {
   time: "game time as m:ss",
   difficulty: "the run's difficulty, such as nightmare",
@@ -76,7 +76,7 @@ export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: strin
   eliteMinHp: { min: 0, max: 1, about: "share of max health below which no fight-the-elite goal is offered; 0 offers them at any health" },
 };
 
-export const LOCKSTEP_CRUTCH = "knobs.lockstep is a crutch and is not to be enabled: it paused the game while the models thought, which no player can do. Every game plays live, as a person plays it.";
+const LOCKSTEP_CRUTCH = "knobs.lockstep is a crutch and is not to be enabled: it paused the game while the models thought, which no player can do. Every game plays live, as a person plays it.";
 
 export type Templates = { planner: { state: string; goal: string; pick: string }; action: { state: string; hurt: string; useful: string; dash: string }; knobs: Knobs };
 

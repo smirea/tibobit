@@ -1,18 +1,18 @@
 // How a training game is written into its experiment's file, and what the loop reads back from
 // those entries: which loops an experiment had games in, and whether any started from 0:00.
 
-/** A training game's id: its iteration's tag and its place in the iteration, such as L4.I3.G2. */
 import type { Experiment } from "./experiments";
 import type { Gym } from "./gyms";
 import { clockPadded } from "../../clock";
 import type { GameResult, Start } from "../training/slots";
 import { totalsLines } from "../../bot/tallies";
 
+/** A training game's id: its iteration's tag and its place in the iteration, such as L4.I3.G2. */
 export const gameId = (tag: string, n: number) => `${tag}.G${n}`;
 
 const FRESH = "a fresh game";
 
-export const describeStart = (from: Start, gyms: Gym[]) => {
+const describeStart = (from: Start, gyms: Gym[]) => {
   if ("gym" in from) {
     const name = from.gym;
     const g = gyms.find((x) => x.name === name);

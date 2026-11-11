@@ -37,7 +37,6 @@ export type GameSpec = {
 
 export type GameResult = { spec: GameSpec; seed: string; difficulty: string; result?: TrialResult; stats?: string; savedGym?: CheckpointMeta; error?: string };
 
-
 /** A random Open World seed, as the game rolls them, that is not the evaluation seed. */
 export function freshSeed(evalSeed: string): string {
   for (;;) {

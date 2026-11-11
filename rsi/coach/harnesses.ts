@@ -1,8 +1,8 @@
 import os from "node:os";
 import path from "node:path";
-/** What one event line adds to the coach's reasoning or reply, or the error it reports. */
 import { mkdtempSync, rmSync } from "node:fs";
 
+/** What one event line adds to the coach's reasoning or reply, or the error it reports. */
 type Delta = { thought?: string; text?: string; error?: string };
 
 // Claude Code and Cursor end with a result event, which carries the error when the call failed.
@@ -90,7 +90,7 @@ type Stream = { reasoning: string; text: string };
 /** What came back besides the reply: errors the harness reported, and the tail of what it printed that was not an event. */
 type Said = Stream & { timedOut: boolean; error: string; stderr: string };
 
-// A bot stopped mid-review exits at once; the coach it was waiting on must not keep running alone.
+// A loop that is stopped exits at once; the coach it was waiting on must not keep running alone.
 const running = new Set<ReturnType<typeof Bun.spawn>>();
 process.on("exit", () => {
   for (const proc of running) proc.kill();

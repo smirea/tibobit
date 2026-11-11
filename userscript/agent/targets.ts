@@ -1,8 +1,8 @@
-/** A target that stays put as Tibo moves. */
 import type { Enums, GameState } from "../../game/types";
 import { STILL } from "../../protocol/geometry";
 import type { Target } from "../../protocol/commands";
 
+/** A target that stays put as Tibo moves. */
 export type Place = Exclude<Target, { dx: number }>;
 
 export function anchored(s: GameState, to: Target): Place {

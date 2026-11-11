@@ -42,7 +42,7 @@ type Bearing = { dist: number; dir: Direction };
 
 /**
  * What is around Tibo, worked out from the game state so an agent need not read every enemy, bullet
- * and hazard (the snapshot's `raw` groups). A tool's output, not game state. `seconds` is the
+ * and hazard (the game's own pools, which `raw` can ask for). A tool's output, not game state. `seconds` is the
  * horizon, the same as the forecast's.
  */
 export type Surroundings = Threats & {
@@ -76,7 +76,7 @@ export type Snapshot = {
   screen: "title" | "run" | "choice" | "paused" | "over";
   /** The game's state object, under the game's own keys (see userscript/agent/reflect.ts); present once a game exists, including one that just ended. */
   game?: Record<string, unknown>;
-  /** What the game recorded for its renderer since the run began, newest last, as the game wrote it (the rarer kinds only; see NOISY_EVENTS in userscript/link/game-link.ts). */
+  /** The latest of what the game recorded for its renderer, newest last, as the game wrote it (the rarer kinds only; see NOISY_EVENTS in userscript/link/game-link.ts). */
   gameEvents?: Record<string, unknown>[];
   /** What the game keeps in this browser's localStorage, by the game's own keys (those starting "tibo."), parsed. */
   storage?: Record<string, unknown>;

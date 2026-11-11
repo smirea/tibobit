@@ -2,15 +2,10 @@ import type { Chest, Spot, World } from "./world";
 import { server } from "./server";
 import { type Book, bookFrom, line } from "../game/book";
 
-
 export const pct = (part: number, whole: number) => Math.round((100 * part) / Math.max(1, whole));
 
 /** A record as "key value, key value", in the game's own keys. */
 export const fields = (o: Record<string, unknown>) => Object.entries(o).map(([k, v]) => `${k} ${typeof v === "object" ? JSON.stringify(v) : v}`).join(", ");
-
-export const onScreen = (r: World) => r.view.world.enemiesOnScreen;
-
-export const dashCharges = (r: World) => r.view.tibo.dash.charges;
 
 // The planner reads the game's own description of every card it holds or is offered.
 export let book: Book | undefined;

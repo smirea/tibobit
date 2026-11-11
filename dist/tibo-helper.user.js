@@ -1532,7 +1532,7 @@
       throw new Error(`picked starting weapon ${id}, but the start screen shows ${now ?? "nothing"}`);
   }
 
-  // userscript/agent/steering.ts
+  // userscript/agent/targets.ts
   function anchored(s, to) {
     return "dx" in to ? { x: (s.player.x[s.me] ?? 0) + to.dx, y: (s.player.y[s.me] ?? 0) + to.dy } : to;
   }
@@ -2459,7 +2459,7 @@
     el.dataset.id = String(m.id);
     return el;
   }
-  function chatBox(bridge) {
+  function botFeed(bridge) {
     const giveBack = h("button", "tbh-giveback");
     giveBack.type = "button";
     giveBack.addEventListener("click", () => bridge.setPilot({ on: false }));
@@ -2557,10 +2557,10 @@
     return box;
   }
 
-  // userscript/combos/live.ts
+  // userscript/combos/run-combos.ts
   var data;
   var dataFrom;
-  function liveData(link) {
+  function runCombos(link) {
     const content = link.content();
     if (content === undefined)
       return;
@@ -3001,8 +3001,8 @@
     document.body.append(panel);
     return { panel, content };
   }
-  function startHelper(link, discovery, bridge) {
-    const { panel, content } = mount(chatBox(bridge), connectionRow(bridge));
+  function startPanel(link, discovery, bridge) {
+    const { panel, content } = mount(botFeed(bridge), connectionRow(bridge));
     let collapsedBefore;
     const followPilot = () => {
       const piloting = bridge.pilot().state !== "off";
@@ -3037,7 +3037,7 @@
       panel.classList.toggle("tbh-choice", offered.length > 0);
       if (offered.length === 0)
         panel.classList.remove("tbh-peek");
-      const d = liveData(link);
+      const d = runCombos(link);
       if (d === undefined) {
         const problem = link.error === undefined ? "Reading the game's content..." : `Can't read the game's content: ${link.error}. The game changed; tibobit needs an update.`;
         if (panelSignature !== problem)
@@ -3086,7 +3086,7 @@
     d.textContent = text;
     return d;
   }
-  function startPickShow(bridge) {
+  function startPickOverlay(bridge) {
     const layer = el("tbh-pick-layer");
     const banner = el("tbh-pick-banner");
     const arrows = { down: moveIcon("down", "tbh-pick-arrow-icon"), right: moveIcon("right", "tbh-pick-arrow-icon") };
@@ -3427,8 +3427,8 @@
   function start() {
     forecaster.start();
     const bridge = startBridge(link, controller, forecaster);
-    startHelper(link, discovery, bridge);
-    startPickShow(bridge);
+    startPanel(link, discovery, bridge);
+    startPickOverlay(bridge);
   }
   if (document.body === null)
     document.addEventListener("DOMContentLoaded", start, { once: true });

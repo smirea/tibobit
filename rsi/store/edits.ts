@@ -14,7 +14,7 @@ type ExperimentEdit = Partial<Omit<Experiment, "games" | "created" | "updated">>
 export type LoopEdits = { experiments?: ExperimentEdit[]; beliefs?: BeliefRow[]; infra?: { request: string; why: string }[] };
 
 /** What the coach was shown, which its edits are checked against. */
-export type Tables = { beliefs: BeliefRow[]; experiments: Experiment[] };
+type Tables = { beliefs: BeliefRow[]; experiments: Experiment[] };
 
 export const readTables = async (): Promise<Tables> => ({ beliefs: await readBeliefs(), experiments: await readExperiments() });
 
@@ -70,7 +70,7 @@ export function checkEdits(raw: Record<string, unknown>, before: Tables): Checke
  * created and updated columns and the experiments'.
  */
 /** An experiment with a coach's edit over it: only the fields the edit sends change, and a new one starts proposed. */
-export function edited(old: Experiment | undefined, edit: ExperimentEdit): Experiment {
+function edited(old: Experiment | undefined, edit: ExperimentEdit): Experiment {
   const sent = Object.fromEntries(Object.entries(edit).filter(([, v]) => v !== undefined));
   return { title: "", status: "proposed", area: "models", result: "", created: "", updated: "", hypothesis: "", method: "", findings: "", games: "", ...old, ...sent, name: edit.name };
 }

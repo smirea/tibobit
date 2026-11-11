@@ -6,8 +6,8 @@ import { clockPadded } from "../clock";
 export const NOTES_DIR = path.join(GAMEPLAY, "notes");
 
 // One file per run, written when the run ends, named for when it started and how long Tibo lived.
-// The bot writes the facts, the plan and the prompts; the coach writes the review between the
-// review markers. `--review` and the next plan read a notes file back from these same headings.
+// The bot writes the facts and the plan; the coach writes the review between the review markers.
+// The loop reads a notes file back from these same headings.
 
 type Surface = "headless" | "browser";
 
@@ -20,7 +20,7 @@ export type RunPlan = { source: string; intent: string; templates: Templates; we
 export type RunEnd = { lived: number; level?: number; kills?: number; ending: string; outcome: string[] };
 
 /** `started` is what Tibo actually started with, which says whether the coach's choice was offered. */
-type NotesContent = { setup: RunSetup; plan: RunPlan; end: RunEnd; link: string; log: string; prompts: string; picks: string[]; review: string; started: string; stats: string; key: string };
+type NotesContent = { setup: RunSetup; plan: RunPlan; end: RunEnd; link: string; log: string; picks: string[]; review: string; started: string; stats: string; key: string };
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -55,7 +55,6 @@ export function renderNotes(n: NotesContent): string {
     `| Action model | ${setup.action} |`,
     `| Coach | ${setup.coach} |`,
     `| Bot code | ${setup.bot} |`,
-    `| Coach prompts | ${n.prompts} |`,
     `| Templates from | ${plan.source} |`,
     `| Log | ${n.log} |`,
     "",

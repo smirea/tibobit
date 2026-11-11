@@ -1,7 +1,7 @@
-/** Where the coach's loop stands. */
 import { COACH_LOG } from "./paths";
 import { FULL_RUN_ITERATION } from "../rules";
 
+/** Where the coach's loop stands. */
 export type CoachState = { loop: number; iteration: number };
 
 /**

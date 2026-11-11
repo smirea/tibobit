@@ -63,7 +63,6 @@ type GameJson = {
 const UNDER = 14;
 const round = (n: number) => Math.round(n * 10) / 10;
 
-
 function loadoutOf(weapons: { id: string; level: number }[], passives: { id: string; level: number }[], items: { id: string; count: number }[]): Loadout {
   const l: Loadout = new Map();
   for (const w of weapons) l.set(`weapon:${w.id}`, w.level);

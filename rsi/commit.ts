@@ -1,9 +1,9 @@
-/** Commits gameplay/ alone, under the lock so another coach's write is never half in it, and pushes. */
 import type { CoachState } from "./store/coach-log";
 import { withLock } from "./store/lock";
 import { COMMITTER } from "./flags";
 import { GAMEPLAY } from "../paths";
 
+/** Commits gameplay/ alone, under the lock so another coach's write is never half in it, and pushes. */
 export async function commit(state: CoachState, notesFile: string | undefined) {
   const run = (cmd: string[], env?: Record<string, string>) => {
     const p = Bun.spawnSync(cmd, { cwd: GAMEPLAY, stdout: "pipe", stderr: "pipe", env: { ...process.env, ...env } });

@@ -9,8 +9,7 @@ const USAGE = `usage: rsi/main.ts [--coach claude:<model>@<effort>] [--loops <n>
   --slots      training games played side by side (default 5)
   --eval-seed  the seed every full run plays (default TIBO10); training games never use it
 
-The loop goes on from where the coach's state.json says it stopped. Ctrl-C stops it, the games and the servers.`;
-
+The loop goes on from the last entry of gameplay/coach-log.md. Ctrl-C stops it, the games and the servers.`;
 
 const argv = process.argv.slice(2);
 if (argv.includes("--help") || argv.includes("-h")) {

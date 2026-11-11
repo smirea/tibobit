@@ -1,13 +1,13 @@
 import path from "node:path";
-/**
- * The part of the game an experiment is about. The coverage table counts them, so a coach can see
- * which parts of the game no experiment has looked at yet.
- */
 import { mkdirSync, readdirSync } from "node:fs";
 import { EXPERIMENTS_DIR } from "./paths";
 import { withLock } from "./lock";
 import { gameLoops } from "./games";
 
+/**
+ * The part of the game an experiment is about. The coverage table counts them, so a coach can see
+ * which parts of the game no experiment has looked at yet.
+ */
 export const AREAS = {
   build: "weapons, passives, level-up picks, recipes and evolutions, reroll, skip and banish",
   items: "items and what they do",

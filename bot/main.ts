@@ -6,12 +6,12 @@
 // simulation says cost clearly more health over its horizon (the forecastSeconds knob) than the cheapest one.
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
-import { ladderCleared } from "../protocol/view";
+import { ladderCleared, type State } from "../protocol/view";
 import { type EndJson, see, type World } from "./world";
 import type { RunPlan, RunSetup } from "./notes";
 import { talliesOf, totalsBetween } from "./tallies";
-import { onScreen, readBook } from "./phrasing";
-import { command, followPanel, pace, RAW, say, server, type Snap, timed, timings } from "./server";
+import { readBook } from "./phrasing";
+import { command, followPanel, pace, RAW, say, server, timed, timings } from "./server";
 import { BOT_CODE, difficulty, MODE, MODE_NAME, setDifficulty, WIN_SECONDS } from "./run-context";
 import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RUN_COUNT, STEP, TAKEOVER, TRIAL, TRIAL_RESULT, WEAPON } from "./config";
 import { RunNotes } from "./run-notes";
@@ -27,7 +27,6 @@ import type { TrialResult } from "./trial-result";
 
 // The first run plays this Open World seed in a freshly reloaded tab, or the bot stops rather than play another.
 let SEED = option("seed", "").toUpperCase();
-
 
 let rescuedLink: string | undefined;
 
@@ -82,10 +81,10 @@ async function startRun(weapon = ""): Promise<void> {
 let recordCrash: ((e: unknown) => Promise<void>) | undefined;
 
 /** What the game holds of a run the bot needs once it is over, when the live view is gone, under the game's keys. */
-const ended = (s: Snap) => s.game as EndJson | undefined;
+const ended = (s: State) => s.game as EndJson | undefined;
 /** The seed of the run the tab holds, from the game's `run.seed`. */
-const gameSeed = (s: Snap) => ended(s)?.run.seed?.toString();
-const runClock = (s: Snap) => ended(s)?.runClock ?? 0;
+const gameSeed = (s: State) => ended(s)?.run.seed?.toString();
+const runClock = (s: State) => ended(s)?.runClock ?? 0;
 
 async function main() {
   await mkdir(path.dirname(LOG), { recursive: true });
@@ -102,11 +101,7 @@ async function main() {
   let awaitingLink: { notes: RunNotes; known: string | undefined } | undefined;
   console.log(`model ${MODEL}, ${MODE} ${DIFFICULTY}, step ${STEP}s, planner ${PLAN_MODEL}, templates from ${BASE.source}, run logs in ${LOG_DIR}`);
   // A run the bot is stopped in the middle of leaves no notes: it ended neither in the game nor in a bug.
-  const stop = async () => {
-    process.exit(0);
-  };
-  process.on("SIGINT", () => void stop());
-  process.on("SIGTERM", () => void stop());
+  for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => process.exit(0));
   /** A run cut short by the bot or the page gets notes that say so, and no review. */
   const cutShort = async (n: RunNotes, ending: string) => {
     n.link = "none";
@@ -170,7 +165,7 @@ async function main() {
   if (!adopted) await prepareAndStart();
   runs = 1;
 
-  const fillLink = async (s: Snap) => {
+  const fillLink = async (s: State) => {
     const link = [s.lastRunLink, rescuedLink].find((l) => l !== undefined && l !== awaitingLink?.known);
     if (awaitingLink === undefined || link === undefined) return;
     awaitingLink.notes.link = link;
@@ -182,7 +177,7 @@ async function main() {
 
   // The tab's command stream can drop and reconnect after 3s; the server re-sends the pilot state
   // when it does, so the run carries on. Two training games were lost to drops before this wait.
-  const reconnected = async (): Promise<Snap> => {
+  const reconnected = async (): Promise<State> => {
     const since = Date.now();
     for (;;) {
       await Bun.sleep(500);
@@ -273,9 +268,8 @@ async function main() {
     if (notes === undefined || planner === undefined || runLog === undefined) {
       const setup: RunSetup = { started: new Date(), difficulty: r.view.world.difficulty, mode: MODE_NAME, surface: s.headless === true ? "headless" : "browser", seed: String(r.run.seed), planner: PLAN_MODEL, action: MODEL, coach: COACH_LABEL, bot: BOT_CODE };
       const skip = !NOTES ? "no --notes" : adopted ? "taken over mid-run" : incognito ? "incognito" : undefined;
-      const prompts = "see the coach's log";
       setTemplates(plan.templates);
-      notes = new RunNotes(setup, plan, prompts, skip === undefined);
+      notes = new RunNotes(setup, plan, skip === undefined);
       const first = r.weapons[0]?.id ?? "none";
       notes.started = startNote === "chosen" ? `${first} (chosen by the coach)` : `${first} (${startNote})`;
       adopted = false;
@@ -291,10 +285,10 @@ async function main() {
       lastReport = Math.floor(r.time / 30);
       const per = (ms: number) => Math.round(ms / Math.max(1, timings.steps));
       console.log(
-        `${r.time}s hp ${Math.round(r.hp)}/${Math.round(r.maxHp)} lv ${r.view.tibo.level.level} enemies on screen ${onScreen(r)} ${r.weapons.map((w) => `${w.id}:${w.level}`).join(",")} | per step: state ${per(timings.state)}ms decide ${per(timings.decide)}ms command ${per(timings.command)}ms`,
+        `${r.time}s hp ${Math.round(r.hp)}/${Math.round(r.maxHp)} lv ${r.view.tibo.level.level} enemies on screen ${r.view.world.enemiesOnScreen} ${r.weapons.map((w) => `${w.id}:${w.level}`).join(",")} | per step: state ${per(timings.state)}ms decide ${per(timings.decide)}ms command ${per(timings.command)}ms`,
       );
       Object.assign(timings, { state: 0, decide: 0, command: 0, steps: 0 });
-      log.write(`${JSON.stringify({ event: "tick", time: r.time, hp: r.hp, level: r.view.tibo.level.level, enemies: onScreen(r) })}\n`);
+      log.write(`${JSON.stringify({ event: "tick", time: r.time, hp: r.hp, level: r.view.tibo.level.level, enemies: r.view.world.enemiesOnScreen })}\n`);
       log.flush();
     }
     steps++;

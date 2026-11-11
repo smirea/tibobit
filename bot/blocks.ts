@@ -1,11 +1,4 @@
-// The planner is the decision model in a second persona. Before every decision it reads the state
-// its template asks for, which the coach wrote for this run with the game knowledge in it. It
-// picks every level-up, chest and shrine option, and weighs every goal Tibo could take on next,
-// one question each; the most promising becomes the goal. It is asked when a goal ends, at every
-// choice, when a boss appears, and every pace.planEvery seconds, so a better goal can take over.
-
-/** One thing Tibo can do on the open choice: the game's own action, and the words the planner weighs it by. */
-import { book, fields, groundSources, onScreen, pct, poiWhat, priceWords, spotLine } from "./phrasing";
+import { book, fields, groundSources, pct, poiWhat, priceWords, spotLine } from "./phrasing";
 import { difficulty, MODE_NAME } from "./run-context";
 import type { BlockName } from "./templates";
 import type { ChoiceAction } from "../protocol/commands";
@@ -16,7 +9,7 @@ import { outcomes, pursuit } from "./goals";
 import type { Book } from "../game/book";
 import { clock } from "../clock";
 
-
+/** One thing Tibo can do on the open choice: the game's own action, and the words the planner weighs it by. */
 export type Card = { action: ChoiceAction; name: string; notes: string[]; text: string };
 
 function slotWords(r: World, type: string, id: string): string {
@@ -67,7 +60,7 @@ export function blocks(r: World, b: Book): Record<BlockName, () => string> {
     bosses: () => `Bosses: ${r.bosses.map((x) => `${x.name} (${x.type}) ${Math.round(x.dist)} away to the ${x.dir}, ${pct(x.hp, x.maxHp)}% health`).join("; ") || "none"}.`,
     enemies: () => {
       const crowd = [...r.sectors].sort((a, z) => z.enemies - a.enemies);
-      return `Enemies: ${onScreen(r)} on screen. Most to the ${crowd[0]?.dir} (${crowd[0]?.enemies}), fewest to the ${crowd.at(-1)?.dir} (${crowd.at(-1)?.enemies}).`;
+      return `Enemies: ${r.view.world.enemiesOnScreen} on screen. Most to the ${crowd[0]?.dir} (${crowd[0]?.enemies}), fewest to the ${crowd.at(-1)?.dir} (${crowd.at(-1)?.enemies}).`;
     },
     current_goal: () => `Current goal: ${pursuit === undefined ? "none" : `${pursuit.title}, since ${clock(pursuit.since)}`}.`,
     recent_goals: () => `Recent goals: ${outcomes.slice(-6).map((o) => `${clock(o.time)} ${o.title}: ${o.outcome}`).join("; ") || "none yet"}.`,

@@ -43,7 +43,7 @@ export function parsePilotChange(input: unknown): PilotChange {
 export type MoveOption = {
   move: string;
   description: string;
-  /** Health the sim forecast says this move costs over the next second, or "dead". */
+  /** Health the sim forecast says this move costs over its horizon, or "dead". */
   forecast?: string;
   /** The model's 0-4 hurt score and 0-1 usefulness; absent for a move ruled out before asking. */
   hurt?: number;

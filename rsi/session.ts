@@ -11,7 +11,6 @@ import type { Encyclopedia } from "../protocol/snapshot";
 export const LOGS = path.join(RUNS, "rsi");
 mkdirSync(LOGS, { recursive: true });
 
-
 const opened: Slot[] = [];
 
 let closing: Promise<unknown> | undefined;
