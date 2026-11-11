@@ -5,8 +5,9 @@
 import path from "node:path";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { ENTRY, ROOT } from "../paths";
-import type { CheckpointMeta, CommandStatus, LoadoutSpec, State } from "../protocol/protocol";
-import { type Gym, type Templates, type Totals, clock, runStats } from "../rsi/gameplay";
+import type { CheckpointMeta, CommandStatus, LoadoutSpec } from "../protocol/commands";
+import type { State } from "../protocol/view";
+import { clock, type Gym, runStats, type Templates, type Totals } from "../rsi/gameplay";
 
 export const DECISION_MODEL = "typesafe/jev-1.14-20261014";
 const GYM_STAGE_SECONDS = 300;

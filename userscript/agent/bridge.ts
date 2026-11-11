@@ -3,7 +3,9 @@ import type { Controller } from "./control";
 import type { CheckpointFile } from "./training";
 import { encyclopedia } from "./encyclopedia";
 import { Foresight } from "./foresight";
-import { BRIDGE_PORT, type ChatMessage, type PageLine, type PilotState, bridgeOrigin, DEFAULT_SETTINGS, parseCommand, parsePilotChange, type PilotChange, type PilotSettings, trimChat, validPort } from "../../protocol/protocol";
+import { BRIDGE_PORT, bridgeOrigin, validPort } from "../../protocol/address";
+import { type ChatMessage, DEFAULT_SETTINGS, type PageLine, parsePilotChange, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../../protocol/pilot";
+import { parseCommand } from "../../protocol/commands";
 import { inRun, snapshot } from "./snapshot";
 
 const PORT_KEY = "tibobit.bridgePort";

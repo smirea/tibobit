@@ -9,11 +9,12 @@ import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { lookup } from "node:dns/promises";
 import { ENTRY, GAMEPLAY, ROOT, RUNS, USERSCRIPT } from "../paths";
-import { type LoadoutSpec, ladderCleared, parseLoadout } from "../protocol/protocol";
-import { type HarnessName, checkHarness, jsonObject, runCoach } from "./coach";
+import { type LoadoutSpec, parseLoadout } from "../protocol/commands";
+import { ladderCleared } from "../protocol/view";
+import { checkHarness, type HarnessName, jsonObject, runCoach } from "./coach";
+import { type BeliefRow, type Checked, clock, type Experiment, type Gym, type Playbook, type PromptKey, type Templates } from "./gameplay";
+import { DECISION_MODEL, freshSeed, type GameResult, type GameSpec, onSlots, Slot, type Start } from "../training/slots";
 import * as loop from "./gameplay";
-import { type BeliefRow, type Checked, type Experiment, type Gym, type Playbook, type PromptKey, type Templates, clock } from "./gameplay";
-import { DECISION_MODEL, type GameResult, type GameSpec, type Start, Slot, freshSeed, onSlots } from "../training/slots";
 
 const USAGE = `usage: scripts/recursive-self-improvement.ts [--coach claude:<model>@<effort>] [--loops <n>] [--slots <n>] [--eval-seed <seed>]
 

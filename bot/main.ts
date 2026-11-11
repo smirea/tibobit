@@ -9,11 +9,16 @@ import path from "node:path";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { ROOT, RUNS as RUNS_DIR } from "../paths";
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, type ActionTag, type ChatLine, type ChoiceAction, type ChoiceOption, type GoalResult, type CommandStatus, DIRECTIONS, type Direction, type DirectionView, type CardOption, type Encyclopedia, type GameMode, type Inspect, ladderCleared, type MoveOption, type PilotPace, type State } from "../protocol/protocol";
-import { type Book, line, readBook as bookOf } from "../agent-server/book";
-import { type Chest, type Sector, type Spot, type World, see } from "./world";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN } from "../protocol/address";
+import type { ActionTag, CardOption, ChatLine, GoalResult, Inspect, MoveOption, PilotPace } from "../protocol/pilot";
+import type { ChoiceAction, CommandStatus, GameMode } from "../protocol/commands";
+import { type ChoiceOption, type DirectionView, ladderCleared, type State } from "../protocol/view";
+import { type Direction, DIRECTIONS } from "../protocol/geometry";
+import type { Encyclopedia } from "../protocol/snapshot";
+import { type Book, readBook as bookOf, line } from "../agent-server/book";
+import { type Chest, type Sector, see, type Spot, type World } from "./world";
+import { type BlockName, DEFAULT_TEMPLATES, type Knobs, render, type RunPlan, type RunSetup, type Templates } from "../rsi/gameplay";
 import * as loop from "../rsi/gameplay";
-import { type BlockName, type Knobs, type RunPlan, type RunSetup, type Templates, DEFAULT_TEMPLATES, render } from "../rsi/gameplay";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {

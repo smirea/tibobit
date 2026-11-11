@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type BeliefRow, checkEdits, upsert, promptLoss, stampBeliefs, checkLoopFiles, checkTemplates, DEFAULT_TEMPLATES, type Experiment, notesName, notesTemplates, parseCsv, parseExperiment, renderExperiment, renderNotes, type RunSetup, withReview, totalsBetween, totalsLines, LOCKSTEP_CRUTCH, splitPrompts, checkPromptPart, stateFromLog, wordsChanged, overdueAreas, hasFreshGames } from "./gameplay";
+import { type BeliefRow, checkEdits, checkLoopFiles, checkPromptPart, checkTemplates, DEFAULT_TEMPLATES, type Experiment, hasFreshGames, LOCKSTEP_CRUTCH, notesName, notesTemplates, overdueAreas, parseCsv, parseExperiment, promptLoss, renderExperiment, renderNotes, type RunSetup, splitPrompts, stampBeliefs, stateFromLog, totalsBetween, totalsLines, upsert, withReview, wordsChanged } from "./gameplay";
 
 const setup: RunSetup = { started: new Date(2026, 10, 7, 15, 4, 9), difficulty: "nightmare", mode: "daily", surface: "headless", seed: "S1", planner: "jev", action: "jev", coach: "grok", bot: "abc1234" };
 

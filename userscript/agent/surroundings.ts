@@ -1,11 +1,11 @@
 import type { GameLink, GameState } from "../game";
-import { DIRECTIONS, type Direction, type Surroundings, type Threats } from "../../protocol/protocol";
+import { type Direction, directionOf, DIRECTIONS, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
+import type { Surroundings, Threats } from "../../protocol/snapshot";
 
 // Volleys, attack zones and hazards farther than this from Tibo are left out.
 const REACH = 300;
 // Enemies this close count as on Tibo, for standing still.
 const NEAR = 60;
-const TICKS_PER_SECOND = 60;
 const WINDOW_TICKS = 3 * TICKS_PER_SECOND;
 
 type Tally = { tick: number; totals: Map<string, number> }[];
@@ -37,17 +37,8 @@ function recentDps(s: GameState): number {
 }
 const PATH_SAMPLES = [0.25, 0.5, 0.75, 1];
 
-export function directionOf(dx: number, dy: number): Direction {
-  const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
-  return DIRECTIONS[(octant + 8) % 8] ?? "right";
-}
-
 const round = (n: number) => Math.round(n * 10) / 10;
 const bearing = (dx: number, dy: number) => ({ dist: round(Math.hypot(dx, dy)), dir: directionOf(dx, dy) });
-const unit = (dir: Direction) => {
-  const a = (DIRECTIONS.indexOf(dir) * Math.PI) / 4;
-  return { x: Math.cos(a), y: Math.sin(a) };
-};
 
 function* alive(p: { pool: { count: number; slotAt(n: number): number; isAlive(slot: number): boolean } }): Generator<number> {
   for (let n = 0; n < p.pool.count; n++) {
@@ -138,7 +129,7 @@ export function threats(link: GameLink, s: GameState, seconds: number): Threats 
 
   const inPool = link.inPool;
   const paths = DIRECTIONS.map((dir) => {
-    const u = unit(dir);
+    const u = unitOf(dir);
     return { dir, points: PATH_SAMPLES.map((f) => ({ x: u.x * reach * f, y: u.y * reach * f })) };
   });
   const entered = (contains: (x: number, y: number) => boolean) => paths.filter((p) => p.points.some((q) => contains(q.x, q.y))).map((p) => p.dir);

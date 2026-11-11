@@ -1,21 +1,6 @@
-import {
-  type Combo,
-  type Key,
-  type Kind,
-  type Loadout,
-  type Part,
-  comboProgress,
-  combosUsing,
-  idOf,
-  nameOf,
-  partner,
-  partState,
-  readLoadout,
-  relevantCombos,
-  unpaired,
-} from "./catalog";
+import { type Combo, comboProgress, combosUsing, idOf, type Key, type Kind, type Loadout, nameOf, type Part, partner, partState, readLoadout, relevantCombos, unpaired } from "./catalog";
 import type { Bridge } from "./agent/bridge";
-import { validPort } from "../protocol/protocol";
+import { validPort } from "../protocol/address";
 import { chatBox } from "./chat";
 import { type Data, liveData } from "./data";
 import type { Discovery } from "./discovery";

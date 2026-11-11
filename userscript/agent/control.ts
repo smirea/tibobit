@@ -1,13 +1,13 @@
 import type { Game, GameLink, GameState } from "../game";
-import { type Command, type CommandStatus, type GameMode, DIRECTIONS, type Envelope, type Heading, type Target } from "../../protocol/protocol";
+import type { Command, CommandStatus, Envelope, GameMode, Target } from "../../protocol/commands";
+import { STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
 import { button, modeScreen } from "./menu";
-import { choiceCards, inRun } from "./snapshot";
+import { inRun } from "./snapshot";
 import { type CheckpointFile, SEED_KEY, Training } from "./training";
 
 /** Where checkpoints live: the agent server's disk, reached through the bridge. */
 export type CheckpointStore = { put(file: CheckpointFile): Promise<void>; get(name: string): Promise<CheckpointFile> };
 
-const TICKS_PER_SECOND = 60;
 const STUCK_TICKS = 90;
 const KEEP_STATUSES = 10;
 
@@ -39,13 +39,6 @@ export function toward(s: GameState, goal: { x: number; y: number; within: numbe
   return dist > goal.within ? { x: dx / dist, y: dy / dist } : STILL;
 }
 
-function vector(dir: Heading): { x: number; y: number } {
-  const degrees = typeof dir === "number" ? dir : DIRECTIONS.indexOf(dir) * 45;
-  const radians = (degrees * Math.PI) / 180;
-  return { x: Math.cos(radians), y: Math.sin(radians) };
-}
-
-const STILL = { x: 0, y: 0 };
 
 function wait(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -187,7 +180,7 @@ export class Controller {
       case "dash": {
         const game = this.game();
         const me = game.state.me;
-        const v = command.dir === undefined ? { x: game.state.player.fx[me] ?? 1, y: game.state.player.fy[me] ?? 0 } : vector(command.dir);
+        const v = command.dir === undefined ? { x: game.state.player.fx[me] ?? 1, y: game.state.player.fy[me] ?? 0 } : unitOf(command.dir);
         game.dash(v.x, v.y);
         this.finish(status, "done");
         return;
@@ -342,7 +335,7 @@ export class Controller {
         this.finish(status, "done");
         return STILL;
       }
-      return vector(command.dir);
+      return unitOf(command.dir);
     }
 
     if (elapsed >= (command.timeout ?? 60) * TICKS_PER_SECOND) {
@@ -385,7 +378,7 @@ export class Controller {
     if (active === undefined || live === undefined) return undefined;
     const { command } = active;
     if (command.type === "move") {
-      const held = vector(command.dir);
+      const held = unitOf(command.dir);
       const end = command.seconds === undefined ? Infinity : (active.startTick ?? live.tick) + command.seconds * TICKS_PER_SECOND;
       return (s) => (s.tick >= end ? STILL : held);
     }

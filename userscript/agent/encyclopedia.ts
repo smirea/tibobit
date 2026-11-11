@@ -1,5 +1,5 @@
 import type { GameLink } from "../game";
-import type { Encyclopedia } from "../../protocol/protocol";
+import type { Encyclopedia } from "../../protocol/snapshot";
 
 function plain(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value, (_k, v: unknown) => (v instanceof Map ? Object.fromEntries(v) : v instanceof Set ? [...v] : v)));

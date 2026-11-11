@@ -9,7 +9,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { GAMEPLAY } from "../paths";
-import type { CheckpointMeta, LoadoutSpec } from "../protocol/protocol";
+import type { CheckpointMeta, LoadoutSpec } from "../protocol/commands";
 
 export const NOTES_DIR = path.join(GAMEPLAY, "notes");
 export const EXPERIMENTS_DIR = path.join(GAMEPLAY, "experiments");

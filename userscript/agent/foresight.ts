@@ -1,9 +1,9 @@
 import type { Game, GameLink, GameState } from "../game";
 import { type Controller, toward } from "./control";
-import { DIRECTIONS, type Ahead, type Direction, type Forecast, type Routes } from "../../protocol/protocol";
-import { directionOf, threats } from "./surroundings";
+import { type Direction, directionOf, DIRECTIONS, STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
+import type { Ahead, Forecast, Routes } from "../../protocol/snapshot";
+import { threats } from "./surroundings";
 
-const TICKS_PER_SECOND = 60;
 // The copies run on the page's own thread, in slices this long, and take at most this share of its
 // time: a whole forecast in one go would hold up the game's frames and the agent's commands.
 const SLICE_MS = 4;
@@ -21,11 +21,6 @@ type Plan = {
   trip?: { goal(s: GameState): { x: number; y: number; within: number } | undefined; stayTicks: number };
 };
 
-const unit = (dir: Direction) => {
-  const a = (DIRECTIONS.indexOf(dir) * Math.PI) / 4;
-  return { x: Math.cos(a), y: Math.sin(a) };
-};
-const STILL = { x: 0, y: 0 };
 const playing = (s: GameState) => !s.over && s.choiceQueue.length === 0;
 const dealt = (s: GameState) => {
   let total = 0;
@@ -61,7 +56,7 @@ export class Foresight {
     const place = route === undefined ? undefined : this.controller.place(s, route.to);
     if (route === undefined || place === undefined) {
       return [...DIRECTIONS, "still" as const].map((name) => {
-        const held = name === "still" ? STILL : unit(name);
+        const held = name === "still" ? STILL : unitOf(name);
         return { name, ticks: this.link.forecastTicks, input: () => held };
       });
     }
@@ -74,9 +69,9 @@ export class Foresight {
     const trip = { goal, stayTicks: route.stayTicks };
     return [
       { name: "straight", ticks: route.ticks, input: straight, trip },
-      ...beside.map((dir) => ({ name: dir, ticks: route.ticks, input: first(unit(dir)), trip })),
+      ...beside.map((dir) => ({ name: dir, ticks: route.ticks, input: first(unitOf(dir)), trip })),
       { name: "still", ticks: route.ticks, input: first(STILL), trip },
-      { name: `dash ${ahead}`, ticks: route.ticks, input: straight, dash: unit(ahead), trip },
+      { name: `dash ${ahead}`, ticks: route.ticks, input: straight, dash: unitOf(ahead), trip },
     ];
   }
 

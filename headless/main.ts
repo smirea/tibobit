@@ -3,10 +3,10 @@
 // browser. Tampermonkey is not available there, so GM_xmlhttpRequest is shimmed with fetch; the
 // page's CSP and CORS would block that fetch, which is why both are turned off for this profile.
 import { readdirSync } from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { USERSCRIPT } from "../paths";
 import { chromium } from "playwright-core";
+import os from "node:os";
+import path from "node:path";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {

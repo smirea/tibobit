@@ -1,10 +1,11 @@
 import type { GameLink } from "../game";
 import { modeScreen } from "./menu";
-import type { CommandStatus, Forecast, Snapshot } from "../../protocol/protocol";
+import type { CommandStatus } from "../../protocol/commands";
+import type { Forecast, Snapshot } from "../../protocol/snapshot";
 import { reflect } from "./reflect";
 import { surroundings } from "./surroundings";
+import { TICKS_PER_SECOND } from "../../protocol/geometry";
 
-const TICKS_PER_SECOND = 60;
 
 /**
  * The open choice's cards and buttons in on-screen order, for the panel's pick overlay. Level-ups,

@@ -1,5 +1,6 @@
 import type { Game, GameLink, GameState } from "../game";
-import type { CheckpointMeta, LoadoutSpec } from "../../protocol/protocol";
+import type { CheckpointMeta, LoadoutSpec } from "../../protocol/commands";
+import { TICKS_PER_SECOND } from "../../protocol/geometry";
 
 export const SEED_KEY = "tibobit.seed";
 
@@ -52,7 +53,6 @@ function classKey(proto: object): string {
   return `${name}(${Object.getOwnPropertyNames(proto).sort().join(",")})`;
 }
 
-const TICKS_PER_SECOND = 60;
 const WARM_UP_TICKS = 3 * TICKS_PER_SECOND;
 const WEAPON_SLOTS = 6;
 const MAX_CACHED = 3;

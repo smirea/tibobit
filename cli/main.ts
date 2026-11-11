@@ -1,12 +1,7 @@
 #!/usr/bin/env bun
-import {
-  BRIDGE_ORIGIN as DEFAULT_ORIGIN,
-  type CheckpointMeta,
-  type CommandStatus,
-  type State,
-  bridgeOrigin,
-  validPort,
-} from "../protocol/protocol";
+import { bridgeOrigin, BRIDGE_ORIGIN as DEFAULT_ORIGIN, validPort } from "../protocol/address";
+import type { CheckpointMeta, CommandStatus } from "../protocol/commands";
+import type { State } from "../protocol/view";
 
 const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
 

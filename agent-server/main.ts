@@ -1,11 +1,16 @@
 #!/usr/bin/env bun
 import { mkdir, readdir, rename } from "node:fs/promises";
-import path from "node:path";
 import type { ServerWebSocket, Subprocess } from "bun";
 import { CHECKPOINTS, ENTRY, ROOT } from "../paths";
 import { type Book, readBook } from "./book";
 import { liveView } from "./live-view";
-import { BRIDGE_PORT, CHECKPOINT_NAME, type LiveView, parseRaw, rawParts, type State, type CheckpointMeta, type ChatMessage, type CommandStatus, type Encyclopedia, type PageLine, type PilotState, type Snapshot, DEFAULT_SETTINGS, type PilotChange, type PilotSettings, parseChatLine, parseCommand, parsePilotChange, trimChat } from "../protocol/protocol";
+import { BRIDGE_PORT } from "../protocol/address";
+import { CHECKPOINT_NAME, type CheckpointMeta, type CommandStatus, parseCommand } from "../protocol/commands";
+import type { LiveView, State } from "../protocol/view";
+import { parseRaw, rawParts } from "./raw";
+import { type ChatMessage, DEFAULT_SETTINGS, type PageLine, parseChatLine, parsePilotChange, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../protocol/pilot";
+import type { Encyclopedia, Snapshot } from "../protocol/snapshot";
+import path from "node:path";
 
 const KEEPALIVE_MS = 5_000;
 const option = (name: string, fallback: string) => {

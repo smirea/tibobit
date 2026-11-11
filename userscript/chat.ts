@@ -1,6 +1,6 @@
 import type { Bridge } from "./agent/bridge";
 import { ACTION_ICONS, moveIcon, NOTE_ICON, RESULT_ICONS, svgIcon } from "./icons";
-import { type CardOption, type ChatMessage, type Inspect, PACE_LIMITS, type PilotPace, type PilotRole } from "../protocol/protocol";
+import { type CardOption, type ChatMessage, type Inspect, PACE_LIMITS, type PilotPace, type PilotRole } from "../protocol/pilot";
 
 const ROLE_LABELS: Record<PilotRole, string> = { planner: "Plan", action: "Action", system: "Bot" };
 const HIDE_DELAY_MS = 200;

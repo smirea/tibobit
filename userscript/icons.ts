@@ -1,4 +1,4 @@
-import type { ActionTag, GoalResult } from "../protocol/protocol";
+import type { ActionTag, GoalResult } from "../protocol/pilot";
 
 /** One stroke of a 24x24 icon: a path drawn in the tile's colour, or filled with it. */
 type Stroke = string | { fill: string };

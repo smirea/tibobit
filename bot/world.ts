@@ -1,7 +1,8 @@
 // What the bot reads each step: the agent server's live view of the game (LiveView), with the
 // targets of every direction gathered into lists, and the game's own run tallies, which the bot asks
 // for with `raw` to write its logs and results.
-import { type Aim, DIRECTIONS, type Direction, type DirectionView, type LiveView, type LoadoutItem, type State } from "../protocol/protocol";
+import type { Aim, DirectionView, LiveView, LoadoutItem, State } from "../protocol/view";
+import { type Direction, DIRECTIONS } from "../protocol/geometry";
 
 /** Where a target is: its distance, and the way to walk to it, or "still" when Tibo stands on or in it. */
 export type Placed = { dist: number; dir: Direction | "still" };

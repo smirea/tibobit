@@ -1,8 +1,10 @@
 // The game as a live game needs it (LiveView in src/agent/protocol.ts), built by the agent server
 // from the page's snapshot (the game state, its surroundings and the sim forecast) and the game's
 // encyclopedia. Names and descriptions are the game's English; ids and kinds are the game's own.
-import { type Loadout, comboProgress, nameOf, partState, relevantCombos } from "../userscript/catalog";
-import { type Aim, type ChoiceOption, DIRECTIONS, type Direction, type DirectionView, type LiveView, type LoadoutItem, type Snapshot } from "../protocol/protocol";
+import { comboProgress, type Loadout, nameOf, partState, relevantCombos } from "../userscript/catalog";
+import type { Aim, ChoiceOption, DirectionView, LiveView, LoadoutItem } from "../protocol/view";
+import { type Direction, directionOf, DIRECTIONS, TICKS_PER_SECOND } from "../protocol/geometry";
+import type { Snapshot } from "../protocol/snapshot";
 import { type Book, line, pairings } from "./book";
 
 type Row = { uid: number; slot: number; x: number; y: number };
@@ -57,15 +59,10 @@ type GameJson = {
   moreVariety?: Record<string, unknown>;
 };
 
-const TICKS = 60;
 // A pickup this close is under Tibo; the game's own reach for chests is about this.
 const UNDER = 14;
 const round = (n: number) => Math.round(n * 10) / 10;
 
-export function directionOf(dx: number, dy: number): Direction {
-  const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
-  return DIRECTIONS[(octant + 8) % 8] ?? "right";
-}
 
 export function loadoutOf(weapons: { id: string; level: number }[], passives: { id: string; level: number }[], items: { id: string; count: number }[]): Loadout {
   const l: Loadout = new Map();
@@ -256,7 +253,7 @@ export function liveView(s: Snapshot, b: Book): LiveView | undefined {
       type,
       name: (variety === undefined ? line(b, "poi", p.kind) : line(b, "varietyPlace", variety)) ?? type,
       distance: at.distance,
-      charged: round(p.state.charge / TICKS),
+      charged: round(p.state.charge / TICKS_PER_SECOND),
       chargeSeconds: p.kind === "bigUpdate" ? (p.varietyPlace === undefined ? 1.5 : 0) : (activation[p.kind] ?? 0),
     });
   }
@@ -264,7 +261,7 @@ export function liveView(s: Snapshot, b: Book): LiveView | undefined {
     const at = place(p.x, p.y);
     const aim: Aim = { id: p.uid, type: p.kind, name: p.kind, distance: at.distance };
     const where = at.distance <= UNDER ? "still" : at.direction;
-    if (p.kind === "chest") add("chests", where, { ...aim, charged: round(p.charge / TICKS), chargeSeconds: activation.chest ?? 1 });
+    if (p.kind === "chest") add("chests", where, { ...aim, charged: round(p.charge / TICKS_PER_SECOND), chargeSeconds: activation.chest ?? 1 });
     else add(p.kind === "heal" ? "food" : "pickups", where, aim);
   }
   for (const x of g.bosses) {
@@ -305,11 +302,11 @@ export function liveView(s: Snapshot, b: Book): LiveView | undefined {
       life: { hp: Math.round(me.hp), max: Math.round(stats.maxHp ?? 0) },
       level: { level: l.level, xp: Math.round(l.xp), next: Math.round(l.xpNext) },
       gold: Math.floor(l.gold),
-      dash: { charges: me.dashCharges, max: dashMax, readyIn: me.dashCharges >= dashMax ? 0 : round(me.dashCd / TICKS) },
+      dash: { charges: me.dashCharges, max: dashMax, readyIn: me.dashCharges >= dashMax ? 0 : round(me.dashCd / TICKS_PER_SECOND) },
       position: { x: Math.round(me.x), y: Math.round(me.y) },
       status: {
-        ...(me.stunTicks > 0 ? { stunned: round(me.stunTicks / TICKS) } : {}),
-        ...(me.freezeTicks > 0 ? { frozen: round(me.freezeTicks / TICKS) } : {}),
+        ...(me.stunTicks > 0 ? { stunned: round(me.stunTicks / TICKS_PER_SECOND) } : {}),
+        ...(me.freezeTicks > 0 ? { frozen: round(me.freezeTicks / TICKS_PER_SECOND) } : {}),
         ...(me.slowT > 0 ? { slowed: round(me.slowT) } : {}),
         ...(me.invuln > 0 ? { invulnerable: true as const } : {}),
       },
