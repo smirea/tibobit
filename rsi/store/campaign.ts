@@ -1,5 +1,5 @@
 import path from "node:path";
-import { NOTES_DIR, notesField, notesFiles } from "../../bot/notes";
+import { NOTES_DIR, notesField, notesFiles, readNotesName } from "../../bot/notes";
 import { clock } from "../../clock";
 
 /** A finished run as the ladder sees it, read from its notes file name and header. */
@@ -8,11 +8,11 @@ type RunRecord = { name: string; coach: string; difficulty: string; level: numbe
 async function runRecords(): Promise<RunRecord[]> {
   const out: RunRecord[] = [];
   for (const name of await notesFiles()) {
-    const m = name.match(/_lived-(\d+)-(\d+)_(.+)_(daily|world)_(headless|browser)\.md$/);
-    if (m === null) continue;
+    const run = readNotesName(name);
+    if (run === undefined) continue;
     const text = await Bun.file(path.join(NOTES_DIR, name)).text();
-    const difficulty = m[3] ?? "";
-    out.push({ name, coach: (notesField(text, "Coach") ?? "?").split(" ")[0] ?? "?", difficulty, level: Number(difficulty.match(/^nightmare-(\d+)$/)?.[1] ?? 0), mode: m[4] ?? "", lived: Number(m[1]) * 60 + Number(m[2]), won: (notesField(text, "Ending") ?? "").startsWith("won"), text });
+    const { difficulty } = run;
+    out.push({ name, coach: (notesField(text, "Coach") ?? "?").split(" ")[0] ?? "?", difficulty, level: Number(difficulty.match(/^nightmare-(\d+)$/)?.[1] ?? 0), mode: run.mode, lived: run.lived, won: (notesField(text, "Ending") ?? "").startsWith("won"), text });
   }
   return out;
 }

@@ -22,6 +22,7 @@ import { buildClaimed, buildGym, claimPending } from "./gym-builds";
 import { stopping } from "./stop";
 import { logForPrompt } from "../bot/run-log/reader";
 import { botArgv, JEV } from "../bot/args";
+import type { NotedRun } from "../bot/trial-result";
 type ExperimentReply = { summary: string; edits: LoopEdits; games: GameSpec[]; gyms: GymRequest; playbook?: Playbook };
 
 export async function experimentIteration(state: CoachState) {
@@ -183,7 +184,7 @@ async function rehearse(state: CoachState, playbook: Playbook): Promise<Rehearsa
   return { reverted, text: ["## The rehearsal", verdict, ...results.map((r) => gameEntry(r, gyms, false))].join("\n\n") };
 }
 
-export async function fullRun(state: CoachState): Promise<string | undefined> {
+export async function fullRun(state: CoachState): Promise<NotedRun | undefined> {
   const tag = tagOf(state);
   const stamp = tagOf(state);
   const instructions = (await readPrompts()).fullRun;
@@ -225,7 +226,9 @@ export async function fullRun(state: CoachState): Promise<string | undefined> {
   const templatesFile = path.join(LOGS, `${tag}.full-run.templates.json`);
   await Bun.write(templatesFile, JSON.stringify(final.templates));
   await refreshGames();
-  const startedAt = Date.now();
+  const resultFile = path.join(LOGS, `${tag}.full-run.result.json`);
+  // A full run played again after a stop must not be taken for the one before it.
+  await Bun.file(resultFile).delete().catch(() => {});
   // The bot plays the evaluation seed in a freshly loaded tab, as its first run there, and checks it.
   console.log(`${tag}: full run on Nightmare ${(await ladder()) + 1}, seed ${EVAL_SEED}`);
   const out = Bun.file(path.join(LOGS, `${tag}.full-run.log`));
@@ -234,17 +237,14 @@ export async function fullRun(state: CoachState): Promise<string | undefined> {
       process.execPath,
       ENTRY.bot,
       ...botArgv({ server: main.agent.origin, reload: "", ...JEV, mode: "openWorld", difficulty: "highest", runs: 1, seed: EVAL_SEED }),
-      ...botArgv({ notes: true, "coach-label": COACH_LABEL, intent, templates: templatesFile, ...(final.weapon === "" ? {} : { weapon: final.weapon }), "log-dir": path.join(LOGS, "full-runs") }),
+      ...botArgv({ notes: true, "coach-label": COACH_LABEL, intent, templates: templatesFile, ...(final.weapon === "" ? {} : { weapon: final.weapon }), "log-dir": path.join(LOGS, "full-runs"), result: resultFile }),
     ],
     { cwd: ROOT, stdin: "ignore", stdout: out, stderr: out },
   );
   const code = await bot.exited;
   if (code !== 0) console.error(`${tag}: the full run's bot exited with code ${code}; see ${out.name}`);
-  for (const name of await notesFiles()) {
-    const file = path.join(NOTES_DIR, name);
-    if (Bun.file(file).lastModified >= startedAt && notesField(await Bun.file(file).text(), "Coach") === COACH_LABEL) return file;
-  }
-  return undefined;
+  // A run cut short leaves no notes.
+  return (await Bun.file(resultFile).exists()) ? ((await Bun.file(resultFile).json()) as NotedRun) : undefined;
 }
 
 type ReflectReply = { review: string; summary: string; edits: LoopEdits; prompts: Partial<Record<PromptKey, string>>; gyms: GymRequest; playbook?: Playbook };

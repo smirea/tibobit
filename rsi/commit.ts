@@ -2,15 +2,15 @@ import type { CoachState } from "./store/coach-log";
 import { withLock } from "./store/lock";
 import { COMMITTER } from "./flags";
 import { GAMEPLAY } from "../paths";
+import { clock } from "../clock";
 
 /** Commits gameplay/ alone, under the lock so another coach's write is never half in it, and pushes. */
-export async function commit(state: CoachState, notesFile: string | undefined) {
+export async function commit(state: CoachState, lived: number | undefined) {
   const run = (cmd: string[], env?: Record<string, string>) => {
     const p = Bun.spawnSync(cmd, { cwd: GAMEPLAY, stdout: "pipe", stderr: "pipe", env: { ...process.env, ...env } });
     return { ok: p.exitCode === 0, out: `${p.stdout.toString()}${p.stderr.toString()}`.trim() };
   };
-  const lived = notesFile?.match(/lived-(\d+)-(\d+)/);
-  const title = `docs(gameplay): the coach finishes loop ${state.loop}${lived === null || lived === undefined ? "" : `, its full run lived ${Number(lived[1])}:${lived[2]}`}`;
+  const title = `docs(gameplay): the coach finishes loop ${state.loop}${lived === undefined ? "" : `, its full run lived ${clock(lived)}`}`;
   const result = await withLock(async () => {
     run(["git", "add", "-A", "--", "."]);
     if (run(["git", "diff", "--cached", "--quiet", "--", "."]).ok) return undefined;

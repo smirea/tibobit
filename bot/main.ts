@@ -12,7 +12,7 @@ import type { RunPlan, RunSetup } from "./notes";
 import { talliesOf, totalsBetween } from "./tallies";
 import { command, followPanel, pace, RAW, say, server, timed, timings } from "./server";
 import { BOT_CODE, difficulty, MODE, MODE_NAME, setDifficulty, WIN_SECONDS } from "./run-context";
-import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG, LOG_DIR, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RUN_COUNT, STEP, TAKEOVER, TRIAL, TRIAL_RESULT, WEAPON } from "./config";
+import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG, LOG_DIR, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RESULT, RUN_COUNT, STEP, TAKEOVER, TRIAL, WEAPON } from "./config";
 import { RunNotes } from "./run-notes";
 import { setTemplates } from "./run-templates";
 import { choose, loadoutLines, Planner } from "./planner";
@@ -151,7 +151,7 @@ async function main() {
       await command({ type: "stop" });
       await command({ type: "pause" });
     }
-    await Bun.write(TRIAL_RESULT, `${JSON.stringify(result, null, 2)}\n`);
+    await Bun.write(RESULT, `${JSON.stringify(result, null, 2)}\n`);
     console.log(`trial: ${died === undefined ? "alive" : "died"} after ${result.survived}s, hp ${result.hp.start} -> ${result.hp.end}, ${result.kills} kills`);
   };
   say({

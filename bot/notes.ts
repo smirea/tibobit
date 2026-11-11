@@ -34,6 +34,12 @@ export function notesName(setup: RunSetup, lived: number): string {
   return `${runId(setup.started)}_lived-${clockPadded(lived, "-")}_${setup.difficulty}_${setup.mode}_${setup.surface}.md`;
 }
 
+/** What a notes file's name says of its run, or undefined for a file that is not a run's notes. */
+export function readNotesName(name: string): { lived: number; difficulty: string; mode: string; surface: string } | undefined {
+  const m = name.match(/_lived-(\d+)-(\d+)_(.+)_(daily|world)_(headless|browser)\.md$/);
+  return m === null ? undefined : { lived: Number(m[1]) * 60 + Number(m[2]), difficulty: m[3] ?? "", mode: m[4] ?? "", surface: m[5] ?? "" };
+}
+
 const REVIEW_START = "<!-- review: written by the coach after the run -->";
 
 const REVIEW_END = "<!-- /review -->";

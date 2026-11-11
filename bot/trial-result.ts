@@ -21,3 +21,6 @@ export type TrialResult = {
   snapshotAgeMs: { p50: number; p90: number };
   log?: string;
 };
+
+/** What the bot writes to --result for a run it kept notes of: where the notes are, and how long Tibo lived. */
+export type NotedRun = { notes: string; lived: number };

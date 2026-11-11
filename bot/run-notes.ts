@@ -2,7 +2,8 @@ import path from "node:path";
 import { keyNumbers, runStats } from "./run-log/reader";
 import { NOTES_DIR, notesName, renderNotes, type RunEnd, runId, type RunPlan, type RunSetup } from "./notes";
 import { existsSync } from "node:fs";
-import { LOG_DIR } from "./config";
+import { LOG_DIR, RESULT } from "./config";
+import type { NotedRun } from "./trial-result";
 
 /** The run's notes, written to gameplay/notes when the run ends; bot/notes.ts has the format. */
 export class RunNotes {
@@ -35,6 +36,7 @@ export class RunNotes {
     this.end = end;
     this.file = path.join(NOTES_DIR, notesName(this.setup, end.lived));
     await this.write();
+    if (this.saved && RESULT !== "") await Bun.write(RESULT, `${JSON.stringify({ notes: this.file, lived: end.lived } satisfies NotedRun)}\n`);
   }
 
   async write() {

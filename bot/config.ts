@@ -22,8 +22,9 @@ export const MODEL = option("model", "h2o-lightning-4b@q8_0");
 export const TRIAL = has("trial") ? Number(option("trial", "")) : undefined;
 if (TRIAL !== undefined && !(TRIAL > 0)) throw new Error(`--trial takes the seconds of game time to play; got ${option("trial", "nothing")}`);
 
-export const TRIAL_RESULT = option("result", "");
-if (TRIAL !== undefined && TRIAL_RESULT === "") throw new Error("--trial needs --result <file> for what happened");
+/** Where the bot writes what happened: a trial's result, or for a run with notes, where its notes are. */
+export const RESULT = option("result", "");
+if (TRIAL !== undefined && RESULT === "") throw new Error("--trial needs --result <file> for what happened");
 
 export const BASE: { templates: Templates; weapon?: string; source: string } = await (async () => {
   const file = option("templates", "");

@@ -33,10 +33,10 @@ for (let played = 0; played < LOOPS && !stopping; played++) {
   }
   if (stopping) break;
   console.log(`== ${tagOf(state)}: full run`);
-  const notesFile = await fullRun(state);
+  const run = await fullRun(state);
   if (stopping) break;
-  await reflect(state, notesFile);
-  await commit(state, notesFile);
+  await reflect(state, run?.notes);
+  await commit(state, run?.lived);
   state = { loop: state.loop + 1, iteration: 1 };
 }
 await shutdown(0);
