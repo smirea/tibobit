@@ -77,3 +77,23 @@ export const goalCell = {
 
 /** What a row's reason ends with when the model it names never answered and the bot went on without it. */
 export const UNANSWERED = "did not answer in time";
+
+type Rated = { card: string; probability?: number };
+/** The options of one question with the model's odds for each: `Peeler 61%; Root Cellar 30%; Grab Bag ?%`. */
+export const oddsCell = {
+  encode: (options: Rated[]) => options.map((o) => `${o.card} ${o.probability === undefined ? "?" : Math.round(o.probability * 100)}%`).join("; "),
+  decode: (text: string | undefined) =>
+    (text ?? "").split("; ").filter(Boolean).map((part) => {
+      const m = part.match(/^(.*) (\d+|\?)%$/);
+      return { card: m?.[1] ?? part, percent: m === null || m[2] === "?" ? undefined : Number(m[2]) };
+    }),
+};
+
+/** What the planner weighed on one call: the goals, and before them the cards when a choice was open: `<cards> | goals: <goals>`. */
+export const weighedCell = {
+  encode: (goals: Rated[], cards?: Rated[]) => (cards === undefined ? oddsCell.encode(goals) : `${oddsCell.encode(cards)} | goals: ${oddsCell.encode(goals)}`),
+  decode: (text: string | undefined) => {
+    const [first = "", second] = (text ?? "").split(" | goals: ");
+    return second === undefined ? { cards: [], goals: oddsCell.decode(first) } : { cards: oddsCell.decode(first), goals: oddsCell.decode(second) };
+  },
+};

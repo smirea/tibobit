@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bossCell, changeCell, changesCell, dashCell, eliteCell, goalCell, hurtCell, listCell } from "./cells";
+import { bossCell, changeCell, changesCell, dashCell, eliteCell, goalCell, hurtCell, listCell, weighedCell } from "./cells";
 
 test("a boss, an elite and a hurt source read back as written, names with spaces and brackets included", () => {
   expect(bossCell.decode(bossCell.encode({ name: "The Amusing (Bouche)", type: "amusing", dist: 119.6, dir: "down-left", hp: 3200, maxHp: 4000 }))).toEqual({ name: "The Amusing (Bouche)", type: "amusing", dist: 120, dir: "down-left", percent: 80, maxHp: 4000 });
@@ -25,4 +25,11 @@ test("a dash detail and a goal id read back as written", () => {
   expect(dashCell.decode(dashCell.encode(0.2, false))).toEqual({ percent: 20, dashed: false });
   expect(dashCell.decode("the forecast was fine")).toBeUndefined();
   expect([{ kind: "chest", uid: 12 }, { kind: "poi", uid: 7 }, { kind: "food", uid: 3 }, { kind: "elite", uid: 9 }, { kind: "explore", dir: "left" }, { kind: "evade" }].map((g) => goalCell.kind(goalCell.encode(g)))).toEqual(["chest", "spot", "food", "elite", "explore", "evade"]);
+});
+
+test("what the planner weighed reads back as written, with and without a choice open", () => {
+  const goals = [{ card: "Open the chest (85 up)", probability: 0.71 }, { card: "Explore left", probability: 0.4 }];
+  const cards = [{ card: "Peeler", probability: 0.613 }, { card: "Root Cellar" }];
+  expect(weighedCell.decode(weighedCell.encode(goals))).toEqual({ cards: [], goals: [{ card: "Open the chest (85 up)", percent: 71 }, { card: "Explore left", percent: 40 }] });
+  expect(weighedCell.decode(weighedCell.encode(goals, cards)).cards).toEqual([{ card: "Peeler", percent: 61 }, { card: "Root Cellar", percent: undefined }]);
 });

@@ -2,7 +2,7 @@
 // took it, when bosses and the first chest came, how goals ended, what Tibo gained, and dashes.
 
 import { csvField, parseCsv } from "../../csv";
-import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, hurtCell, listCell, UNANSWERED } from "./cells";
+import { bossCell, changeCell, changesCell, chestCell, dashCell, eliteCell, goalCell, goalTitleCell, hurtCell, listCell, UNANSWERED, weighedCell } from "./cells";
 
 const goalKind = goalCell.kind;
 
@@ -121,11 +121,50 @@ export function runStats(csv: string): string {
     `- Bursts of 40+ health lost within 3 s, hit by hit: ${bursts.join(" | ") || "none"}.`,
     `- First chest listed: ${firstChest ?? "never"}. First time under 25% health: ${low ?? "never"}.`,
     `- Gold, spots and chests: ${economy(csv)}.`,
+    `- Picks, each with the planner's odds for the card taken and for the others offered: ${picks(csv).join("; ") || "none"}.`,
+    `- Goal changes, each with the planner's rating of the goal chosen and of the next two: ${goalChanges(csv).join("; ") || "none"}.`,
     `- Goals by kind (done / gave up / dropped): ${[...goals].map(([k, g]) => `${k} ${g.done}/${g.failed}/${g.dropped}`).join("; ") || "none"}.`,
     `- Dashes: ${dashes.length}${dashes.length === 0 ? "" : `: ${dashes.slice(0, 12).join("; ")}${dashes.length > 12 ? "; …" : ""}`}.`,
     `- Model calls: ${calls("plan").length} plans, ${calls("pick").length} picks, ${calls("move").length} moves (mean ${meanMs(calls("move"))}ms); the page walked through ${calls("walk").length} hits on its own. Calls the model never answered in time, where the bot went on without it: ${rows.filter((r) => (r.reason ?? "").includes(UNANSWERED)).length}.`,
     `- New cards, evolutions and jumps of 3 or more levels (chests give those): ${gained.length === 0 ? "nothing logged" : gained.join("; ")}.`,
   ].join("\n");
+}
+
+const rowsOf = (csv: string) => {
+  const [header = [], ...cells] = parseCsv(csv);
+  return header[0] !== "time" ? undefined : cells.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])) as Record<string, string>);
+};
+const rated = (o: { card: string; percent?: number }) => `${o.card} ${o.percent === undefined ? "?" : o.percent}%`;
+
+/**
+ * Every card the planner took, one line each: when, what it took with its odds, and what else was
+ * offered with the odds of each, the most favoured first.
+ */
+export function picks(csv: string): string[] {
+  return (rowsOf(csv) ?? [])
+    .filter((r) => r.event === "pick")
+    .map((r) => {
+      const offered = weighedCell.decode(r.options).cards;
+      const taken = offered.find((o) => o.card === r.action);
+      const others = offered.filter((o) => o !== taken).sort((a, z) => (z.percent ?? 0) - (a.percent ?? 0));
+      return `${r.time} took ${taken === undefined ? r.action : rated(taken)}${others.length === 0 ? "" : ` over ${others.map(rated).join(", ")}`}`;
+    });
+}
+
+/**
+ * Every time the planner's goal changed, one line each: when, the goal it chose with its rating,
+ * and the two options it rated next. Plans that kept the goal under way are left out.
+ */
+export function goalChanges(csv: string): string[] {
+  const out: string[] = [];
+  let goal: string | undefined;
+  for (const r of (rowsOf(csv) ?? []).filter((x) => x.event === "plan" || x.event === "pick")) {
+    if (r.goal === goal || (r.reason ?? "").includes(UNANSWERED)) continue;
+    goal = r.goal;
+    const goals = weighedCell.decode(r.options).goals.sort((a, z) => (z.percent ?? 0) - (a.percent ?? 0));
+    out.push(`${r.time} ${goals.slice(0, 3).map(rated).join(" > ") || r.goal}`);
+  }
+  return out;
 }
 
 /**

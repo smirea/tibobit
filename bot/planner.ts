@@ -20,7 +20,7 @@ import { PLAN_RANGE } from "./limits";
 import type { EndJson, World } from "./world";
 import { RunLog } from "./run-log/writer";
 import { clock } from "../clock";
-import { UNANSWERED } from "./run-log/cells";
+import { UNANSWERED, weighedCell } from "./run-log/cells";
 
 type GoalOption = { goal: Goal; text: string };
 
@@ -159,14 +159,13 @@ export class Planner {
       const t = g !== undefined && "uid" in g ? locate(r, g) : undefined;
       return t === undefined ? w : { ...w, card: `${w.card} (${Math.round(t.dist)} ${t.dir})` };
     });
-    const odds = (xs: CardOption[]) => xs.map((x) => `${x.card} ${x.probability === undefined ? "?" : Math.round(x.probability * 100)}%`).join("; ");
     this.log.write(r, {
       event: pick === undefined ? "plan" : "pick",
       model: PLAN_MODEL,
       reason: why,
       goal: goalId(goal),
       action: pick === undefined ? title : pick.name,
-      options: cards === undefined ? odds(placed) : `${odds(cards)} | goals: ${odds(placed)}`,
+      options: weighedCell.encode(placed, cards),
       ms,
     });
     if (pick !== undefined) {

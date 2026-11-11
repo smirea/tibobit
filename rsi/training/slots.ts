@@ -9,7 +9,7 @@ import type { CheckpointMeta, Command, CommandStatus, LoadoutSpec } from "../../
 import type { State } from "../../protocol/view";
 import { clockPadded } from "../../clock";
 import type { Gym } from "../store/gyms";
-import { economy, runStats } from "../../bot/run-log/reader";
+import { economy, picks, runStats } from "../../bot/run-log/reader";
 import type { Templates } from "../../bot/templates";
 import { AgentServer } from "../../agent-server/client";
 import { bridgeOrigin } from "../../protocol/address";
@@ -35,7 +35,7 @@ export type GameSpec = {
   saveGym?: { name: string; purpose: string };
 };
 
-export type GameResult = { spec: GameSpec; seed: string; difficulty: string; result?: TrialResult; stats?: string; economy?: string; savedGym?: CheckpointMeta; error?: string };
+export type GameResult = { spec: GameSpec; seed: string; difficulty: string; result?: TrialResult; stats?: string; economy?: string; picks?: string[]; savedGym?: CheckpointMeta; error?: string };
 
 /** A random Open World seed, as the game rolls them, that is not the evaluation seed. */
 export function freshSeed(evalSeed: string): string {
@@ -220,7 +220,7 @@ export class Slot {
   }
 
   /** Plays the run in progress for `seconds` with these templates; the run waits paused after. */
-  async trial(id: string, seconds: number, templates: Templates): Promise<{ result: TrialResult; stats: string; economy: string }> {
+  async trial(id: string, seconds: number, templates: Templates): Promise<{ result: TrialResult; stats: string; economy: string; picks: string[] }> {
     const base = path.join(this.logs, id.replace(/[^\w.-]/g, "_"));
     await Bun.write(`${base}.templates.json`, JSON.stringify(templates));
     const bot = this.spawn(
@@ -236,7 +236,7 @@ export class Slot {
     }
     const result = (await Bun.file(`${base}.result.json`).json()) as TrialResult;
     const csv = result.log === undefined ? "" : await Bun.file(result.log).text().catch(() => "");
-    return { result, stats: csv === "" ? "(no log)" : runStats(csv), economy: csv === "" ? "(no log)" : economy(csv) };
+    return { result, stats: csv === "" ? "(no log)" : runStats(csv), economy: csv === "" ? "(no log)" : economy(csv), picks: picks(csv) };
   }
 
   /** Loads a gym into a run here, building it first when this game build cannot load it. */
@@ -285,13 +285,13 @@ export class Slot {
         difficulty = await this.fresh(seed, spec.from.fresh.difficulty, spec.from.fresh.weapon);
       }
       if (spec.loadout !== undefined) await this.command({ type: "loadout", ...spec.loadout });
-      const { result, stats, economy } = await this.trial(spec.id, spec.seconds, spec.templates);
+      const { result, stats, economy, picks } = await this.trial(spec.id, spec.seconds, spec.templates);
       let savedGym: CheckpointMeta | undefined;
       if (spec.saveGym !== undefined && !result.died) {
         await this.command({ type: "checkpoint", op: "save", name: `gym-${spec.saveGym.name}` });
         savedGym = (await this.agent.checkpoints()).find((c) => c.name === `gym-${spec.saveGym?.name}`);
       }
-      return { spec, seed, difficulty, result, stats, economy, ...(savedGym === undefined ? {} : { savedGym }) };
+      return { spec, seed, difficulty, result, stats, economy, picks, ...(savedGym === undefined ? {} : { savedGym }) };
     } catch (e) {
       return { spec, seed, difficulty, error: e instanceof Error ? e.message : String(e) };
     }
