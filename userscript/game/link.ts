@@ -1,4 +1,3 @@
-import type { Target } from "../../protocol/commands";
 import { assertContent, BOOT_CHUNK, ENGLISH_CHUNK, findEnums, findGameClass, importBinding, isRecord, localAt, SIM_CHUNK } from "./chunks";
 import type { Content, Enums, Game, GameEvent, GameState, IconFrame, IconPage, IconSheet, InPool, Messages, Steer, Table } from "./types";
 import { cloneState, isRuleModule, NO_RECORDER, reachable } from "./clone";
@@ -28,16 +27,8 @@ export class GameLink {
   inPool: InPool | undefined;
   /** Simulation ticks per game frame; above 1 the game runs faster than real time. */
   speed = 1;
-  /** Forecast while the game runs, not only while it is paused; see the `forecast` command. */
-  liveForecast = false;
   /** Pause the next new run before its first tick, so agents start every run from tick 0. */
   pauseAtStart = false;
-  /** Ticks an agent takes to act on a forecast; the `forecast` command sets it. */
-  forecastLagTicks = 0;
-  /** How far the forecast and the surroundings look ahead, in ticks. */
-  forecastTicks = 30;
-  /** The place the forecast prices whole trips to, when the `forecast` command names one. */
-  forecastRoute: { to: Exclude<Target, { dx: number }>; stayTicks: number; ticks: number; legTicks: number } | undefined;
   /** A deep copy of a game state that shares content definitions and rule modules with it, as the sim needs. */
   copyState: ((state: GameState) => GameState) | undefined;
   /** A copy of the game that steps without recording, rendering or being taken for the live game; `setInput` holds a direction on it, past any agent's steering. */

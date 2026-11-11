@@ -5,9 +5,10 @@ import { STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
 import { button, inRun, modeScreen, press, until, wait } from "../game/screen";
 import { type CheckpointFile, Checkpoints } from "./checkpoint";
 import { pickDifficulty, pickWeapon } from "./menus";
-import { anchored, type Place, toward } from "./steering";
+import { anchored, type Place, place, toward } from "./steering";
 import { applyLoadout } from "./loadout";
 import { clearSeed, requestSeed } from "./seed";
+import { Forecaster } from "./forecast";
 
 /** Where checkpoints live: the agent server's disk, reached through the bridge. */
 export type CheckpointStore = { put(file: CheckpointFile): Promise<void>; get(name: string): Promise<CheckpointFile> };
@@ -36,19 +37,21 @@ export class Controller {
   readonly statuses: CommandStatus[] = [];
   private active: Active | undefined;
   private checkpoints: Checkpoints;
-  store: CheckpointStore | undefined;
 
-  constructor(private link: GameLink) {
+  constructor(
+    private link: GameLink,
+    private forecaster: Forecaster,
+  ) {
     link.steer = (game) => this.steer(game);
     this.checkpoints = new Checkpoints(link);
   }
 
-  handle({ id, command }: Envelope) {
+  handle({ id, command }: Envelope, store: CheckpointStore) {
     const status: CommandStatus = { id, command, state: "running", at: Date.now() };
     this.statuses.push(status);
     if (this.statuses.length > KEEP_STATUSES) this.statuses.splice(0, this.statuses.length - KEEP_STATUSES);
     try {
-      this.run(status, command);
+      this.run(status, command, store);
     } catch (e) {
       this.finish(status, "failed", e instanceof Error ? e.message : String(e));
     }
@@ -58,10 +61,7 @@ export class Controller {
   release() {
     if (this.active !== undefined) this.finish(this.active.status, "replaced");
     this.link.speed = 1;
-    this.link.liveForecast = false;
-    this.link.forecastLagTicks = 0;
-    this.link.forecastTicks = 30;
-    this.link.forecastRoute = undefined;
+    this.forecaster.reset();
     if (inRun(this.link)) this.link.game?.setPaused(false);
   }
 
@@ -80,7 +80,7 @@ export class Controller {
     return game;
   }
 
-  private run(status: CommandStatus, command: Command) {
+  private run(status: CommandStatus, command: Command, store: CheckpointStore) {
     switch (command.type) {
       case "move":
       case "goto":
@@ -122,13 +122,7 @@ export class Controller {
         this.finish(status, "done");
         return;
       case "forecast":
-        this.link.liveForecast = command.live;
-        if (command.lag !== undefined) this.link.forecastLagTicks = Math.round(command.lag * 60);
-        if (command.seconds !== undefined) this.link.forecastTicks = Math.round(command.seconds * 60);
-        this.link.forecastRoute =
-          command.route === undefined
-            ? undefined
-            : { to: anchored(this.game().state, command.route.to), stayTicks: Math.round((command.route.stay ?? 0) * TICKS_PER_SECOND), ticks: Math.round((command.route.seconds ?? 4) * TICKS_PER_SECOND), legTicks: Math.round((command.route.leg ?? 0.5) * TICKS_PER_SECOND) };
+        this.forecaster.configure(command, this.link.game?.state);
         this.finish(status, "done");
         return;
       case "start":
@@ -144,7 +138,7 @@ export class Controller {
         setTimeout(() => location.reload(), 1500);
         return;
       case "checkpoint":
-        this.checkpoint(status, command).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+        this.checkpoint(status, command, store).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
         return;
       case "loadout": {
         const game = this.game();
@@ -156,13 +150,11 @@ export class Controller {
     }
   }
 
-  private async checkpoint(status: CommandStatus, { op, name }: Extract<Command, { type: "checkpoint" }>) {
+  private async checkpoint(status: CommandStatus, { op, name }: Extract<Command, { type: "checkpoint" }>, store: CheckpointStore) {
     if (op === "drop") {
       this.checkpoints.drop(name);
       return this.finish(status, "done");
     }
-    const store = this.store;
-    if (store === undefined) throw new Error("no agent server to keep checkpoints");
     const game = this.game();
     if (op === "save") {
       const file = this.checkpoints.save(game, name);
@@ -268,7 +260,7 @@ export class Controller {
       return STILL;
     }
     active.to ??= anchored(s, command.to);
-    const goal = this.place(s, active.to, command.within);
+    const goal = place(this.link.enums, s, active.to, command.within);
     if (goal === undefined) {
       if (command.stay === "done" && active.arrivedTick !== undefined) this.finish(status, "done", "used up");
       else this.finish(status, "failed", "the target is gone");
@@ -308,24 +300,6 @@ export class Controller {
       return (s) => (s.tick >= end ? STILL : held);
     }
     const to = active.to ?? anchored(live, command.to);
-    return (s) => toward(s, this.place(s, to, command.within));
-  }
-
-  /** Where a target is in a game state, a copy included, and how close counts as there; undefined once it is gone. */
-  place(s: GameState, to: Place, within?: number): { x: number; y: number; within: number } | undefined {
-    if ("poi" in to) {
-      const poi = s.world.activePois.find((p) => p.state.uid === to.poi);
-      if (poi === undefined || poi.state.used || poi.state.goneAt >= 0) return undefined;
-      return { x: poi.x, y: poi.y, within: within ?? poi.radius * 0.5 };
-    }
-    if ("pickup" in to) {
-      if (!s.pickups.pool.has(to.pickup)) return undefined;
-      // A pool id packs a generation counter above the 16-bit slot index.
-      const slot = to.pickup & 0xffff;
-      const kind = this.link.enums?.pickupKinds[s.pickups.kind[slot] ?? -1] ?? "";
-      const radius = s.cfg.activation.pickupRadius[kind];
-      return { x: s.pickups.x[slot] ?? 0, y: s.pickups.y[slot] ?? 0, within: within ?? (radius === undefined ? 6 : radius * 0.5) };
-    }
-    return { x: to.x, y: to.y, within: within ?? 6 };
+    return (s) => toward(s, place(this.link.enums, s, to, command.within));
   }
 }

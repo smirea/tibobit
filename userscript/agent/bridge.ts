@@ -1,8 +1,8 @@
 import type { GameLink } from "../game/link";
-import type { Controller } from "./control";
+import type { CheckpointStore, Controller } from "./control";
 import type { CheckpointFile } from "./checkpoint";
 import { encyclopedia } from "./encyclopedia";
-import { Foresight } from "./forecast";
+import { Forecaster } from "./forecast";
 import { BRIDGE_PORT, bridgeOrigin, validPort } from "../../protocol/address";
 import { type ChatMessage, DEFAULT_SETTINGS, type PageLine, parsePilotChange, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../../protocol/pilot";
 import { parseCommand } from "../../protocol/commands";
@@ -137,7 +137,7 @@ const NOT_GRANTED =
     ? undefined
     : "Tampermonkey did not grant GM_xmlhttpRequest. Add @grant GM_xmlhttpRequest and @connect 127.0.0.1 to the installed script's header.";
 
-export function startBridge(link: GameLink, controller: Controller): Bridge {
+export function startBridge(link: GameLink, controller: Controller, forecaster: Forecaster): Bridge {
   let origin = initialOrigin();
   let session = 0;
   let request: { abort(): void } | undefined;
@@ -156,8 +156,7 @@ export function startBridge(link: GameLink, controller: Controller): Bridge {
   // The English text loads only when a run starts, after the content tables, so the encyclopedia
   // goes up again each time more of it has arrived: -1 means not sent to this server yet.
   let sentWithMessages = -1;
-  const foresight = new Foresight(link, controller);
-  controller.store = {
+  const store: CheckpointStore = {
     put: async (file) => {
       await gmCall("POST", `${origin}/bridge/checkpoint`, JSON.stringify(file));
     },
@@ -259,7 +258,7 @@ export function startBridge(link: GameLink, controller: Controller): Bridge {
           } else if ("chat" in envelope) {
             receiveChat(envelope.chat);
             notify();
-          } else controller.handle({ id: envelope.id, command: parseCommand(envelope.command) });
+          } else controller.handle({ id: envelope.id, command: parseCommand(envelope.command) }, store);
         } catch (e) {
           console.error("[tibobit] bad command from the agent server", line, e);
         }
@@ -287,9 +286,9 @@ export function startBridge(link: GameLink, controller: Controller): Bridge {
     let built = now;
     try {
       // A paused game's forecast is made on the spot; counted as the snapshot's cost it would space the next ones seconds apart.
-      const forecast = foresight.read();
+      const forecast = forecaster.read();
       built = performance.now();
-      body = JSON.stringify(snapshot(link, controller.statuses, forecast));
+      body = JSON.stringify(snapshot(link, controller.statuses, forecast, forecaster.seconds));
     } catch (e) {
       body = JSON.stringify({ capturedAt: Date.now(), screen: "title", commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` });
     }

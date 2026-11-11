@@ -116,6 +116,9 @@ function heading(v: unknown, what: string): Heading {
   return fail(`${what} must be one of ${DIRECTIONS.join(", ")} or degrees`);
 }
 
+/** What a forecast route plays when the command leaves a part out, in seconds. */
+export const ROUTE_DEFAULTS = { stay: 0, seconds: 4, leg: 0.5 };
+
 function route(v: unknown): { to: Target; stay?: number; seconds?: number; leg?: number } {
   const r = (v ?? {}) as Record<string, unknown>;
   if (r.stay !== undefined && (num(r.stay, "route.stay") < 0 || num(r.stay, "route.stay") > 5)) fail("route.stay must be from 0 to 5 seconds");

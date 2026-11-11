@@ -4,7 +4,6 @@ import type { CommandStatus } from "../../protocol/commands";
 import type { Forecast, Snapshot } from "../../protocol/snapshot";
 import { reflect } from "./reflect";
 import { surroundings } from "./surroundings";
-import { TICKS_PER_SECOND } from "../../protocol/geometry";
 
 
 
@@ -28,7 +27,8 @@ function gameStorage(): Record<string, unknown> {
 
 const json = (v: unknown): Record<string, unknown> => JSON.parse(JSON.stringify(v, (_k, x: unknown) => (x instanceof Map ? Object.fromEntries(x) : x instanceof Set ? [...x] : x))) as Record<string, unknown>;
 
-export function snapshot(link: GameLink, commands: CommandStatus[], forecast: Forecast | undefined): Snapshot {
+/** `seconds` is how far the surroundings look ahead: the forecast's horizon. */
+export function snapshot(link: GameLink, commands: CommandStatus[], forecast: Forecast | undefined, seconds: number): Snapshot {
   link.noteRunLink();
   const game = link.game;
   const playing = game !== undefined && inRun(link);
@@ -41,7 +41,7 @@ export function snapshot(link: GameLink, commands: CommandStatus[], forecast: Fo
     capturedAt: Date.now(),
     screen,
     ...(reflection === undefined ? {} : { game: reflection, gameEvents: link.events.map(json) }),
-    ...(reflection === undefined || !playing ? {} : { surroundings: surroundings(link, game.state, link.forecastTicks / TICKS_PER_SECOND, { enemies: (reflection.enemies ?? []) as Record<string, unknown>[], pickups: (reflection.pickups ?? []) as Record<string, unknown>[] }) }),
+    ...(reflection === undefined || !playing ? {} : { surroundings: surroundings(link, game.state, seconds, { enemies: (reflection.enemies ?? []) as Record<string, unknown>[], pickups: (reflection.pickups ?? []) as Record<string, unknown>[] }) }),
     storage: gameStorage(),
     headless: navigator.webdriver,
     ...(link.simBuild === undefined ? {} : { gameBuild: link.simBuild }),

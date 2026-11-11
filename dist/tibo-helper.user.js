@@ -53,23 +53,83 @@
     };
   }
 
-  // protocol/protocol.ts
+  // protocol/address.ts
   var BRIDGE_PORT = 7357;
   var bridgeOrigin = (port) => `http://127.0.0.1:${port}`;
   var BRIDGE_ORIGIN = bridgeOrigin(BRIDGE_PORT);
   function validPort(port) {
     return Number.isInteger(port) && port >= 1 && port <= 65535;
   }
-  var DIRECTIONS = ["right", "down-right", "down", "down-left", "left", "up-left", "up", "up-right"];
-  var CHOICE_ACTIONS = ["pick", "banish", "buy", "reroll", "skip", "close", "accept", "continue", "endRun"];
-  var CHECKPOINT_NAME = /^[\w.@-]{1,100}$/;
-  var SEED = /^[0-9A-Z]{1,7}$/;
+
+  // protocol/parse.ts
   function fail(message) {
     throw new Error(message);
   }
   function num(v, what) {
     return typeof v === "number" && Number.isFinite(v) ? v : fail(`${what} must be a number`);
   }
+
+  // protocol/pilot.ts
+  var DEFAULT_PACE = { planEvery: 5, actEvery: 0.3 };
+  var PACE_LIMITS = { planEvery: { min: 0.5, max: 300, step: 0.5 }, actEvery: { min: 0.1, max: 5, step: 0.1 } };
+  var DEFAULT_SETTINGS = { pace: DEFAULT_PACE, incognito: false };
+  function parsePilotChange(input) {
+    const c = input ?? {};
+    const change = {};
+    for (const key of ["on", "incognito"]) {
+      if (c[key] === undefined)
+        continue;
+      if (typeof c[key] !== "boolean")
+        fail(`${key} must be true or false`);
+      change[key] = c[key];
+    }
+    for (const key of ["planEvery", "actEvery"]) {
+      if (c[key] === undefined)
+        continue;
+      const { min, max, step } = PACE_LIMITS[key];
+      const v = num(c[key], key);
+      if (v < min || v > max)
+        fail(`${key} must be from ${min} to ${max} seconds`);
+      change[key] = Number((Math.round(v / step) * step).toFixed(1));
+    }
+    if (Object.keys(change).length === 0)
+      fail('send {"on": true|false}, {"incognito": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
+    return change;
+  }
+  var ACTION_TAGS = [
+    ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
+    ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
+    ...["Dash", "Start", "Take over", "Over", "Stopped", "Incognito"]
+  ];
+  var KEEP_PLANS = 500;
+  var KEEP_OTHERS = 400;
+  function trimChat(chat) {
+    let plans = 0;
+    let others = 0;
+    for (let i = chat.length - 1;i >= 0; i--) {
+      const keep = chat[i]?.role === "planner" ? ++plans <= KEEP_PLANS : ++others <= KEEP_OTHERS;
+      if (!keep)
+        chat.splice(i, 1);
+    }
+  }
+
+  // protocol/geometry.ts
+  var TICKS_PER_SECOND = 60;
+  var DIRECTIONS = ["right", "down-right", "down", "down-left", "left", "up-left", "up", "up-right"];
+  var STILL = { x: 0, y: 0 };
+  function unitOf(heading) {
+    const radians = (typeof heading === "number" ? heading : DIRECTIONS.indexOf(heading) * 45) * Math.PI / 180;
+    return { x: Math.cos(radians), y: Math.sin(radians) };
+  }
+  function directionOf(dx, dy) {
+    const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
+    return DIRECTIONS[(octant + 8) % 8] ?? "right";
+  }
+
+  // protocol/commands.ts
+  var CHOICE_ACTIONS = ["pick", "banish", "buy", "reroll", "skip", "close", "accept", "continue", "endRun"];
+  var CHECKPOINT_NAME = /^[\w.@-]{1,100}$/;
+  var SEED = /^[0-9A-Z]{1,7}$/;
   function heading(v, what) {
     if (typeof v === "number" && Number.isFinite(v))
       return v;
@@ -77,6 +137,7 @@
       return v;
     return fail(`${what} must be one of ${DIRECTIONS.join(", ")} or degrees`);
   }
+  var ROUTE_DEFAULTS = { stay: 0, seconds: 4, leg: 0.5 };
   function route(v) {
     const r = v ?? {};
     if (r.stay !== undefined && (num(r.stay, "route.stay") < 0 || num(r.stay, "route.stay") > 5))
@@ -212,53 +273,13 @@
         return fail("type must be move, goto, stop, choose, dash, pause, resume, speed, forecast, start, summary, seed, checkpoint or loadout");
     }
   }
-  var DEFAULT_PACE = { planEvery: 5, actEvery: 0.3 };
-  var PACE_LIMITS = { planEvery: { min: 0.5, max: 300, step: 0.5 }, actEvery: { min: 0.1, max: 5, step: 0.1 } };
-  var DEFAULT_SETTINGS = { pace: DEFAULT_PACE, incognito: false };
-  function parsePilotChange(input) {
-    const c = input ?? {};
-    const change = {};
-    for (const key of ["on", "incognito"]) {
-      if (c[key] === undefined)
-        continue;
-      if (typeof c[key] !== "boolean")
-        fail(`${key} must be true or false`);
-      change[key] = c[key];
-    }
-    for (const key of ["planEvery", "actEvery"]) {
-      if (c[key] === undefined)
-        continue;
-      const { min, max, step } = PACE_LIMITS[key];
-      const v = num(c[key], key);
-      if (v < min || v > max)
-        fail(`${key} must be from ${min} to ${max} seconds`);
-      change[key] = Number((Math.round(v / step) * step).toFixed(1));
-    }
-    if (Object.keys(change).length === 0)
-      fail('send {"on": true|false}, {"incognito": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
-    return change;
-  }
-  var ACTION_TAGS = [
-    ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
-    ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
-    ...["Dash", "Start", "Take over", "Over", "Stopped", "Incognito"]
-  ];
-  var KEEP_PLANS = 500;
-  var KEEP_OTHERS = 400;
-  function trimChat(chat) {
-    let plans = 0;
-    let others = 0;
-    for (let i = chat.length - 1;i >= 0; i--) {
-      const keep = chat[i]?.role === "planner" ? ++plans <= KEEP_PLANS : ++others <= KEEP_OTHERS;
-      if (!keep)
-        chat.splice(i, 1);
-    }
-  }
 
-  // userscript/agent/menu.ts
+  // userscript/game/screen.ts
+  var PANEL_ID = "tibo-helper";
+  var OURS = `#${PANEL_ID}, [class*='tbh-']`;
   function button(label) {
     return [...document.querySelectorAll("button")].find((b) => {
-      if (b.closest("#tibo-helper, [class*='tbh-']"))
+      if (b.closest(OURS))
         return false;
       const text = b.textContent?.trim() ?? "";
       return typeof label === "string" ? text === label : label.test(text);
@@ -268,6 +289,41 @@
     if (button("Start") === undefined)
       return;
     return button("Leaderboard") === undefined ? "openWorld" : "daily";
+  }
+  function wait(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+  async function press(el) {
+    el.click();
+    await wait(300);
+    if (!el.isConnected)
+      return;
+    el.focus();
+    for (const type of ["keydown", "keyup"])
+      el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", bubbles: true }));
+  }
+  var byTestId = (id) => document.querySelector(`[data-testid="${id}"]`) ?? undefined;
+  var locked = (b) => b === undefined || b.disabled || b.getAttribute("aria-disabled") === "true";
+  async function until(check, ms) {
+    const end = performance.now() + ms;
+    while (performance.now() < end) {
+      if (check())
+        return true;
+      await wait(100);
+    }
+    return check();
+  }
+  function choiceCards() {
+    const cards = [...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")];
+    const buttons = [...document.querySelectorAll("button")].filter((b) => !b.matches(".ui-card, .ui-pause-btn, .ui-sound") && !b.closest(OURS) && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "" && !/^banish/i.test((b.textContent ?? "").trim()));
+    return [...cards, ...buttons];
+  }
+  function pauseMenuOpen() {
+    return [...document.querySelectorAll("button")].some((b) => !b.closest(OURS) && b.textContent?.trim() === "Resume" && b.getClientRects().length > 0);
+  }
+  function inRun(link) {
+    const hud = document.querySelector(".hud-weapons");
+    return link.game !== undefined && !link.game.state.over && hud !== null && hud.getClientRects().length > 0;
   }
 
   // userscript/agent/reflect.ts
@@ -393,7 +449,6 @@
   // userscript/agent/surroundings.ts
   var REACH = 300;
   var NEAR = 60;
-  var TICKS_PER_SECOND = 60;
   var WINDOW_TICKS = 3 * TICKS_PER_SECOND;
   var takenHistory = [];
   var dealtHistory = [];
@@ -424,16 +479,8 @@
     return seconds === 0 ? 0 : round(dealt / seconds);
   }
   var PATH_SAMPLES = [0.25, 0.5, 0.75, 1];
-  function directionOf(dx, dy) {
-    const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
-    return DIRECTIONS[(octant + 8) % 8] ?? "right";
-  }
   var round = (n) => Math.round(n * 10) / 10;
   var bearing = (dx, dy) => ({ dist: round(Math.hypot(dx, dy)), dir: directionOf(dx, dy) });
-  var unit = (dir) => {
-    const a = DIRECTIONS.indexOf(dir) * Math.PI / 4;
-    return { x: Math.cos(a), y: Math.sin(a) };
-  };
   function* alive(p) {
     for (let n = 0;n < p.pool.count; n++) {
       const slot = p.pool.slotAt(n);
@@ -514,7 +561,7 @@
     volleys.sort((x, y) => x.dist - y.dist);
     const inPool = link.inPool;
     const paths = DIRECTIONS.map((dir) => {
-      const u = unit(dir);
+      const u = unitOf(dir);
       return { dir, points: PATH_SAMPLES.map((f) => ({ x: u.x * reach * f, y: u.y * reach * f })) };
     });
     const entered = (contains) => paths.filter((p) => p.points.some((q) => contains(q.x, q.y))).map((p) => p.dir);
@@ -577,19 +624,6 @@
   }
 
   // userscript/agent/snapshot.ts
-  var TICKS_PER_SECOND2 = 60;
-  function choiceCards() {
-    const cards = [...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")];
-    const buttons = [...document.querySelectorAll("button")].filter((b) => !b.matches(".ui-card, .ui-pause-btn, .ui-sound") && !b.closest("#tibo-helper") && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "" && !/^banish/i.test((b.textContent ?? "").trim()));
-    return [...cards, ...buttons];
-  }
-  function pauseMenuOpen() {
-    return [...document.querySelectorAll("button")].some((b) => !b.closest("#tibo-helper") && b.textContent?.trim() === "Resume" && b.getClientRects().length > 0);
-  }
-  function inRun(link) {
-    const hud = document.querySelector(".hud-weapons");
-    return link.game !== undefined && !link.game.state.over && hud !== null && hud.getClientRects().length > 0;
-  }
   function gameStorage() {
     const out = {};
     try {
@@ -608,7 +642,7 @@
     return out;
   }
   var json = (v) => JSON.parse(JSON.stringify(v, (_k, x) => x instanceof Map ? Object.fromEntries(x) : x instanceof Set ? [...x] : x));
-  function snapshot(link, commands, forecast) {
+  function snapshot(link, commands, forecast, seconds) {
     link.noteRunLink();
     const game = link.game;
     const playing = game !== undefined && inRun(link);
@@ -621,7 +655,7 @@
       capturedAt: Date.now(),
       screen,
       ...reflection === undefined ? {} : { game: reflection, gameEvents: link.events.map(json) },
-      ...reflection === undefined || !playing ? {} : { surroundings: surroundings(link, game.state, link.forecastTicks / TICKS_PER_SECOND2, { enemies: reflection.enemies ?? [], pickups: reflection.pickups ?? [] }) },
+      ...reflection === undefined || !playing ? {} : { surroundings: surroundings(link, game.state, seconds, { enemies: reflection.enemies ?? [], pickups: reflection.pickups ?? [] }) },
       storage: gameStorage(),
       headless: navigator.webdriver,
       ...link.simBuild === undefined ? {} : { gameBuild: link.simBuild },
@@ -633,27 +667,542 @@
     };
   }
 
-  // userscript/agent/training.ts
-  var SEED_KEY = "tibobit.seed";
-  function installSeedHook() {
-    let want = null;
+  // userscript/agent/bridge.ts
+  var PORT_KEY = "tibobit.bridgePort";
+  var SETTINGS_KEY = "tibobit.pilotSettings";
+  function savedSettings() {
     try {
-      want = sessionStorage.getItem(SEED_KEY);
-    } catch {}
-    if (want === null)
+      const c = parsePilotChange(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null"));
+      return {
+        pace: { planEvery: c.planEvery ?? DEFAULT_SETTINGS.pace.planEvery, actEvery: c.actEvery ?? DEFAULT_SETTINGS.pace.actEvery },
+        incognito: c.incognito ?? DEFAULT_SETTINGS.incognito
+      };
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
+  }
+  var asChange = (s) => ({ ...s.pace, incognito: s.incognito });
+  function savedPort() {
+    try {
+      const port = Number(localStorage.getItem(PORT_KEY));
+      return validPort(port) ? port : undefined;
+    } catch {
       return;
-    const n = parseInt(want, 36);
-    const page = typeof unsafeWindow === "undefined" ? window : unsafeWindow;
-    const real = page.crypto.getRandomValues.bind(page.crypto);
-    page.crypto.getRandomValues = (a) => {
-      if (a !== null && a.constructor.name === "Uint32Array" && a.length === 1) {
-        a[0] = n;
-        return a;
+    }
+  }
+  function initialOrigin() {
+    return globalThis.__tiboBridgeOrigin ?? bridgeOrigin(savedPort() ?? BRIDGE_PORT);
+  }
+  var RUN_INTERVAL_MS = 33;
+  var SNAPSHOT_SHARE = 0.1;
+  var CHECKPOINT_TIMEOUT_MS = 120000;
+  var IDLE_INTERVAL_MS = 500;
+  var RECONNECT_MS = 3000;
+  var MAX_IN_FLIGHT = 4;
+  var HELLO_TIMEOUT_MS = 5000;
+  var TAB_ID = crypto.randomUUID();
+  function refusal(r, origin) {
+    const text = r.responseText ?? (typeof r.response === "string" ? r.response : "");
+    try {
+      const { error } = JSON.parse(text);
+      if (typeof error === "string")
+        return error;
+    } catch {}
+    return `the agent server on ${origin} refused the connection (${r.status})`;
+  }
+  function post(origin, path, body) {
+    return new Promise((resolve) => GM_xmlhttpRequest({
+      method: "POST",
+      url: `${origin}${path}`,
+      data: typeof body === "string" ? body : JSON.stringify(body),
+      headers: { "content-type": "application/json" },
+      timeout: 5000,
+      onload: (r) => resolve(r.status < 300),
+      onerror: () => resolve(false),
+      ontimeout: () => resolve(false)
+    }));
+  }
+  function gmCall(method, url, body) {
+    return new Promise((resolve, reject) => GM_xmlhttpRequest({
+      method,
+      url,
+      ...body === undefined ? {} : { data: body, headers: { "content-type": "application/json" } },
+      timeout: CHECKPOINT_TIMEOUT_MS,
+      onload: (r) => {
+        const text = r.responseText ?? String(r.response ?? "");
+        if (r.status < 300)
+          resolve(text);
+        else
+          reject(new Error(`${method} ${url}: ${r.status} ${text.slice(0, 300)}`));
+      },
+      onerror: () => reject(new Error(`${method} ${url} failed`)),
+      ontimeout: () => reject(new Error(`${method} ${url} timed out`))
+    }));
+  }
+  var NOT_GRANTED = typeof GM_xmlhttpRequest === "function" ? undefined : "Tampermonkey did not grant GM_xmlhttpRequest. Add @grant GM_xmlhttpRequest and @connect 127.0.0.1 to the installed script's header.";
+  function startBridge(link, controller, forecaster) {
+    let origin = initialOrigin();
+    let session = 0;
+    let request;
+    let error = NOT_GRANTED;
+    let connected = false;
+    const listeners = new Set;
+    const notify = () => {
+      for (const listener of listeners)
+        listener();
+    };
+    let settings = savedSettings();
+    let pilot = { state: "off", ...settings };
+    const chat = [];
+    let inFlight = 0;
+    let lastPush = 0;
+    let snapshotMs = 0;
+    let sentWithMessages = -1;
+    const store = {
+      put: async (file) => {
+        await gmCall("POST", `${origin}/bridge/checkpoint`, JSON.stringify(file));
+      },
+      get: async (name) => JSON.parse(await gmCall("GET", `${origin}/bridge/checkpoint?name=${encodeURIComponent(name)}`))
+    };
+    const reconnect = (from) => {
+      if (from !== session)
+        return;
+      connected = false;
+      receivePilot({ state: "off", ...settings });
+      notify();
+      setTimeout(listen, RECONNECT_MS);
+    };
+    const listen = () => {
+      const mine = ++session;
+      if (NOT_GRANTED !== undefined)
+        return;
+      let over = false;
+      const retry = (why) => {
+        if (over)
+          return;
+        over = true;
+        clearTimeout(silence);
+        if (why !== undefined && mine === session)
+          error = why;
+        reconnect(mine);
+      };
+      const silence = setTimeout(() => {
+        if (connected || mine !== session)
+          return;
+        request?.abort();
+        retry(`the agent server on ${origin} did not answer`);
+      }, HELLO_TIMEOUT_MS);
+      request = GM_xmlhttpRequest({
+        method: "GET",
+        url: `${origin}/bridge/commands?tab=${TAB_ID}`,
+        responseType: "stream",
+        onloadstart: (r) => {
+          const body = r.response;
+          if (body === null)
+            return;
+          read(body, mine).catch(() => {}).finally(() => retry());
+        },
+        onload: (r) => retry(r.status >= 300 ? refusal(r, origin) : undefined),
+        onerror: () => retry(`no agent server on ${origin}`),
+        ontimeout: () => retry(`no agent server on ${origin}`)
+      });
+    };
+    const receivePilot = (next) => {
+      if (pilot.state !== "off" && next.state === "off")
+        controller.release();
+      if (pilot.state === "off" && next.state === "on")
+        chat.length = 0;
+      pilot = next;
+    };
+    const receiveChat = (message) => {
+      const at = chat.findIndex((m) => m.id === message.id);
+      if (at >= 0)
+        chat[at] = message;
+      else
+        chat.push(message);
+      trimChat(chat);
+    };
+    const read = async (body, mine) => {
+      const reader = body.getReader();
+      const decoder = new TextDecoder;
+      let buffer = "";
+      for (;; ) {
+        const { value, done } = await reader.read();
+        if (done)
+          buffer += `
+`;
+        else
+          buffer += decoder.decode(value, { stream: true });
+        for (let nl = buffer.indexOf(`
+`);nl >= 0; nl = buffer.indexOf(`
+`)) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (line === "")
+            continue;
+          try {
+            const envelope = JSON.parse(line);
+            if (mine !== session)
+              return;
+            if ("hello" in envelope) {
+              connected = true;
+              error = undefined;
+              sentWithMessages = -1;
+              chat.length = 0;
+              post(origin, "/pilot", asChange(settings));
+              notify();
+            } else if ("error" in envelope) {
+              error = envelope.error;
+              notify();
+            } else if ("pilot" in envelope) {
+              receivePilot(envelope.pilot);
+              notify();
+            } else if ("chat" in envelope) {
+              receiveChat(envelope.chat);
+              notify();
+            } else
+              controller.handle({ id: envelope.id, command: parseCommand(envelope.command) }, store);
+          } catch (e) {
+            console.error("[tibobit] bad command from the agent server", line, e);
+          }
+        }
+        if (done)
+          return;
       }
-      return real(a);
+    };
+    setInterval(() => {
+      if (!connected || inFlight >= MAX_IN_FLIGHT)
+        return;
+      const now = performance.now();
+      if (now - lastPush < (inRun(link) ? Math.max(RUN_INTERVAL_MS, snapshotMs / SNAPSHOT_SHARE) : IDLE_INTERVAL_MS))
+        return;
+      lastPush = now;
+      const messages = Object.keys(link.messages).length;
+      if (sentWithMessages !== messages) {
+        const book = encyclopedia(link);
+        if (book !== undefined) {
+          sentWithMessages = messages;
+          post(origin, "/bridge/encyclopedia", book).then((ok) => {
+            if (!ok)
+              sentWithMessages = -1;
+          });
+        }
+      }
+      let body;
+      let built = now;
+      try {
+        const forecast = forecaster.read();
+        built = performance.now();
+        body = JSON.stringify(snapshot(link, controller.statuses, forecast, forecaster.seconds));
+      } catch (e) {
+        body = JSON.stringify({ capturedAt: Date.now(), screen: "title", commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` });
+      }
+      snapshotMs = performance.now() - built;
+      inFlight++;
+      post(origin, "/bridge/state", body).finally(() => inFlight--);
+    }, RUN_INTERVAL_MS / 2);
+    listen();
+    return {
+      status: () => ({ port: Number(new URL(origin).port), state: connected ? "connected" : "connecting", error: connected ? undefined : error }),
+      connect: (port) => {
+        if (!validPort(port))
+          throw new Error(`not a port: ${port}`);
+        try {
+          localStorage.setItem(PORT_KEY, String(port));
+        } catch {}
+        origin = bridgeOrigin(port);
+        connected = false;
+        error = NOT_GRANTED;
+        request?.abort();
+        listen();
+        notify();
+      },
+      pilot: () => pilot,
+      setPilot: (change) => {
+        const { on, ...rest } = change;
+        if (Object.keys(rest).length > 0) {
+          settings = { pace: { planEvery: rest.planEvery ?? settings.pace.planEvery, actEvery: rest.actEvery ?? settings.pace.actEvery }, incognito: rest.incognito ?? settings.incognito };
+          pilot = { ...pilot, ...settings };
+          try {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(asChange(settings)));
+          } catch {}
+          notify();
+        }
+        if (!connected)
+          return;
+        post(origin, "/pilot", change).then((ok) => {
+          if (ok)
+            return;
+          pilot = { ...pilot, detail: `the agent server on ${origin} refused ${JSON.stringify(change)}; restart it with this version of scripts/agent-server.ts` };
+          notify();
+        });
+      },
+      chat: () => chat,
+      onChange: (listener) => listeners.add(listener)
     };
   }
+
+  // userscript/game/clone.ts
+  var NO_RECORDER = { step() {}, choose() {}, dash() {}, taint() {}, log() {} };
+  function cloneState(root, shared) {
+    const memo = new Map;
+    const copy = (v) => {
+      if (typeof v !== "object" || v === null || shared.has(v))
+        return v;
+      const known = memo.get(v);
+      if (known !== undefined)
+        return known;
+      if (ArrayBuffer.isView(v)) {
+        const c = v instanceof DataView ? new DataView(v.buffer.slice(0)) : v.slice();
+        memo.set(v, c);
+        return c;
+      }
+      if (Array.isArray(v)) {
+        const c = [];
+        memo.set(v, c);
+        for (const x of v)
+          c.push(copy(x));
+        return c;
+      }
+      if (v instanceof Map) {
+        const c = new Map;
+        memo.set(v, c);
+        for (const [k, x] of v)
+          c.set(copy(k), copy(x));
+        return c;
+      }
+      if (v instanceof Set) {
+        const c = new Set;
+        memo.set(v, c);
+        for (const x of v)
+          c.add(copy(x));
+        return c;
+      }
+      const c = Object.create(Object.getPrototypeOf(v));
+      memo.set(v, c);
+      for (const k of Object.keys(v))
+        c[k] = copy(v[k]);
+      return c;
+    };
+    return copy(root);
+  }
+  function reachable(root, into) {
+    const stack = [root];
+    while (stack.length > 0) {
+      const v = stack.pop();
+      if (typeof v !== "object" || v === null || into.has(v) || ArrayBuffer.isView(v))
+        continue;
+      into.add(v);
+      if (v instanceof Map)
+        for (const [k, x] of v)
+          stack.push(k, x);
+      else if (v instanceof Set)
+        for (const x of v)
+          stack.push(x);
+      else
+        for (const x of Object.values(v))
+          stack.push(x);
+    }
+  }
   var isRuleModule = (v) => typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).length > 0 && Object.values(v).every((x) => typeof x === "function");
+
+  // userscript/combos/catalog.ts
+  function titleCase(id) {
+    return id.replace(/(^|-)(\w)/g, (_, dash, c) => `${dash ? " " : ""}${c.toUpperCase()}`);
+  }
+  var maxWeaponLevel = (w) => w.tier === "base" ? Math.min(8, (w.levels?.length ?? 0) + 1) : 1;
+  function buildCatalog(content, messages) {
+    const names = {};
+    const descriptions = {};
+    const maxLevel = {};
+    const name = (kind, id) => {
+      names[`${kind}:${id}`] = messages[`content.${kind}.${id}.name`]?.[0] ?? titleCase(id);
+      const description = messages[`content.${kind}.${id}.desc`]?.[0];
+      if (description !== undefined)
+        descriptions[`${kind}:${id}`] = description;
+    };
+    for (const w of content.allWeapons) {
+      name("weapon", w.id);
+      if (w.tier === "base")
+        maxLevel[`weapon:${w.id}`] = maxWeaponLevel(w);
+    }
+    for (const p of content.passives) {
+      name("passive", p.id);
+      maxLevel[`passive:${p.id}`] = p.maxLevel;
+    }
+    for (const i of content.allItems)
+      name("item", i.id);
+    const passiveIds = new Set(content.passives.map((p) => p.id));
+    const recipes = [];
+    for (const e of content.evolutions) {
+      if (typeof e.from !== "string" || e.catalyst === undefined)
+        continue;
+      const catalyst = passiveIds.has(e.catalyst) ? `passive:${e.catalyst}` : `item:${e.catalyst}`;
+      recipes.push({ kind: "evolution", weapon: e.from, catalyst, result: e.id });
+    }
+    for (const u of content.unions) {
+      if (!Array.isArray(u.from) || u.from.length !== 2)
+        continue;
+      recipes.push({ kind: "union", weapons: [u.from[0] ?? "", u.from[1] ?? ""], result: u.id });
+    }
+    for (const i of content.evolvedItems) {
+      if (i.from === undefined || i.catalyst === undefined)
+        continue;
+      recipes.push({ kind: "itemEvolution", item: i.from, catalyst: i.catalyst, result: i.id });
+    }
+    return { names, descriptions, maxLevel, recipes };
+  }
+  function toCombo(r) {
+    switch (r.kind) {
+      case "evolution":
+        return {
+          recipe: r,
+          result: `weapon:${r.result}`,
+          parts: [
+            { key: `weapon:${r.weapon}`, need: "max" },
+            { key: r.catalyst, need: "own" }
+          ]
+        };
+      case "union":
+        return {
+          recipe: r,
+          result: `weapon:${r.result}`,
+          parts: [
+            { key: `weapon:${r.weapons[0]}`, need: "own" },
+            { key: `weapon:${r.weapons[1]}`, need: "own" }
+          ]
+        };
+      case "itemEvolution":
+        return {
+          recipe: r,
+          result: `item:${r.result}`,
+          parts: [
+            { key: `item:${r.item}`, need: "own" },
+            { key: `passive:${r.catalyst}`, need: "max" }
+          ]
+        };
+    }
+  }
+  function readLoadout(state) {
+    const loadout = new Map;
+    for (const w of state.loadout.weapons)
+      loadout.set(`weapon:${w.def.id}`, w.level);
+    for (const p of state.loadout.passives)
+      loadout.set(`passive:${p.def.id}`, p.level);
+    for (const [id, count] of state.loadout.items)
+      if (count > 0)
+        loadout.set(`item:${id}`, count);
+    return loadout;
+  }
+  function partState(part, loadout, catalog) {
+    const have = loadout.get(part.key);
+    if (have === undefined)
+      return "missing";
+    if (part.need === "own")
+      return "done";
+    return have >= (catalog.maxLevel[part.key] ?? 1) ? "done" : "leveling";
+  }
+  function comboProgress(combo, loadout, catalog) {
+    return combo.parts.map((p) => partState(p, loadout, catalog));
+  }
+  function combosUsing(combos, key) {
+    return combos.filter((c) => c.parts.some((p) => p.key === key));
+  }
+  function partner(combo, key) {
+    const [a, b] = combo.parts;
+    return a.key === key ? b : a;
+  }
+  function relevantCombos(combos, loadout) {
+    return combos.filter((c) => !loadout.has(c.result) && c.parts.some((p) => loadout.has(p.key)));
+  }
+  function unpaired(combos, loadout) {
+    const out = [];
+    for (const held of loadout.keys()) {
+      const options = combosUsing(combos, held).filter((c) => !loadout.has(c.result)).map((combo) => ({ partner: partner(combo, held), combo }));
+      if (options.length === 0 || options.some((o) => loadout.has(o.partner.key)))
+        continue;
+      out.push({ held, options });
+    }
+    return out;
+  }
+  function idOf(key) {
+    return key.slice(key.indexOf(":") + 1);
+  }
+  function nameOf(catalog, key) {
+    return catalog.names[key] ?? titleCase(idOf(key));
+  }
+
+  // userscript/agent/loadout.ts
+  var WEAPON_SLOTS = 6;
+  function pick(game, offer) {
+    const s = game.state;
+    s.choiceQueue.push({ kind: "levelUp", offers: [offer], level: s.loadout.level });
+    game.choose({ type: "pick", index: 0 });
+  }
+  function applyLoadout(link, game, spec) {
+    const content = link.content();
+    if (content === undefined)
+      throw new Error("the game's content is not loaded yet");
+    const weaponDefs = new Map(content.allWeapons.map((w) => [w.id, w]));
+    const passiveDefs = new Map(content.passives.map((p) => [p.id, p]));
+    const itemIds = new Set(content.allItems.map((i) => i.id));
+    const problems = [];
+    const weaponMax = (id) => {
+      const w = weaponDefs.get(id);
+      return w === undefined ? 0 : maxWeaponLevel(w);
+    };
+    for (const { id, level } of spec.weapons) {
+      if (!weaponDefs.has(id))
+        problems.push(`no weapon ${id}`);
+      else if (level < 1 || level > weaponMax(id))
+        problems.push(`weapon ${id} levels 1 to ${weaponMax(id)}, not ${level}`);
+    }
+    for (const { id, level } of spec.passives) {
+      const p = passiveDefs.get(id);
+      if (p === undefined)
+        problems.push(`no passive ${id}`);
+      else if (level < 1 || level > p.maxLevel)
+        problems.push(`passive ${id} levels 1 to ${p.maxLevel}, not ${level}`);
+    }
+    for (const { id } of spec.items)
+      if (!itemIds.has(id))
+        problems.push(`no item ${id}`);
+    if (spec.weapons.length === 0)
+      problems.push("a loadout needs a weapon");
+    if (spec.weapons.length > WEAPON_SLOTS)
+      problems.push(`at most ${WEAPON_SLOTS} weapons`);
+    if (spec.passives.length > WEAPON_SLOTS)
+      problems.push(`at most ${WEAPON_SLOTS} passives`);
+    if (problems.length > 0)
+      throw new Error(problems.join("; "));
+    const s = game.state;
+    if (s.choiceQueue.length > 0)
+      throw new Error("a choice is open; pick it first");
+    const L = s.loadout;
+    L.weapons.length = 0;
+    L.passives.length = 0;
+    L.items.clear();
+    for (const { id, count } of spec.items)
+      L.items.set(id, (L.items.get(id) ?? 0) + count);
+    for (const { id, level } of spec.weapons)
+      for (let n = 1;n <= level; n++)
+        pick(game, { type: "weapon", id, level: n, isNew: n === 1 });
+    for (const { id, level } of spec.passives)
+      for (let n = 1;n <= level; n++)
+        pick(game, { type: "passive", id, level: n, isNew: n === 1 });
+    if (spec.gold !== undefined)
+      L.gold = spec.gold;
+    const maxHp = L.stats.maxHp;
+    if (spec.hp !== undefined)
+      s.player.hp[s.me] = spec.hp === "full" ? maxHp : Math.min(maxHp, spec.hp);
+    game.taint();
+    const got = L.weapons.map((w) => `${w.def.id} ${w.level}`).join(", ");
+    const want = spec.weapons.map((w) => `${w.id} ${w.level}`).join(", ");
+    if (got !== want)
+      throw new Error(`the game kept weapons ${got || "none"}, not ${want}`);
+  }
+
+  // userscript/agent/checkpoint.ts
   var b64 = (u8) => {
     let s = "";
     for (let i = 0;i < u8.length; i += 32768)
@@ -665,12 +1214,10 @@
     const name = proto.constructor?.name ?? "?";
     return `${name}(${Object.getOwnPropertyNames(proto).sort().join(",")})`;
   }
-  var TICKS_PER_SECOND3 = 60;
-  var WARM_UP_TICKS = 3 * TICKS_PER_SECOND3;
-  var WEAPON_SLOTS = 6;
+  var WARM_UP_TICKS = 3 * TICKS_PER_SECOND;
   var MAX_CACHED = 3;
 
-  class Training {
+  class Checkpoints {
     link;
     shared;
     classes = new Map;
@@ -938,116 +1485,12 @@
       const { copyState } = this.sim();
       game.state = copyState(saved);
       this.link.events = [];
-      taint(game);
+      game.taint();
       game.setPaused(true);
     }
-    loadout(game, spec) {
-      const content = this.link.content();
-      if (content === undefined)
-        throw new Error("the game's content is not loaded yet");
-      const weaponDefs = new Map(content.allWeapons.map((w) => [w.id, w]));
-      const passiveDefs = new Map(content.passives.map((p) => [p.id, p]));
-      const itemIds = new Set(content.allItems.map((i) => i.id));
-      const problems = [];
-      const weaponMax = (id) => {
-        const w = weaponDefs.get(id);
-        return w === undefined ? 0 : w.tier === "base" ? Math.min(8, (w.levels?.length ?? 0) + 1) : 1;
-      };
-      for (const { id, level } of spec.weapons) {
-        if (!weaponDefs.has(id))
-          problems.push(`no weapon ${id}`);
-        else if (level < 1 || level > weaponMax(id))
-          problems.push(`weapon ${id} levels 1 to ${weaponMax(id)}, not ${level}`);
-      }
-      for (const { id, level } of spec.passives) {
-        const p = passiveDefs.get(id);
-        if (p === undefined)
-          problems.push(`no passive ${id}`);
-        else if (level < 1 || level > p.maxLevel)
-          problems.push(`passive ${id} levels 1 to ${p.maxLevel}, not ${level}`);
-      }
-      for (const { id } of spec.items)
-        if (!itemIds.has(id))
-          problems.push(`no item ${id}`);
-      if (spec.weapons.length === 0)
-        problems.push("a loadout needs a weapon");
-      if (spec.weapons.length > WEAPON_SLOTS)
-        problems.push(`at most ${WEAPON_SLOTS} weapons`);
-      if (spec.passives.length > WEAPON_SLOTS)
-        problems.push(`at most ${WEAPON_SLOTS} passives`);
-      if (problems.length > 0)
-        throw new Error(problems.join("; "));
-      const s = game.state;
-      if (s.choiceQueue.length > 0)
-        throw new Error("a choice is open; pick it first");
-      const L = s.loadout;
-      L.weapons.length = 0;
-      L.passives.length = 0;
-      L.items.clear();
-      for (const { id, count } of spec.items)
-        L.items.set(id, (L.items.get(id) ?? 0) + count);
-      for (const { id, level } of spec.weapons)
-        for (let n = 1;n <= level; n++)
-          pick(game, { type: "weapon", id, level: n, isNew: n === 1 });
-      for (const { id, level } of spec.passives)
-        for (let n = 1;n <= level; n++)
-          pick(game, { type: "passive", id, level: n, isNew: n === 1 });
-      if (spec.gold !== undefined)
-        L.gold = spec.gold;
-      const maxHp = L.stats.maxHp;
-      if (spec.hp !== undefined)
-        s.player.hp[s.me] = spec.hp === "full" ? maxHp : Math.min(maxHp, spec.hp);
-      taint(game);
-      const got = L.weapons.map((w) => `${w.def.id} ${w.level}`).join(", ");
-      const want = spec.weapons.map((w) => `${w.id} ${w.level}`).join(", ");
-      if (got !== want)
-        throw new Error(`the game kept weapons ${got || "none"}, not ${want}`);
-    }
-  }
-  function pick(game, offer) {
-    const s = game.state;
-    s.choiceQueue.push({ kind: "levelUp", offers: [offer], level: s.loadout.level });
-    game.choose({ type: "pick", index: 0 });
-  }
-  function taint(game) {
-    game.taint();
   }
 
-  // userscript/agent/control.ts
-  var TICKS_PER_SECOND4 = 60;
-  var STUCK_TICKS = 90;
-  var KEEP_STATUSES = 10;
-  function anchored(s, to) {
-    return "dx" in to ? { x: (s.player.x[s.me] ?? 0) + to.dx, y: (s.player.y[s.me] ?? 0) + to.dy } : to;
-  }
-  function toward(s, goal) {
-    if (goal === undefined)
-      return STILL;
-    const dx = goal.x - (s.player.x[s.me] ?? 0);
-    const dy = goal.y - (s.player.y[s.me] ?? 0);
-    const dist = Math.hypot(dx, dy);
-    return dist > goal.within ? { x: dx / dist, y: dy / dist } : STILL;
-  }
-  function vector(dir) {
-    const degrees = typeof dir === "number" ? dir : DIRECTIONS.indexOf(dir) * 45;
-    const radians = degrees * Math.PI / 180;
-    return { x: Math.cos(radians), y: Math.sin(radians) };
-  }
-  var STILL = { x: 0, y: 0 };
-  function wait(ms) {
-    return new Promise((r) => setTimeout(r, ms));
-  }
-  async function press(el) {
-    el.click();
-    await wait(300);
-    if (!el.isConnected)
-      return;
-    el.focus();
-    for (const type of ["keydown", "keyup"])
-      el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", bubbles: true }));
-  }
-  var byTestId = (id) => document.querySelector(`[data-testid="${id}"]`) ?? undefined;
-  var locked = (b) => b === undefined || b.disabled || b.getAttribute("aria-disabled") === "true";
+  // userscript/agent/menus.ts
   async function pickDifficulty(difficulty) {
     if (difficulty === "highest") {
       for (let i = 0;i < 10 && !locked(byTestId("pick-harder")); i++)
@@ -1084,34 +1527,89 @@
     if (now !== id)
       throw new Error(`picked starting weapon ${id}, but the start screen shows ${now ?? "nothing"}`);
   }
-  async function until(check, ms) {
-    const end = performance.now() + ms;
-    while (performance.now() < end) {
-      if (check())
-        return true;
-      await wait(100);
-    }
-    return check();
+
+  // userscript/agent/steering.ts
+  function anchored(s, to) {
+    return "dx" in to ? { x: (s.player.x[s.me] ?? 0) + to.dx, y: (s.player.y[s.me] ?? 0) + to.dy } : to;
   }
+  function toward(s, goal) {
+    if (goal === undefined)
+      return STILL;
+    const dx = goal.x - (s.player.x[s.me] ?? 0);
+    const dy = goal.y - (s.player.y[s.me] ?? 0);
+    const dist = Math.hypot(dx, dy);
+    return dist > goal.within ? { x: dx / dist, y: dy / dist } : STILL;
+  }
+  function place(enums, s, to, within) {
+    if ("poi" in to) {
+      const poi = s.world.activePois.find((p) => p.state.uid === to.poi);
+      if (poi === undefined || poi.state.used || poi.state.goneAt >= 0)
+        return;
+      return { x: poi.x, y: poi.y, within: within ?? poi.radius * 0.5 };
+    }
+    if ("pickup" in to) {
+      if (!s.pickups.pool.has(to.pickup))
+        return;
+      const slot = to.pickup & 65535;
+      const kind = enums?.pickupKinds[s.pickups.kind[slot] ?? -1] ?? "";
+      const radius = s.cfg.activation.pickupRadius[kind];
+      return { x: s.pickups.x[slot] ?? 0, y: s.pickups.y[slot] ?? 0, within: within ?? (radius === undefined ? 6 : radius * 0.5) };
+    }
+    return { x: to.x, y: to.y, within: within ?? 6 };
+  }
+
+  // userscript/agent/seed.ts
+  var SEED_KEY = "tibobit.seed";
+  function installSeedHook() {
+    let want = null;
+    try {
+      want = sessionStorage.getItem(SEED_KEY);
+    } catch {}
+    if (want === null)
+      return;
+    const n = parseInt(want, 36);
+    const page = typeof unsafeWindow === "undefined" ? window : unsafeWindow;
+    const real = page.crypto.getRandomValues.bind(page.crypto);
+    page.crypto.getRandomValues = (a) => {
+      if (a !== null && a.constructor.name === "Uint32Array" && a.length === 1) {
+        a[0] = n;
+        return a;
+      }
+      return real(a);
+    };
+  }
+  function requestSeed(seed) {
+    sessionStorage.setItem(SEED_KEY, seed);
+  }
+  function clearSeed() {
+    try {
+      sessionStorage.removeItem(SEED_KEY);
+    } catch {}
+  }
+
+  // userscript/agent/control.ts
+  var STUCK_TICKS = 90;
+  var KEEP_STATUSES = 10;
 
   class Controller {
     link;
+    forecaster;
     statuses = [];
     active;
-    training;
-    store;
-    constructor(link) {
+    checkpoints;
+    constructor(link, forecaster) {
       this.link = link;
+      this.forecaster = forecaster;
       link.steer = (game) => this.steer(game);
-      this.training = new Training(link);
+      this.checkpoints = new Checkpoints(link);
     }
-    handle({ id, command }) {
+    handle({ id, command }, store) {
       const status = { id, command, state: "running", at: Date.now() };
       this.statuses.push(status);
       if (this.statuses.length > KEEP_STATUSES)
         this.statuses.splice(0, this.statuses.length - KEEP_STATUSES);
       try {
-        this.run(status, command);
+        this.run(status, command, store);
       } catch (e) {
         this.finish(status, "failed", e instanceof Error ? e.message : String(e));
       }
@@ -1120,10 +1618,7 @@
       if (this.active !== undefined)
         this.finish(this.active.status, "replaced");
       this.link.speed = 1;
-      this.link.liveForecast = false;
-      this.link.forecastLagTicks = 0;
-      this.link.forecastTicks = 30;
-      this.link.forecastRoute = undefined;
+      this.forecaster.reset();
       if (inRun(this.link))
         this.link.game?.setPaused(false);
     }
@@ -1144,7 +1639,7 @@
         throw new Error("no run in progress");
       return game;
     }
-    run(status, command) {
+    run(status, command, store) {
       switch (command.type) {
         case "move":
         case "goto":
@@ -1175,7 +1670,7 @@
         case "dash": {
           const game = this.game();
           const me = game.state.me;
-          const v = command.dir === undefined ? { x: game.state.player.fx[me] ?? 1, y: game.state.player.fy[me] ?? 0 } : vector(command.dir);
+          const v = command.dir === undefined ? { x: game.state.player.fx[me] ?? 1, y: game.state.player.fy[me] ?? 0 } : unitOf(command.dir);
           game.dash(v.x, v.y);
           this.finish(status, "done");
           return;
@@ -1190,12 +1685,7 @@
           this.finish(status, "done");
           return;
         case "forecast":
-          this.link.liveForecast = command.live;
-          if (command.lag !== undefined)
-            this.link.forecastLagTicks = Math.round(command.lag * 60);
-          if (command.seconds !== undefined)
-            this.link.forecastTicks = Math.round(command.seconds * 60);
-          this.link.forecastRoute = command.route === undefined ? undefined : { to: anchored(this.game().state, command.route.to), stayTicks: Math.round((command.route.stay ?? 0) * TICKS_PER_SECOND4), ticks: Math.round((command.route.seconds ?? 4) * TICKS_PER_SECOND4), legTicks: Math.round((command.route.leg ?? 0.5) * TICKS_PER_SECOND4) };
+          this.forecaster.configure(command, this.link.game?.state);
           this.finish(status, "done");
           return;
         case "start":
@@ -1205,40 +1695,37 @@
           this.summary(status).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
           return;
         case "seed":
-          sessionStorage.setItem(SEED_KEY, command.seed);
+          requestSeed(command.seed);
           this.finish(status, "done");
           setTimeout(() => location.reload(), 1500);
           return;
         case "checkpoint":
-          this.checkpoint(status, command).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+          this.checkpoint(status, command, store).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
           return;
         case "loadout": {
           const game = this.game();
-          this.training.loadout(game, command);
+          applyLoadout(this.link, game, command);
           const L = game.state.loadout;
           this.finish(status, "done", [...L.weapons.map((w) => `${w.def.id} ${w.level}`), ...L.passives.map((p) => `${p.def.id} ${p.level}`), ...[...L.items.keys()]].join(", "));
           return;
         }
       }
     }
-    async checkpoint(status, { op, name }) {
+    async checkpoint(status, { op, name }, store) {
       if (op === "drop") {
-        this.training.drop(name);
+        this.checkpoints.drop(name);
         return this.finish(status, "done");
       }
-      const store = this.store;
-      if (store === undefined)
-        throw new Error("no agent server to keep checkpoints");
       const game = this.game();
       if (op === "save") {
-        const file = this.training.save(game, name);
+        const file = this.checkpoints.save(game, name);
         await store.put(file);
         return this.finish(status, "done", `${file.meta.time}s, ${file.state.nodes.length} objects`);
       }
-      const file = this.training.has(name) ? undefined : await store.get(name);
+      const file = this.checkpoints.has(name) ? undefined : await store.get(name);
       if (this.active !== undefined)
         this.finish(this.active.status, "replaced");
-      this.training.load(game, name, file);
+      this.checkpoints.load(game, name, file);
       this.finish(status, "done", `${Math.round(game.state.runClock * 10) / 10}s`);
     }
     async summary(status) {
@@ -1309,9 +1796,7 @@
       window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", bubbles: true }));
       if (!started)
         throw new Error("the run did not start within 20 seconds");
-      try {
-        sessionStorage.removeItem(SEED_KEY);
-      } catch {}
+      clearSeed();
       this.finish(status, "done", picked);
     }
     steer(game) {
@@ -1323,18 +1808,18 @@
       const elapsed = s.tick - active.startTick;
       const { command, status } = active;
       if (command.type === "move") {
-        if (command.seconds !== undefined && elapsed >= command.seconds * TICKS_PER_SECOND4) {
+        if (command.seconds !== undefined && elapsed >= command.seconds * TICKS_PER_SECOND) {
           this.finish(status, "done");
           return STILL;
         }
-        return vector(command.dir);
+        return unitOf(command.dir);
       }
-      if (elapsed >= (command.timeout ?? 60) * TICKS_PER_SECOND4) {
+      if (elapsed >= (command.timeout ?? 60) * TICKS_PER_SECOND) {
         this.finish(status, "failed", "timeout");
         return STILL;
       }
       active.to ??= anchored(s, command.to);
-      const goal = this.place(s, active.to, command.within);
+      const goal = place(this.link.enums, s, active.to, command.within);
       if (goal === undefined) {
         if (command.stay === "done" && active.arrivedTick !== undefined)
           this.finish(status, "done", "used up");
@@ -1358,7 +1843,7 @@
       active.arrivedTick ??= s.tick;
       active.best = undefined;
       const stay = command.stay;
-      if (stay === undefined || stay === 0 || typeof stay === "number" && s.tick - active.arrivedTick >= stay * TICKS_PER_SECOND4) {
+      if (stay === undefined || stay === 0 || typeof stay === "number" && s.tick - active.arrivedTick >= stay * TICKS_PER_SECOND) {
         this.finish(status, "done");
       }
       return STILL;
@@ -1370,522 +1855,16 @@
         return;
       const { command } = active;
       if (command.type === "move") {
-        const held = vector(command.dir);
-        const end = command.seconds === undefined ? Infinity : (active.startTick ?? live.tick) + command.seconds * TICKS_PER_SECOND4;
+        const held = unitOf(command.dir);
+        const end = command.seconds === undefined ? Infinity : (active.startTick ?? live.tick) + command.seconds * TICKS_PER_SECOND;
         return (s) => s.tick >= end ? STILL : held;
       }
       const to = active.to ?? anchored(live, command.to);
-      return (s) => toward(s, this.place(s, to, command.within));
-    }
-    place(s, to, within) {
-      if ("poi" in to) {
-        const poi = s.world.activePois.find((p) => p.state.uid === to.poi);
-        if (poi === undefined || poi.state.used || poi.state.goneAt >= 0)
-          return;
-        return { x: poi.x, y: poi.y, within: within ?? poi.radius * 0.5 };
-      }
-      if ("pickup" in to) {
-        if (!s.pickups.pool.has(to.pickup))
-          return;
-        const slot = to.pickup & 65535;
-        const kind = this.link.enums?.pickupKinds[s.pickups.kind[slot] ?? -1] ?? "";
-        const radius = s.cfg.activation.pickupRadius[kind];
-        return { x: s.pickups.x[slot] ?? 0, y: s.pickups.y[slot] ?? 0, within: within ?? (radius === undefined ? 6 : radius * 0.5) };
-      }
-      return { x: to.x, y: to.y, within: within ?? 6 };
+      return (s) => toward(s, place(this.link.enums, s, to, command.within));
     }
   }
 
-  // userscript/agent/foresight.ts
-  var TICKS_PER_SECOND5 = 60;
-  var SLICE_MS = 4;
-  var SHARE = 0.75;
-  var KEEP_TICKS = 2 * TICKS_PER_SECOND5;
-  var unit2 = (dir) => {
-    const a = DIRECTIONS.indexOf(dir) * Math.PI / 4;
-    return { x: Math.cos(a), y: Math.sin(a) };
-  };
-  var STILL2 = { x: 0, y: 0 };
-  var playing = (s) => !s.over && s.choiceQueue.length === 0;
-  var dealt = (s) => {
-    let total = 0;
-    for (const amount of s.run.damageBySource.values())
-      total += amount;
-    return total;
-  };
-
-  class Foresight {
-    link;
-    controller;
-    outcomes = new Map;
-    run;
-    turn = 0;
-    restUntil = 0;
-    game;
-    routed = false;
-    paused = false;
-    constructor(link, controller) {
-      this.link = link;
-      this.controller = controller;
-      setInterval(() => this.slice(), SLICE_MS);
-    }
-    plans(s) {
-      const route = this.link.forecastRoute;
-      const place = route === undefined ? undefined : this.controller.place(s, route.to);
-      if (route === undefined || place === undefined) {
-        return [...DIRECTIONS, "still"].map((name) => {
-          const held = name === "still" ? STILL2 : unit2(name);
-          return { name, ticks: this.link.forecastTicks, input: () => held };
-        });
-      }
-      const goal = (state) => this.controller.place(state, route.to);
-      const straight = (state) => toward(state, goal(state));
-      const way = DIRECTIONS.indexOf(directionOf(place.x - (s.player.x[s.me] ?? 0), place.y - (s.player.y[s.me] ?? 0)));
-      const beside = [-2, -1, 1, 2].map((turn) => DIRECTIONS[(way + turn + 8) % 8]);
-      const first = (held) => (state, i) => i < route.legTicks ? held : straight(state);
-      const ahead = DIRECTIONS[way];
-      const trip = { goal, stayTicks: route.stayTicks };
-      return [
-        { name: "straight", ticks: route.ticks, input: straight, trip },
-        ...beside.map((dir) => ({ name: dir, ticks: route.ticks, input: first(unit2(dir)), trip })),
-        { name: "still", ticks: route.ticks, input: first(STILL2), trip },
-        { name: `dash ${ahead}`, ticks: route.ticks, input: straight, dash: unit2(ahead), trip }
-      ];
-    }
-    *lead(game, lagTicks) {
-      const { copyState, simulator } = this.link;
-      if (copyState === undefined || simulator === undefined)
-        throw new Error("the game's sim is not hooked yet");
-      const copy = simulator(game, copyState(game.state));
-      const course = this.controller.course();
-      for (let i = 0;i < lagTicks && playing(copy.sim.state); i++) {
-        if (course !== undefined) {
-          const held = course(copy.sim.state);
-          copy.setInput(held.x, held.y);
-        }
-        copy.step();
-        yield;
-      }
-      return copy;
-    }
-    *play(game, plan, lagTicks) {
-      const tick = game.state.tick;
-      const { sim, step, setInput } = yield* this.lead(game, lagTicks);
-      const s = sim.state;
-      const me = s.me;
-      if (plan.dash !== undefined) {
-        if ((s.player.dashCharges[me] ?? 0) <= 0) {
-          this.outcomes.delete(plan.name);
-          return;
-        }
-        sim.dash(plan.dash.x, plan.dash.y);
-      }
-      const before = new Map(s.run.damageTakenBySource);
-      const dealtBefore = dealt(s);
-      let arrived;
-      let stood = 0;
-      let done;
-      let played = 0;
-      for (let i = 0;i < plan.ticks && playing(s) && done === undefined; i++) {
-        const held = plan.input(s, i);
-        setInput(held.x, held.y);
-        step();
-        played++;
-        if (plan.trip !== undefined) {
-          const goal = plan.trip.goal(s);
-          const there = goal !== undefined && Math.hypot(goal.x - (s.player.x[me] ?? 0), goal.y - (s.player.y[me] ?? 0)) <= goal.within;
-          stood = there ? stood + 1 : 0;
-          if (there)
-            arrived ??= i + 1;
-          if (goal === undefined || there && stood > plan.trip.stayTicks)
-            done = i + 1;
-        }
-        yield;
-      }
-      const bySource = {};
-      let damage = 0;
-      for (const [source, total] of s.run.damageTakenBySource) {
-        const taken = total - (before.get(source) ?? 0);
-        if (taken <= 0)
-          continue;
-        bySource[source] = taken;
-        damage += taken;
-      }
-      this.outcomes.set(plan.name, {
-        tick,
-        damage,
-        dead: s.over,
-        bySource,
-        dps: played === 0 ? 0 : (dealt(s) - dealtBefore) * TICKS_PER_SECOND5 / played,
-        ...arrived === undefined ? {} : { arrives: arrived / TICKS_PER_SECOND5 },
-        ...done === undefined ? {} : { done: done / TICKS_PER_SECOND5 }
-      });
-    }
-    forget() {
-      this.outcomes.clear();
-      this.run = undefined;
-    }
-    look(game, lagTicks) {
-      const steps = this.lead(game, lagTicks);
-      let step = steps.next();
-      while (!step.done)
-        step = steps.next();
-      const s = step.value.sim.state;
-      const me = s.me;
-      return {
-        tick: game.state.tick,
-        seconds: lagTicks / TICKS_PER_SECOND5,
-        player: { x: s.player.x[me] ?? 0, y: s.player.y[me] ?? 0, hp: s.player.hp[me] ?? 0, dashCharges: s.player.dashCharges[me] ?? 0 },
-        threats: threats(this.link, s, this.link.forecastTicks / TICKS_PER_SECOND5)
-      };
-    }
-    current(game) {
-      const plans = this.plans(game.state);
-      const routed = plans[0]?.name === "straight";
-      if (game !== this.game || routed !== this.routed || game.state.paused !== this.paused)
-        this.forget();
-      this.game = game;
-      this.routed = routed;
-      this.paused = game.state.paused;
-      const names = new Set(plans.map((p) => p.name));
-      const tick = game.state.tick;
-      for (const [name, o] of this.outcomes)
-        if (!names.has(name) || o.tick > tick || tick - o.tick > KEEP_TICKS)
-          this.outcomes.delete(name);
-      return plans;
-    }
-    slice() {
-      const game = this.link.game;
-      if (game === undefined || !this.link.ready || !this.link.liveForecast || game.state.paused || !playing(game.state)) {
-        this.run = undefined;
-        return;
-      }
-      const now = performance.now();
-      if (now < this.restUntil)
-        return;
-      if (this.run !== undefined && (this.run.game !== game || this.run.tick > game.state.tick))
-        this.run = undefined;
-      while (performance.now() - now < SLICE_MS) {
-        if (this.run === undefined) {
-          const plans = this.current(game);
-          const plan = plans[this.turn++ % plans.length];
-          this.run = { game, tick: game.state.tick, steps: this.play(game, plan, this.link.forecastLagTicks) };
-        }
-        if (this.run.steps.next().done)
-          this.run = undefined;
-      }
-      const worked = performance.now() - now;
-      this.restUntil = now + worked / SHARE;
-    }
-    read() {
-      const game = this.link.game;
-      if (game === undefined || !this.link.ready)
-        return;
-      const s = game.state;
-      if (!playing(s) || !(s.paused || this.link.liveForecast))
-        return;
-      const plans = this.current(game);
-      if (s.paused) {
-        this.run = undefined;
-        for (const plan of plans)
-          if (this.outcomes.get(plan.name)?.tick !== s.tick)
-            for (const _ of this.play(game, plan, 0))
-              ;
-      }
-      const ahead = this.look(game, s.paused ? 0 : this.link.forecastLagTicks);
-      const route = this.link.forecastRoute;
-      const outcomes = {};
-      for (const { name } of plans) {
-        const outcome = this.outcomes.get(name);
-        if (outcome !== undefined)
-          outcomes[name] = outcome;
-      }
-      return {
-        lag: s.paused ? 0 : this.link.forecastLagTicks / TICKS_PER_SECOND5,
-        seconds: this.link.forecastTicks / TICKS_PER_SECOND5,
-        ahead,
-        ...this.routed && route !== undefined ? { routes: { seconds: route.ticks / TICKS_PER_SECOND5, leg: route.legTicks / TICKS_PER_SECOND5, stay: route.stayTicks / TICKS_PER_SECOND5, options: outcomes } } : { moves: outcomes }
-      };
-    }
-  }
-
-  // userscript/agent/bridge.ts
-  var PORT_KEY = "tibobit.bridgePort";
-  var SETTINGS_KEY = "tibobit.pilotSettings";
-  function savedSettings() {
-    try {
-      const c = parsePilotChange(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null"));
-      return {
-        pace: { planEvery: c.planEvery ?? DEFAULT_SETTINGS.pace.planEvery, actEvery: c.actEvery ?? DEFAULT_SETTINGS.pace.actEvery },
-        incognito: c.incognito ?? DEFAULT_SETTINGS.incognito
-      };
-    } catch {
-      return DEFAULT_SETTINGS;
-    }
-  }
-  var asChange = (s) => ({ ...s.pace, incognito: s.incognito });
-  function savedPort() {
-    try {
-      const port = Number(localStorage.getItem(PORT_KEY));
-      return validPort(port) ? port : undefined;
-    } catch {
-      return;
-    }
-  }
-  function initialOrigin() {
-    return globalThis.__tiboBridgeOrigin ?? bridgeOrigin(savedPort() ?? BRIDGE_PORT);
-  }
-  var RUN_INTERVAL_MS = 33;
-  var SNAPSHOT_SHARE = 0.1;
-  var CHECKPOINT_TIMEOUT_MS = 120000;
-  var IDLE_INTERVAL_MS = 500;
-  var RECONNECT_MS = 3000;
-  var MAX_IN_FLIGHT = 4;
-  var HELLO_TIMEOUT_MS = 5000;
-  var TAB_ID = crypto.randomUUID();
-  function refusal(r, origin) {
-    const text = r.responseText ?? (typeof r.response === "string" ? r.response : "");
-    try {
-      const { error } = JSON.parse(text);
-      if (typeof error === "string")
-        return error;
-    } catch {}
-    return `the agent server on ${origin} refused the connection (${r.status})`;
-  }
-  function post(origin, path, body) {
-    return new Promise((resolve) => GM_xmlhttpRequest({
-      method: "POST",
-      url: `${origin}${path}`,
-      data: typeof body === "string" ? body : JSON.stringify(body),
-      headers: { "content-type": "application/json" },
-      timeout: 5000,
-      onload: (r) => resolve(r.status < 300),
-      onerror: () => resolve(false),
-      ontimeout: () => resolve(false)
-    }));
-  }
-  function gmCall(method, url, body) {
-    return new Promise((resolve, reject) => GM_xmlhttpRequest({
-      method,
-      url,
-      ...body === undefined ? {} : { data: body, headers: { "content-type": "application/json" } },
-      timeout: CHECKPOINT_TIMEOUT_MS,
-      onload: (r) => {
-        const text = r.responseText ?? String(r.response ?? "");
-        if (r.status < 300)
-          resolve(text);
-        else
-          reject(new Error(`${method} ${url}: ${r.status} ${text.slice(0, 300)}`));
-      },
-      onerror: () => reject(new Error(`${method} ${url} failed`)),
-      ontimeout: () => reject(new Error(`${method} ${url} timed out`))
-    }));
-  }
-  var NOT_GRANTED = typeof GM_xmlhttpRequest === "function" ? undefined : "Tampermonkey did not grant GM_xmlhttpRequest. Add @grant GM_xmlhttpRequest and @connect 127.0.0.1 to the installed script's header.";
-  function startBridge(link, controller) {
-    let origin = initialOrigin();
-    let session = 0;
-    let request;
-    let error = NOT_GRANTED;
-    let connected = false;
-    const listeners = new Set;
-    const notify = () => {
-      for (const listener of listeners)
-        listener();
-    };
-    let settings = savedSettings();
-    let pilot = { state: "off", ...settings };
-    const chat = [];
-    let inFlight = 0;
-    let lastPush = 0;
-    let snapshotMs = 0;
-    let sentWithMessages = -1;
-    const foresight = new Foresight(link, controller);
-    controller.store = {
-      put: async (file) => {
-        await gmCall("POST", `${origin}/bridge/checkpoint`, JSON.stringify(file));
-      },
-      get: async (name) => JSON.parse(await gmCall("GET", `${origin}/bridge/checkpoint?name=${encodeURIComponent(name)}`))
-    };
-    const reconnect = (from) => {
-      if (from !== session)
-        return;
-      connected = false;
-      receivePilot({ state: "off", ...settings });
-      notify();
-      setTimeout(listen, RECONNECT_MS);
-    };
-    const listen = () => {
-      const mine = ++session;
-      if (NOT_GRANTED !== undefined)
-        return;
-      let over = false;
-      const retry = (why) => {
-        if (over)
-          return;
-        over = true;
-        clearTimeout(silence);
-        if (why !== undefined && mine === session)
-          error = why;
-        reconnect(mine);
-      };
-      const silence = setTimeout(() => {
-        if (connected || mine !== session)
-          return;
-        request?.abort();
-        retry(`the agent server on ${origin} did not answer`);
-      }, HELLO_TIMEOUT_MS);
-      request = GM_xmlhttpRequest({
-        method: "GET",
-        url: `${origin}/bridge/commands?tab=${TAB_ID}`,
-        responseType: "stream",
-        onloadstart: (r) => {
-          const body = r.response;
-          if (body === null)
-            return;
-          read(body, mine).catch(() => {}).finally(() => retry());
-        },
-        onload: (r) => retry(r.status >= 300 ? refusal(r, origin) : undefined),
-        onerror: () => retry(`no agent server on ${origin}`),
-        ontimeout: () => retry(`no agent server on ${origin}`)
-      });
-    };
-    const receivePilot = (next) => {
-      if (pilot.state !== "off" && next.state === "off")
-        controller.release();
-      if (pilot.state === "off" && next.state === "on")
-        chat.length = 0;
-      pilot = next;
-    };
-    const receiveChat = (message) => {
-      const at = chat.findIndex((m) => m.id === message.id);
-      if (at >= 0)
-        chat[at] = message;
-      else
-        chat.push(message);
-      trimChat(chat);
-    };
-    const read = async (body, mine) => {
-      const reader = body.getReader();
-      const decoder = new TextDecoder;
-      let buffer = "";
-      for (;; ) {
-        const { value, done } = await reader.read();
-        if (done)
-          buffer += `
-`;
-        else
-          buffer += decoder.decode(value, { stream: true });
-        for (let nl = buffer.indexOf(`
-`);nl >= 0; nl = buffer.indexOf(`
-`)) {
-          const line = buffer.slice(0, nl).trim();
-          buffer = buffer.slice(nl + 1);
-          if (line === "")
-            continue;
-          try {
-            const envelope = JSON.parse(line);
-            if (mine !== session)
-              return;
-            if ("hello" in envelope) {
-              connected = true;
-              error = undefined;
-              sentWithMessages = -1;
-              chat.length = 0;
-              post(origin, "/pilot", asChange(settings));
-              notify();
-            } else if ("error" in envelope) {
-              error = envelope.error;
-              notify();
-            } else if ("pilot" in envelope) {
-              receivePilot(envelope.pilot);
-              notify();
-            } else if ("chat" in envelope) {
-              receiveChat(envelope.chat);
-              notify();
-            } else
-              controller.handle({ id: envelope.id, command: parseCommand(envelope.command) });
-          } catch (e) {
-            console.error("[tibobit] bad command from the agent server", line, e);
-          }
-        }
-        if (done)
-          return;
-      }
-    };
-    setInterval(() => {
-      if (!connected || inFlight >= MAX_IN_FLIGHT)
-        return;
-      const now = performance.now();
-      if (now - lastPush < (inRun(link) ? Math.max(RUN_INTERVAL_MS, snapshotMs / SNAPSHOT_SHARE) : IDLE_INTERVAL_MS))
-        return;
-      lastPush = now;
-      const messages = Object.keys(link.messages).length;
-      if (sentWithMessages !== messages) {
-        const book = encyclopedia(link);
-        if (book !== undefined) {
-          sentWithMessages = messages;
-          post(origin, "/bridge/encyclopedia", book).then((ok) => {
-            if (!ok)
-              sentWithMessages = -1;
-          });
-        }
-      }
-      let body;
-      let built = now;
-      try {
-        const forecast = foresight.read();
-        built = performance.now();
-        body = JSON.stringify(snapshot(link, controller.statuses, forecast));
-      } catch (e) {
-        body = JSON.stringify({ capturedAt: Date.now(), screen: "title", commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` });
-      }
-      snapshotMs = performance.now() - built;
-      inFlight++;
-      post(origin, "/bridge/state", body).finally(() => inFlight--);
-    }, RUN_INTERVAL_MS / 2);
-    listen();
-    return {
-      status: () => ({ port: Number(new URL(origin).port), state: connected ? "connected" : "connecting", error: connected ? undefined : error }),
-      connect: (port) => {
-        if (!validPort(port))
-          throw new Error(`not a port: ${port}`);
-        try {
-          localStorage.setItem(PORT_KEY, String(port));
-        } catch {}
-        origin = bridgeOrigin(port);
-        connected = false;
-        error = NOT_GRANTED;
-        request?.abort();
-        listen();
-        notify();
-      },
-      pilot: () => pilot,
-      setPilot: (change) => {
-        const { on, ...rest } = change;
-        if (Object.keys(rest).length > 0) {
-          settings = { pace: { planEvery: rest.planEvery ?? settings.pace.planEvery, actEvery: rest.actEvery ?? settings.pace.actEvery }, incognito: rest.incognito ?? settings.incognito };
-          pilot = { ...pilot, ...settings };
-          try {
-            localStorage.setItem(SETTINGS_KEY, JSON.stringify(asChange(settings)));
-          } catch {}
-          notify();
-        }
-        if (!connected)
-          return;
-        post(origin, "/pilot", change).then((ok) => {
-          if (ok)
-            return;
-          pilot = { ...pilot, detail: `the agent server on ${origin} refused ${JSON.stringify(change)}; restart it with this version of scripts/agent-server.ts` };
-          notify();
-        });
-      },
-      chat: () => chat,
-      onChange: (listener) => listeners.add(listener)
-    };
-  }
-
-  // userscript/discovery.ts
+  // userscript/combos/discovery.ts
   var DISCOVERY_KEY = "tibo.discovery.v1";
   var EVOLUTIONS_KEY = "tibo.evolutions.v1";
   function parseDiscovery(raw) {
@@ -1940,69 +1919,7 @@
     }
   }
 
-  // userscript/game.ts
-  var NO_RECORDER = { step() {}, choose() {}, dash() {}, taint() {}, log() {} };
-  function cloneState(root, shared) {
-    const memo = new Map;
-    const copy = (v) => {
-      if (typeof v !== "object" || v === null || shared.has(v))
-        return v;
-      const known = memo.get(v);
-      if (known !== undefined)
-        return known;
-      if (ArrayBuffer.isView(v)) {
-        const c = v instanceof DataView ? new DataView(v.buffer.slice(0)) : v.slice();
-        memo.set(v, c);
-        return c;
-      }
-      if (Array.isArray(v)) {
-        const c = [];
-        memo.set(v, c);
-        for (const x of v)
-          c.push(copy(x));
-        return c;
-      }
-      if (v instanceof Map) {
-        const c = new Map;
-        memo.set(v, c);
-        for (const [k, x] of v)
-          c.set(copy(k), copy(x));
-        return c;
-      }
-      if (v instanceof Set) {
-        const c = new Set;
-        memo.set(v, c);
-        for (const x of v)
-          c.add(copy(x));
-        return c;
-      }
-      const c = Object.create(Object.getPrototypeOf(v));
-      memo.set(v, c);
-      for (const k of Object.keys(v))
-        c[k] = copy(v[k]);
-      return c;
-    };
-    return copy(root);
-  }
-  function reachable(root, into) {
-    const stack = [root];
-    while (stack.length > 0) {
-      const v = stack.pop();
-      if (typeof v !== "object" || v === null || into.has(v) || ArrayBuffer.isView(v))
-        continue;
-      into.add(v);
-      if (v instanceof Map)
-        for (const [k, x] of v)
-          stack.push(k, x);
-      else if (v instanceof Set)
-        for (const x of v)
-          stack.push(x);
-      else
-        for (const x of Object.values(v))
-          stack.push(x);
-    }
-  }
-  var isRuleModule2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).length > 0 && Object.values(v).every((x) => typeof x === "function");
+  // userscript/game/chunks.ts
   var SIM_CHUNK = /\/assets\/sim-[\w-]+\.js$/;
   var BOOT_CHUNK = /\/assets\/boot-[\w-]+\.js$/;
   var ENGLISH_CHUNK = /\/assets\/i18n-en-[\w.-]+\.js$/;
@@ -2012,8 +1929,6 @@
     const proto = value.prototype;
     return typeof proto?.step === "function" && typeof proto.setInput === "function" && typeof proto.choose === "function" && typeof proto.drainEvents === "function";
   }
-  var KEEP_EVENTS = 40;
-  var NOISY_EVENTS = new Set(["playerHit", "hitStop", "dodge", "dashed", "block", "throttle", "reelStop", "dogAbility", "bossLanding"]);
   function findGameClass(ns) {
     for (const value of Object.values(ns)) {
       if (value === null || typeof value !== "object")
@@ -2071,6 +1986,10 @@
         throw new Error(`content registry has no ${key} list`);
   }
 
+  // userscript/game/link.ts
+  var KEEP_EVENTS = 40;
+  var NOISY_EVENTS = new Set(["playerHit", "hitStop", "dodge", "dashed", "block", "throttle", "reelStop", "dogAbility", "bossLanding"]);
+
   class GameLink {
     game;
     table;
@@ -2081,11 +2000,7 @@
     steer;
     inPool;
     speed = 1;
-    liveForecast = false;
     pauseAtStart = false;
-    forecastLagTicks = 0;
-    forecastTicks = 30;
-    forecastRoute;
     copyState;
     simulator;
     simBuild;
@@ -2198,7 +2113,7 @@
           reachable(link.table, shared);
         }
         for (const v of Object.values(state))
-          if (isRuleModule2(v))
+          if (isRuleModule(v))
             shared.add(v);
         return cloneState(state, shared);
       };
@@ -2275,132 +2190,7 @@
     }
   }
 
-  // userscript/catalog.ts
-  function titleCase(id) {
-    return id.replace(/(^|-)(\w)/g, (_, dash, c) => `${dash ? " " : ""}${c.toUpperCase()}`);
-  }
-  function buildCatalog(content, messages) {
-    const names = {};
-    const descriptions = {};
-    const maxLevel = {};
-    const name = (kind, id) => {
-      names[`${kind}:${id}`] = messages[`content.${kind}.${id}.name`]?.[0] ?? titleCase(id);
-      const description = messages[`content.${kind}.${id}.desc`]?.[0];
-      if (description !== undefined)
-        descriptions[`${kind}:${id}`] = description;
-    };
-    for (const w of content.allWeapons) {
-      name("weapon", w.id);
-      if (w.tier === "base")
-        maxLevel[`weapon:${w.id}`] = Math.min(8, (w.levels?.length ?? 0) + 1);
-    }
-    for (const p of content.passives) {
-      name("passive", p.id);
-      maxLevel[`passive:${p.id}`] = p.maxLevel;
-    }
-    for (const i of content.allItems)
-      name("item", i.id);
-    const passiveIds = new Set(content.passives.map((p) => p.id));
-    const recipes = [];
-    for (const e of content.evolutions) {
-      if (typeof e.from !== "string" || e.catalyst === undefined)
-        continue;
-      const catalyst = passiveIds.has(e.catalyst) ? `passive:${e.catalyst}` : `item:${e.catalyst}`;
-      recipes.push({ kind: "evolution", weapon: e.from, catalyst, result: e.id });
-    }
-    for (const u of content.unions) {
-      if (!Array.isArray(u.from) || u.from.length !== 2)
-        continue;
-      recipes.push({ kind: "union", weapons: [u.from[0] ?? "", u.from[1] ?? ""], result: u.id });
-    }
-    for (const i of content.evolvedItems) {
-      if (i.from === undefined || i.catalyst === undefined)
-        continue;
-      recipes.push({ kind: "itemEvolution", item: i.from, catalyst: i.catalyst, result: i.id });
-    }
-    return { names, descriptions, maxLevel, recipes };
-  }
-  function toCombo(r) {
-    switch (r.kind) {
-      case "evolution":
-        return {
-          recipe: r,
-          result: `weapon:${r.result}`,
-          parts: [
-            { key: `weapon:${r.weapon}`, need: "max" },
-            { key: r.catalyst, need: "own" }
-          ]
-        };
-      case "union":
-        return {
-          recipe: r,
-          result: `weapon:${r.result}`,
-          parts: [
-            { key: `weapon:${r.weapons[0]}`, need: "own" },
-            { key: `weapon:${r.weapons[1]}`, need: "own" }
-          ]
-        };
-      case "itemEvolution":
-        return {
-          recipe: r,
-          result: `item:${r.result}`,
-          parts: [
-            { key: `item:${r.item}`, need: "own" },
-            { key: `passive:${r.catalyst}`, need: "max" }
-          ]
-        };
-    }
-  }
-  function readLoadout(state) {
-    const loadout = new Map;
-    for (const w of state.loadout.weapons)
-      loadout.set(`weapon:${w.def.id}`, w.level);
-    for (const p of state.loadout.passives)
-      loadout.set(`passive:${p.def.id}`, p.level);
-    for (const [id, count] of state.loadout.items)
-      if (count > 0)
-        loadout.set(`item:${id}`, count);
-    return loadout;
-  }
-  function partState(part, loadout, catalog) {
-    const have = loadout.get(part.key);
-    if (have === undefined)
-      return "missing";
-    if (part.need === "own")
-      return "done";
-    return have >= (catalog.maxLevel[part.key] ?? 1) ? "done" : "leveling";
-  }
-  function comboProgress(combo, loadout, catalog) {
-    return combo.parts.map((p) => partState(p, loadout, catalog));
-  }
-  function combosUsing(combos, key) {
-    return combos.filter((c) => c.parts.some((p) => p.key === key));
-  }
-  function partner(combo, key) {
-    const [a, b] = combo.parts;
-    return a.key === key ? b : a;
-  }
-  function relevantCombos(combos, loadout) {
-    return combos.filter((c) => !loadout.has(c.result) && c.parts.some((p) => loadout.has(p.key)));
-  }
-  function unpaired(combos, loadout) {
-    const out = [];
-    for (const held of loadout.keys()) {
-      const options = combosUsing(combos, held).filter((c) => !loadout.has(c.result)).map((combo) => ({ partner: partner(combo, held), combo }));
-      if (options.length === 0 || options.some((o) => loadout.has(o.partner.key)))
-        continue;
-      out.push({ held, options });
-    }
-    return out;
-  }
-  function idOf(key) {
-    return key.slice(key.indexOf(":") + 1);
-  }
-  function nameOf(catalog, key) {
-    return catalog.names[key] ?? titleCase(idOf(key));
-  }
-
-  // userscript/icons.ts
+  // userscript/pilot/icons.ts
   var ring = (x, y, r) => `M${x - r} ${y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
   var dot = (x, y, r) => ({ fill: ring(x, y, r) });
   var ACTION_ICONS = {
@@ -2487,7 +2277,7 @@
     return turn === undefined ? svgIcon(STILL_ICON, className) : svgIcon(ARROW_ICON, className, turn);
   }
 
-  // userscript/chat.ts
+  // userscript/pilot/feed.ts
   var ROLE_LABELS = { planner: "Plan", action: "Action", system: "Bot" };
   var HIDE_DELAY_MS = 200;
   var MIN_SIDE_ROOM = 300;
@@ -2763,7 +2553,7 @@
     return box;
   }
 
-  // userscript/data.ts
+  // userscript/combos/live.ts
   var data;
   var dataFrom;
   function liveData(link) {
@@ -2779,7 +2569,7 @@
     return data;
   }
 
-  // userscript/style.ts
+  // userscript/panel/style.ts
   var css = `
 .tbh-panel {
   position: fixed; top: 52px; right: 8px; z-index: 2147483000;
@@ -2971,10 +2761,7 @@
 .tbh-ready-tag { color: #5ee8a0; font-weight: 700; }
 `;
 
-  // userscript/helper.ts
-  function isShown(el) {
-    return el.getClientRects().length > 0;
-  }
+  // userscript/panel/panel.ts
   function h2(tag, className, ...children) {
     const el = document.createElement(tag);
     el.className = className;
@@ -3195,7 +2982,7 @@
   }
   function guardPanelKeys() {
     for (const type of ["keydown", "keyup", "keypress"]) {
-      window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest("#tibo-helper") !== null && e.stopImmediatePropagation(), true);
+      window.addEventListener(type, (e) => e.target instanceof Element && e.target.closest(`#${PANEL_ID}`) !== null && e.stopImmediatePropagation(), true);
     }
   }
   function mount(chat, footer) {
@@ -3204,7 +2991,7 @@
     document.head.append(style);
     const content = h2("div", "tbh-content");
     const panel = h2("div", "tbh-panel", content, footer, chat);
-    panel.id = "tibo-helper";
+    panel.id = PANEL_ID;
     if (window.innerWidth < 700)
       panel.classList.add("tbh-collapsed");
     document.body.append(panel);
@@ -3233,9 +3020,8 @@
     let lastInputs;
     const update = () => {
       queued = false;
-      const hud = document.querySelector(".hud-weapons");
       const game = link.game;
-      const running = game !== undefined && !game.state.over && hud !== null && isShown(hud);
+      const running = game !== undefined && inRun(link);
       panel.classList.toggle("tbh-idle", !running);
       dropStaleTip();
       if (!running) {
@@ -3286,7 +3072,7 @@
     schedule();
   }
 
-  // userscript/pickShow.ts
+  // userscript/pilot/pick-overlay.ts
   var SHOW_MS = 1500;
   var ARRIVE_MS = 700;
   var FRESH_MS = 8000;
@@ -3391,15 +3177,252 @@
     requestAnimationFrame(frame);
   }
 
+  // userscript/agent/forecast.ts
+  var SLICE_MS = 4;
+  var SHARE = 0.75;
+  var KEEP_TICKS = 2 * TICKS_PER_SECOND;
+  var DEFAULT_TICKS = 0.5 * TICKS_PER_SECOND;
+  var playing = (s) => !s.over && s.choiceQueue.length === 0;
+  var dealt = (s) => {
+    let total = 0;
+    for (const amount of s.run.damageBySource.values())
+      total += amount;
+    return total;
+  };
+
+  class Forecaster {
+    link;
+    course;
+    outcomes = new Map;
+    run;
+    turn = 0;
+    restUntil = 0;
+    game;
+    routed = false;
+    paused = false;
+    live = false;
+    lagTicks = 0;
+    ticks = DEFAULT_TICKS;
+    route;
+    constructor(link, course) {
+      this.link = link;
+      this.course = course;
+    }
+    start() {
+      setInterval(() => this.slice(), SLICE_MS);
+    }
+    configure(command, s) {
+      const route = command.route;
+      if (route !== undefined && s === undefined)
+        throw new Error("no game is running");
+      this.live = command.live;
+      if (command.lag !== undefined)
+        this.lagTicks = Math.round(command.lag * TICKS_PER_SECOND);
+      if (command.seconds !== undefined)
+        this.ticks = Math.round(command.seconds * TICKS_PER_SECOND);
+      const ticks = (seconds) => Math.round(seconds * TICKS_PER_SECOND);
+      this.route = route === undefined || s === undefined ? undefined : { to: anchored(s, route.to), stayTicks: ticks(route.stay ?? ROUTE_DEFAULTS.stay), ticks: ticks(route.seconds ?? ROUTE_DEFAULTS.seconds), legTicks: ticks(route.leg ?? ROUTE_DEFAULTS.leg) };
+    }
+    reset() {
+      this.live = false;
+      this.lagTicks = 0;
+      this.ticks = DEFAULT_TICKS;
+      this.route = undefined;
+    }
+    get seconds() {
+      return this.ticks / TICKS_PER_SECOND;
+    }
+    plans(s) {
+      const route = this.route;
+      const there = route === undefined ? undefined : place(this.link.enums, s, route.to);
+      if (route === undefined || there === undefined) {
+        return [...DIRECTIONS, "still"].map((name) => {
+          const held = name === "still" ? STILL : unitOf(name);
+          return { name, ticks: this.ticks, input: () => held };
+        });
+      }
+      const goal = (state) => place(this.link.enums, state, route.to);
+      const straight = (state) => toward(state, goal(state));
+      const way = DIRECTIONS.indexOf(directionOf(there.x - (s.player.x[s.me] ?? 0), there.y - (s.player.y[s.me] ?? 0)));
+      const beside = [-2, -1, 1, 2].map((turn) => DIRECTIONS[(way + turn + 8) % 8]);
+      const first = (held) => (state, i) => i < route.legTicks ? held : straight(state);
+      const ahead = DIRECTIONS[way];
+      const trip = { goal, stayTicks: route.stayTicks };
+      return [
+        { name: "straight", ticks: route.ticks, input: straight, trip },
+        ...beside.map((dir) => ({ name: dir, ticks: route.ticks, input: first(unitOf(dir)), trip })),
+        { name: "still", ticks: route.ticks, input: first(STILL), trip },
+        { name: `dash ${ahead}`, ticks: route.ticks, input: straight, dash: unitOf(ahead), trip }
+      ];
+    }
+    *lead(game, lagTicks) {
+      const { copyState, simulator } = this.link;
+      if (copyState === undefined || simulator === undefined)
+        throw new Error("the game's sim is not hooked yet");
+      const copy = simulator(game, copyState(game.state));
+      const course = this.course();
+      for (let i = 0;i < lagTicks && playing(copy.sim.state); i++) {
+        if (course !== undefined) {
+          const held = course(copy.sim.state);
+          copy.setInput(held.x, held.y);
+        }
+        copy.step();
+        yield;
+      }
+      return copy;
+    }
+    *play(game, plan, lagTicks) {
+      const tick = game.state.tick;
+      const { sim, step, setInput } = yield* this.lead(game, lagTicks);
+      const s = sim.state;
+      const me = s.me;
+      if (plan.dash !== undefined) {
+        if ((s.player.dashCharges[me] ?? 0) <= 0) {
+          this.outcomes.delete(plan.name);
+          return;
+        }
+        sim.dash(plan.dash.x, plan.dash.y);
+      }
+      const before = new Map(s.run.damageTakenBySource);
+      const dealtBefore = dealt(s);
+      let arrived;
+      let stood = 0;
+      let done;
+      let played = 0;
+      for (let i = 0;i < plan.ticks && playing(s) && done === undefined; i++) {
+        const held = plan.input(s, i);
+        setInput(held.x, held.y);
+        step();
+        played++;
+        if (plan.trip !== undefined) {
+          const goal = plan.trip.goal(s);
+          const there = goal !== undefined && Math.hypot(goal.x - (s.player.x[me] ?? 0), goal.y - (s.player.y[me] ?? 0)) <= goal.within;
+          stood = there ? stood + 1 : 0;
+          if (there)
+            arrived ??= i + 1;
+          if (goal === undefined || there && stood > plan.trip.stayTicks)
+            done = i + 1;
+        }
+        yield;
+      }
+      const bySource = {};
+      let damage = 0;
+      for (const [source, total] of s.run.damageTakenBySource) {
+        const taken = total - (before.get(source) ?? 0);
+        if (taken <= 0)
+          continue;
+        bySource[source] = taken;
+        damage += taken;
+      }
+      this.outcomes.set(plan.name, {
+        tick,
+        damage,
+        dead: s.over,
+        bySource,
+        dps: played === 0 ? 0 : (dealt(s) - dealtBefore) * TICKS_PER_SECOND / played,
+        ...arrived === undefined ? {} : { arrives: arrived / TICKS_PER_SECOND },
+        ...done === undefined ? {} : { done: done / TICKS_PER_SECOND }
+      });
+    }
+    forget() {
+      this.outcomes.clear();
+      this.run = undefined;
+    }
+    look(game, lagTicks) {
+      const steps = this.lead(game, lagTicks);
+      let step = steps.next();
+      while (!step.done)
+        step = steps.next();
+      const s = step.value.sim.state;
+      const me = s.me;
+      return {
+        tick: game.state.tick,
+        seconds: lagTicks / TICKS_PER_SECOND,
+        player: { x: s.player.x[me] ?? 0, y: s.player.y[me] ?? 0, hp: s.player.hp[me] ?? 0, dashCharges: s.player.dashCharges[me] ?? 0 },
+        threats: threats(this.link, s, this.ticks / TICKS_PER_SECOND)
+      };
+    }
+    current(game) {
+      const plans = this.plans(game.state);
+      const routed = plans[0]?.name === "straight";
+      if (game !== this.game || routed !== this.routed || game.state.paused !== this.paused)
+        this.forget();
+      this.game = game;
+      this.routed = routed;
+      this.paused = game.state.paused;
+      const names = new Set(plans.map((p) => p.name));
+      const tick = game.state.tick;
+      for (const [name, o] of this.outcomes)
+        if (!names.has(name) || o.tick > tick || tick - o.tick > KEEP_TICKS)
+          this.outcomes.delete(name);
+      return plans;
+    }
+    slice() {
+      const game = this.link.game;
+      if (game === undefined || !this.link.ready || !this.live || game.state.paused || !playing(game.state)) {
+        this.run = undefined;
+        return;
+      }
+      const now = performance.now();
+      if (now < this.restUntil)
+        return;
+      if (this.run !== undefined && (this.run.game !== game || this.run.tick > game.state.tick))
+        this.run = undefined;
+      while (performance.now() - now < SLICE_MS) {
+        if (this.run === undefined) {
+          const plans = this.current(game);
+          const plan = plans[this.turn++ % plans.length];
+          this.run = { game, tick: game.state.tick, steps: this.play(game, plan, this.lagTicks) };
+        }
+        if (this.run.steps.next().done)
+          this.run = undefined;
+      }
+      const worked = performance.now() - now;
+      this.restUntil = now + worked / SHARE;
+    }
+    read() {
+      const game = this.link.game;
+      if (game === undefined || !this.link.ready)
+        return;
+      const s = game.state;
+      if (!playing(s) || !(s.paused || this.live))
+        return;
+      const plans = this.current(game);
+      if (s.paused) {
+        this.run = undefined;
+        for (const plan of plans)
+          if (this.outcomes.get(plan.name)?.tick !== s.tick)
+            for (const _ of this.play(game, plan, 0))
+              ;
+      }
+      const ahead = this.look(game, s.paused ? 0 : this.lagTicks);
+      const route = this.route;
+      const outcomes = {};
+      for (const { name } of plans) {
+        const outcome = this.outcomes.get(name);
+        if (outcome !== undefined)
+          outcomes[name] = outcome;
+      }
+      return {
+        lag: s.paused ? 0 : this.lagTicks / TICKS_PER_SECOND,
+        seconds: this.ticks / TICKS_PER_SECOND,
+        ahead,
+        ...this.routed && route !== undefined ? { routes: { seconds: route.ticks / TICKS_PER_SECOND, leg: route.legTicks / TICKS_PER_SECOND, stay: route.stayTicks / TICKS_PER_SECOND, options: outcomes } } : { moves: outcomes }
+      };
+    }
+  }
+
   // userscript/main.ts
   installSeedHook();
   var link = new GameLink;
   var discovery = new Discovery;
-  var controller = new Controller(link);
+  var forecaster = new Forecaster(link, () => controller.course());
+  var controller = new Controller(link, forecaster);
   Object.assign(window, { __tibobit: { link } });
   guardPanelKeys();
   function start() {
-    const bridge = startBridge(link, controller);
+    forecaster.start();
+    const bridge = startBridge(link, controller, forecaster);
     startHelper(link, discovery, bridge);
     startPickShow(bridge);
   }

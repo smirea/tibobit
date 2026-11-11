@@ -1,10 +1,10 @@
 import type { Game, GameState } from "../game/types";
 import type { GameLink } from "../game/link";
-import type { Controller } from "./control";
-import { toward } from "./steering";
+import { anchored, type Place, place, toward } from "./steering";
 import { type Direction, directionOf, DIRECTIONS, STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
 import type { Ahead, Forecast, Routes } from "../../protocol/snapshot";
 import { threats } from "./surroundings";
+import { type Command, ROUTE_DEFAULTS } from "../../protocol/commands";
 
 // The copies run on the page's own thread, in slices this long, and take at most this share of its
 // time: a whole forecast in one go would hold up the game's frames and the agent's commands.
@@ -12,6 +12,7 @@ const SLICE_MS = 4;
 const SHARE = 0.75;
 // An outcome this old is no longer about the game as it stands.
 const KEEP_TICKS = 2 * TICKS_PER_SECOND;
+const DEFAULT_TICKS = 0.5 * TICKS_PER_SECOND;
 
 type Plan = {
   name: string;
@@ -35,7 +36,7 @@ const dealt = (s: GameState) => {
  * time, each on a fresh copy, so the newest outcomes are always a few frames old however long a
  * whole round takes.
  */
-export class Foresight {
+export class Forecaster {
   private outcomes = new Map<string, Routes["options"][string]>();
   private run: { game: Game; tick: number; steps: Generator<void, void> } | undefined;
   private turn = 0;
@@ -46,25 +47,63 @@ export class Foresight {
   /** Whether the outcomes held are of a paused game, which are priced with no lag. */
   private paused = false;
 
+  /** Forecast while the game runs, not only while it is paused. */
+  private live = false;
+  /** Ticks an agent takes to act on a forecast. */
+  private lagTicks = 0;
+  /** How far single moves, and the surroundings, look ahead. */
+  private ticks = DEFAULT_TICKS;
+  /** The place whole trips are priced to, when the `forecast` command names one. */
+  private route: { to: Place; stayTicks: number; ticks: number; legTicks: number } | undefined;
+
+  /** `course` is the movement the page holds now, as the input it gives in any game state. */
   constructor(
     private link: GameLink,
-    private controller: Controller,
-  ) {
+    private course: () => ((s: GameState) => { x: number; y: number }) | undefined,
+  ) {}
+
+  start() {
     setInterval(() => this.slice(), SLICE_MS);
   }
 
+  /** Takes a `forecast` command; a route to a place relative to Tibo is anchored where he stands in `s`. */
+  configure(command: Extract<Command, { type: "forecast" }>, s: GameState | undefined) {
+    const route = command.route;
+    if (route !== undefined && s === undefined) throw new Error("no game is running");
+    this.live = command.live;
+    if (command.lag !== undefined) this.lagTicks = Math.round(command.lag * TICKS_PER_SECOND);
+    if (command.seconds !== undefined) this.ticks = Math.round(command.seconds * TICKS_PER_SECOND);
+    const ticks = (seconds: number) => Math.round(seconds * TICKS_PER_SECOND);
+    this.route =
+      route === undefined || s === undefined
+        ? undefined
+        : { to: anchored(s, route.to), stayTicks: ticks(route.stay ?? ROUTE_DEFAULTS.stay), ticks: ticks(route.seconds ?? ROUTE_DEFAULTS.seconds), legTicks: ticks(route.leg ?? ROUTE_DEFAULTS.leg) };
+  }
+
+  reset() {
+    this.live = false;
+    this.lagTicks = 0;
+    this.ticks = DEFAULT_TICKS;
+    this.route = undefined;
+  }
+
+  /** How far the forecast's single moves look ahead; the surroundings look as far. */
+  get seconds() {
+    return this.ticks / TICKS_PER_SECOND;
+  }
+
   private plans(s: GameState): Plan[] {
-    const route = this.link.forecastRoute;
-    const place = route === undefined ? undefined : this.controller.place(s, route.to);
-    if (route === undefined || place === undefined) {
+    const route = this.route;
+    const there = route === undefined ? undefined : place(this.link.enums, s, route.to);
+    if (route === undefined || there === undefined) {
       return [...DIRECTIONS, "still" as const].map((name) => {
         const held = name === "still" ? STILL : unitOf(name);
-        return { name, ticks: this.link.forecastTicks, input: () => held };
+        return { name, ticks: this.ticks, input: () => held };
       });
     }
-    const goal = (state: GameState) => this.controller.place(state, route.to);
+    const goal = (state: GameState) => place(this.link.enums, state, route.to);
     const straight = (state: GameState) => toward(state, goal(state));
-    const way = DIRECTIONS.indexOf(directionOf(place.x - (s.player.x[s.me] ?? 0), place.y - (s.player.y[s.me] ?? 0)));
+    const way = DIRECTIONS.indexOf(directionOf(there.x - (s.player.x[s.me] ?? 0), there.y - (s.player.y[s.me] ?? 0)));
     const beside = [-2, -1, 1, 2].map((turn) => DIRECTIONS[(way + turn + 8) % 8] as Direction);
     const first = (held: { x: number; y: number }) => (state: GameState, i: number) => (i < route.legTicks ? held : straight(state));
     const ahead = DIRECTIONS[way] as Direction;
@@ -82,7 +121,7 @@ export class Foresight {
     const { copyState, simulator } = this.link;
     if (copyState === undefined || simulator === undefined) throw new Error("the game's sim is not hooked yet");
     const copy = simulator(game, copyState(game.state));
-    const course = this.controller.course();
+    const course = this.course();
     for (let i = 0; i < lagTicks && playing(copy.sim.state); i++) {
       if (course !== undefined) {
         const held = course(copy.sim.state);
@@ -162,7 +201,7 @@ export class Foresight {
       tick: game.state.tick,
       seconds: lagTicks / TICKS_PER_SECOND,
       player: { x: s.player.x[me] ?? 0, y: s.player.y[me] ?? 0, hp: s.player.hp[me] ?? 0, dashCharges: s.player.dashCharges[me] ?? 0 },
-      threats: threats(this.link, s, this.link.forecastTicks / TICKS_PER_SECOND),
+      threats: threats(this.link, s, this.ticks / TICKS_PER_SECOND),
     };
   }
 
@@ -182,7 +221,7 @@ export class Foresight {
 
   private slice() {
     const game = this.link.game;
-    if (game === undefined || !this.link.ready || !this.link.liveForecast || game.state.paused || !playing(game.state)) {
+    if (game === undefined || !this.link.ready || !this.live || game.state.paused || !playing(game.state)) {
       this.run = undefined;
       return;
     }
@@ -194,7 +233,7 @@ export class Foresight {
       if (this.run === undefined) {
         const plans = this.current(game);
         const plan = plans[this.turn++ % plans.length] as Plan;
-        this.run = { game, tick: game.state.tick, steps: this.play(game, plan, this.link.forecastLagTicks) };
+        this.run = { game, tick: game.state.tick, steps: this.play(game, plan, this.lagTicks) };
       }
       if (this.run.steps.next().done) this.run = undefined;
     }
@@ -211,22 +250,22 @@ export class Foresight {
     const game = this.link.game;
     if (game === undefined || !this.link.ready) return undefined;
     const s = game.state;
-    if (!playing(s) || !(s.paused || this.link.liveForecast)) return undefined;
+    if (!playing(s) || !(s.paused || this.live)) return undefined;
     const plans = this.current(game);
     if (s.paused) {
       this.run = undefined;
       for (const plan of plans) if (this.outcomes.get(plan.name)?.tick !== s.tick) for (const _ of this.play(game, plan, 0));
     }
-    const ahead = this.look(game, s.paused ? 0 : this.link.forecastLagTicks);
-    const route = this.link.forecastRoute;
+    const ahead = this.look(game, s.paused ? 0 : this.lagTicks);
+    const route = this.route;
     const outcomes: Routes["options"] = {};
     for (const { name } of plans) {
       const outcome = this.outcomes.get(name);
       if (outcome !== undefined) outcomes[name] = outcome;
     }
     return {
-      lag: s.paused ? 0 : this.link.forecastLagTicks / TICKS_PER_SECOND,
-      seconds: this.link.forecastTicks / TICKS_PER_SECOND,
+      lag: s.paused ? 0 : this.lagTicks / TICKS_PER_SECOND,
+      seconds: this.ticks / TICKS_PER_SECOND,
       ahead,
       ...(this.routed && route !== undefined ? { routes: { seconds: route.ticks / TICKS_PER_SECOND, leg: route.legTicks / TICKS_PER_SECOND, stay: route.stayTicks / TICKS_PER_SECOND, options: outcomes } } : { moves: outcomes }),
     };

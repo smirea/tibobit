@@ -1,5 +1,5 @@
 /** A target that stays put as Tibo moves. */
-import type { GameState } from "../game/types";
+import type { Enums, GameState } from "../game/types";
 import { STILL } from "../../protocol/geometry";
 import type { Target } from "../../protocol/commands";
 
@@ -16,4 +16,22 @@ export function toward(s: GameState, goal: { x: number; y: number; within: numbe
   const dy = goal.y - (s.player.y[s.me] ?? 0);
   const dist = Math.hypot(dx, dy);
   return dist > goal.within ? { x: dx / dist, y: dy / dist } : STILL;
+}
+
+/** Where a target is in a game state, a copy included, and how close counts as there; undefined once it is gone. */
+export function place(enums: Enums | undefined, s: GameState, to: Place, within?: number): { x: number; y: number; within: number } | undefined {
+  if ("poi" in to) {
+    const poi = s.world.activePois.find((p) => p.state.uid === to.poi);
+    if (poi === undefined || poi.state.used || poi.state.goneAt >= 0) return undefined;
+    return { x: poi.x, y: poi.y, within: within ?? poi.radius * 0.5 };
+  }
+  if ("pickup" in to) {
+    if (!s.pickups.pool.has(to.pickup)) return undefined;
+    // A pool id packs a generation counter above the 16-bit slot index.
+    const slot = to.pickup & 0xffff;
+    const kind = enums?.pickupKinds[s.pickups.kind[slot] ?? -1] ?? "";
+    const radius = s.cfg.activation.pickupRadius[kind];
+    return { x: s.pickups.x[slot] ?? 0, y: s.pickups.y[slot] ?? 0, within: within ?? (radius === undefined ? 6 : radius * 0.5) };
+  }
+  return { x: to.x, y: to.y, within: within ?? 6 };
 }

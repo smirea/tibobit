@@ -1,4 +1,3 @@
-import type { ChoiceAction } from "../../protocol/commands";
 
 export type WeaponDef = {
   id: string;
@@ -171,7 +170,8 @@ export type Game = {
   setInput(x: number, y: number): void;
   setPaused(paused: boolean): void;
   dash(x: number, y: number): void;
-  choose(action: ChoiceAction): void;
+  /** The game's own action on the open choice, such as `{ type: "pick", index: 0 }` or `{ type: "skip" }`. */
+  choose(action: { type: string; index?: number }): void;
   /** Marks the run as not replayable from its inputs, so the game neither posts it nor counts it. */
   taint(): void;
 };
