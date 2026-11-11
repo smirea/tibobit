@@ -165,7 +165,7 @@ tibo.dog ships native ES modules, and importing a module URL that the page alrea
 - It watches the page's resource timing for the `sim-*.js` chunk, imports it, and wraps `Game.prototype.step` to hold a reference to the running game. Weapons, passives and items come straight from the game's loadout state, and the agent's snapshot reads the game's entity pools directly.
 - It wraps `Game.prototype.setInput`, which the game calls every tick with the player's movement, so agent commands steer the player without faking key presses.
 - Enemy and boss names come from the game's global content table, found the same way through the sim chunk's `w.enemyAt(...)` call. Pickup kinds, zone kinds and enemy flags come from enum tables in the same module, matched by their contents.
-- The recipe tables, max levels and content lists come from the game's own content registry, the function the sim chunk calls as `x(e.bigUpdate).baseWeapons`. The script finds that function's export name in the sim chunk's import clause, so a new build needs no update unless the game changes how that call looks.
+- The recipe tables, max levels and content lists come from the game's own content registry, the function the sim chunk calls as `x().baseWeapons`. The script finds that function's export name in the sim chunk's import clause, so a new build needs no update unless the game changes how that call looks.
 - English names come from the `i18n-en-*` chunks, which export the message table.
 - Discovery state comes from the game's own `localStorage` keys `tibo.discovery.v1` and `tibo.evolutions.v1`.
 - Offer cards are `.ui-card` elements with `data-tip="weapon-offer:<id>:<level>"`, `passive-offer:<id>:<level>` or `item:<id>`.

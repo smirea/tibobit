@@ -52,9 +52,8 @@ type Poi = {
   y: number;
   radius: number;
   state: { uid: number; used: boolean; charge: number; armed: boolean; goneAt: number };
-  /** A "bigUpdate" spot is either a variety place, by id, or a variant such as the Spud Forge. */
+  /** Which variety place a "varietyPlace" spot is. */
   varietyPlace?: string;
-  variant?: { kind: string };
 };
 type Hazard = { kind: string; x: number; y: number; radius: number; strength: number; poolShape: number; turn: number };
 
@@ -110,7 +109,6 @@ export type GameState = {
     economy?: { chestPriceBase: number; chestPriceLinear: number; chestPriceQuad: number; chestPriceCubic: number; chestPriceKnee: number; vendorPrice?: number[] };
   };
   paidChestsBought?: number;
-  bigUpdate: Record<string, boolean>;
   choiceQueue: Choice[];
   over: boolean;
   paused: boolean;

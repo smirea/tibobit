@@ -63,6 +63,8 @@ type GameJson = {
 // A pickup this close is under Tibo; the game's own reach for chests is about this.
 const UNDER = 14;
 const round = (n: number) => Math.round(n * 10) / 10;
+// The game charges these two for 1.5 s in its code; they are not in its cfg.activation.seconds.
+const UNLISTED_CHARGE = new Set(["spudForge", "varietyPlace"]);
 
 function loadoutOf(weapons: { id: string; level: number }[], passives: { id: string; level: number }[], items: { id: string; count: number }[]): Loadout {
   const l: Loadout = new Map();
@@ -159,8 +161,6 @@ function choiceView(b: Book, g: GameJson, held: Loadout): LiveView["choice"] {
         options: [...g.pets.map((p, index) => ({ action: { type: "pick" as const, index }, name: `Swap ${line(b, "dog", p.breed) ?? p.breed} (level ${p.level})` })), plain("close", "Keep the pack")],
       };
     }
-    case "bigUpdate":
-      return { kind: c.kind, options: [...listed((c.variant as { offers?: unknown } | undefined)?.offers, "pick"), plain("close", "Leave")] };
     default:
       return { kind: c.kind, options: [...listed(c.offers ?? c.stock, "pick"), plain("close", "Leave")] };
   }
@@ -245,8 +245,8 @@ export function liveView(s: Snapshot, b: Book): LiveView | undefined {
   for (const p of g.world.activePois) {
     if (p.state.used || p.state.goneAt >= 0) continue;
     const at = place(p.x, p.y);
-    // A big update spot is a variety place, with its own English, or a variant such as the Spud Forge.
-    const variety = p.kind === "bigUpdate" && p.varietyPlace !== undefined ? p.varietyPlace.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`) : undefined;
+    // A variety place has its own English, by the place it is.
+    const variety = p.kind === "varietyPlace" && p.varietyPlace !== undefined ? p.varietyPlace.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`) : undefined;
     const type = variety ?? p.kind;
     add("spots", at.distance <= p.radius ? "still" : at.direction, {
       id: p.state.uid,
@@ -254,7 +254,7 @@ export function liveView(s: Snapshot, b: Book): LiveView | undefined {
       name: (variety === undefined ? line(b, "poi", p.kind) : line(b, "varietyPlace", variety)) ?? type,
       distance: at.distance,
       charged: round(p.state.charge / TICKS_PER_SECOND),
-      chargeSeconds: p.kind === "bigUpdate" ? (p.varietyPlace === undefined ? 1.5 : 0) : (activation[p.kind] ?? 0),
+      chargeSeconds: UNLISTED_CHARGE.has(p.kind) ? 1.5 : (activation[p.kind] ?? 0),
     });
   }
   for (const p of around.pickups.items as unknown as (Row & { kind: string; charge: number })[]) {

@@ -41,7 +41,7 @@ export class GameLink {
     share.search = location.search;
     this.runLink = share.toString();
   }
-  private contentFn: ((bigUpdate: Record<string, boolean>) => Content) | undefined;
+  private contentFn: (() => Content) | undefined;
   private seen = new Set<string>();
   private listeners = new Set<() => void>();
 
@@ -63,7 +63,7 @@ export class GameLink {
   content(): Content | undefined {
     if (this.game === undefined || this.contentFn === undefined) return undefined;
     try {
-      const content = this.contentFn(this.game.state.bigUpdate);
+      const content = this.contentFn();
       assertContent(content);
       return content;
     } catch (e) {
@@ -156,9 +156,9 @@ export class GameLink {
     this.copyState = copyState;
     this.simulator = simulator;
     const source = await (await fetch(url)).text();
-    // The registry function is called as `x(e.bigUpdate).baseWeapons` and the global table as
+    // The registry function is called as `x().baseWeapons` and the global table as
     // `w.enemyAt(...)`. Their exported names are minified per build, so follow the import clauses.
-    const contentFn = await importBinding(source, url, localAt(source, /([\w$]+)\(e\.bigUpdate\)\.baseWeapons/, "content registry call"));
+    const contentFn = await importBinding(source, url, localAt(source, /([\w$]+)\(\)\.baseWeapons/, "content registry call"));
     if (typeof contentFn.value !== "function") throw new Error("the content registry is not a function");
     const table = await importBinding(source, url, localAt(source, /([\w$]+)\.enemyAt\(/, "content table"));
     if (!isRecord(table.value) || typeof table.value.enemyAt !== "function") throw new Error("the content table has no enemyAt");
@@ -175,7 +175,7 @@ export class GameLink {
     const inPool = poolExport === undefined ? undefined : ns[poolExport];
     if (typeof inPool !== "function") throw new Error("the sim chunk does not export its pool hit test");
     this.inPool = inPool as InPool;
-    this.contentFn = contentFn.value as (bigUpdate: Record<string, boolean>) => Content;
+    this.contentFn = contentFn.value as () => Content;
     this.changed();
   }
 
