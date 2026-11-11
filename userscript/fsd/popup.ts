@@ -447,13 +447,17 @@ export function fsdPopup(pilot: Pilot, game: GameControl): { open(from: HTMLElem
     closing = true;
     hideTip();
     dialog.classList.add("tbh-fsd-leaving");
-    void flip(false).then(() => {
-      dialog.close();
-      dialog.classList.remove("tbh-fsd-leaving");
-      closing = false;
-      if (pausedHere) game.resume();
-      pausedHere = false;
-    });
+    // The flip is decoration: if it cannot play, the popup still closes and the run resumes.
+    void Promise.resolve()
+      .then(() => flip(false))
+      .catch((e: unknown) => console.error("[tibobit] the FSD close animation failed", e))
+      .then(() => {
+        dialog.close();
+        dialog.classList.remove("tbh-fsd-leaving");
+        closing = false;
+        if (pausedHere) game.resume();
+        pausedHere = false;
+      });
   }
 
   dialog.addEventListener("cancel", (e) => {
@@ -479,7 +483,9 @@ export function fsdPopup(pilot: Pilot, game: GameControl): { open(from: HTMLElem
       target = undefined;
       prompt.area.focus({ preventScroll: true });
       prompt.area.setSelectionRange(prompt.area.value.length, prompt.area.value.length);
-      void flip(true);
+      void Promise.resolve()
+        .then(() => flip(true))
+        .catch((e: unknown) => console.error("[tibobit] the FSD open animation failed", e));
     },
   };
 }

@@ -3834,7 +3834,7 @@ Recent goals: 0:41 Keep away from enemies: the 8 seconds ran out, and Tibo lost 
       closing = true;
       hideTip();
       dialog.classList.add("tbh-fsd-leaving");
-      flip(false).then(() => {
+      Promise.resolve().then(() => flip(false)).catch((e) => console.error("[tibobit] the FSD close animation failed", e)).then(() => {
         dialog.close();
         dialog.classList.remove("tbh-fsd-leaving");
         closing = false;
@@ -3867,7 +3867,7 @@ Recent goals: 0:41 Keep away from enemies: the 8 seconds ran out, and Tibo lost 
         target = undefined;
         prompt.area.focus({ preventScroll: true });
         prompt.area.setSelectionRange(prompt.area.value.length, prompt.area.value.length);
-        flip(true);
+        Promise.resolve().then(() => flip(true)).catch((e) => console.error("[tibobit] the FSD open animation failed", e));
       }
     };
   }
