@@ -1,15 +1,15 @@
 #!/usr/bin/env bun
-import { mkdir, readdir, rename } from "node:fs/promises";
-import type { ServerWebSocket, Subprocess } from "bun";
-import { CHECKPOINTS, ENTRY, ROOT } from "../paths";
+import type { ServerWebSocket } from "bun";
 import { type Book, readBook } from "./book";
 import { liveView } from "./live-view";
 import { BRIDGE_PORT } from "../protocol/address";
-import { CHECKPOINT_NAME, type CheckpointMeta, type CommandStatus, parseCommand } from "../protocol/commands";
+import { type CommandStatus, parseCommand } from "../protocol/commands";
 import type { LiveView, State } from "../protocol/view";
 import { parseRaw, rawParts } from "./raw";
-import { type ChatMessage, DEFAULT_SETTINGS, type PageLine, parseChatLine, parsePilotChange, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../protocol/pilot";
+import { type PageLine, parsePilotChange, type PilotChange, type PilotSettings } from "../protocol/pilot";
 import type { Encyclopedia, Snapshot } from "../protocol/snapshot";
+import { listCheckpoints, readCheckpoint, saveCheckpoint } from "./checkpoints";
+import { Pilot } from "./pilot";
 import path from "node:path";
 
 const KEEPALIVE_MS = 5_000;
@@ -19,16 +19,6 @@ const option = (name: string, fallback: string) => {
 };
 const PORT = Number(option("port", String(BRIDGE_PORT)));
 const WAIT_LIMIT_MS = 120_000;
-const checkpointFile = (name: string) => {
-  if (!CHECKPOINT_NAME.test(name)) throw new Error("a checkpoint name is letters, digits, _ . @ or -");
-  return { state: path.join(CHECKPOINTS, `${name}.json.gz`), meta: path.join(CHECKPOINTS, `${name}.meta.json`) };
-};
-
-async function checkpoints(): Promise<CheckpointMeta[]> {
-  const names = (await readdir(CHECKPOINTS).catch(() => [])).filter((f) => f.endsWith(".meta.json"));
-  const metas = await Promise.all(names.map(async (f) => (await Bun.file(path.join(CHECKPOINTS, f)).json()) as CheckpointMeta));
-  return metas.sort((a, b) => a.savedAt.localeCompare(b.savedAt));
-}
 // The bot "Grok take the wheel" runs: Jev moves and picks, grok plans. Override with
 // --pilot "<tibo-bot.ts flags>", such as --pilot "--model laya@q8_0" for LM Studio.
 const PILOT_ARGS = option("pilot", "--decider openrouter --model typesafe/jev-1.14-20261014 --mode current --difficulty nightmare").split(/\s+/).filter(Boolean);
@@ -46,71 +36,8 @@ const waiters = new Set<() => void>();
 const encoder = new TextEncoder();
 
 const toPage = (line: PageLine) => page?.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+const pilot = new Pilot(`http://127.0.0.1:${PORT}`, PILOT_ARGS, toPage);
 
-const chat: ChatMessage[] = [];
-let nextChatId = 1;
-function say(input: unknown) {
-  const line = parseChatLine(input);
-  const at = line.key === undefined ? -1 : chat.findIndex((m) => m.key === line.key);
-  const earlier = chat[at];
-  if (earlier !== undefined) {
-    const message: ChatMessage = { ...line, id: earlier.id, at: Date.now() };
-    chat[at] = message;
-    toPage({ chat: message });
-    return;
-  }
-  const message: ChatMessage = { ...line, id: nextChatId++, at: Date.now() };
-  chat.push(message);
-  trimChat(chat);
-  toPage({ chat: message });
-}
-
-let pilot: PilotState = { state: "off", ...DEFAULT_SETTINGS };
-let bot: Subprocess<"ignore", "inherit", "pipe"> | undefined;
-/** The settings outlast the bot, so the next time it takes the wheel it plays the same way. */
-function setPilot(next: Omit<PilotState, keyof PilotSettings> & Partial<PilotSettings>) {
-  pilot = { pace: pilot.pace, incognito: pilot.incognito, ...next };
-  toPage({ pilot });
-}
-
-function startPilot() {
-  if (bot !== undefined) return;
-  // One run: when it ends, the bot reviews it (unless incognito) and hands the wheel back.
-  const args = ["--server", `http://127.0.0.1:${PORT}`, "--takeover", "--runs", "1", "--reload", "", ...PILOT_ARGS];
-  console.log(`pilot: bot ${args.join(" ")}`);
-  const child = Bun.spawn([process.execPath, ENTRY.bot, ...args], { cwd: ROOT, stdin: "ignore", stdout: "inherit", stderr: "pipe" });
-  bot = child;
-  chat.length = 0;
-  setPilot({ state: "on" });
-  let errors = "";
-  void (async () => {
-    const decoder = new TextDecoder();
-    for await (const chunk of child.stderr) {
-      process.stderr.write(chunk);
-      errors = (errors + decoder.decode(chunk, { stream: true })).slice(-2000);
-    }
-  })();
-  void child.exited.then((code) => {
-    if (bot !== child) return;
-    bot = undefined;
-    if (pilot.state === "stopping") return setPilot({ state: "off" });
-    if (code === 0) {
-      say({ role: "system", tag: "Over", text: "The run is over: the wheel is yours." });
-      return setPilot({ state: "off" });
-    }
-    const reason = errors.trim().split("\n").filter((l) => /error/i.test(l)).at(-1) ?? errors.trim().split("\n").at(-1);
-    const detail = `The bot stopped (exit ${code})${reason ? `: ${reason.trim().slice(0, 300)}` : ""}`;
-    say({ role: "system", tag: "Stopped", text: detail });
-    setPilot({ state: "off", detail });
-  });
-}
-
-function stopPilot() {
-  if (bot === undefined) return setPilot({ state: "off" });
-  setPilot({ state: "stopping" });
-  // The bot marks an unfinished run aborted in its notes on SIGTERM, then exits.
-  bot.kill("SIGTERM");
-}
 
 // A JSON content type forces a CORS preflight, which this server never answers, so another
 // website open in the browser cannot start the bot with a plain form post.
@@ -125,7 +52,7 @@ function state(raw: string[] = []): State | undefined {
   const { game: _, surroundings: _s, forecast: _f, storage: _st, gameEvents: _e, ...meta } = latest.snapshot;
   // The settings tell a running bot, every step, how often to plan and act and whether to keep
   // notes. Only a bot the panel started follows them; one started by hand keeps its own flags.
-  const settings: Partial<PilotSettings> = pilot.state === "off" ? {} : { pace: pilot.pace, incognito: pilot.incognito };
+  const settings: Partial<PilotSettings> = pilot.state.state === "off" ? {} : { pace: pilot.state.pace, incognito: pilot.state.incognito };
   return { connected: page !== undefined, ageMs: Date.now() - latest.snapshot.capturedAt, ...settings, ...meta, ...latest.view, ...rawParts(latest.snapshot, raw) };
 }
 
@@ -224,8 +151,8 @@ const server = Bun.serve<{ raw: string[] }>({
                 page = controller;
                 pageTab = tab;
                 toPage({ hello: true });
-                toPage({ pilot });
-                for (const message of chat) toPage({ chat: message });
+                toPage({ pilot: pilot.state });
+                for (const message of pilot.chat) toPage({ chat: message });
                 console.log("game tab connected");
                 const keepalive = setInterval(() => {
                   try {
@@ -286,40 +213,30 @@ const server = Bun.serve<{ raw: string[] }>({
           } catch (e) {
             return errorResponse(e);
           }
-          const { on, planEvery, actEvery, incognito } = change;
-          if (planEvery !== undefined || actEvery !== undefined || incognito !== undefined)
-            setPilot({ ...pilot, incognito: incognito ?? pilot.incognito, pace: { planEvery: planEvery ?? pilot.pace.planEvery, actEvery: actEvery ?? pilot.pace.actEvery } });
-          if (on === true) startPilot();
-          if (on === false) stopPilot();
-          return Response.json(pilot);
+          pilot.change(change);
+          return Response.json(pilot.state);
         }
         case "POST /pilot/say":
           try {
-            say(await jsonBody(req));
+            pilot.say(await jsonBody(req));
           } catch (e) {
             return errorResponse(e);
           }
           return new Response(null, { status: 204 });
         case "POST /bridge/checkpoint": {
           const text = await req.text();
-          const { meta } = JSON.parse(text) as { meta: CheckpointMeta };
-          const file = checkpointFile(meta.name);
-          await mkdir(CHECKPOINTS, { recursive: true });
-          // Written aside and renamed, so a load never reads half a file.
-          await Bun.write(`${file.state}.tmp`, Bun.gzipSync(new TextEncoder().encode(text)));
-          await rename(`${file.state}.tmp`, file.state);
-          await Bun.write(file.meta, JSON.stringify(meta, null, 2));
+          const meta = await saveCheckpoint(text);
           console.log(`checkpoint ${meta.name}: ${meta.time}s, ${(text.length / 1e6).toFixed(1)} MB`);
           return new Response(null, { status: 204 });
         }
         case "GET /bridge/checkpoint": {
           const name = url.searchParams.get("name") ?? "";
-          const file = Bun.file(checkpointFile(name).state);
-          if (!(await file.exists())) return errorResponse(`no checkpoint ${name}; saved: ${(await checkpoints()).map((c) => c.name).join(", ") || "none"}`, 404);
-          return new Response(Bun.gunzipSync(new Uint8Array(await file.arrayBuffer())), { headers: { "content-type": "application/json" } });
+          const json = await readCheckpoint(name);
+          if (json === undefined) return errorResponse(`no checkpoint ${name}; saved: ${(await listCheckpoints()).map((c) => c.name).join(", ") || "none"}`, 404);
+          return new Response(json, { headers: { "content-type": "application/json" } });
         }
         case "GET /checkpoints":
-          return Response.json(await checkpoints());
+          return Response.json(await listCheckpoints());
         case "GET /encyclopedia":
           return book === undefined ? errorResponse("no encyclopedia yet; is the tibo.dog tab open?", 503) : Response.json(book);
         case "POST /command": {
@@ -359,10 +276,4 @@ const server = Bun.serve<{ raw: string[] }>({
 });
 
 console.log(`agent server on ${server.url}`);
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
-    if (bot === undefined) process.exit(0);
-    stopPilot();
-    void bot?.exited.then(() => process.exit(0));
-  });
-}
+for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => void pilot.shutdown().then(() => process.exit(0)));
