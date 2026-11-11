@@ -2,7 +2,7 @@ import { type Combo, comboProgress, combosUsing, idOf, type Key, type Kind, type
 import type { Bridge } from "../agent/bridge";
 import { validPort } from "../../protocol/address";
 import { botFeed } from "../pilot/feed";
-import { type RunCombos, runCombos } from "../combos/run-combos";
+import { runCombos, type RunCombos } from "../combos/run-combos";
 import type { Discovery } from "../combos/discovery";
 import type { GameLink } from "../link/game-link";
 import type { IconSheet } from "../../game/types";
@@ -167,12 +167,12 @@ function connectionRow(bridge: Bridge): HTMLElement {
   const status = h("div", "tbh-conn-status");
   const wheel = h("button", "tbh-wheel", "Grok take the wheel");
   wheel.type = "button";
-  wheel.addEventListener("click", () => bridge.setPilot({ on: true }));
+  wheel.addEventListener("click", () => bridge.pilot.set({ on: true }));
   const wheelNote = h("div", "tbh-wheel-note");
   const incognito = h("button", "tbh-incognito", "Incognito");
   incognito.type = "button";
   incognito.title = "The bot just plays: no notes, no review after the run. Turning it on mid-run deletes that run's notes.";
-  incognito.addEventListener("click", () => bridge.setPilot({ incognito: !bridge.pilot().incognito }));
+  incognito.addEventListener("click", () => bridge.pilot.set({ incognito: !bridge.pilot.state().incognito }));
 
   const refresh = () => {
     const s = bridge.status();
@@ -186,7 +186,7 @@ function connectionRow(bridge: Bridge): HTMLElement {
     if (status.textContent !== text) status.textContent = text;
     status.hidden = text === "";
     status.dataset.state = s.error === undefined ? "wait" : "error";
-    const pilot = bridge.pilot();
+    const pilot = bridge.pilot.state();
     // While the bot plays, its controls sit at the top of its chat.
     wheel.hidden = pilot.state !== "off";
     wheel.disabled = !live;
@@ -208,6 +208,7 @@ function connectionRow(bridge: Bridge): HTMLElement {
   row.noValidate = true;
   row.addEventListener("submit", connect);
   bridge.onChange(refresh);
+  bridge.pilot.onChange(refresh);
   input.addEventListener("input", () => {
     input.classList.remove("tbh-invalid");
     refresh();
@@ -291,11 +292,11 @@ function mount(chat: HTMLElement, footer: HTMLElement): { panel: HTMLElement; co
 }
 
 export function startPanel(link: GameLink, discovery: Discovery, bridge: Bridge) {
-  const { panel, content } = mount(botFeed(bridge), connectionRow(bridge));
+  const { panel, content } = mount(botFeed(bridge.pilot), connectionRow(bridge));
   // While the bot plays, its chat takes the corner and the combos fold to their header.
   let collapsedBefore: boolean | undefined;
   const followPilot = () => {
-    const piloting = bridge.pilot().state !== "off";
+    const piloting = bridge.pilot.state().state !== "off";
     if (piloting === panel.classList.contains("tbh-pilot")) return;
     panel.classList.toggle("tbh-pilot", piloting);
     if (piloting) {
@@ -303,7 +304,7 @@ export function startPanel(link: GameLink, discovery: Discovery, bridge: Bridge)
       panel.classList.add("tbh-collapsed");
     } else if (collapsedBefore !== undefined) panel.classList.toggle("tbh-collapsed", collapsedBefore);
   };
-  bridge.onChange(followPilot);
+  bridge.pilot.onChange(followPilot);
   followPilot();
   const dropStaleTip = startTips();
   let panelSignature = "";

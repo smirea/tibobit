@@ -4,29 +4,13 @@ import type { CheckpointFile } from "./checkpoint";
 import { encyclopedia } from "./encyclopedia";
 import { Forecaster } from "./forecast";
 import { BRIDGE_PORT, bridgeOrigin, validPort } from "../../protocol/address";
-import { type ChatMessage, DEFAULT_SETTINGS, type PageLine, parsePilotChange, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../../protocol/pilot";
+import type { PageLine } from "../../protocol/pilot";
 import { parseCommand } from "../../protocol/commands";
 import { inRun } from "../link/screen";
 import { snapshot } from "./snapshot";
+import { Pilot } from "../pilot/pilot";
 
 const PORT_KEY = "tibobit.bridgePort";
-const SETTINGS_KEY = "tibobit.pilotSettings";
-
-/** The bot settings chosen in this browser; the page sends them to every server it connects to. */
-function savedSettings(): PilotSettings {
-  try {
-    const c = parsePilotChange(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null"));
-    return {
-      pace: { planEvery: c.planEvery ?? DEFAULT_SETTINGS.pace.planEvery, actEvery: c.actEvery ?? DEFAULT_SETTINGS.pace.actEvery },
-      incognito: c.incognito ?? DEFAULT_SETTINGS.incognito,
-    };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
-
-const asChange = (s: PilotSettings): PilotChange => ({ ...s.pace, incognito: s.incognito });
-
 function savedPort(): number | undefined {
   try {
     const port = Number(localStorage.getItem(PORT_KEY));
@@ -47,13 +31,10 @@ export type Bridge = {
   status(): BridgeStatus;
   /** Drops the current server and connects to the one on this port, remembering it for next time. */
   connect(port: number): void;
-  /** Whether the server's bot is playing for this tab ("Grok take the wheel"). */
-  pilot(): PilotState;
-  /** Asks the server to start or stop the bot, or to change its pace; the new state arrives over the stream. */
-  setPilot(change: PilotChange): void;
-  /** The bot's chat, oldest first; a message whose `count` grows keeps its id and position. */
-  chat(): readonly ChatMessage[];
+  /** Tells of a change to the connection: its port, whether it is up, its error. */
   onChange(listener: () => void): void;
+  /** The server's bot for this tab ("Grok take the wheel"). */
+  readonly pilot: Pilot;
 };
 
 type GmResponse = { status: number; response: unknown; responseText?: string };
@@ -147,9 +128,7 @@ export function startBridge(link: GameLink, controller: Controller, forecaster: 
   const notify = () => {
     for (const listener of listeners) listener();
   };
-  let settings = savedSettings();
-  let pilot: PilotState = { state: "off", ...settings };
-  const chat: ChatMessage[] = [];
+  const pilot = new Pilot({ connected: () => connected, origin: () => origin, ask: (change) => post(origin, "/pilot", change) }, () => controller.release());
   let inFlight = 0;
   let lastPush = 0;
   let snapshotMs = 0;
@@ -166,8 +145,7 @@ export function startBridge(link: GameLink, controller: Controller, forecaster: 
   const reconnect = (from: number) => {
     if (from !== session) return;
     connected = false;
-    // Without the server there is no bot, so nothing is driving the game any more.
-    receivePilot({ state: "off", ...settings });
+    pilot.disconnected();
     notify();
     setTimeout(listen, RECONNECT_MS);
   };
@@ -209,21 +187,6 @@ export function startBridge(link: GameLink, controller: Controller, forecaster: 
     });
   };
 
-  const receivePilot = (next: PilotState) => {
-    // Hand the game back to the keyboard: the bot leaves it paused at its own speed between steps.
-    if (pilot.state !== "off" && next.state === "off") controller.release();
-    // Each time the bot takes the wheel its chat starts empty, as the server's does.
-    if (pilot.state === "off" && next.state === "on") chat.length = 0;
-    pilot = next;
-  };
-
-  const receiveChat = (message: ChatMessage) => {
-    const at = chat.findIndex((m) => m.id === message.id);
-    if (at >= 0) chat[at] = message;
-    else chat.push(message);
-    trimChat(chat);
-  };
-
   const read = async (body: ReadableStream<Uint8Array>, mine: number) => {
     const reader = body.getReader();
     const decoder = new TextDecoder();
@@ -244,21 +207,14 @@ export function startBridge(link: GameLink, controller: Controller, forecaster: 
             connected = true;
             error = undefined;
             sentWithMessages = -1;
-            // The server replays its chat backlog after the hello.
-            chat.length = 0;
-            // This browser's settings win over whatever the server kept, so they survive its restarts.
-            void post(origin, "/pilot", asChange(settings));
+            pilot.hello();
             notify();
           } else if ("error" in envelope) {
             error = envelope.error;
             notify();
-          } else if ("pilot" in envelope) {
-            receivePilot(envelope.pilot);
-            notify();
-          } else if ("chat" in envelope) {
-            receiveChat(envelope.chat);
-            notify();
-          } else controller.handle({ id: envelope.id, command: parseCommand(envelope.command) }, store);
+          } else if ("pilot" in envelope) pilot.receive(envelope.pilot);
+          else if ("chat" in envelope) pilot.hear(envelope.chat);
+          else controller.handle({ id: envelope.id, command: parseCommand(envelope.command) }, store);
         } catch (e) {
           console.error("[tibobit] bad command from the agent server", line, e);
         }
@@ -313,25 +269,7 @@ export function startBridge(link: GameLink, controller: Controller, forecaster: 
       listen();
       notify();
     },
-    pilot: () => pilot,
-    setPilot: (change) => {
-      const { on, ...rest } = change;
-      if (Object.keys(rest).length > 0) {
-        settings = { pace: { planEvery: rest.planEvery ?? settings.pace.planEvery, actEvery: rest.actEvery ?? settings.pace.actEvery }, incognito: rest.incognito ?? settings.incognito };
-        pilot = { ...pilot, ...settings };
-        try {
-          localStorage.setItem(SETTINGS_KEY, JSON.stringify(asChange(settings)));
-        } catch {}
-        notify();
-      }
-      if (!connected) return;
-      void post(origin, "/pilot", change).then((ok) => {
-        if (ok) return;
-        pilot = { ...pilot, detail: `the agent server on ${origin} refused ${JSON.stringify(change)}; restart it with this version of agent-server/main.ts` };
-        notify();
-      });
-    },
-    chat: () => chat,
+    pilot,
     onChange: (listener) => listeners.add(listener),
   };
 }

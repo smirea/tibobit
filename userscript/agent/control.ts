@@ -5,7 +5,7 @@ import { STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
 import { inRun } from "../link/screen";
 import { type CheckpointFile, Checkpoints } from "./checkpoint";
 import { showSummary, startRun } from "./menus";
-import { anchored, type Place, place, toward } from "./targets";
+import { anchored, place, type Place, toward } from "./targets";
 import { applyLoadout } from "./loadout";
 import { requestSeed } from "./seed";
 import { Forecaster } from "./forecast";

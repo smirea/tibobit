@@ -1,7 +1,7 @@
-import type { Bridge } from "../agent/bridge";
 import { ACTION_ICONS, moveIcon, NOTE_ICON, RESULT_ICONS, svgIcon } from "./icons";
 import { type CardOption, type ChatMessage, type Inspect, PACE_LIMITS, type PilotPace, type PilotRole } from "../../protocol/pilot";
 import { type Direction, DIRECTIONS } from "../../protocol/geometry";
+import { Pilot } from "./pilot";
 
 const ROLE_LABELS: Record<PilotRole, string> = { planner: "Plan", action: "Action", system: "Bot" };
 const HIDE_DELAY_MS = 200;
@@ -263,10 +263,10 @@ function actionTile(m: ChatMessage): HTMLElement {
  * The bot's models while it plays: its latest plan pinned at the top, and the latest actions under
  * it, newest first. Hovering either shows what the model was asked and what it weighed.
  */
-export function botFeed(bridge: Bridge): HTMLElement {
+export function botFeed(pilot: Pilot): HTMLElement {
   const giveBack = h("button", "tbh-giveback");
   giveBack.type = "button";
-  giveBack.addEventListener("click", () => bridge.setPilot({ on: false }));
+  giveBack.addEventListener("click", () => pilot.set({ on: false }));
   const paceInput = (key: keyof PilotPace) => {
     const { min, max, step } = PACE_LIMITS[key];
     const input = h("input", "tbh-pace-input");
@@ -276,7 +276,7 @@ export function botFeed(bridge: Bridge): HTMLElement {
       if (!Number.isFinite(v) || input.value === "") return;
       const clamped = Number(Math.min(max, Math.max(min, Math.round(v / step) * step)).toFixed(1));
       input.value = String(clamped);
-      bridge.setPilot({ [key]: clamped });
+      pilot.set({ [key]: clamped });
     });
     return input;
   };
@@ -294,24 +294,24 @@ export function botFeed(bridge: Bridge): HTMLElement {
   const list = h("div", "tbh-actions");
   list.setAttribute("aria-live", "polite");
   const rows = new Map<number, { el: HTMLElement; message: ChatMessage }>();
-  const insp = inspector(() => plan.closest<HTMLElement>(".tbh-panel") ?? plan, () => bridge.chat());
+  const insp = inspector(() => plan.closest<HTMLElement>(".tbh-panel") ?? plan, () => pilot.chat());
   let shownPlan: ChatMessage | undefined;
 
   const render = () => {
-    const pilot = bridge.pilot();
-    const label = pilot.state === "stopping" ? "Handing the wheel back…" : "I'll do it myself";
+    const now = pilot.state();
+    const label = now.state === "stopping" ? "Handing the wheel back…" : "I'll do it myself";
     if (giveBack.textContent !== label) giveBack.textContent = label;
-    giveBack.disabled = pilot.state !== "on";
+    giveBack.disabled = now.state !== "on";
     // Typing in a box is not interrupted by the server echoing the value back.
     for (const [input, value] of [
-      [planEvery, pilot.pace.planEvery],
-      [actEvery, pilot.pace.actEvery],
+      [planEvery, now.pace.planEvery],
+      [actEvery, now.pace.actEvery],
     ] as const) {
-      input.disabled = pilot.state !== "on";
+      input.disabled = now.state !== "on";
       if (document.activeElement !== input && input.value !== String(value)) input.value = String(value);
     }
 
-    const messages = bridge.chat();
+    const messages = pilot.chat();
     const latest = [...messages].reverse().find((m) => m.role === "planner");
     if (latest !== shownPlan || latest === undefined) {
       shownPlan = latest;
@@ -367,7 +367,7 @@ export function botFeed(bridge: Bridge): HTMLElement {
     insp.leave();
   });
 
-  bridge.onChange(render);
+  pilot.onChange(render);
   render();
   return box;
 }

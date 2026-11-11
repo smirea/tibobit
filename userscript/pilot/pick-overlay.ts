@@ -1,7 +1,7 @@
-import type { Bridge } from "../agent/bridge";
 import { type CardOption, type ChatMessage, PICK_SHOW_MS } from "../../protocol/pilot";
 import { choiceCards } from "../link/screen";
 import { moveIcon } from "./icons";
+import { Pilot } from "./pilot";
 
 // The bot waits PICK_SHOW_MS before taking the card; the pick glows until a little before that.
 const SHOW_MS = PICK_SHOW_MS - 500;
@@ -24,7 +24,7 @@ function el(className: string, text = ""): HTMLDivElement {
  * While the bot has the wheel and picks at a level-up, chest or shrine, shows its plan above the
  * cards, its odds above each card, and an arrow that glides to its pick.
  */
-export function startPickOverlay(bridge: Bridge) {
+export function startPickOverlay(pilot: Pilot) {
   const layer = el("tbh-pick-layer");
   const banner = el("tbh-pick-banner");
   // Cards side by side get the arrow above them pointing down, under the plan and over the odds
@@ -37,7 +37,7 @@ export function startPickOverlay(bridge: Bridge) {
   const bars = new Map<number, { bar: HTMLDivElement; frame: HTMLDivElement }>();
 
   const latestPick = (): ChatMessage | undefined => {
-    const chat = bridge.chat();
+    const chat = pilot.chat();
     for (let i = chat.length - 1; i >= 0; i--) {
       const m = chat[i];
       if (m?.role === "planner" && m.inspect?.kind === "plan" && m.inspect.choices !== undefined) return m;
@@ -45,7 +45,7 @@ export function startPickOverlay(bridge: Bridge) {
     return undefined;
   };
 
-  bridge.onChange(() => {
+  pilot.onChange(() => {
     const m = latestPick();
     if (m === undefined || m.id === show?.id || m.inspect?.kind !== "plan" || m.inspect.choices === undefined) return;
     const options = m.inspect.choices.filter((c) => c.index !== undefined);
@@ -78,7 +78,7 @@ export function startPickOverlay(bridge: Bridge) {
     const age = show === undefined ? Number.POSITIVE_INFINITY : performance.now() - show.seen;
     // choiceCards() also lists the overlay's plain buttons, which outside a choice are any menu's.
     const choosing = document.querySelector(".ui-card") !== null;
-    const visible = show !== undefined && bridge.pilot().state !== "off" && choosing && cards.length > 0 && age < FRESH_MS;
+    const visible = show !== undefined && pilot.state().state !== "off" && choosing && cards.length > 0 && age < FRESH_MS;
     layer.hidden = !visible;
     if (!visible || show === undefined) return;
     const done = age >= SHOW_MS;

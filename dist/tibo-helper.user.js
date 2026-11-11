@@ -61,59 +61,6 @@
     return Number.isInteger(port) && port >= 1 && port <= 65535;
   }
 
-  // protocol/parse.ts
-  function fail(message) {
-    throw new Error(message);
-  }
-  function num(v, what) {
-    return typeof v === "number" && Number.isFinite(v) ? v : fail(`${what} must be a number`);
-  }
-
-  // protocol/pilot.ts
-  var DEFAULT_PACE = { planEvery: 5, actEvery: 0.3 };
-  var PACE_LIMITS = { planEvery: { min: 0.5, max: 300, step: 0.5 }, actEvery: { min: 0.1, max: 5, step: 0.1 } };
-  var DEFAULT_SETTINGS = { pace: DEFAULT_PACE, incognito: false };
-  function parsePilotChange(input) {
-    const c = input ?? {};
-    const change = {};
-    for (const key of ["on", "incognito"]) {
-      if (c[key] === undefined)
-        continue;
-      if (typeof c[key] !== "boolean")
-        fail(`${key} must be true or false`);
-      change[key] = c[key];
-    }
-    for (const key of ["planEvery", "actEvery"]) {
-      if (c[key] === undefined)
-        continue;
-      const { min, max, step } = PACE_LIMITS[key];
-      const v = num(c[key], key);
-      if (v < min || v > max)
-        fail(`${key} must be from ${min} to ${max} seconds`);
-      change[key] = Number((Math.round(v / step) * step).toFixed(1));
-    }
-    if (Object.keys(change).length === 0)
-      fail('send {"on": true|false}, {"incognito": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
-    return change;
-  }
-  var PICK_SHOW_MS = 2000;
-  var ACTION_TAGS = [
-    ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
-    ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
-    ...["Dash", "Start", "Take over", "Over", "Stopped", "Incognito"]
-  ];
-  var KEEP_PLANS = 500;
-  var KEEP_OTHERS = 400;
-  function trimChat(chat) {
-    let plans = 0;
-    let others = 0;
-    for (let i = chat.length - 1;i >= 0; i--) {
-      const keep = chat[i]?.role === "planner" ? ++plans <= KEEP_PLANS : ++others <= KEEP_OTHERS;
-      if (!keep)
-        chat.splice(i, 1);
-    }
-  }
-
   // protocol/geometry.ts
   var TICKS_PER_SECOND = 60;
   var DIRECTIONS = ["right", "down-right", "down", "down-left", "left", "up-left", "up", "up-right"];
@@ -125,6 +72,14 @@
   function directionOf(dx, dy) {
     const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
     return DIRECTIONS[(octant + 8) % 8] ?? "right";
+  }
+
+  // protocol/parse.ts
+  function fail(message) {
+    throw new Error(message);
+  }
+  function num(v, what) {
+    return typeof v === "number" && Number.isFinite(v) ? v : fail(`${what} must be a number`);
   }
 
   // protocol/commands.ts
@@ -659,8 +614,52 @@
     };
   }
 
-  // userscript/agent/bridge.ts
-  var PORT_KEY = "tibobit.bridgePort";
+  // protocol/pilot.ts
+  var DEFAULT_PACE = { planEvery: 5, actEvery: 0.3 };
+  var PACE_LIMITS = { planEvery: { min: 0.5, max: 300, step: 0.5 }, actEvery: { min: 0.1, max: 5, step: 0.1 } };
+  var DEFAULT_SETTINGS = { pace: DEFAULT_PACE, incognito: false };
+  function parsePilotChange(input) {
+    const c = input ?? {};
+    const change = {};
+    for (const key of ["on", "incognito"]) {
+      if (c[key] === undefined)
+        continue;
+      if (typeof c[key] !== "boolean")
+        fail(`${key} must be true or false`);
+      change[key] = c[key];
+    }
+    for (const key of ["planEvery", "actEvery"]) {
+      if (c[key] === undefined)
+        continue;
+      const { min, max, step } = PACE_LIMITS[key];
+      const v = num(c[key], key);
+      if (v < min || v > max)
+        fail(`${key} must be from ${min} to ${max} seconds`);
+      change[key] = Number((Math.round(v / step) * step).toFixed(1));
+    }
+    if (Object.keys(change).length === 0)
+      fail('send {"on": true|false}, {"incognito": true|false}, {"planEvery": seconds} or {"actEvery": seconds}');
+    return change;
+  }
+  var PICK_SHOW_MS = 2000;
+  var ACTION_TAGS = [
+    ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
+    ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
+    ...["Dash", "Start", "Take over", "Over", "Stopped", "Incognito"]
+  ];
+  var KEEP_PLANS = 500;
+  var KEEP_OTHERS = 400;
+  function trimChat(chat) {
+    let plans = 0;
+    let others = 0;
+    for (let i = chat.length - 1;i >= 0; i--) {
+      const keep = chat[i]?.role === "planner" ? ++plans <= KEEP_PLANS : ++others <= KEEP_OTHERS;
+      if (!keep)
+        chat.splice(i, 1);
+    }
+  }
+
+  // userscript/pilot/pilot.ts
   var SETTINGS_KEY = "tibobit.pilotSettings";
   function savedSettings() {
     try {
@@ -674,6 +673,80 @@
     }
   }
   var asChange = (s) => ({ ...s.pace, incognito: s.incognito });
+
+  class Pilot {
+    server;
+    release;
+    settings = savedSettings();
+    current = { state: "off", ...this.settings };
+    messages = [];
+    listeners = new Set;
+    constructor(server, release) {
+      this.server = server;
+      this.release = release;
+    }
+    state() {
+      return this.current;
+    }
+    chat() {
+      return this.messages;
+    }
+    onChange(listener) {
+      this.listeners.add(listener);
+    }
+    notify() {
+      for (const listener of this.listeners)
+        listener();
+    }
+    hello() {
+      this.messages.length = 0;
+      this.server.ask(asChange(this.settings));
+      this.notify();
+    }
+    receive(next) {
+      if (this.current.state !== "off" && next.state === "off")
+        this.release();
+      if (this.current.state === "off" && next.state === "on")
+        this.messages.length = 0;
+      this.current = next;
+      this.notify();
+    }
+    disconnected() {
+      this.receive({ state: "off", ...this.settings });
+    }
+    hear(message) {
+      const at = this.messages.findIndex((m) => m.id === message.id);
+      if (at >= 0)
+        this.messages[at] = message;
+      else
+        this.messages.push(message);
+      trimChat(this.messages);
+      this.notify();
+    }
+    set(change) {
+      const { on, ...rest } = change;
+      if (Object.keys(rest).length > 0) {
+        const now = this.settings;
+        this.settings = { pace: { planEvery: rest.planEvery ?? now.pace.planEvery, actEvery: rest.actEvery ?? now.pace.actEvery }, incognito: rest.incognito ?? now.incognito };
+        this.current = { ...this.current, ...this.settings };
+        try {
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify(asChange(this.settings)));
+        } catch {}
+        this.notify();
+      }
+      if (!this.server.connected())
+        return;
+      this.server.ask(change).then((ok) => {
+        if (ok)
+          return;
+        this.current = { ...this.current, detail: `the agent server on ${this.server.origin()} refused ${JSON.stringify(change)}; restart it with this version of agent-server/main.ts` };
+        this.notify();
+      });
+    }
+  }
+
+  // userscript/agent/bridge.ts
+  var PORT_KEY = "tibobit.bridgePort";
   function savedPort() {
     try {
       const port = Number(localStorage.getItem(PORT_KEY));
@@ -743,9 +816,7 @@
       for (const listener of listeners)
         listener();
     };
-    let settings = savedSettings();
-    let pilot = { state: "off", ...settings };
-    const chat = [];
+    const pilot = new Pilot({ connected: () => connected, origin: () => origin, ask: (change) => post(origin, "/pilot", change) }, () => controller.release());
     let inFlight = 0;
     let lastPush = 0;
     let snapshotMs = 0;
@@ -760,7 +831,7 @@
       if (from !== session)
         return;
       connected = false;
-      receivePilot({ state: "off", ...settings });
+      pilot.disconnected();
       notify();
       setTimeout(listen, RECONNECT_MS);
     };
@@ -799,21 +870,6 @@
         ontimeout: () => retry(`no agent server on ${origin}`)
       });
     };
-    const receivePilot = (next) => {
-      if (pilot.state !== "off" && next.state === "off")
-        controller.release();
-      if (pilot.state === "off" && next.state === "on")
-        chat.length = 0;
-      pilot = next;
-    };
-    const receiveChat = (message) => {
-      const at = chat.findIndex((m) => m.id === message.id);
-      if (at >= 0)
-        chat[at] = message;
-      else
-        chat.push(message);
-      trimChat(chat);
-    };
     const read = async (body, mine) => {
       const reader = body.getReader();
       const decoder = new TextDecoder;
@@ -840,19 +896,16 @@
               connected = true;
               error = undefined;
               sentWithMessages = -1;
-              chat.length = 0;
-              post(origin, "/pilot", asChange(settings));
+              pilot.hello();
               notify();
             } else if ("error" in envelope) {
               error = envelope.error;
               notify();
-            } else if ("pilot" in envelope) {
-              receivePilot(envelope.pilot);
-              notify();
-            } else if ("chat" in envelope) {
-              receiveChat(envelope.chat);
-              notify();
-            } else
+            } else if ("pilot" in envelope)
+              pilot.receive(envelope.pilot);
+            else if ("chat" in envelope)
+              pilot.hear(envelope.chat);
+            else
               controller.handle({ id: envelope.id, command: parseCommand(envelope.command) }, store);
           } catch (e) {
             console.error("[tibobit] bad command from the agent server", line, e);
@@ -909,27 +962,7 @@
         listen();
         notify();
       },
-      pilot: () => pilot,
-      setPilot: (change) => {
-        const { on, ...rest } = change;
-        if (Object.keys(rest).length > 0) {
-          settings = { pace: { planEvery: rest.planEvery ?? settings.pace.planEvery, actEvery: rest.actEvery ?? settings.pace.actEvery }, incognito: rest.incognito ?? settings.incognito };
-          pilot = { ...pilot, ...settings };
-          try {
-            localStorage.setItem(SETTINGS_KEY, JSON.stringify(asChange(settings)));
-          } catch {}
-          notify();
-        }
-        if (!connected)
-          return;
-        post(origin, "/pilot", change).then((ok) => {
-          if (ok)
-            return;
-          pilot = { ...pilot, detail: `the agent server on ${origin} refused ${JSON.stringify(change)}; restart it with this version of agent-server/main.ts` };
-          notify();
-        });
-      },
-      chat: () => chat,
+      pilot,
       onChange: (listener) => listeners.add(listener)
     };
   }
@@ -2477,10 +2510,10 @@
     el.dataset.id = String(m.id);
     return el;
   }
-  function botFeed(bridge) {
+  function botFeed(pilot) {
     const giveBack = h("button", "tbh-giveback");
     giveBack.type = "button";
-    giveBack.addEventListener("click", () => bridge.setPilot({ on: false }));
+    giveBack.addEventListener("click", () => pilot.set({ on: false }));
     const paceInput = (key) => {
       const { min, max, step } = PACE_LIMITS[key];
       const input = h("input", "tbh-pace-input");
@@ -2491,7 +2524,7 @@
           return;
         const clamped = Number(Math.min(max, Math.max(min, Math.round(v / step) * step)).toFixed(1));
         input.value = String(clamped);
-        bridge.setPilot({ [key]: clamped });
+        pilot.set({ [key]: clamped });
       });
       return input;
     };
@@ -2502,23 +2535,23 @@
     const list = h("div", "tbh-actions");
     list.setAttribute("aria-live", "polite");
     const rows = new Map;
-    const insp = inspector(() => plan.closest(".tbh-panel") ?? plan, () => bridge.chat());
+    const insp = inspector(() => plan.closest(".tbh-panel") ?? plan, () => pilot.chat());
     let shownPlan;
     const render = () => {
-      const pilot = bridge.pilot();
-      const label = pilot.state === "stopping" ? "Handing the wheel back…" : "I'll do it myself";
+      const now = pilot.state();
+      const label = now.state === "stopping" ? "Handing the wheel back…" : "I'll do it myself";
       if (giveBack.textContent !== label)
         giveBack.textContent = label;
-      giveBack.disabled = pilot.state !== "on";
+      giveBack.disabled = now.state !== "on";
       for (const [input, value] of [
-        [planEvery, pilot.pace.planEvery],
-        [actEvery, pilot.pace.actEvery]
+        [planEvery, now.pace.planEvery],
+        [actEvery, now.pace.actEvery]
       ]) {
-        input.disabled = pilot.state !== "on";
+        input.disabled = now.state !== "on";
         if (document.activeElement !== input && input.value !== String(value))
           input.value = String(value);
       }
-      const messages = bridge.chat();
+      const messages = pilot.chat();
       const latest = [...messages].reverse().find((m) => m.role === "planner");
       if (latest !== shownPlan || latest === undefined) {
         shownPlan = latest;
@@ -2570,7 +2603,7 @@
       hovered = undefined;
       insp.leave();
     });
-    bridge.onChange(render);
+    pilot.onChange(render);
     render();
     return box;
   }
@@ -2915,12 +2948,12 @@
     const status = h2("div", "tbh-conn-status");
     const wheel = h2("button", "tbh-wheel", "Grok take the wheel");
     wheel.type = "button";
-    wheel.addEventListener("click", () => bridge.setPilot({ on: true }));
+    wheel.addEventListener("click", () => bridge.pilot.set({ on: true }));
     const wheelNote = h2("div", "tbh-wheel-note");
     const incognito = h2("button", "tbh-incognito", "Incognito");
     incognito.type = "button";
     incognito.title = "The bot just plays: no notes, no review after the run. Turning it on mid-run deletes that run's notes.";
-    incognito.addEventListener("click", () => bridge.setPilot({ incognito: !bridge.pilot().incognito }));
+    incognito.addEventListener("click", () => bridge.pilot.set({ incognito: !bridge.pilot.state().incognito }));
     const refresh = () => {
       const s = bridge.status();
       const live = s.state === "connected";
@@ -2933,7 +2966,7 @@
         status.textContent = text;
       status.hidden = text === "";
       status.dataset.state = s.error === undefined ? "wait" : "error";
-      const pilot = bridge.pilot();
+      const pilot = bridge.pilot.state();
       wheel.hidden = pilot.state !== "off";
       wheel.disabled = !live;
       wheel.title = live ? "" : "Start the agent server first: ./agent-server/main.ts";
@@ -2953,6 +2986,7 @@
     row.noValidate = true;
     row.addEventListener("submit", connect);
     bridge.onChange(refresh);
+    bridge.pilot.onChange(refresh);
     input.addEventListener("input", () => {
       input.classList.remove("tbh-invalid");
       refresh();
@@ -3020,10 +3054,10 @@
     return { panel, content };
   }
   function startPanel(link, discovery, bridge) {
-    const { panel, content } = mount(botFeed(bridge), connectionRow(bridge));
+    const { panel, content } = mount(botFeed(bridge.pilot), connectionRow(bridge));
     let collapsedBefore;
     const followPilot = () => {
-      const piloting = bridge.pilot().state !== "off";
+      const piloting = bridge.pilot.state().state !== "off";
       if (piloting === panel.classList.contains("tbh-pilot"))
         return;
       panel.classList.toggle("tbh-pilot", piloting);
@@ -3033,7 +3067,7 @@
       } else if (collapsedBefore !== undefined)
         panel.classList.toggle("tbh-collapsed", collapsedBefore);
     };
-    bridge.onChange(followPilot);
+    bridge.pilot.onChange(followPilot);
     followPilot();
     const dropStaleTip = startTips();
     let panelSignature = "";
@@ -3104,7 +3138,7 @@
     d.textContent = text;
     return d;
   }
-  function startPickOverlay(bridge) {
+  function startPickOverlay(pilot) {
     const layer = el("tbh-pick-layer");
     const banner = el("tbh-pick-banner");
     const arrows = { down: moveIcon("down", "tbh-pick-arrow-icon"), right: moveIcon("right", "tbh-pick-arrow-icon") };
@@ -3114,7 +3148,7 @@
     let show;
     const bars = new Map;
     const latestPick = () => {
-      const chat = bridge.chat();
+      const chat = pilot.chat();
       for (let i = chat.length - 1;i >= 0; i--) {
         const m = chat[i];
         if (m?.role === "planner" && m.inspect?.kind === "plan" && m.inspect.choices !== undefined)
@@ -3122,7 +3156,7 @@
       }
       return;
     };
-    bridge.onChange(() => {
+    pilot.onChange(() => {
       const m = latestPick();
       if (m === undefined || m.id === show?.id || m.inspect?.kind !== "plan" || m.inspect.choices === undefined)
         return;
@@ -3155,7 +3189,7 @@
       const cards = choiceCards();
       const age = show === undefined ? Number.POSITIVE_INFINITY : performance.now() - show.seen;
       const choosing = document.querySelector(".ui-card") !== null;
-      const visible = show !== undefined && bridge.pilot().state !== "off" && choosing && cards.length > 0 && age < FRESH_MS;
+      const visible = show !== undefined && pilot.state().state !== "off" && choosing && cards.length > 0 && age < FRESH_MS;
       layer.hidden = !visible;
       if (!visible || show === undefined)
         return;
@@ -3446,7 +3480,7 @@
     forecaster.start();
     const bridge = startBridge(link, controller, forecaster);
     startPanel(link, discovery, bridge);
-    startPickOverlay(bridge);
+    startPickOverlay(bridge.pilot);
   }
   if (document.body === null)
     document.addEventListener("DOMContentLoaded", start, { once: true });

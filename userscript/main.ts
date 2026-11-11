@@ -21,7 +21,7 @@ function start() {
   forecaster.start();
   const bridge = startBridge(link, controller, forecaster);
   startPanel(link, discovery, bridge);
-  startPickOverlay(bridge);
+  startPickOverlay(bridge.pilot);
 }
 
 if (document.body === null) document.addEventListener("DOMContentLoaded", start, { once: true });
