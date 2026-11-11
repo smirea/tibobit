@@ -1,7 +1,7 @@
 {
   "fry-knives": {
-    "games": 16,
-    "last": "L5.I9.G6"
+    "games": 18,
+    "last": "L6.I1.G6"
   },
   "hot-potato": {
     "games": 10,
@@ -12,48 +12,48 @@
     "last": "L5.I4.G4"
   },
   "starch-puddle": {
-    "games": 24,
-    "last": "L5.I8.G1"
+    "games": 25,
+    "last": "L6.I2.G5"
   },
   "root-cellar": {
     "games": 23,
     "last": "L5.I7.G8"
   },
   "spud-dice": {
-    "games": 10,
-    "last": "L5.I9.G2"
+    "games": 11,
+    "last": "L6.I1.G2"
   },
   "hot-start": {
-    "games": 20,
-    "last": "L5.I5.G10"
+    "games": 23,
+    "last": "L6.I1.G10"
   },
   "gpu": {
-    "games": 23,
-    "last": "L5.I7.G9"
+    "games": 26,
+    "last": "L6.I1.G10"
   },
   "fry-lance": {
-    "games": 25,
-    "last": "L5.I9.G3"
+    "games": 30,
+    "last": "L6.I2.G3"
   },
   "gravy-heart": {
-    "games": 43,
-    "last": "L5.I8.G2"
+    "games": 44,
+    "last": "L6.I1.G4"
   },
   "chives": {
-    "games": 34,
-    "last": "L5.I9.G8"
+    "games": 36,
+    "last": "L6.I2.G10"
   },
   "spud-sneakers": {
     "games": 5,
     "last": "L5.I9.G2"
   },
   "big-bowl": {
-    "games": 29,
-    "last": "L5.I9.G10"
+    "games": 32,
+    "last": "L6.I1.G10"
   },
   "butter-socks": {
-    "games": 29,
-    "last": "L5.I9.G3"
+    "games": 30,
+    "last": "L6.I1.G4"
   },
   "hash-boomerang": {
     "games": 11,
@@ -64,20 +64,20 @@
     "last": "L5.I9.G3"
   },
   "mash-golem": {
-    "games": 8,
-    "last": "L5.I9.G4"
+    "games": 9,
+    "last": "L6.I1.G2"
   },
   "potato-battery": {
-    "games": 17,
-    "last": "L5.I7.G1"
+    "games": 21,
+    "last": "L6.I1.G10"
   },
   "spud-fence": {
     "games": 15,
     "last": "L5.I8.G1"
   },
   "skipping-cannonball": {
-    "games": 22,
-    "last": "L5.I8.G8"
+    "games": 23,
+    "last": "L6.I1.G6"
   },
   "tater-mines": {
     "games": 15,
@@ -92,8 +92,8 @@
     "last": "L5.I8.G6"
   },
   "peel-out": {
-    "games": 51,
-    "last": "L5.I8.G6"
+    "games": 53,
+    "last": "L6.I1.G4"
   },
   "mezzaluna": {
     "games": 9,
@@ -104,12 +104,12 @@
     "last": "L5.I8.G4"
   },
   "butter-streak": {
-    "games": 19,
-    "last": "L5.I9.G8"
+    "games": 20,
+    "last": "L6.I1.G6"
   },
   "frying-pan": {
-    "games": 17,
-    "last": "L5.I7.G1"
+    "games": 20,
+    "last": "L6.I2.G8"
   },
   "root-network": {
     "games": 30,
@@ -124,44 +124,44 @@
     "last": "L5.I9.G5"
   },
   "skillet-flail": {
-    "games": 17,
-    "last": "L5.I9.G4"
+    "games": 18,
+    "last": "L6.I1.G2"
   },
   "seeker-sprouts": {
-    "games": 185,
-    "last": "L5.I9.G10"
+    "games": 200,
+    "last": "L6.I2.G10"
   },
   "gratin-arc": {
     "games": 13,
     "last": "L5.I1.G2"
   },
   "locked-gatling": {
-    "games": 16,
-    "last": "L5.I8.G5"
+    "games": 17,
+    "last": "L6.I2.G9"
   },
   "harvest-moon": {
-    "games": 31,
-    "last": "L5.I9.G10"
+    "games": 33,
+    "last": "L6.I1.G5"
   },
   "fertilizer": {
-    "games": 44,
-    "last": "L5.I9.G8"
+    "games": 53,
+    "last": "L6.I2.G8"
   },
   "thick-skin": {
-    "games": 48,
-    "last": "L5.I9.G10"
+    "games": 50,
+    "last": "L6.I2.G6"
   },
   "bacon-bits": {
-    "games": 30,
-    "last": "L5.I6.G10"
+    "games": 31,
+    "last": "L6.I2.G2"
   },
   "hot-sauce": {
-    "games": 21,
-    "last": "L5.I1.G2"
+    "games": 22,
+    "last": "L6.I1.G5"
   },
   "spud-cannon": {
-    "games": 24,
-    "last": "L5.I9.G10"
+    "games": 26,
+    "last": "L6.I2.G9"
   },
   "comet-scythe": {
     "games": 23,
@@ -172,16 +172,16 @@
     "last": "L5.I7.G10"
   },
   "starch-plating": {
-    "games": 54,
-    "last": "L5.I6.G6"
+    "games": 57,
+    "last": "L6.I1.G4"
   },
   "sprouting-eyes": {
     "games": 37,
     "last": "L5.I9.G9"
   },
   "hash-rush": {
-    "games": 9,
-    "last": "L5.I5.G4"
+    "games": 12,
+    "last": "L6.I1.G10"
   },
   "pressure-cooker": {
     "games": 1,
@@ -192,24 +192,24 @@
     "last": "L5.I9.G1"
   },
   "reset-button": {
-    "games": 25,
-    "last": "L5.I9.G1"
+    "games": 27,
+    "last": "L6.I1.G7"
   },
   "gravy-splash": {
-    "games": 8,
-    "last": "L5.I9.G6"
+    "games": 9,
+    "last": "L6.I1.G3"
   },
   "tot-toss": {
     "games": 13,
     "last": "L5.I4.G10"
   },
   "gem-sling": {
-    "games": 10,
-    "last": "L5.I2.G6"
+    "games": 11,
+    "last": "L6.I2.G9"
   },
   "seed-potato": {
-    "games": 31,
-    "last": "L5.I9.G10"
+    "games": 33,
+    "last": "L6.I2.G5"
   },
   "sprout-squad": {
     "games": 12,
@@ -228,24 +228,24 @@
     "last": "L5.I8.G8"
   },
   "hot-streak": {
-    "games": 22,
-    "last": "L5.I9.G9"
+    "games": 24,
+    "last": "L6.I2.G6"
   },
   "mash-snowball": {
     "games": 22,
     "last": "L5.I9.G2"
   },
   "small-fry": {
-    "games": 9,
-    "last": "L5.I8.G10"
+    "games": 10,
+    "last": "L6.I1.G3"
   },
   "whisk-vortex": {
-    "games": 21,
-    "last": "L5.I8.G10"
+    "games": 23,
+    "last": "L6.I1.G4"
   },
   "lean-lunch": {
-    "games": 28,
-    "last": "L5.I9.G8"
+    "games": 31,
+    "last": "L6.I2.G9"
   },
   "tater-trot": {
     "games": 1,
@@ -260,8 +260,8 @@
     "last": "L5.I9.G5"
   },
   "grab-bag": {
-    "games": 21,
-    "last": "L5.I8.G5"
+    "games": 22,
+    "last": "L6.I1.G5"
   },
   "packed-pan": {
     "games": 21,
@@ -272,8 +272,8 @@
     "last": "L1.I3.G3"
   },
   "hash-harrier": {
-    "games": 16,
-    "last": "L4.I8.G9"
+    "games": 17,
+    "last": "L6.I2.G2"
   },
   "spud-decoy": {
     "games": 10,
@@ -292,16 +292,16 @@
     "last": "L5.I9.G5"
   },
   "four-eyed-spud": {
-    "games": 13,
-    "last": "L5.I8.G8"
+    "games": 14,
+    "last": "L6.I1.G3"
   },
   "mash-finisher": {
-    "games": 6,
-    "last": "L4.I7.G1"
+    "games": 7,
+    "last": "L6.I2.G4"
   },
   "mash-landing": {
-    "games": 28,
-    "last": "L5.I7.G9"
+    "games": 29,
+    "last": "L6.I1.G1"
   },
   "julienne-dash": {
     "games": 30,
@@ -328,24 +328,24 @@
     "last": "L4.I3.G3"
   },
   "deep-fryer": {
-    "games": 18,
-    "last": "L5.I5.G6"
+    "games": 20,
+    "last": "L6.I2.G10"
   },
   "peel-lash": {
     "games": 14,
     "last": "L5.I9.G9"
   },
   "spud-lob": {
-    "games": 15,
-    "last": "L5.I8.G5"
+    "games": 17,
+    "last": "L6.I2.G7"
   },
   "broadside": {
-    "games": 26,
-    "last": "L5.I9.G7"
+    "games": 27,
+    "last": "L6.I1.G1"
   },
   "butter-pat": {
-    "games": 48,
-    "last": "L5.I9.G10"
+    "games": 53,
+    "last": "L6.I2.G9"
   },
   "sour-cream": {
     "games": 18,
@@ -360,8 +360,8 @@
     "last": "L5.I9.G9"
   },
   "hash-brown-shield": {
-    "games": 23,
-    "last": "L5.I9.G7"
+    "games": 26,
+    "last": "L6.I1.G6"
   },
   "tailgate-fries": {
     "games": 11,
@@ -372,8 +372,8 @@
     "last": "L5.I2.G5"
   },
   "stuffed-skin": {
-    "games": 9,
-    "last": "L5.I9.G5"
+    "games": 10,
+    "last": "L6.I1.G4"
   },
   "hearty-helping": {
     "games": 8,
@@ -400,44 +400,44 @@
     "last": "L5.I5.G8"
   },
   "kettle-cyclone": {
-    "games": 3,
-    "last": "L5.I6.G10"
+    "games": 6,
+    "last": "L6.I1.G10"
   },
   "peel-poltergeist": {
     "games": 2,
     "last": "L4.I6.G3"
   },
   "fry-sentry": {
-    "games": 16,
-    "last": "L5.I9.G8"
+    "games": 18,
+    "last": "L6.I2.G6"
   },
   "hash-hawk": {
-    "games": 24,
-    "last": "L5.I7.G3"
+    "games": 25,
+    "last": "L6.I2.G1"
   },
   "cast-iron": {
     "games": 2,
     "last": "L4.I6.G4"
   },
   "peel-phantom": {
-    "games": 9,
-    "last": "L5.I2.G9"
+    "games": 10,
+    "last": "L6.I1.G4"
   },
   "bottomless-sack": {
     "games": 1,
     "last": "L1.I6.G5"
   },
   "starch-chain": {
-    "games": 25,
-    "last": "L5.I8.G8"
+    "games": 26,
+    "last": "L6.I1.G6"
   },
   "tot-gatling": {
     "games": 1,
     "last": "L1.I8.G5"
   },
   "overgrowth": {
-    "games": 30,
-    "last": "L5.I9.G5"
+    "games": 35,
+    "last": "L6.I2.G6"
   },
   "wildfire-roast": {
     "games": 10,
@@ -460,8 +460,8 @@
     "last": "L4.I8.G9"
   },
   "eclipse-scythe": {
-    "games": 6,
-    "last": "L5.I7.G4"
+    "games": 9,
+    "last": "L6.I1.G10"
   },
   "dynamo-coil": {
     "games": 1,
@@ -536,8 +536,8 @@
     "last": "L4.I9.G7"
   },
   "tot-cavalry": {
-    "games": 2,
-    "last": "L5.I4.G5"
+    "games": 3,
+    "last": "L6.I1.G4"
   },
   "golden-harvest": {
     "games": 1,
@@ -558,5 +558,9 @@
   "stand-mixer": {
     "games": 1,
     "last": "L5.I7.G10"
+  },
+  "tailgate-party": {
+    "games": 3,
+    "last": "L6.I1.G10"
   }
 }

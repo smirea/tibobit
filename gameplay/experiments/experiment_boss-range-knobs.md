@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | recheck |
+| Status | done |
 | Area | bosses |
-| Result | inconclusive |
+| Result | refuted |
 | Created | L5.I9 |
-| Updated | L5.I10 |
+| Updated | L6.I2 |
 
 ## Hypothesis
 
@@ -18,7 +18,7 @@ Seeker-sprouts with the playbook plus distrustBossRange 250, bossOfferRange 250,
 
 ## Findings
 
-L5.I9 s31-40: 9 of 10 alive at 4:00 against 6 of 10 (net +3). L5.I10 full run on the playbook without the knobs died at 10:00 to the Great Wireworm: -52 from 4 away with the dash not asked, dashes at 51% and 60% scores only at 7% health. Replicate on s41-50 before any playbook change.
+The 9 of 10 at s31-40 did not replicate on s41-47 (4 of 7 against 5 of 7). Regression to the mean, as with the holdAbortHurt lead.
 
 ## Games
 
