@@ -37,7 +37,9 @@ export type Table = Content & {
 };
 
 type Offer = { type: "weapon" | "passive" | "item"; id: string; level?: number; isNew?: boolean };
-type Choice = { kind: string; offers?: Offer[]; rewards?: unknown[]; level?: number; gold?: number };
+/** What a Spud Shrine offers: an amount added to one stat, by the game's stat name. */
+type ShrineOffer = { stat: string; value: number };
+type Choice = { kind: string; offers?: (Offer | ShrineOffer)[]; rewards?: unknown[]; level?: number; gold?: number };
 
 type Column<T = number> = { [index: number]: T | undefined; length: number };
 type SlotPool = { count: number; slotAt(n: number): number; isAlive(slot: number): boolean; id(slot: number): number; has(id: number): boolean };

@@ -146,6 +146,11 @@
       return { id: x.id, level: n };
     });
   }
+  function shrineTotals(v) {
+    if (typeof v !== "object" || v === null || Array.isArray(v))
+      return fail("shrineTotals must be an object of the game's stat names to numbers");
+    return Object.fromEntries(Object.entries(v).map(([stat, n]) => [stat, num(n, `shrineTotals.${stat}`)]));
+  }
   function parseLoadout(c) {
     const hp = c.hp === undefined || c.hp === "full" ? c.hp : num(c.hp, "hp");
     return {
@@ -153,7 +158,8 @@
       passives: leveled(c.passives, "passives", "level"),
       items: leveled(c.items, "items", "count").map(({ id, level }) => ({ id, count: level })),
       ...c.gold === undefined ? {} : { gold: num(c.gold, "gold") },
-      ...hp === undefined ? {} : { hp }
+      ...hp === undefined ? {} : { hp },
+      ...c.shrineTotals === undefined ? {} : { shrineTotals: shrineTotals(c.shrineTotals) }
     };
   }
   function parseCommand(input) {
@@ -1172,6 +1178,10 @@
     s.choiceQueue.push({ kind: "levelUp", offers: [offer], level: s.loadout.level });
     game.choose({ type: "pick", index: 0 });
   }
+  function shrinePick(game, stat, value) {
+    game.state.choiceQueue.push({ kind: "shrine", offers: [{ stat, value }] });
+    game.choose({ type: "pick", index: 0 });
+  }
   function applyLoadout(link, game, spec) {
     const content = link.content();
     if (content === undefined)
@@ -1206,12 +1216,15 @@
       problems.push(`at most ${WEAPON_SLOTS} weapons`);
     if (spec.passives.length > WEAPON_SLOTS)
       problems.push(`at most ${WEAPON_SLOTS} passives`);
+    const s = game.state;
+    const L = s.loadout;
+    for (const stat of Object.keys(spec.shrineTotals ?? {}))
+      if (!(stat in L.shrineTotals))
+        problems.push(`no shrine stat ${stat}; the stats are ${Object.keys(L.shrineTotals).join(", ")}`);
     if (problems.length > 0)
       throw new Error(problems.join("; "));
-    const s = game.state;
     if (s.choiceQueue.length > 0)
       throw new Error("a choice is open; pick it first");
-    const L = s.loadout;
     L.weapons.length = 0;
     L.passives.length = 0;
     L.items.clear();
@@ -1223,6 +1236,9 @@
     for (const { id, level } of spec.passives)
       for (let n = 1;n <= level; n++)
         pick(game, { type: "passive", id, level: n, isNew: n === 1 });
+    for (const [stat, total] of Object.entries(spec.shrineTotals ?? {}))
+      shrinePick(game, stat, total - (L.shrineTotals[stat] ?? 0));
+    shrinePick(game, "might", 0);
     if (spec.gold !== undefined)
       L.gold = spec.gold;
     const maxHp = L.stats.maxHp;

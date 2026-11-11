@@ -291,10 +291,13 @@ export class Slot {
 
   /** What Tibo holds now, as a loadout that puts it back. */
   private async held(): Promise<LoadoutSpec> {
-    const tibo = (await this.state()).tibo;
-    if (tibo === undefined) throw new Error("no run to read what Tibo holds from");
+    const state = await this.state("loadout.shrineTotals");
+    const tibo = state.tibo;
+    // Every stat, zeros too, so putting it back also takes away what a rebuild's own shrines added.
+    const shrineTotals = (state.game as { loadout?: { shrineTotals?: Record<string, number> } } | undefined)?.loadout?.shrineTotals;
+    if (tibo === undefined || shrineTotals === undefined) throw new Error("no run to read what Tibo holds from");
     const leveled = (list: { id: string; level: number }[]) => list.map(({ id, level }) => ({ id, level }));
-    return { weapons: leveled(tibo.weapons), passives: leveled(tibo.passives), items: tibo.items.map(({ id, count }) => ({ id, count })), gold: tibo.gold, hp: tibo.life.hp };
+    return { weapons: leveled(tibo.weapons), passives: leveled(tibo.passives), items: tibo.items.map(({ id, count }) => ({ id, count })), gold: tibo.gold, hp: tibo.life.hp, shrineTotals };
   }
 
   private async saveGym(name: string): Promise<{ checkpoint: CheckpointMeta; held: LoadoutSpec }> {

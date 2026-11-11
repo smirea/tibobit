@@ -82,6 +82,8 @@ export type LoadoutSpec = {
   items: { id: string; count: number }[];
   gold?: number;
   hp?: number | "full";
+  /** What Spud Shrines have added, by the game's stat names; a stat left out keeps what the run has. */
+  shrineTotals?: Record<string, number>;
 };
 
 /** What a checkpoint holds, readable without loading it. `build` is the game's sim chunk, which must match to load it. */
@@ -174,7 +176,12 @@ function leveled(v: unknown, what: string, field: "level" | "count"): { id: stri
   });
 }
 
-/** Validates a loadout; ids and levels are checked against the game's content when it is applied. */
+function shrineTotals(v: unknown): Record<string, number> {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return fail("shrineTotals must be an object of the game's stat names to numbers");
+  return Object.fromEntries(Object.entries(v).map(([stat, n]) => [stat, num(n, `shrineTotals.${stat}`)]));
+}
+
+/** Validates a loadout; ids, levels and stat names are checked against the game when it is applied. */
 export function parseLoadout(c: Record<string, unknown>): LoadoutSpec {
   const hp = c.hp === undefined || c.hp === "full" ? c.hp : num(c.hp, "hp");
   return {
@@ -183,6 +190,7 @@ export function parseLoadout(c: Record<string, unknown>): LoadoutSpec {
     items: leveled(c.items, "items", "count").map(({ id, level }) => ({ id, count: level })),
     ...(c.gold === undefined ? {} : { gold: num(c.gold, "gold") }),
     ...(hp === undefined ? {} : { hp }),
+    ...(c.shrineTotals === undefined ? {} : { shrineTotals: shrineTotals(c.shrineTotals) }),
   };
 }
 
