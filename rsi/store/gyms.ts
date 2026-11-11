@@ -5,7 +5,7 @@
 
 import type { CheckpointMeta, LoadoutSpec } from "../../protocol/commands";
 import type { Templates } from "../../bot/templates";
-import { clock } from "../../format";
+import { clockPadded } from "../../format";
 import { GYMS_JSONL } from "./paths";
 import { withLock } from "./lock";
 
@@ -57,5 +57,5 @@ export async function updateGyms<T>(change: (gyms: Gym[]) => T | Promise<T>): Pr
 export function gymLine(g: Gym): string {
   const build = g.checkpoint === undefined ? "" : `; lv ${g.checkpoint.level}, hp ${g.checkpoint.hp}, ${[...g.checkpoint.weapons, ...g.checkpoint.passives, ...g.checkpoint.items].join(", ")}`;
   const used = g.used === undefined || g.used.length === 0 ? "never used" : `used in ${g.used.length} iterations, last ${g.used.at(-1)?.iteration}`;
-  return `- ${g.name} (${g.status}${g.error === undefined ? "" : `: ${g.error}`}): Nightmare ${g.difficulty} at ${clock(g.at)}${g.weapon === "" ? "" : `, started with ${g.weapon}`}${g.loadout === undefined ? "" : ", build swapped in at the start"}${build}. ${g.purpose} (by ${g.coach}, ${g.source}; ${used})`;
+  return `- ${g.name} (${g.status}${g.error === undefined ? "" : `: ${g.error}`}): Nightmare ${g.difficulty} at ${clockPadded(g.at)}${g.weapon === "" ? "" : `, started with ${g.weapon}`}${g.loadout === undefined ? "" : ", build swapped in at the start"}${build}. ${g.purpose} (by ${g.coach}, ${g.source}; ${used})`;
 }

@@ -1,8 +1,9 @@
 import path from "node:path";
-import { book, clock, groundSources, onScreen, pct, said, spotLine } from "../words";
+import { book, groundSources, onScreen, pct, said, spotLine } from "../words";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { option } from "../flags";
 import type { World } from "../world";
+import { clock } from "../../format";
 export const csvField = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 
 // One CSV row per model call and per goal that starts or ends, with the player's state at that

@@ -1,16 +1,14 @@
-// The coach is a reasoning model reached through a coding harness's CLI, run once to plan a run and
-// once to review it. Each harness takes the prompt its own way and streams its own JSON events;
-// this module turns them into reasoning and reply text. The coach only answers: tools are off where
-// the harness allows it, and every harness runs in an empty temporary folder.
 import os from "node:os";
-import { mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
-
 /** What one event line adds to the coach's reasoning or reply, or the error it reports. */
-type Delta = { thought?: string; text?: string; error?: string };
+import { mkdtempSync, rmSync } from "node:fs";
+
+export type Delta = { thought?: string; text?: string; error?: string };
+
 // Claude Code and Cursor end with a result event, which carries the error when the call failed.
-const resultError = (e: Record<string, unknown>): Delta => (e.type === "result" && e.is_error === true ? { error: str(e.result) ?? JSON.stringify(e).slice(0, 500) } : {});
-type Harness = {
+export const resultError = (e: Record<string, unknown>): Delta => (e.type === "result" && e.is_error === true ? { error: str(e.result) ?? JSON.stringify(e).slice(0, 500) } : {});
+
+export type Harness = {
   /** The model when none is named; undefined leaves it to the harness's own setting. */
   model?: string;
   /** The command line; the prompt goes on stdin unless `argv` puts it in the command. `effort` is a reasoning effort only Claude Code takes. */
@@ -19,8 +17,9 @@ type Harness = {
   read: (event: Record<string, unknown>) => Delta;
 };
 
-const str = (v: unknown) => (typeof v === "string" ? v : undefined);
-const content = (e: Record<string, unknown>) => ((e.message as { content?: unknown } | undefined)?.content ?? []) as { type?: string; text?: unknown; thinking?: unknown }[];
+export const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+
+export const content = (e: Record<string, unknown>) => ((e.message as { content?: unknown } | undefined)?.content ?? []) as { type?: string; text?: unknown; thinking?: unknown }[];
 
 export const HARNESSES = {
   grok: {
@@ -75,6 +74,7 @@ export const HARNESSES = {
 } satisfies Record<string, Harness>;
 
 export type HarnessName = keyof typeof HARNESSES;
+
 export const isHarness = (name: string): name is HarnessName => name in HARNESSES;
 
 /** Throws at startup when the harness is unknown or its CLI is not installed. */
@@ -88,11 +88,12 @@ export function checkHarness(name: string): HarnessName {
 export const defaultModel = (name: HarnessName): string | undefined => (HARNESSES[name] as Harness).model;
 
 export type Stream = { reasoning: string; text: string };
+
 /** What came back besides the reply: errors the harness reported, and the tail of what it printed that was not an event. */
 export type Said = Stream & { timedOut: boolean; error: string; stderr: string };
 
 // A bot stopped mid-review exits at once; the coach it was waiting on must not keep running alone.
-const running = new Set<ReturnType<typeof Bun.spawn>>();
+export const running = new Set<ReturnType<typeof Bun.spawn>>();
 process.on("exit", () => {
   for (const proc of running) proc.kill();
 });
@@ -144,21 +145,3 @@ export async function runCoach(name: HarnessName, model: string | undefined, pro
     rmSync(cwd, { recursive: true, force: true });
   }
 }
-
-/**
- * The JSON object in a coach's reply: a fenced json block if there is one, else the first span
- * from a "{" to the last "}" that parses. A coach sometimes writes prose or a fence around it.
- */
-export function jsonObject(text: string): Record<string, unknown> | undefined {
-  const fenced = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)\n```/g)].map((m) => m[1] ?? "");
-  const end = text.lastIndexOf("}");
-  const spans = [...fenced, ...[...text.matchAll(/\{/g)].map((m) => text.slice(m.index, end + 1))];
-  for (const span of spans) {
-    try {
-      const v = JSON.parse(span) as unknown;
-      if (typeof v === "object" && v !== null && !Array.isArray(v)) return v as Record<string, unknown>;
-    } catch {}
-  }
-  return undefined;
-}
-

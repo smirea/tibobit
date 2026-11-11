@@ -3,6 +3,7 @@ import { bridgeOrigin, BRIDGE_ORIGIN as DEFAULT_ORIGIN, validPort } from "../pro
 import { parseCommand } from "../protocol/commands";
 import type { State } from "../protocol/view";
 import { AgentServer, Unreachable } from "../agent-server/client";
+import { clock } from "../format";
 
 const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
 
@@ -85,10 +86,6 @@ function flag(args: string[], name: string): string | undefined {
   return value;
 }
 
-function clock(seconds: number) {
-  return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
-}
-
 // A long list of numbers, such as a weapon's fixed-size buffer, shows its start in text; json has it all.
 const LIST_SHOWN = 32;
 
@@ -129,24 +126,23 @@ function pick(s: State, path: string | undefined): unknown {
 /** The raw groups `--raw=a,b` or `--raw a,b` names. */
 const rawOf = (words: string[]) => words.find((w) => w.startsWith("--raw="))?.slice("--raw=".length) ?? flag([...words], "--raw") ?? "";
 
-const mmss = (seconds: number) => clock(seconds);
 const said = (name: string, description?: string) => (description === undefined || description === "" ? name : `${name}: ${description.replace(/\s+/g, " ").trim()}`);
 
 /** The live view as a person or a model reads it: times as m:ss, health as hp/max, a line per thing. */
 function display(s: State): Record<string, unknown> {
   const { connected: _c, ageMs: _a, capturedAt: _t, headless: _h, gameBuild: _g, commands, pace: _p, incognito: _i, time, world, tibo, directions, attacks, choice, ...rest } = s;
   const out: Record<string, unknown> = {};
-  if (time !== undefined) out.time = mmss(time);
+  if (time !== undefined) out.time = clock(time);
   Object.assign(out, rest);
   if (world !== undefined)
     out.world = {
       ...world,
-      winAt: mmss(world.winAt),
+      winAt: clock(world.winAt),
       biome: world.biome.name,
       ...(world.landmark === undefined ? {} : { landmark: `${world.landmark.name}${world.landmark.event === undefined ? "" : `, event ${world.landmark.event}`}` }),
-      upcoming: world.upcoming.map((u) => `${mmss(u.at)} ${u.text}`),
+      upcoming: world.upcoming.map((u) => `${clock(u.at)} ${u.text}`),
       boosts: world.boosts.map((b) => `${b.name} ${b.endsIn}s left`),
-      events: world.events.map((e) => `${mmss(e.at)} ${e.text}`),
+      events: world.events.map((e) => `${clock(e.at)} ${e.text}`),
     };
   if (tibo !== undefined)
     out.tibo = {

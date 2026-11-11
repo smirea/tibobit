@@ -1,4 +1,4 @@
-import { RUNS as RUNS_DIR } from "../paths";
+import { RUNS } from "../paths";
 import { DIFFICULTIES, type Difficulty, type GameMode, isDifficulty, isGameMode } from "../protocol/commands";
 import { checkTemplates, DEFAULT_TEMPLATES, type Templates } from "./templates";
 import { readPlaybook } from "./playbook";
@@ -52,7 +52,7 @@ export const STEP = Number(option("step", "0.35"));
 
 export const PLAN_EVERY = Number(option("plan-every", "5"));
 
-export const RUNS = Number(option("runs", "1"));
+export const RUN_COUNT = Number(option("runs", "1"));
 
 // "highest" takes the hardest the game allows; `difficulty` then holds what the game picked, such as nightmare-3.
 export const DIFFICULTY: Difficulty = (() => {
@@ -88,4 +88,4 @@ export const TAKEOVER = TRIAL !== undefined || args.includes("--takeover");
 
 export const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
 
-export const LOG = option("log", path.join(RUNS_DIR, `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));
+export const LOG = option("log", path.join(RUNS, `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));

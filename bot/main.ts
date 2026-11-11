@@ -11,10 +11,10 @@ import { ladderCleared } from "../protocol/view";
 import { type EndJson, see, type World } from "./world";
 import type { RunPlan, RunSetup } from "./notes";
 import { talliesOf, totalsBetween } from "./tallies";
-import { clock, onScreen, readBook } from "./words";
+import { onScreen, readBook } from "./words";
 import { command, followPanel, pace, RAW, say, server, type Snap, timed, timings } from "./server";
 import { BOT_CODE, difficulty, MODE, MODE_NAME, setDifficulty, WIN_SECONDS } from "./run-context";
-import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RUNS, STEP, TAKEOVER, TRIAL, TRIAL_RESULT, WEAPON } from "./flags";
+import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RUN_COUNT, STEP, TAKEOVER, TRIAL, TRIAL_RESULT, WEAPON } from "./flags";
 import { RunNotes } from "./run-notes";
 import { setTemplates, templates } from "./playing";
 import { choose, loadoutLines, Planner } from "./planner";
@@ -23,6 +23,7 @@ import { pursue } from "./pursue";
 import { latency, snapshotAges } from "./decider";
 import { LOG_DIR, RunLog } from "./run-log/writer";
 import { pursuit, resetGoals } from "./goals";
+import { clock } from "../format";
 
 // The first run plays this Open World seed in a freshly reloaded tab, or the bot stops rather than play another.
 let SEED = option("seed", "").toUpperCase();
@@ -238,7 +239,7 @@ async function main() {
         console.log(`notes: ${ended.saved ? ended.file : "not saved"}, log: ${runLog.file}`);
         planner = undefined;
         runLog = undefined;
-        if (runs >= RUNS) {
+        if (runs >= RUN_COUNT) {
           // A run the panel played hands the wheel back on its end screen instead of starting another.
           if (awaitingLink !== undefined && !TAKEOVER) {
             await start();

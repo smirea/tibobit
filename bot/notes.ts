@@ -2,7 +2,7 @@ import path from "node:path";
 import type { Checked } from "../protocol/parse";
 import { checkTemplates, DEFAULT_TEMPLATES, SLOTS, slotText, type Templates, type TemplateSlot } from "./templates";
 import { GAMEPLAY } from "../paths";
-import { clock } from "../format";
+import { clockPadded } from "../format";
 export const NOTES_DIR = path.join(GAMEPLAY, "notes");
 
 // One file per run, written when the run ends, named for when it started and how long Tibo lived.
@@ -31,7 +31,7 @@ export function runId(started: Date): string {
 }
 
 export function notesName(setup: RunSetup, lived: number): string {
-  return `${runId(setup.started)}_lived-${clock(lived, "-")}_${setup.difficulty}_${setup.mode}_${setup.surface}.md`;
+  return `${runId(setup.started)}_lived-${clockPadded(lived, "-")}_${setup.difficulty}_${setup.mode}_${setup.surface}.md`;
 }
 
 export const REVIEW_START = "<!-- review: written by the coach after the run -->";
@@ -42,7 +42,7 @@ export function renderNotes(n: NotesContent): string {
   const { setup, plan, end } = n;
   const slots = Object.keys(SLOTS) as TemplateSlot[];
   return [
-    `# ${runId(setup.started).replace("_", " ")}: lived ${clock(end.lived)} on ${setup.difficulty} ${setup.mode} (${setup.surface})`,
+    `# ${runId(setup.started).replace("_", " ")}: lived ${clockPadded(end.lived)} on ${setup.difficulty} ${setup.mode} (${setup.surface})`,
     "",
     "| | |",
     "| --- | --- |",

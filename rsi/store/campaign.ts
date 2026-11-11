@@ -1,6 +1,7 @@
 import path from "node:path";
 /** A finished run as the ladder sees it, read from its notes file name and header. */
 import { NOTES_DIR, notesField, notesFiles } from "../../bot/notes";
+import { clock } from "../../format";
 
 export type RunRecord = { name: string; coach: string; difficulty: string; level: number; mode: string; lived: number; won: boolean; text: string };
 
@@ -16,14 +17,13 @@ export async function runRecords(): Promise<RunRecord[]> {
   return out;
 }
 
-export const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /** Every full run, newest first, with the coach that planned it; runs before the coach was one (sonnet-medium, sonnet-high) count too. */
 export async function campaign(): Promise<string> {
   const records = (await runRecords()).filter((r) => r.mode === "world" && r.level > 0);
   if (records.length === 0) return "No Open World Nightmare run yet.";
   const lines = ["| Run | Level | Lived | Won | Coach | Lockstep |", "| --- | --- | --- | --- | --- | --- |"];
-  for (const r of records) lines.push(`| ${r.name.slice(0, 16).replace("_", " ")} | Nightmare ${r.level} | ${mmss(r.lived)} | ${r.won ? "yes" : "no"} | ${r.coach} | ${r.name < LIVE_SINCE ? "yes (banned since)" : "no"} |`);
+  for (const r of records) lines.push(`| ${r.name.slice(0, 16).replace("_", " ")} | Nightmare ${r.level} | ${clock(r.lived)} | ${r.won ? "yes" : "no"} | ${r.coach} | ${r.name < LIVE_SINCE ? "yes (banned since)" : "no"} |`);
   return lines.join("\n");
 }
 

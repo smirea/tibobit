@@ -7,7 +7,7 @@ import { closeSync, mkdirSync, openSync } from "node:fs";
 import { ENTRY, ROOT } from "../../paths";
 import type { CheckpointMeta, Command, CommandStatus, LoadoutSpec } from "../../protocol/commands";
 import type { State } from "../../protocol/view";
-import { clock } from "../../format";
+import { clockPadded } from "../../format";
 import type { Gym } from "../store/gyms";
 import { runStats } from "../../bot/run-log/stats";
 import type { Templates } from "../../bot/templates";
@@ -341,7 +341,7 @@ export class Slot {
             break;
           }
           deaths.push(result.end);
-          if (deaths.length >= GYM_STAGE_TRIES) return { ...gym, seed, status: "failed", error: `Tibo died ${deaths.length} times between ${clock(time)} and ${clock(time + seconds)}, at ${deaths.map((d) => clock(d)).join(", ")}, on the way to ${clock(gym.at)}`, templates };
+          if (deaths.length >= GYM_STAGE_TRIES) return { ...gym, seed, status: "failed", error: `Tibo died ${deaths.length} times between ${clockPadded(time)} and ${clockPadded(time + seconds)}, at ${deaths.map((d) => clockPadded(d)).join(", ")}, on the way to ${clockPadded(gym.at)}`, templates };
           await this.anyRun();
           await this.command({ type: "checkpoint", op: "drop", name: stage });
           await this.command({ type: "checkpoint", op: "load", name: stage });

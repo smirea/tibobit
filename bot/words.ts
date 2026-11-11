@@ -2,7 +2,6 @@ import type { Chest, Spot, World } from "./world";
 import { server } from "./server";
 import { type Book, bookFrom, line } from "../game/book";
 
-export const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
 export const pct = (part: number, whole: number) => Math.round((100 * part) / Math.max(1, whole));
 

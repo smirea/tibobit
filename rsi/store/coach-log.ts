@@ -18,3 +18,12 @@ export function stateFromLog(log: string): CoachState {
 }
 
 export const readCoachState = async () => stateFromLog(await Bun.file(COACH_LOG).text().catch(() => ""));
+
+export const stampOf = (s: CoachState) => `L${s.loop}.I${s.iteration}`;
+
+export const tagOf = (s: CoachState) => `L${s.loop}.I${s.iteration}`;
+
+/** One entry per iteration; the last one also tells a restarted loop where it stands (see stateFromLog). */
+export async function appendLog(state: CoachState, title: string, body: string) {
+  await Bun.write(COACH_LOG, `${await Bun.file(COACH_LOG).text().catch(() => "")}\n## ${tagOf(state)}: ${title} (${new Date().toISOString().slice(0, 16).replace("T", " ")})\n\n${body.trim()}\n`);
+}

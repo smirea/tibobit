@@ -1,4 +1,4 @@
-import { book, clock, onChest, plural, priceWords, readBook, said, spotSaid } from "./words";
+import { book, onChest, plural, priceWords, readBook, said, spotSaid } from "./words";
 import { knobs, planEvery, templates } from "./playing";
 import { blocks, type Card, cards } from "./blocks";
 import { WIN_SECONDS } from "./run-context";
@@ -13,6 +13,7 @@ import type { CardOption, Inspect } from "../protocol/pilot";
 import { PLAN_RANGE } from "./limits";
 import type { EndJson, World } from "./world";
 import { RunLog } from "./run-log/writer";
+import { clock } from "../format";
 
 export type GoalOption = { goal: Goal; text: string };
 

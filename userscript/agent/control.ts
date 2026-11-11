@@ -5,7 +5,7 @@ import { STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
 import { button, inRun, modeScreen, press, until, wait } from "../link/screen";
 import { type CheckpointFile, Checkpoints } from "./checkpoint";
 import { pickDifficulty, pickWeapon } from "./menus";
-import { anchored, type Place, place, toward } from "./steering";
+import { anchored, place, type Place, toward } from "./steering";
 import { applyLoadout } from "./loadout";
 import { clearSeed, requestSeed } from "./seed";
 import { Forecaster } from "./forecast";
