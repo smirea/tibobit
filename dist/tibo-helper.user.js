@@ -2110,7 +2110,7 @@
       if (this.game === undefined || this.contentFn === undefined)
         return;
       try {
-        const content = this.contentFn(this.game.state.bigUpdate);
+        const content = this.contentFn();
         assertContent(content);
         return content;
       } catch (e) {
@@ -2204,7 +2204,7 @@
       this.copyState = copyState;
       this.simulator = simulator;
       const source = await (await fetch(url)).text();
-      const contentFn = await importBinding(source, url, localAt(source, /([\w$]+)\(e\.bigUpdate\)\.baseWeapons/, "content registry call"));
+      const contentFn = await importBinding(source, url, localAt(source, /([\w$]+)\(\)\.baseWeapons/, "content registry call"));
       if (typeof contentFn.value !== "function")
         throw new Error("the content registry is not a function");
       const table = await importBinding(source, url, localAt(source, /([\w$]+)\.enemyAt\(/, "content table"));
