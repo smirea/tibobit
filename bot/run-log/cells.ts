@@ -43,6 +43,7 @@ export const LOG_COLUMNS = [
   "stats",
   "counts",
   "target",
+  "walked",
 ] as const;
 type LogColumn = (typeof LOG_COLUMNS)[number];
 /** A row as it is read back: every column as text, "" when the row left it out. */

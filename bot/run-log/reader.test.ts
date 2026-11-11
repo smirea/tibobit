@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
-import { eliteCell, hurtLeaveCell, listCell, LOG_COLUMNS, targetCell } from "./cells";
+import { csvField } from "../../csv";
+import { bossCell, dashCell, eliteCell, hurtLeaveCell, listCell, LOG_COLUMNS, targetCell } from "./cells";
 import { buildOverTime, economy, passiveLevels, runStats } from "./reader";
 
-const log = (rows: Record<string, string>[]) => [LOG_COLUMNS.join(","), ...rows.map((r) => LOG_COLUMNS.map((c) => r[c] ?? "").join(","))].join("\n");
+const log = (rows: Record<string, string>[]) => [LOG_COLUMNS.join(","), ...rows.map((r) => LOG_COLUMNS.map((c) => csvField(r[c] ?? "")).join(","))].join("\n");
 const row = (seconds: number, time: string, level: number, passives: string, armor: number) => ({ seconds: String(seconds), time, level: String(level), weapons: "Seeker Sprouts 2/8", passives, stats: `maxHp 120; armor ${armor}; damageMult 1; recovery 0` });
 
 test("a game's build is read at each minute mark it played through and at its end", () => {
@@ -61,4 +62,19 @@ test("a goal for a summoning spot says what followed its use, and other spots ar
     move(120, "2:00", "", counts(2, 2)),
   ]);
   expect(runStats(csv)).toContain("(the game's kinds eliteNest, bossLair, dinnerBell, botDock): 0:27 Beetle Nest (eliteNest) picked 180 away at 110/120 health, used at 0:33; elites first seen in the 20 s after: 0:35 Potato Beetle 60 left; in the 60 s after: elites killed at 0:50, bosses killed at none, chests first listed at 0:50, chests opened at 0:52.");
+});
+
+test("steps and dash asks are counted by the distance to the nearest boss", () => {
+  const boss = (dist: number) => bossCell.encode({ name: "The Amusing", type: "amusing", dist, dir: "left", hp: 4000, maxHp: 4000 });
+  const move = (seconds: number, bosses: string, detail: string, walked: number) => ({ seconds: String(seconds), time: "2:00", event: "move", bosses, detail, walked: String(walked) });
+  const csv = log([
+    move(100, "", "dash not asked: nothing close", 12),
+    move(121, boss(250), dashCell.encode(0.55, true), 3),
+    move(122, listCell.encode([boss(500), boss(240)]), dashCell.encode(0.2, false), 0),
+    move(123, boss(90), dashCell.encode(0.4, false), 0),
+    { seconds: "124", time: "2:04", event: "plan", bosses: boss(90), walked: "2" },
+  ]);
+  const stats = runStats(csv);
+  expect(stats).toContain("(asked of the action model / walked by the page without it): under 100: 1/2; 100-200: 0/0; 200-300: 2/3; 300-400: 0/0; 400-600: 0/0; none within 600: 1/12.");
+  expect(stats).toContain("(asked / dashed / median score): under 100: 1/0/40%; 100-200: 0/0; 200-300: 2/1/55%; 300-400: 0/0; 400-600: 0/0; none within 600: 0/0.");
 });

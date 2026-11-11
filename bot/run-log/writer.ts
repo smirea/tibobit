@@ -21,6 +21,8 @@ export class RunLog {
   /** Health gained between rows over the run: the game counts healing only in total, not by source. */
   healed = 0;
   private held: Map<string, string> | undefined;
+  /** Steps the page walked Tibo toward its goal without a model since the last row; they leave no row of their own. */
+  private walked = 0;
   constructor(readonly file: string) {
     mkdirSync(path.dirname(file), { recursive: true });
     // Never over another run's log: two runs with one id would truncate each other's.
@@ -66,10 +68,16 @@ export class RunLog {
             passives: listCell.encode(r.passives.map(heldCell.encode)),
             items: listCell.encode(r.items.map((i) => `${i.name} x${i.count}`)),
             stats: numbersCell.encode(t.stats),
+            walked: this.walked,
             counts: numbersCell.encode(Object.fromEntries(RUN_COUNTS.map((count) => [count, Number(r.run[count] ?? 0)]))),
           };
+    if (r !== undefined) this.walked = 0;
     const values = { ...state, ...row, wall: new Date().toISOString().slice(11, 19) } as Record<string, string | number | undefined>;
     appendFileSync(this.file, `${LOG_COLUMNS.map((c) => csvField(String(values[c] ?? ""))).join(",")}\n`);
+  }
+
+  pageWalked() {
+    this.walked++;
   }
 
   /** Health lost since the last row. */

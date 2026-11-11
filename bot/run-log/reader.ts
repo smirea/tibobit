@@ -37,6 +37,36 @@ function hurtLeaves(rows: LoggedRow[]): string[] {
   });
 }
 
+const BOSS_BANDS = [100, 200, 300, 400, 600];
+
+/**
+ * How Tibo moved and dashed by its distance to the nearest boss, so runs with different boss-range
+ * knobs can be compared at the same distances: the steps the action model was asked about against
+ * those the page walked without it, and the dash asks with how many dashed and their median score.
+ */
+function nearBosses(rows: LoggedRow[]): { steps: string; dashes: string } {
+  const labels = [...BOSS_BANDS.map((edge, i) => (i === 0 ? `under ${edge}` : `${BOSS_BANDS[i - 1]}-${edge}`)), `none within ${BOSS_BANDS.at(-1)}`];
+  const bands = labels.map(() => ({ asked: 0, walked: 0, dashAsks: [] as number[], dashed: 0 }));
+  for (const r of rows.filter((x) => x.seconds !== "")) {
+    const nearest = Math.min(...listCell.decode(r.bosses).flatMap((cell) => bossCell.decode(cell)?.dist ?? []));
+    const at = BOSS_BANDS.findIndex((edge) => nearest < edge);
+    const band = bands[at < 0 ? bands.length - 1 : at];
+    if (band === undefined) continue;
+    band.walked += Number(r.walked) || 0;
+    if (r.event !== "move") continue;
+    band.asked++;
+    const dash = dashCell.decode(r.detail);
+    if (dash === undefined) continue;
+    band.dashAsks.push(dash.percent);
+    if (dash.dashed) band.dashed++;
+  }
+  const median = (xs: number[]) => [...xs].sort((a, z) => a - z)[Math.floor(xs.length / 2)];
+  return {
+    steps: labels.map((label, i) => `${label}: ${bands[i]?.asked}/${bands[i]?.walked}`).join("; "),
+    dashes: labels.map((label, i) => `${label}: ${bands[i]?.dashAsks.length}/${bands[i]?.dashed}${bands[i]?.dashAsks.length === 0 ? "" : `/${median(bands[i]?.dashAsks ?? [])}%`}`).join("; "),
+  };
+}
+
 const NEW_ELITE_SECONDS = 20;
 const AFTER_SUMMON_SECONDS = 60;
 
@@ -147,6 +177,7 @@ export function runStats(csv: string): string {
   const firstChest = live.find((r) => (r.chests ?? "") !== "")?.time;
   const left = hurtLeaves(rows);
   const called = summons(rows);
+  const boss = nearBosses(rows);
   const opened = rises(live, "bossChests");
   const times = (count: RunCount) => rises(live, count).map((r) => r.time).join(", ") || "none";
   const atTwo = live.filter((r) => num(r.seconds) <= 120).at(-1) ?? lastRow;
@@ -194,6 +225,8 @@ export function runStats(csv: string): string {
     `- Goals by kind (done / gave up / dropped): ${[...goals].map(([k, g]) => `${k} ${g.done}/${g.failed}/${g.dropped}`).join("; ") || "none"}.`,
     `- Goals for spots that call something to Tibo (the game's kinds ${SUMMONING_SPOTS.join(", ")}): ${called.join(" | ") || "none"}.`,
     `- Of the goals given up, those left for the health they cost while they held Tibo in place (holdAbortHurt): ${left.length}${left.length === 0 ? "" : `: ${left.join(" | ")}`}.`,
+    `- Steps by distance to the nearest boss (asked of the action model / walked by the page without it): ${boss.steps}.`,
+    `- Dash asks by distance to the nearest boss (asked / dashed / median score): ${boss.dashes}.`,
     `- Dashes: ${dashes.length}${dashes.length === 0 ? "" : `: ${dashes.slice(0, 12).join("; ")}${dashes.length > 12 ? "; …" : ""}`}.`,
     `- Model calls: ${calls("plan").length} plans, ${calls("pick").length} picks, ${calls("move").length} moves (mean ${meanMs(calls("move"))}ms); the page walked through ${calls("walk").length} hits on its own. Calls the model never answered in time, where the bot went on without it: ${rows.filter((r) => (r.reason ?? "").includes(UNANSWERED)).length}.`,
     `- New cards, evolutions and jumps of 3 or more levels (chests give those): ${gained.length === 0 ? "nothing logged" : gained.join("; ")}.`,

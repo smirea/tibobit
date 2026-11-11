@@ -49,6 +49,7 @@ export async function pursue(s: State, r: World, log: RunLog, planner: Planner) 
         if (knobs().distrustSeconds > 0) setDistrust({ until: r.time + knobs().distrustSeconds, lost: Math.round(lost), at: r.time });
       }
       if (aim.heading !== undefined && aim.heading !== "stay" && dashWorthAsking(r)) await dashOnTheWay(r, p, aim.heading, log);
+      log.pageWalked();
       return walkOn(p, r, aim, status);
     }
     p.sent = undefined;
