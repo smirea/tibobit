@@ -1,44 +1,14 @@
 import type { Game, GameState } from "../game/types";
 import type { GameLink } from "../game/link";
-import type { CheckpointMeta, LoadoutSpec } from "../../protocol/commands";
+import type { CheckpointMeta } from "../../protocol/commands";
 import { TICKS_PER_SECOND } from "../../protocol/geometry";
-
-export const SEED_KEY = "tibobit.seed";
-
-declare const unsafeWindow: Window | undefined;
-
-/**
- * Open World rolls its seed from one crypto.getRandomValues(new Uint32Array(1)) call, as
- * `n.toString(36).toUpperCase()`. A `seed` command stores the seed it wants and reloads; this hands
- * that number to every such call of the new page, before the game's scripts run. The stored seed
- * stays until a run starts (see the start command), so a reload in between keeps it.
- */
-export function installSeedHook() {
-  let want: string | null = null;
-  try {
-    want = sessionStorage.getItem(SEED_KEY);
-  } catch {}
-  if (want === null) return;
-  const n = parseInt(want, 36);
-  const page = typeof unsafeWindow === "undefined" ? window : unsafeWindow;
-  const real = page.crypto.getRandomValues.bind(page.crypto);
-  // The sandbox's Uint32Array is not the page's, so instanceof would miss the page's calls.
-  page.crypto.getRandomValues = <T extends ArrayBufferView | null>(a: T): T => {
-    if (a !== null && a.constructor.name === "Uint32Array" && (a as unknown as Uint32Array).length === 1) {
-      (a as unknown as Uint32Array)[0] = n;
-      return a;
-    }
-    return real(a as unknown as Uint32Array) as unknown as T;
-  };
-}
+import { isRuleModule } from "../game/clone";
+import { pick, WEAPON_SLOTS } from "./loadout";
 
 type Encoded = number | string | boolean | null | { u: 1 } | { n: string } | { b: string } | { s: string } | { r: number };
 type Node = { T: string; d: string } | { A: Encoded[] } | { M: [Encoded, Encoded][] } | { S: Encoded[] } | { O: Record<string, Encoded>; P?: string; z?: 1 };
 export type StateData = { root: Encoded; nodes: Node[] };
 export type CheckpointFile = { meta: CheckpointMeta; state: StateData };
-
-const isRuleModule = (v: unknown) =>
-  typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).length > 0 && Object.values(v).every((x) => typeof x === "function");
 
 const b64 = (u8: Uint8Array) => {
   let s = "";
@@ -55,7 +25,6 @@ function classKey(proto: object): string {
 }
 
 const WARM_UP_TICKS = 3 * TICKS_PER_SECOND;
-const WEAPON_SLOTS = 6;
 const MAX_CACHED = 3;
 
 /**
@@ -64,7 +33,7 @@ const MAX_CACHED = 3;
  * their path from the content table, and class instances by their class, so the page that loads it
  * must run the same build.
  */
-export class Training {
+export class Checkpoints {
   private shared: { byObject: Map<object, string>; byPath: Map<string, object> } | undefined;
   private classes = new Map<string, object | "ambiguous">();
   private warmed = false;
@@ -299,67 +268,9 @@ export class Training {
     const { copyState } = this.sim();
     game.state = copyState(saved);
     this.link.events = [];
-    taint(game);
+    // A loaded state no longer replays from the run's inputs, so the game must not post it to boards or count it as a win.
+    game.taint();
     game.setPaused(true);
   }
 
-  /** Replaces the run's weapons, passives and items, level by level as level-ups would. */
-  loadout(game: Game, spec: LoadoutSpec) {
-    const content = this.link.content();
-    if (content === undefined) throw new Error("the game's content is not loaded yet");
-    const weaponDefs = new Map(content.allWeapons.map((w) => [w.id, w]));
-    const passiveDefs = new Map(content.passives.map((p) => [p.id, p]));
-    const itemIds = new Set(content.allItems.map((i) => i.id));
-    const problems: string[] = [];
-    const weaponMax = (id: string) => {
-      const w = weaponDefs.get(id);
-      return w === undefined ? 0 : w.tier === "base" ? Math.min(8, (w.levels?.length ?? 0) + 1) : 1;
-    };
-    for (const { id, level } of spec.weapons) {
-      if (!weaponDefs.has(id)) problems.push(`no weapon ${id}`);
-      else if (level < 1 || level > weaponMax(id)) problems.push(`weapon ${id} levels 1 to ${weaponMax(id)}, not ${level}`);
-    }
-    for (const { id, level } of spec.passives) {
-      const p = passiveDefs.get(id);
-      if (p === undefined) problems.push(`no passive ${id}`);
-      else if (level < 1 || level > p.maxLevel) problems.push(`passive ${id} levels 1 to ${p.maxLevel}, not ${level}`);
-    }
-    for (const { id } of spec.items) if (!itemIds.has(id)) problems.push(`no item ${id}`);
-    if (spec.weapons.length === 0) problems.push("a loadout needs a weapon");
-    if (spec.weapons.length > WEAPON_SLOTS) problems.push(`at most ${WEAPON_SLOTS} weapons`);
-    if (spec.passives.length > WEAPON_SLOTS) problems.push(`at most ${WEAPON_SLOTS} passives`);
-    if (problems.length > 0) throw new Error(problems.join("; "));
-    const s = game.state;
-    if (s.choiceQueue.length > 0) throw new Error("a choice is open; pick it first");
-    const L = s.loadout;
-    L.weapons.length = 0;
-    L.passives.length = 0;
-    L.items.clear();
-    // Items count on the next recompute, which every pick does.
-    for (const { id, count } of spec.items) L.items.set(id, (L.items.get(id) ?? 0) + count);
-    for (const { id, level } of spec.weapons) for (let n = 1; n <= level; n++) pick(game, { type: "weapon", id, level: n, isNew: n === 1 });
-    for (const { id, level } of spec.passives) for (let n = 1; n <= level; n++) pick(game, { type: "passive", id, level: n, isNew: n === 1 });
-    if (spec.gold !== undefined) L.gold = spec.gold;
-    const maxHp = L.stats.maxHp;
-    if (spec.hp !== undefined) s.player.hp[s.me] = spec.hp === "full" ? maxHp : Math.min(maxHp, spec.hp);
-    taint(game);
-    const got = L.weapons.map((w) => `${w.def.id} ${w.level}`).join(", ");
-    const want = spec.weapons.map((w) => `${w.id} ${w.level}`).join(", ");
-    if (got !== want) throw new Error(`the game kept weapons ${got || "none"}, not ${want}`);
-  }
-}
-
-type Offer = { type: "weapon" | "passive"; id: string; level: number; isNew: boolean };
-
-// The game applies an offer only through its own pick, which also recomputes the stats.
-function pick(game: Game, offer: Offer) {
-  const s = game.state;
-  s.choiceQueue.push({ kind: "levelUp", offers: [offer], level: s.loadout.level });
-  game.choose({ type: "pick", index: 0 });
-}
-
-// A run with a loaded state or a hand-made loadout no longer replays from its inputs, so the game
-// must not post it to boards or count it as a win.
-function taint(game: Game) {
-  game.taint();
 }

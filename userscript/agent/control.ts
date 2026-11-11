@@ -3,9 +3,11 @@ import type { GameLink } from "../game/link";
 import type { Command, CommandStatus, Envelope, GameMode } from "../../protocol/commands";
 import { STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
 import { button, inRun, modeScreen, press, until, wait } from "../game/screen";
-import { type CheckpointFile, SEED_KEY, Training } from "./training";
+import { type CheckpointFile, Checkpoints } from "./checkpoint";
 import { pickDifficulty, pickWeapon } from "./menus";
 import { anchored, type Place, toward } from "./steering";
+import { applyLoadout } from "./loadout";
+import { clearSeed, requestSeed } from "./seed";
 
 /** Where checkpoints live: the agent server's disk, reached through the bridge. */
 export type CheckpointStore = { put(file: CheckpointFile): Promise<void>; get(name: string): Promise<CheckpointFile> };
@@ -33,12 +35,12 @@ type Active = {
 export class Controller {
   readonly statuses: CommandStatus[] = [];
   private active: Active | undefined;
-  private training: Training;
+  private checkpoints: Checkpoints;
   store: CheckpointStore | undefined;
 
   constructor(private link: GameLink) {
     link.steer = (game) => this.steer(game);
-    this.training = new Training(link);
+    this.checkpoints = new Checkpoints(link);
   }
 
   handle({ id, command }: Envelope) {
@@ -136,7 +138,7 @@ export class Controller {
         this.summary(status).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
         return;
       case "seed":
-        sessionStorage.setItem(SEED_KEY, command.seed);
+        requestSeed(command.seed);
         this.finish(status, "done");
         // The title screen reports twice a second, so the server hears "done" before the reload.
         setTimeout(() => location.reload(), 1500);
@@ -146,7 +148,7 @@ export class Controller {
         return;
       case "loadout": {
         const game = this.game();
-        this.training.loadout(game, command);
+        applyLoadout(this.link, game, command);
         const L = game.state.loadout;
         this.finish(status, "done", [...L.weapons.map((w) => `${w.def.id} ${w.level}`), ...L.passives.map((p) => `${p.def.id} ${p.level}`), ...[...L.items.keys()]].join(", "));
         return;
@@ -156,21 +158,21 @@ export class Controller {
 
   private async checkpoint(status: CommandStatus, { op, name }: Extract<Command, { type: "checkpoint" }>) {
     if (op === "drop") {
-      this.training.drop(name);
+      this.checkpoints.drop(name);
       return this.finish(status, "done");
     }
     const store = this.store;
     if (store === undefined) throw new Error("no agent server to keep checkpoints");
     const game = this.game();
     if (op === "save") {
-      const file = this.training.save(game, name);
+      const file = this.checkpoints.save(game, name);
       await store.put(file);
       return this.finish(status, "done", `${file.meta.time}s, ${file.state.nodes.length} objects`);
     }
-    const file = this.training.has(name) ? undefined : await store.get(name);
+    const file = this.checkpoints.has(name) ? undefined : await store.get(name);
     // The movement under way aimed at things of the state being replaced.
     if (this.active !== undefined) this.finish(this.active.status, "replaced");
-    this.training.load(game, name, file);
+    this.checkpoints.load(game, name, file);
     this.finish(status, "done", `${Math.round(game.state.runClock * 10) / 10}s`);
   }
 
@@ -241,9 +243,7 @@ export class Controller {
     const started = await until(() => inRun(this.link) && this.link.game !== before, 20000);
     window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", bubbles: true }));
     if (!started) throw new Error("the run did not start within 20 seconds");
-    try {
-      sessionStorage.removeItem(SEED_KEY);
-    } catch {}
+    clearSeed();
     this.finish(status, "done", picked);
   }
 

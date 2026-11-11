@@ -4,7 +4,7 @@ import { Discovery } from "./combos/discovery";
 import { GameLink } from "./game/link";
 import { guardPanelKeys, startHelper } from "./panel/panel";
 import { startPickShow } from "./pilot/pick-overlay";
-import { installSeedHook } from "./agent/training";
+import { installSeedHook } from "./agent/seed";
 
 installSeedHook();
 

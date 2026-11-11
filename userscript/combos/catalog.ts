@@ -19,6 +19,10 @@ function titleCase(id: string): string {
   return id.replace(/(^|-)(\w)/g, (_, dash: string, c: string) => `${dash ? " " : ""}${c.toUpperCase()}`);
 }
 
+/** The game's own cap: a base weapon tops out at min(8, levels + 1), anything else at 1. */
+export const maxWeaponLevel = (w: { tier: string; levels?: unknown[] }) => (w.tier === "base" ? Math.min(8, (w.levels?.length ?? 0) + 1) : 1);
+
+
 export function buildCatalog(content: Content, messages: Messages): Catalog {
   const names: Record<Key, string> = {};
   const descriptions: Record<Key, string> = {};
@@ -30,8 +34,7 @@ export function buildCatalog(content: Content, messages: Messages): Catalog {
   };
   for (const w of content.allWeapons) {
     name("weapon", w.id);
-    // Mirrors the game's own cap: a base weapon tops out at min(8, levels + 1), anything else at 1.
-    if (w.tier === "base") maxLevel[`weapon:${w.id}`] = Math.min(8, (w.levels?.length ?? 0) + 1);
+    if (w.tier === "base") maxLevel[`weapon:${w.id}`] = maxWeaponLevel(w);
   }
   for (const p of content.passives) {
     name("passive", p.id);

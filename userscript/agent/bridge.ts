@@ -1,6 +1,6 @@
 import type { GameLink } from "../game/link";
 import type { Controller } from "./control";
-import type { CheckpointFile } from "./training";
+import type { CheckpointFile } from "./checkpoint";
 import { encyclopedia } from "./encyclopedia";
 import { Foresight } from "./forecast";
 import { BRIDGE_PORT, bridgeOrigin, validPort } from "../../protocol/address";
