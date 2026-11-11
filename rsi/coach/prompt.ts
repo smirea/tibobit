@@ -6,7 +6,7 @@ import { BOOK, IDS, ladder, LOGS, main, OFFERED } from "../session";
 import { coverage, readExperiments, renderExperiment } from "../store/experiments";
 import { heldCoverage, readHeld } from "../store/held";
 import { BELIEFS_CSV, COACH_LOG, INFRA_CSV } from "../store/paths";
-import { DECISION_MODEL, type GameResult, type Start } from "../training/slots";
+import type { GameResult, Start } from "../training/slots";
 import { EXPERIMENT_ITERATIONS, GOAL_LEVEL, MAX_GAME_SECONDS, MAX_GAMES, MAX_GYM_SECONDS, MAX_NEW_GYMS } from "../rules";
 import type { Playbook } from "../../bot/playbook";
 import { BLOCKS, KNOBS, QUESTION_LIMIT, SLOTS, STATE_LIMIT, type TemplateSlot } from "../../bot/templates";
@@ -14,6 +14,7 @@ import { type Gym, gymLine, readGyms } from "../store/gyms";
 import { GIVE_UP_SECONDS, PLAN_RANGE } from "../../bot/limits";
 import type { CoachState } from "../store/coach-log";
 import { clockPadded } from "../../format";
+import { JEV } from "../../bot/args";
 export function editableFiles(phase: "experiments" | "fullRun" | "reflect"): string {
   return [
     "# What you can change",
@@ -95,7 +96,7 @@ export async function facts(state: CoachState, playbook: Playbook): Promise<stri
     await campaign(),
     "# Facts",
     "## The game and the bot",
-    botFacts({ planner: DECISION_MODEL, action: DECISION_MODEL }),
+    botFacts({ planner: JEV.model, action: JEV.model }),
     "## Templates, state blocks and knobs",
     catalog(),
     "## Your playbook",

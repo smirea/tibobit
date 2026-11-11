@@ -5,6 +5,7 @@
 import { readdirSync } from "node:fs";
 import { USERSCRIPT } from "../paths";
 import { chromium } from "playwright-core";
+import { HEADLESS_PORT } from "../protocol/address";
 import os from "node:os";
 import path from "node:path";
 
@@ -15,7 +16,7 @@ const option = (name: string, fallback: string) => {
 };
 const width = Number(option("width", "960"));
 const height = Number(option("height", "600"));
-const port = Number(option("port", "7358"));
+const port = Number(option("port", String(HEADLESS_PORT)));
 const headed = args.includes("--headed");
 const bridge = option("bridge", "");
 // A profile folder keeps the game's own progress, such as unlocked Nightmare levels, across launches.

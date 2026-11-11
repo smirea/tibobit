@@ -10,6 +10,7 @@ import { type PageLine, parsePilotChange, type PilotChange, type PilotSettings }
 import type { Encyclopedia, Snapshot } from "../protocol/snapshot";
 import { listCheckpoints, readCheckpoint, saveCheckpoint } from "./checkpoints";
 import { Pilot } from "./pilot";
+import { type BotArgs, JEV, parseBotArgs } from "../bot/args";
 
 const KEEPALIVE_MS = 5_000;
 const option = (name: string, fallback: string) => {
@@ -20,7 +21,7 @@ const PORT = Number(option("port", String(BRIDGE_PORT)));
 const WAIT_LIMIT_MS = 120_000;
 // The bot "Grok take the wheel" runs: Jev moves and picks, grok plans. Override with
 // --pilot "<the bot's flags>", such as --pilot "--model laya@q8_0" for LM Studio.
-const PILOT_ARGS = option("pilot", "--decider openrouter --model typesafe/jev-1.14-20261014 --mode current --difficulty nightmare").split(/\s+/).filter(Boolean);
+const PILOT_ARGS: BotArgs = process.argv.includes("--pilot") ? parseBotArgs(option("pilot", "").split(/\s+/).filter(Boolean)) : { ...JEV, mode: "current", difficulty: "nightmare" };
 
 let latest: { snapshot: Snapshot; view?: LiveView } | undefined;
 /** The game's content for building the live view; rebuilt whenever the page sends its encyclopedia. */

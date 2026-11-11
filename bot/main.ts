@@ -23,6 +23,7 @@ import { latency, snapshotAges } from "./decider";
 import { LOG_DIR, RunLog } from "./run-log/writer";
 import { pursuit, resetGoals } from "./goals";
 import { clock } from "../format";
+import type { TrialResult } from "./trial";
 
 // The first run plays this Open World seed in a freshly reloaded tab, or the bot stops rather than play another.
 let SEED = option("seed", "").toUpperCase();
@@ -127,7 +128,7 @@ async function main() {
     const totals = totalsBetween(talliesOf(died ?? tallies(end)), talliesOf(tallies(start)));
     const endTime = died?.runClock ?? end.time;
     const run = (totals.run ?? {}) as Record<string, unknown>;
-    const result = {
+    const result: TrialResult = {
       survived: Math.round((endTime - start.time) * 10) / 10,
       died: died !== undefined,
       start: start.time,

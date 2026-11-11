@@ -2,13 +2,16 @@ import { RUNS } from "../paths";
 import { DIFFICULTIES, type Difficulty, type GameMode, isDifficulty, isGameMode } from "../protocol/commands";
 import { checkTemplates, DEFAULT_TEMPLATES, type Templates } from "./templates";
 import { readPlaybook } from "./playbook";
-import { BRIDGE_ORIGIN } from "../protocol/address";
+import { BRIDGE_ORIGIN, HEADLESS_PORT, headlessOrigin } from "../protocol/address";
+import { parseBotArgs } from "./args";
 import path from "node:path";
-export const args = process.argv.slice(2);
+const given = parseBotArgs(process.argv.slice(2));
 
-export const option = (name: string, fallback: string) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 ? (args[i + 1] ?? fallback) : fallback;
+/** Whether a flag was given. */
+export const has = (name: keyof typeof given) => given[name] !== undefined;
+export const option = (name: keyof typeof given, fallback: string) => {
+  const value = given[name];
+  return typeof value === "string" ? value : fallback;
 };
 
 export const MODEL = option("model", "h2o-lightning-4b@q8_0");
@@ -16,7 +19,7 @@ export const MODEL = option("model", "h2o-lightning-4b@q8_0");
 // A trial (a training game, rsi/training/slots.ts) plays the run in progress, usually a loaded checkpoint, for this many
 // seconds of game time with the templates in --templates, then writes what happened to --result and
 // exits: no plan, notes, review or commit.
-export const TRIAL = args.includes("--trial") ? Number(option("trial", "")) : undefined;
+export const TRIAL = has("trial") ? Number(option("trial", "")) : undefined;
 if (TRIAL !== undefined && !(TRIAL > 0)) throw new Error(`--trial takes the seconds of game time to play; got ${option("trial", "nothing")}`);
 
 export const TRIAL_RESULT = option("result", "");
@@ -69,23 +72,24 @@ export const MODE_ARG: GameMode | "current" = (() => {
 })();
 
 const CRUTCH = "lockstep is a crutch: it pauses the game while the models think, which no player can do. Every game plays live, as a person plays it. Do not enable it.";
-if (args.includes("--lockstep") || args.includes("--speed")) throw new Error(CRUTCH);
+if (has("lockstep") || has("speed")) throw new Error(CRUTCH);
 
 // Notes are for full runs only: --notes writes one to gameplay/notes when the run ends, under
 // --coach-label, with --intent as its plan. Templates come from --templates (a JSON file with any of
 // planner, action and knobs over the defaults), else the coach's playbook.
-export const NOTES = args.includes("--notes");
+export const NOTES = has("notes");
 
 export const COACH_LABEL = option("coach-label", "none");
 
 export const INTENT = option("intent", "");
 
 // Without --templates, the bot plays as the coach would: its playbook's templates and starting weapon.
-export const WEAPON = args.includes("--weapon") ? option("weapon", "") : (BASE.weapon ?? "");
+export const WEAPON = has("weapon") ? option("weapon", "") : (BASE.weapon ?? "");
 
 // For "Grok take the wheel" and trials: play the run already in progress instead of starting a fresh one.
-export const TAKEOVER = TRIAL !== undefined || args.includes("--takeover");
+export const TAKEOVER = TRIAL !== undefined || has("takeover");
 
-export const RELOAD = option("reload", "http://127.0.0.1:7358/reload");
+// The headless game's own API reloads the tab; "" keeps the bot from ever reloading, as in a person's browser.
+export const RELOAD = option("reload", `${headlessOrigin(HEADLESS_PORT)}/reload`);
 
 export const LOG = option("log", path.join(RUNS, `${MODEL.replace(/[^\w.@-]/g, "_")}-${Date.now()}.jsonl`));

@@ -11,35 +11,13 @@ import { clockPadded } from "../../format";
 import type { Gym } from "../store/gyms";
 import { runStats } from "../../bot/run-log/stats";
 import type { Templates } from "../../bot/templates";
-import type { Totals } from "../../bot/tallies";
 import { AgentServer } from "../../agent-server/client";
 import { bridgeOrigin } from "../../protocol/address";
+import type { TrialResult } from "../../bot/trial";
+import { botArgv, JEV } from "../../bot/args";
 
-export const DECISION_MODEL = "typesafe/jev-1.14-20261014";
 const GYM_STAGE_SECONDS = 300;
 const GYM_STAGE_TRIES = 3;
-
-/** What the bot writes with --trial. */
-type TrialResult = {
-  survived: number;
-  died: boolean;
-  start: number;
-  end: number;
-  hp: { start: number; end: number; max: number };
-  level: { start: number; end: number };
-  kills: number;
-  damageTaken: Record<string, number>;
-  /** Everything the game counted during the game: damage dealt and kills by weapon, gold, bosses, elites, chests and more. */
-  totals?: Totals;
-  weapons: string[];
-  passives: string[];
-  steps: number;
-  plannerCalls?: number;
-  actionCalls?: number;
-  avgDecisionMs: number;
-  snapshotAgeMs?: { p50: number; p90: number };
-  log?: string;
-};
 
 export type Start = { gym: string } | { fresh: { difficulty: number; weapon: string; seed?: string } };
 
@@ -248,7 +226,7 @@ export class Slot {
     await Bun.write(`${base}.templates.json`, JSON.stringify(templates));
     const bot = this.spawn(
       ENTRY.bot,
-      ["--server", this.agent.origin, "--reload", `${this.game}/reload`, "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--trial", String(seconds), "--templates", `${base}.templates.json`, "--result", `${base}.result.json`, "--log-dir", base],
+      botArgv({ server: this.agent.origin, reload: `${this.game}/reload`, ...JEV, mode: "openWorld", trial: seconds, templates: `${base}.templates.json`, result: `${base}.result.json`, "log-dir": base }),
       `${base}.bot.log`,
     );
     const code = await bot.exited;

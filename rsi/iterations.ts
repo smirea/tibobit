@@ -5,7 +5,7 @@ import { readHeld, recordHeld } from "./store/held";
 import type { Templates } from "../bot/templates";
 import { NOTES_DIR, notesField, notesFiles, notesTemplates, withReview } from "../bot/notes";
 import { IDS, ladder, LOGS, main, playGame, refreshGames, slots } from "./session";
-import { DECISION_MODEL, freshSeed, type GameResult, type GameSpec, onSlots } from "./training/slots";
+import { freshSeed, type GameResult, type GameSpec, onSlots } from "./training/slots";
 import { ask, NO_TOOLS } from "./coach/ask";
 import { applyEdits, checkEdits, EDITS_CONTRACT, type LoopEdits, readTables } from "./store/edits";
 import { type Playbook, readPlaybook, writePlaybook } from "../bot/playbook";
@@ -20,6 +20,7 @@ import { ENTRY, ROOT } from "../paths";
 import { buildClaimed, buildGym, claimPending } from "./gym-builds";
 import { stopping } from "./stop";
 import { logForPrompt } from "../bot/run-log/stats";
+import { botArgv, JEV } from "../bot/args";
 type ExperimentReply = { summary: string; edits: LoopEdits; games: GameSpec[]; gyms: GymRequest; playbook?: Playbook };
 
 export async function experimentIteration(state: CoachState) {
@@ -247,8 +248,8 @@ export async function fullRun(state: CoachState): Promise<string | undefined> {
     [
       process.execPath,
       ENTRY.bot,
-      ...["--server", main.agent.origin, "--reload", "", "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--difficulty", "highest", "--runs", "1", "--seed", EVAL_SEED],
-      ...["--notes", "--coach-label", COACH_LABEL, "--intent", intent, "--templates", templatesFile, ...(final.weapon === "" ? [] : ["--weapon", final.weapon]), "--log-dir", path.join(LOGS, "full-runs")],
+      ...botArgv({ server: main.agent.origin, reload: "", ...JEV, mode: "openWorld", difficulty: "highest", runs: 1, seed: EVAL_SEED }),
+      ...botArgv({ notes: true, "coach-label": COACH_LABEL, intent, templates: templatesFile, ...(final.weapon === "" ? {} : { weapon: final.weapon }), "log-dir": path.join(LOGS, "full-runs") }),
     ],
     { cwd: ROOT, stdin: "ignore", stdout: out, stderr: out },
   );

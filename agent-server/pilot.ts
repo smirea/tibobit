@@ -1,6 +1,7 @@
 import type { Subprocess } from "bun";
 import { ENTRY, ROOT } from "../paths";
 import { type ChatMessage, DEFAULT_SETTINGS, type PageLine, parseChatLine, type PilotChange, type PilotSettings, type PilotState, trimChat } from "../protocol/pilot";
+import { type BotArgs, botArgv } from "../bot/args";
 
 /**
  * "Grok take the wheel": the bot this server starts for its tab, and what the bot says in the
@@ -14,7 +15,7 @@ export class Pilot {
 
   constructor(
     private server: string,
-    private botArgs: string[],
+    private botArgs: BotArgs,
     private toPage: (line: PageLine) => void,
   ) {}
 
@@ -51,7 +52,7 @@ export class Pilot {
   private start() {
     if (this.bot !== undefined) return;
     // One run, in the tab as it is: the person's tab is never reloaded.
-    const args = ["--server", this.server, "--takeover", "--runs", "1", "--reload", "", ...this.botArgs];
+    const args = botArgv({ server: this.server, takeover: true, runs: 1, reload: "", ...this.botArgs });
     console.log(`pilot: bot ${args.join(" ")}`);
     const child = Bun.spawn([process.execPath, ENTRY.bot, ...args], { cwd: ROOT, stdin: "ignore", stdout: "inherit", stderr: "pipe" });
     this.bot = child;
