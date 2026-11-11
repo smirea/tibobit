@@ -47,7 +47,7 @@ export type Command =
    * `weapon` picks the starting weapon by id (Random when left out); a weapon the game does not
    * offer fails the command with the ids it does offer.
    */
-  | { type: "start"; mode?: GameMode; difficulty?: "easy" | "normal" | "hard" | "nightmare" | "highest"; weapon?: string }
+  | { type: "start"; mode?: GameMode; difficulty?: Difficulty; weapon?: string }
   /** After a run ends, step forward through the end screens to the run summary, which puts the run's share link in `lastRunLink`. */
   | { type: "summary" }
   /**
@@ -108,7 +108,14 @@ export type CommandStatus = { id: number; command: Command; state: CommandState;
 
 export type Envelope = { id: number; command: Command };
 
-export type GameMode = "openWorld" | "daily";
+export const GAME_MODES = ["openWorld", "daily"] as const;
+export type GameMode = (typeof GAME_MODES)[number];
+
+/** What a run can be started on; "highest" is the hardest the game allows, up through the unlocked Nightmare levels. */
+export const DIFFICULTIES = ["easy", "normal", "hard", "nightmare", "highest"] as const;
+export type Difficulty = (typeof DIFFICULTIES)[number];
+export const isDifficulty = (v: unknown): v is Difficulty => (DIFFICULTIES as readonly unknown[]).includes(v);
+export const isGameMode = (v: unknown): v is GameMode => (GAME_MODES as readonly unknown[]).includes(v);
 
 function heading(v: unknown, what: string): Heading {
   if (typeof v === "number" && Number.isFinite(v)) return v;
@@ -209,9 +216,9 @@ export function parseCommand(input: unknown): Command {
       return c.dir === undefined ? { type: "dash" } : { type: "dash", dir: heading(c.dir, "dir") };
     case "start": {
       const d = c.difficulty;
-      if (d !== undefined && d !== "easy" && d !== "normal" && d !== "hard" && d !== "nightmare" && d !== "highest") fail("difficulty must be easy, normal, hard, nightmare or highest");
+      if (d !== undefined && !isDifficulty(d)) fail(`difficulty must be one of ${DIFFICULTIES.join(", ")}`);
       const m = c.mode;
-      if (m !== undefined && m !== "openWorld" && m !== "daily") fail("mode must be openWorld or daily");
+      if (m !== undefined && !isGameMode(m)) fail(`mode must be one of ${GAME_MODES.join(", ")}`);
       const w = c.weapon;
       if (w !== undefined && (typeof w !== "string" || !/^[a-z0-9-]+$/.test(w))) fail("weapon must be a weapon id such as deep-fryer");
       return { type: "start", ...(m === undefined ? {} : { mode: m }), ...(d === undefined ? {} : { difficulty: d }), ...(w === undefined ? {} : { weapon: w }) };

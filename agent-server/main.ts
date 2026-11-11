@@ -4,7 +4,7 @@ import { type Book, readBook } from "./book";
 import { liveView } from "./live-view";
 import { BRIDGE_PORT } from "../protocol/address";
 import { type CommandStatus, parseCommand } from "../protocol/commands";
-import type { LiveView, State } from "../protocol/view";
+import type { LiveView, Settled, State } from "../protocol/view";
 import { parseRaw, rawParts } from "./raw";
 import { type PageLine, parsePilotChange, type PilotChange, type PilotSettings } from "../protocol/pilot";
 import type { Encyclopedia, Snapshot } from "../protocol/snapshot";
@@ -71,7 +71,7 @@ function send(command: unknown): { id: number } {
  * Waits for a command to finish. A level-up or chest choice freezes game time, so a running
  * move or goto also returns as soon as one opens (or the run ends) and the agent has to act.
  */
-async function settled(id: number, limitMs: number): Promise<(CommandStatus & { interruptedBy?: string }) | undefined> {
+async function settled(id: number, limitMs: number): Promise<Settled | undefined> {
   const end = Date.now() + limitMs;
   for (;;) {
     const status = statusOf(id);

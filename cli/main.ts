@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 import { bridgeOrigin, BRIDGE_ORIGIN as DEFAULT_ORIGIN, validPort } from "../protocol/address";
-import type { CheckpointMeta, CommandStatus } from "../protocol/commands";
+import { parseCommand } from "../protocol/commands";
 import type { State } from "../protocol/view";
+import { AgentServer, Unreachable } from "../agent-server/client";
 
 const USAGE = `usage: tibo [--port <port> | --server <url>] <command>
 
@@ -47,9 +48,8 @@ training ground:
 Commands wait until they finish (except move without seconds); add --no-wait to return at once.
 The agent server defaults to $TIBO_SERVER, then ${DEFAULT_ORIGIN}; --port picks another one on 127.0.0.1.`;
 
-type Snap = State;
 
-let server = DEFAULT_ORIGIN;
+let server = new AgentServer(DEFAULT_ORIGIN);
 
 function serverFrom(args: string[]): string {
   const wantsPort = args.includes("--port");
@@ -66,17 +66,15 @@ function serverFrom(args: string[]): string {
   return bridgeOrigin(Number(port));
 }
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  let res: Response;
+/** The agent server, with a hint on how to start it when nothing answers. */
+async function asked<T>(work: Promise<T>): Promise<T> {
   try {
-    res = await fetch(`${server}${path}`, init);
-  } catch {
-    const port = new URL(server).port;
-    throw new Error(`no agent server at ${server}; start it with ./scripts/agent-server.ts${port === String(new URL(DEFAULT_ORIGIN).port) ? "" : ` --port ${port}`}`);
+    return await work;
+  } catch (e) {
+    if (!(e instanceof Unreachable)) throw e;
+    const port = new URL(server.origin).port;
+    throw new Error(`no agent server at ${server.origin}; start it with ./agent-server/main.ts${port === String(new URL(DEFAULT_ORIGIN).port) ? "" : ` --port ${port}`}`);
   }
-  const body = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error(body.error ?? `${res.status}`);
-  return body;
 }
 
 function flag(args: string[], name: string): string | undefined {
@@ -118,7 +116,7 @@ function tree(v: unknown, indent = ""): string[] {
 }
 
 /** The part of the snapshot a dotted path names, such as "game.loadout.weapons" or "game.enemies". */
-function pick(s: Snap, path: string | undefined): unknown {
+function pick(s: State, path: string | undefined): unknown {
   if (path === undefined) return s;
   let v: unknown = s;
   for (const key of path.split(".")) {
@@ -128,17 +126,14 @@ function pick(s: Snap, path: string | undefined): unknown {
   return v;
 }
 
-/** /state, with the raw groups `--raw=a,b` or `--raw a,b` names. */
-function stateRoute(words: string[]): string {
-  const raw = words.find((w) => w.startsWith("--raw="))?.slice("--raw=".length) ?? flag([...words], "--raw");
-  return raw === undefined ? "/state" : `/state?raw=${encodeURIComponent(raw)}`;
-}
+/** The raw groups `--raw=a,b` or `--raw a,b` names. */
+const rawOf = (words: string[]) => words.find((w) => w.startsWith("--raw="))?.slice("--raw=".length) ?? flag([...words], "--raw") ?? "";
 
 const mmss = (seconds: number) => clock(seconds);
 const said = (name: string, description?: string) => (description === undefined || description === "" ? name : `${name}: ${description.replace(/\s+/g, " ").trim()}`);
 
 /** The live view as a person or a model reads it: times as m:ss, health as hp/max, a line per thing. */
-function display(s: Snap): Record<string, unknown> {
+function display(s: State): Record<string, unknown> {
   const { connected: _c, ageMs: _a, capturedAt: _t, headless: _h, gameBuild: _g, commands, pace: _p, incognito: _i, time, world, tibo, directions, attacks, choice, ...rest } = s;
   const out: Record<string, unknown> = {};
   if (time !== undefined) out.time = mmss(time);
@@ -222,7 +217,7 @@ function display(s: Snap): Record<string, unknown> {
   return out;
 }
 
-function render(s: Snap, path: string | undefined): string {
+function render(s: State, path: string | undefined): string {
   const lines = tree(path === undefined ? display(s) : pick(s, path));
   if (!s.connected) lines.unshift("the tibo.dog tab is not connected");
   return lines.join("\n");
@@ -295,7 +290,7 @@ function parseArgs(args: string[]): unknown {
 
 async function main(argv: string[]) {
   const args = [...argv];
-  server = serverFrom(args);
+  server = new AgentServer(serverFrom(args));
   const noWait = args.includes("--no-wait");
   const words = args.filter((a) => a !== "--no-wait");
   switch (words[0]) {
@@ -309,35 +304,31 @@ async function main(argv: string[]) {
       const format = inline?.slice("--format=".length) ?? (words.includes("--format") ? (flag(words, "--format") ?? "") : "text");
       if (format !== "text" && format !== "json") throw new Error(`--format must be text or json, got ${format}`);
       const path = words.slice(1).find((w) => !w.startsWith("--") && w !== flag([...words], "--raw"));
-      const s = await api<Snap>(stateRoute(words));
+      const s = await asked(server.state(rawOf(words)));
       console.log(format === "json" ? JSON.stringify(pick(s, path)) : render(s, path));
       return;
     }
     case "watch": {
       const path = words.slice(1).find((w) => !w.startsWith("--") && w !== flag([...words], "--raw"));
       for (;;) {
-        const s = await api<Snap>(stateRoute(words)).catch((e: Error) => e);
+        const s = await asked(server.state(rawOf(words))).catch((e: Error) => e);
         process.stdout.write(`\x1b[2J\x1b[H${s instanceof Error ? s.message : render(s, path)}\n`);
         await Bun.sleep(250);
       }
     }
     case "checkpoints":
-      for (const c of await api<CheckpointMeta[]>("/checkpoints"))
+      for (const c of await asked(server.checkpoints()))
         console.log(`${c.name}  ${clock(c.time)} lv ${c.level} hp ${c.hp}  ${c.difficulty} seed ${c.seed}  ${c.weapons.join(", ")}  (${c.savedAt}, ${c.build})`);
       return;
     case "encyclopedia": {
-      const book = await api<Record<string, unknown>>("/encyclopedia");
+      const book: Record<string, unknown> = await asked(server.encyclopedia());
       console.log(JSON.stringify(words[1] === undefined ? book : book[words[1]], null, 2));
       return;
     }
   }
-  const command = parseArgs(words) as { type: string };
+  const command = parseCommand(parseArgs(words));
   const waits = !noWait && !(command.type === "move" && !("seconds" in command));
-  const status = await api<CommandStatus | { id: number }>(`/command${waits ? "?wait=1&timeout=120" : ""}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(command),
-  });
+  const status = await asked(waits ? server.run(command) : server.send(command));
   console.log(JSON.stringify(status));
   if ("state" in status && status.state === "failed") process.exit(1);
 }

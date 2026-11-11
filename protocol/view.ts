@@ -1,5 +1,5 @@
 // What the agent server sends its clients.
-import type { ChoiceAction } from "./commands";
+import type { ChoiceAction, CommandStatus } from "./commands";
 import type { Direction } from "./geometry";
 import type { PilotPace } from "./pilot";
 import type { Snapshot } from "./snapshot";
@@ -126,3 +126,10 @@ export function ladderCleared(s: { storage?: Record<string, unknown> }): number 
   const cleared = (s.storage?.["tibo.ladder.v1"] as { cleared?: unknown } | undefined)?.cleared;
   return typeof cleared === "number" ? cleared : 0;
 }
+
+/**
+ * What a waited-for command comes back as. A level-up or chest choice freezes game time, so a move
+ * or goto under way when a choice opens or the run ends comes back early, still running, with what
+ * interrupted it.
+ */
+export type Settled = CommandStatus & { interruptedBy?: "choice" | "over" };

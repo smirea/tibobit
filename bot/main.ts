@@ -11,13 +11,13 @@ import { mkdir } from "node:fs/promises";
 import { ROOT, RUNS as RUNS_DIR } from "../paths";
 import { BRIDGE_ORIGIN as DEFAULT_ORIGIN } from "../protocol/address";
 import type { ActionTag, CardOption, ChatLine, GoalResult, Inspect, MoveOption, PilotPace } from "../protocol/pilot";
-import type { ChoiceAction, CommandStatus, GameMode } from "../protocol/commands";
+import { type ChoiceAction, type Command, type CommandStatus, DIFFICULTIES, type Difficulty, type GameMode, isDifficulty } from "../protocol/commands";
 import { type ChoiceOption, type DirectionView, ladderCleared, type State } from "../protocol/view";
 import { type Direction, DIRECTIONS } from "../protocol/geometry";
-import type { Encyclopedia } from "../protocol/snapshot";
 import { type Book, readBook as bookOf, line } from "../agent-server/book";
 import { type Chest, type Sector, see, type Spot, type World } from "./world";
 import { type BlockName, DEFAULT_TEMPLATES, type Knobs, render, type RunPlan, type RunSetup, type Templates } from "../rsi/gameplay";
+import { AgentServer } from "../agent-server/client";
 import * as loop from "../rsi/gameplay";
 
 const args = process.argv.slice(2);
@@ -57,8 +57,12 @@ const STEP = Number(option("step", "0.35"));
 const PLAN_EVERY = Number(option("plan-every", "5"));
 const RUNS = Number(option("runs", "1"));
 // "highest" takes the hardest the game allows; `difficulty` then holds what the game picked, such as nightmare-3.
-const DIFFICULTY = option("difficulty", "easy");
-let difficulty = DIFFICULTY;
+const DIFFICULTY: Difficulty = (() => {
+  const d = option("difficulty", "easy");
+  if (!isDifficulty(d)) throw new Error(`--difficulty must be one of ${DIFFICULTIES.join(", ")}, got ${d}`);
+  return d;
+})();
+let difficulty: string = DIFFICULTY;
 // "current" plays the mode the game is on (its open mode screen, or the run in play or just ended), else the Daily.
 const MODE_ARG = option("mode", "daily");
 if (MODE_ARG !== "daily" && MODE_ARG !== "openWorld" && MODE_ARG !== "current") throw new Error(`--mode must be daily, openWorld or current; got ${MODE_ARG}`);
@@ -106,22 +110,8 @@ type Question =
   | { type: "score"; instructions: string; criteria: string[] };
 type Answer = { choice?: string; probabilities?: Record<string, number>; confidence?: number; noul?: number; score?: number };
 
-async function api<T>(route: string, body?: unknown): Promise<T> {
-  const init = body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
-  let res: Response | undefined;
-  // Ride out a restarting agent server instead of losing the run.
-  for (let attempt = 0; res === undefined; attempt++) {
-    try {
-      res = await fetch(`${SERVER}${route}`, init);
-    } catch (e) {
-      if (attempt >= 30) throw e;
-      await Bun.sleep(2000);
-    }
-  }
-  const json = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error(`${route}: ${json.error ?? res.status}`);
-  return json;
-}
+// A restarting agent server is ridden out instead of losing the run.
+const server = new AgentServer(SERVER, 30);
 
 const timings = { state: 0, decide: 0, command: 0, steps: 0 };
 async function timed<T>(phase: "state" | "decide" | "command", work: Promise<T>): Promise<T> {
@@ -133,12 +123,12 @@ async function timed<T>(phase: "state" | "decide" | "command", work: Promise<T>)
   }
 }
 
-async function command(c: unknown, timeoutSeconds = 30) {
-  return timed("command", api<CommandStatus & { interruptedBy?: string }>(`/command?wait=1&timeout=${timeoutSeconds}`, c));
+async function command(c: Command, timeoutSeconds = 30) {
+  return timed("command", server.run(c, timeoutSeconds));
 }
 /** Sends a command without waiting for it to finish, such as a move held until the next one. */
-async function send(c: unknown) {
-  return timed("command", api<{ id: number }>("/command", c));
+async function send(c: Command) {
+  return timed("command", server.send(c));
 }
 
 // The bot plays live, as a person does: the game runs in real time and never pauses for the models,
@@ -212,8 +202,8 @@ async function decide(state: string, questions: Record<string, Question>, model 
 // ---- The run -------------------------------------------------------------------------------
 // The live view, plus what the bot keeps beyond it, under the game's keys: its run tallies (logs and
 // results), the browser's storage (the Nightmare ladder), and the clock and level for a run that ended.
-const STATE = "/state?raw=run,counters,storage,runClock,over,loadout.level,loadout.shrineTotals";
-const MODE: GameMode = MODE_ARG === "current" ? ((await api<Snap>(STATE)).mode ?? "daily") : MODE_ARG;
+const RAW = "run,counters,storage,runClock,over,loadout.level,loadout.shrineTotals";
+const MODE: GameMode = MODE_ARG === "current" ? ((await server.state(RAW)).mode ?? "daily") : MODE_ARG;
 const MODE_NAME = MODE === "daily" ? "daily" : "world";
 const WIN_SECONDS = 1200;
 // Read once at startup: the code this process runs, whatever is committed while it plays.
@@ -410,7 +400,7 @@ let book: Book | undefined;
 async function readBook(): Promise<Book | undefined> {
   if (book !== undefined) return book;
   try {
-    book = bookOf(await api<Encyclopedia>("/encyclopedia"));
+    book = bookOf(await server.encyclopedia());
     return book;
   } catch (e) {
     // Asked again next time: the page sends the encyclopedia a moment after it connects.
@@ -780,7 +770,7 @@ async function pursue(s: Snap, r: World, log: RunLog, planner: Planner) {
 }
 
 async function walkOn(p: Pursuit, r: World, aim: Aim, status: CommandStatus | undefined, log: RunLog) {
-  const order = aim.to !== undefined ? { type: "goto", to: aim.to, stay: "done" } : { type: "move", dir: aim.heading };
+  const order: Command = aim.to !== undefined ? { type: "goto", to: aim.to, stay: "done" } : aim.heading === undefined || aim.heading === "stay" ? { type: "stop" } : { type: "move", dir: aim.heading };
   // One command steers until the goal changes; it is only sent again if it changes or ends.
   const key = JSON.stringify(order);
   if (p.sent === key && (status === undefined || status.state === "running")) return;
@@ -1346,7 +1336,7 @@ async function seedPage() {
   const sent = await command({ type: "seed", seed: SEED }, 30);
   if (sent.state !== "done") throw new Error(`could not set seed ${SEED}: ${sent.detail ?? sent.state}`);
   await Bun.sleep(4000);
-  for (let i = 0; i < 90 && !(await api<Snap>(STATE)).connected; i++) await Bun.sleep(1000);
+  for (let i = 0; i < 90 && !(await server.state(RAW)).connected; i++) await Bun.sleep(1000);
 }
 
 async function start(weapon = ""): Promise<void> {
@@ -1355,7 +1345,7 @@ async function start(weapon = ""): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     await seedPage();
     await startRun(weapon);
-    const got = gameSeed(await api<Snap>(STATE));
+    const got = gameSeed(await server.state(RAW));
     if (got === want) break;
     if (attempt === 2) throw new Error(`asked for seed ${want} twice, the game rolled ${got ?? "nothing"}`);
     console.log(`asked for seed ${want}, the game rolled ${got ?? "nothing"}; trying once more`);
@@ -1375,7 +1365,7 @@ async function startRun(weapon = ""): Promise<void> {
   }
   if (started.state !== "done") {
     // The page has already shown the finished run's link by now; a reload would lose it.
-    rescuedLink = (await api<Snap>(STATE)).lastRunLink ?? rescuedLink;
+    rescuedLink = (await server.state(RAW)).lastRunLink ?? rescuedLink;
     console.log(`start failed (${started.detail ?? started.state}); reloading the game page`);
     if (RELOAD !== "") await fetch(RELOAD).catch(() => undefined);
     await Bun.sleep(8000);
@@ -1425,7 +1415,7 @@ async function main() {
   recordCrash = async (e) => {
     if (notes !== undefined) await cutShort(notes, `the bot crashed (${e instanceof Error ? e.message : String(e)})`);
   };
-  const now = await api<Snap>(STATE);
+  const now = await server.state(RAW);
   // Every run the bot starts begins fresh, so a Daily always begins at tick 0 on its fixed seed.
   let adopted = TAKEOVER && now.tibo !== undefined && now.screen !== "over" && now.screen !== "title";
   if (TRIAL !== undefined && !adopted) throw new Error("--trial plays the run in progress, and there is none; start a run and load a checkpoint first");
@@ -1495,7 +1485,7 @@ async function main() {
     const since = Date.now();
     for (;;) {
       await Bun.sleep(500);
-      const s = await api<Snap>(STATE);
+      const s = await server.state(RAW);
       if (s.connected) {
         console.error(`the game tab dropped its connection and came back after ${((Date.now() - since) / 1000).toFixed(1)}s`);
         return s;
@@ -1505,7 +1495,7 @@ async function main() {
   };
 
   for (;;) {
-    const polled = await timed("state", api<Snap>(STATE));
+    const polled = await timed("state", server.state(RAW));
     const s = polled.connected ? polled : await reconnected();
     await fillLink(s);
     if (s.screen === "title" || s.screen === "over") {
@@ -1535,7 +1525,7 @@ async function main() {
         // The share link only exists on the run summary, and a page reload loses it, so it goes into
         // the notes now, before the review, rather than whenever the next run starts.
         const summary = await command({ type: "summary" }, 60);
-        const shown = (await api<Snap>(STATE)).lastRunLink;
+        const shown = (await server.state(RAW)).lastRunLink;
         if (summary.state === "done" && shown !== undefined && shown !== s.lastRunLink) {
           ended.link = shown;
           await ended.write();
@@ -1551,7 +1541,7 @@ async function main() {
           // A run the panel played hands the wheel back on its end screen instead of starting another.
           if (awaitingLink !== undefined && !TAKEOVER) {
             await start();
-            await fillLink(await api<Snap>(STATE));
+            await fillLink(await server.state(RAW));
           }
           return;
         }

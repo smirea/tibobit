@@ -14,6 +14,7 @@ import { ladderCleared } from "../protocol/view";
 import { checkHarness, type HarnessName, jsonObject, runCoach } from "./coach";
 import { type BeliefRow, type Checked, clock, type Experiment, type Gym, type Playbook, type PromptKey, type Templates } from "./gameplay";
 import { DECISION_MODEL, freshSeed, type GameResult, type GameSpec, onSlots, Slot, type Start } from "../training/slots";
+import type { Encyclopedia } from "../protocol/snapshot";
 import * as loop from "./gameplay";
 
 const USAGE = `usage: scripts/recursive-self-improvement.ts [--coach claude:<model>@<effort>] [--loops <n>] [--slots <n>] [--eval-seed <seed>]
@@ -136,9 +137,9 @@ async function refreshGames() {
 }
 
 // The game sends its encyclopedia once a run has loaded its content.
-async function encyclopedia(): Promise<Record<string, unknown[]>> {
+async function encyclopedia(): Promise<Encyclopedia> {
   for (let attempt = 0; attempt < 5; attempt++) {
-    const book = await main.api<Record<string, unknown[]>>("/encyclopedia").catch(() => undefined);
+    const book = await main.agent.encyclopedia().catch(() => undefined);
     if (book !== undefined) return book;
     await main.anyRun();
     await Bun.sleep(3000);
@@ -146,7 +147,7 @@ async function encyclopedia(): Promise<Record<string, unknown[]>> {
   throw new Error("the game never sent its encyclopedia");
 }
 const BOOK = await encyclopedia();
-const idsOf = (section: string, keep: (x: Record<string, unknown>) => boolean = () => true) =>
+const idsOf = (section: "weapons" | "passives" | "items", keep: (x: Record<string, unknown>) => boolean = () => true) =>
   new Set((BOOK[section] as Record<string, unknown>[]).filter((x) => typeof x.id === "string" && keep(x)).map((x) => x.id as string));
 const IDS = { weapons: idsOf("weapons"), base: idsOf("weapons", (w) => w.tier === "base"), evolved: idsOf("weapons", (w) => w.tier !== "base"), passives: idsOf("passives"), items: idsOf("items") };
 // While a base weapon or a passive has never been held in a game, every experiment iteration tries this many of them, over at least this many games.
@@ -159,7 +160,7 @@ const explores = (spec: GameSpec, open: Set<string>) =>
 const ladder = async () => ladderCleared(await main.state("storage"));
 // The start command names the weapons the profile offers when asked for one it does not.
 const OFFERED = await (async () => {
-  const probe = await main.api<{ state: string; detail?: string }>("/command?wait=1&timeout=120", { type: "start", mode: "openWorld", difficulty: "nightmare", weapon: "no-such-weapon" });
+  const probe = await main.agent.run({ type: "start", mode: "openWorld", difficulty: "nightmare", weapon: "no-such-weapon" });
   const list = probe.detail?.match(/offered: (.*)$/)?.[1];
   if (list === undefined) throw new Error(`could not read the starting weapons the game offers: ${probe.state} ${probe.detail ?? ""}`);
   return list.split(", ").filter(Boolean);
@@ -777,7 +778,7 @@ async function fullRun(state: loop.CoachState): Promise<string | undefined> {
     [
       process.execPath,
       ENTRY.bot,
-      ...["--server", main.server, "--reload", "", "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--difficulty", "highest", "--runs", "1", "--seed", EVAL_SEED],
+      ...["--server", main.agent.origin, "--reload", "", "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--difficulty", "highest", "--runs", "1", "--seed", EVAL_SEED],
       ...["--notes", "--coach-label", COACH_LABEL, "--intent", intent, "--templates", templatesFile, ...(final.weapon === "" ? [] : ["--weapon", final.weapon]), "--log-dir", path.join(LOGS, "full-runs")],
     ],
     { cwd: ROOT, stdin: "ignore", stdout: out, stderr: out },

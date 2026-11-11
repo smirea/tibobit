@@ -5,9 +5,11 @@
 import path from "node:path";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { ENTRY, ROOT } from "../paths";
-import type { CheckpointMeta, CommandStatus, LoadoutSpec } from "../protocol/commands";
+import type { CheckpointMeta, Command, CommandStatus, LoadoutSpec } from "../protocol/commands";
 import type { State } from "../protocol/view";
 import { clock, type Gym, runStats, type Templates, type Totals } from "../rsi/gameplay";
+import { AgentServer } from "../agent-server/client";
+import { bridgeOrigin } from "../protocol/address";
 
 export const DECISION_MODEL = "typesafe/jev-1.14-20261014";
 const GYM_STAGE_SECONDS = 300;
@@ -53,7 +55,6 @@ export type GameSpec = {
 
 export type GameResult = { spec: GameSpec; seed: string; difficulty: string; result?: TrialResult; stats?: string; savedGym?: CheckpointMeta; error?: string };
 
-type Snap = State;
 
 /** A random Open World seed, as the game rolls them, that is not the evaluation seed. */
 export function freshSeed(evalSeed: string): string {
@@ -75,12 +76,14 @@ type Child = ReturnType<typeof Bun.spawn>;
 
 /** One agent server and headless game. The main slot of a loop plays its full runs; the others play training games. */
 /** The seed of the run the tab holds, from the game's `run.seed`. */
-const gameSeed = (s: Snap) => (s.game as { run?: { seed?: unknown } } | undefined)?.run?.seed?.toString();
+const gameSeed = (s: State) => (s.game as { run?: { seed?: unknown } } | undefined)?.run?.seed?.toString();
 
 export class Slot {
   private children: Child[] = [];
   private headless: Child | undefined;
-  readonly server: string;
+  /** The slot's agent server. */
+  readonly agent: AgentServer;
+  /** The headless game's own API. */
   readonly game: string;
 
   private constructor(
@@ -90,7 +93,7 @@ export class Slot {
     readonly profile: string,
     readonly logs: string,
   ) {
-    this.server = `http://127.0.0.1:${serverPort}`;
+    this.agent = new AgentServer(bridgeOrigin(serverPort));
     this.game = `http://127.0.0.1:${gamePort}`;
   }
 
@@ -152,28 +155,22 @@ export class Slot {
     }
   }
 
-  async api<T>(route: string, body?: unknown): Promise<T> {
-    const res = await fetch(`${this.server}${route}`, body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    const json = (await res.json()) as T & { error?: string };
-    if (!res.ok) throw new Error(json.error ?? `${route}: ${res.status}`);
-    return json;
-  }
-
-  async command(c: unknown, timeoutSeconds = 120): Promise<CommandStatus> {
-    const status = await this.api<CommandStatus>(`/command?wait=1&timeout=${timeoutSeconds}`, c);
-    if (status.state !== "done") throw new Error(`${(c as { type: string }).type} ${status.state}: ${status.detail ?? ""}`);
+  /** Runs a command to its end; one that fails, is replaced or is still running after `seconds` throws. */
+  async command(c: Command, seconds = 120): Promise<CommandStatus> {
+    const status = await this.agent.run(c, seconds);
+    if (status.state !== "done") throw new Error(`${c.type} ${status.state}: ${status.detail ?? ""}`);
     return status;
   }
 
   /** The state, with the game's own state paths in `raw` (`run` holds the seed). */
-  state = (raw = "run") => this.api<Snap>(`/state?raw=${raw}`);
+  state = (raw = "run") => this.agent.state(raw);
 
-  async connected(limitMs: number): Promise<Snap> {
+  async connected(limitMs: number): Promise<State> {
     const end = Date.now() + limitMs;
     for (;;) {
       const s = await this.state().catch(() => undefined);
       if (s?.connected === true) return s;
-      if (Date.now() > end) throw new Error(`${this.name}: the game never connected to ${this.server}`);
+      if (Date.now() > end) throw new Error(`${this.name}: the game never connected to ${this.agent.origin}`);
       await Bun.sleep(500);
     }
   }
@@ -225,7 +222,7 @@ export class Slot {
     await Bun.sleep(4000);
     await this.connected(90_000);
     // A training profile has not unlocked every starting weapon, so one it lacks is swapped in at 0:00.
-    const offered = await this.api<CommandStatus>("/command?wait=1&timeout=120", { type: "start", mode: "openWorld", difficulty: "highest", ...(weapon === "" ? {} : { weapon }) });
+    const offered = await this.agent.run({ type: "start", mode: "openWorld", difficulty: "highest", ...(weapon === "" ? {} : { weapon }) });
     const lacking = offered.state !== "done" && /is not offered/.test(offered.detail ?? "");
     if (offered.state !== "done" && !lacking) throw new Error(`start ${offered.state}: ${offered.detail ?? ""}`);
     const started = lacking ? await this.command({ type: "start", mode: "openWorld", difficulty: "highest" }) : offered;
@@ -247,7 +244,7 @@ export class Slot {
     await Bun.write(`${base}.templates.json`, JSON.stringify(templates));
     const bot = this.spawn(
       ENTRY.bot,
-      ["--server", this.server, "--reload", `${this.game}/reload`, "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--trial", String(seconds), "--templates", `${base}.templates.json`, "--result", `${base}.result.json`, "--log-dir", base],
+      ["--server", this.agent.origin, "--reload", `${this.game}/reload`, "--decider", "openrouter", "--model", DECISION_MODEL, "--mode", "openWorld", "--trial", String(seconds), "--templates", `${base}.templates.json`, "--result", `${base}.result.json`, "--log-dir", base],
       `${base}.bot.log`,
     );
     const code = await bot.exited;
@@ -281,7 +278,7 @@ export class Slot {
     if (gym.checkpoint.build !== page) ready = await build(gym);
     // Another slot may have built the gym again since this page last loaded it.
     await this.command({ type: "checkpoint", op: "drop", name: `gym-${ready.name}` });
-    const loaded = await this.api<CommandStatus>("/command?wait=1&timeout=120", { type: "checkpoint", op: "load", name: `gym-${ready.name}` });
+    const loaded = await this.agent.run({ type: "checkpoint", op: "load", name: `gym-${ready.name}` });
     if (loaded.state === "done") return ready;
     // The screen read a moment before can be stale: the last game's run had just ended.
     if (!/no run in progress/.test(loaded.detail ?? "")) throw new Error(`checkpoint ${loaded.state}: ${loaded.detail ?? ""}`);
@@ -311,7 +308,7 @@ export class Slot {
       let savedGym: CheckpointMeta | undefined;
       if (spec.saveGym !== undefined && !result.died) {
         await this.command({ type: "checkpoint", op: "save", name: `gym-${spec.saveGym.name}` });
-        savedGym = (await this.api<CheckpointMeta[]>("/checkpoints")).find((c) => c.name === `gym-${spec.saveGym?.name}`);
+        savedGym = (await this.agent.checkpoints()).find((c) => c.name === `gym-${spec.saveGym?.name}`);
       }
       return { spec, seed, difficulty, result, stats, ...(savedGym === undefined ? {} : { savedGym }) };
     } catch (e) {
@@ -347,7 +344,7 @@ export class Slot {
         }
       }
       await this.command({ type: "checkpoint", op: "save", name: `gym-${gym.name}` });
-      const checkpoint = (await this.api<CheckpointMeta[]>("/checkpoints")).find((c) => c.name === `gym-${gym.name}`);
+      const checkpoint = (await this.agent.checkpoints()).find((c) => c.name === `gym-${gym.name}`);
       if (checkpoint === undefined) throw new Error("the checkpoint was saved but is not listed");
       const { error: _, ...rest } = gym;
       return { ...rest, seed, status: "ready", checkpoint, templates };
