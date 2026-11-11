@@ -1,4 +1,5 @@
 import { button, byTestId, locked, press, wait } from "../link/screen";
+import { CommandFailure } from "../../protocol/commands";
 
 /**
  * Picks a difficulty on the mode screen and returns what was picked, such as "hard" or
@@ -30,9 +31,9 @@ export async function pickWeapon(id: string) {
   await wait(400);
   const option = document.querySelector<HTMLElement>(`[data-testid="start-pick-option-${id}"]`);
   if (option === null) {
-    const offered = [...document.querySelectorAll<HTMLElement>('[data-testid^="start-pick-option-"]')].map((o) => o.dataset.testid?.slice("start-pick-option-".length)).filter((x) => x !== "random");
+    const offered = [...document.querySelectorAll<HTMLElement>('[data-testid^="start-pick-option-"]')].flatMap((o) => o.dataset.testid?.slice("start-pick-option-".length) ?? []).filter((x) => x !== "random");
     byTestId("start-pick-close")?.click();
-    throw new Error(`starting weapon ${id} is not offered; offered: ${offered.join(", ")}`);
+    throw new CommandFailure("weaponNotOffered", `starting weapon ${id} is not offered; offered: ${offered.join(", ")}`, offered);
   }
   option.click();
   await wait(300);

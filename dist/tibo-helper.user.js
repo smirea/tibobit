@@ -130,6 +130,16 @@
   var CHOICE_ACTIONS = ["pick", "banish", "buy", "reroll", "skip", "close", "accept", "continue", "endRun"];
   var CHECKPOINT_NAME = /^[\w.@-]{1,100}$/;
   var SEED = /^[0-9A-Z]{1,7}$/;
+
+  class CommandFailure extends Error {
+    failure;
+    offered;
+    constructor(failure, message, offered) {
+      super(message);
+      this.failure = failure;
+      this.offered = offered;
+    }
+  }
   var GAME_MODES = ["openWorld", "daily"];
   var DIFFICULTIES = ["easy", "normal", "hard", "nightmare", "highest"];
   var isDifficulty = (v) => DIFFICULTIES.includes(v);
@@ -1521,9 +1531,9 @@
     await wait(400);
     const option = document.querySelector(`[data-testid="start-pick-option-${id}"]`);
     if (option === null) {
-      const offered = [...document.querySelectorAll('[data-testid^="start-pick-option-"]')].map((o) => o.dataset.testid?.slice("start-pick-option-".length)).filter((x) => x !== "random");
+      const offered = [...document.querySelectorAll('[data-testid^="start-pick-option-"]')].flatMap((o) => o.dataset.testid?.slice("start-pick-option-".length) ?? []).filter((x) => x !== "random");
       byTestId("start-pick-close")?.click();
-      throw new Error(`starting weapon ${id} is not offered; offered: ${offered.join(", ")}`);
+      throw new CommandFailure("weaponNotOffered", `starting weapon ${id} is not offered; offered: ${offered.join(", ")}`, offered);
     }
     option.click();
     await wait(300);
@@ -1615,7 +1625,7 @@
       try {
         this.run(status, command, store);
       } catch (e) {
-        this.finish(status, "failed", e instanceof Error ? e.message : String(e));
+        this.fail(status, e);
       }
     }
     release() {
@@ -1625,6 +1635,14 @@
       this.forecaster.reset();
       if (inRun(this.link))
         this.link.game?.setPaused(false);
+    }
+    fail(status, e) {
+      if (e instanceof CommandFailure) {
+        status.failure = e.failure;
+        if (e.offered !== undefined)
+          status.offered = e.offered;
+      }
+      this.finish(status, "failed", e instanceof Error ? e.message : String(e));
     }
     finish(status, state, detail) {
       status.state = state;
@@ -1640,7 +1658,7 @@
     game() {
       const game = this.link.game;
       if (game === undefined || !inRun(this.link))
-        throw new Error("no run in progress");
+        throw new CommandFailure("noRun", "no run in progress");
       return game;
     }
     run(status, command, store) {
@@ -1693,10 +1711,10 @@
           this.finish(status, "done");
           return;
         case "start":
-          this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy", command.weapon).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+          this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy", command.weapon).catch((e) => this.fail(status, e));
           return;
         case "summary":
-          this.summary(status).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+          this.summary(status).catch((e) => this.fail(status, e));
           return;
         case "seed":
           requestSeed(command.seed);
@@ -1704,7 +1722,7 @@
           setTimeout(() => location.reload(), 1500);
           return;
         case "checkpoint":
-          this.checkpoint(status, command, store).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+          this.checkpoint(status, command, store).catch((e) => this.fail(status, e));
           return;
         case "loadout": {
           const game = this.game();
@@ -1819,7 +1837,7 @@
         return unitOf(command.dir);
       }
       if (elapsed >= (command.timeout ?? 60) * TICKS_PER_SECOND) {
-        this.finish(status, "failed", "timeout");
+        this.fail(status, new CommandFailure("timeout", "timeout"));
         return STILL;
       }
       active.to ??= anchored(s, command.to);
@@ -1828,7 +1846,7 @@
         if (command.stay === "done" && active.arrivedTick !== undefined)
           this.finish(status, "done", "used up");
         else
-          this.finish(status, "failed", "the target is gone");
+          this.fail(status, new CommandFailure("targetGone", "the target is gone"));
         return STILL;
       }
       const me = s.me;

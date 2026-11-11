@@ -89,7 +89,6 @@ export const ladder = async () => ladderCleared(await main.state("storage"));
 // The start command names the weapons the profile offers when asked for one it does not.
 export const OFFERED = await (async () => {
   const probe = await main.agent.run({ type: "start", mode: "openWorld", difficulty: "nightmare", weapon: "no-such-weapon" });
-  const list = probe.detail?.match(/offered: (.*)$/)?.[1];
-  if (list === undefined) throw new Error(`could not read the starting weapons the game offers: ${probe.state} ${probe.detail ?? ""}`);
-  return list.split(", ").filter(Boolean);
+  if (probe.offered === undefined) throw new Error(`could not read the starting weapons the game offers: ${probe.state} ${probe.detail ?? ""}`);
+  return probe.offered;
 })();

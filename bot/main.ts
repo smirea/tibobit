@@ -60,7 +60,7 @@ async function start(weapon = ""): Promise<void> {
 async function startRun(weapon = ""): Promise<void> {
   startNote = weapon === "" ? "random" : "chosen";
   let started = await command({ type: "start", mode: MODE, difficulty: DIFFICULTY, ...(weapon === "" ? {} : { weapon }) }, 120);
-  if (started.state !== "done" && /is not offered/.test(started.detail ?? "")) {
+  if (started.failure === "weaponNotOffered") {
     // A weapon this profile has not unlocked; the run still happens, on Random, and the notes say so.
     startNote = `random, because ${started.detail}`;
     console.log(`start: ${started.detail}; starting on Random`);

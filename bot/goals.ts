@@ -57,7 +57,6 @@ const GOAL_SLACK = 10;
 
 // A goto that runs out its time, and food collected on touch ("gone" before the goto counts it as
 // reached), end without saying how the goal went; the next step's look at the target tells.
-const STEP_OVER = new Set(["timeout", "the target is gone"]);
 
 export let pursuit: Pursuit | undefined;
 
@@ -251,7 +250,7 @@ export function setGoal(goal: Goal, r: World, log: RunLog, decision: Inspect) {
 export function ending(p: Pursuit, r: World, aim: Course | Ended, status: CommandStatus | undefined): Ended | undefined {
   if ("done" in aim) return aim;
   if (status?.command.type === "goto" && status.state === "done") return { done: TARGET_DONE[(p.goal as TargetGoal).kind], success: true };
-  if (status?.state === "failed" && !STEP_OVER.has(status.detail ?? "")) return { done: `the game said: ${status.detail ?? "failed"}`, success: false };
+  if (status?.state === "failed" && status.failure !== "timeout" && status.failure !== "targetGone") return { done: `the game said: ${status.detail ?? "failed"}`, success: false };
   if (r.time > p.deadline) return { done: `still not done after ${Math.round(r.time - p.since)} seconds`, success: false };
   if (aim.left === undefined) return undefined;
   if (aim.left < p.best.left - 1) p.best = { left: aim.left, time: r.time };

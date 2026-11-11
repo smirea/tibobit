@@ -104,7 +104,22 @@ export const CHECKPOINT_NAME = /^[\w.@-]{1,100}$/;
 const SEED = /^[0-9A-Z]{1,7}$/;
 
 type CommandState = "running" | "done" | "failed" | "replaced";
-export type CommandStatus = { id: number; command: Command; state: CommandState; detail?: string; at: number };
+/** The failures a program acts on, by name; `detail` says the same to a person. */
+export type Failure = "weaponNotOffered" | "noRun" | "timeout" | "targetGone";
+
+/** `offered` comes with weaponNotOffered: the starting weapons the game offers this profile. */
+export type CommandStatus = { id: number; command: Command; state: CommandState; detail?: string; failure?: Failure; offered?: string[]; at: number };
+
+/** An error a command fails with when a program may want to act on why. */
+export class CommandFailure extends Error {
+  constructor(
+    readonly failure: Failure,
+    message: string,
+    readonly offered?: string[],
+  ) {
+    super(message);
+  }
+}
 
 export type Envelope = { id: number; command: Command };
 

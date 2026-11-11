@@ -1,6 +1,6 @@
 import type { Game, GameState } from "../../game/types";
 import type { GameLink } from "../link/game-link";
-import type { Command, CommandStatus, Envelope, GameMode } from "../../protocol/commands";
+import { type Command, CommandFailure, type CommandStatus, type Envelope, type GameMode } from "../../protocol/commands";
 import { STILL, TICKS_PER_SECOND, unitOf } from "../../protocol/geometry";
 import { button, inRun, modeScreen, press, until, wait } from "../link/screen";
 import { type CheckpointFile, Checkpoints } from "./checkpoint";
@@ -48,7 +48,7 @@ export class Controller {
     try {
       this.run(status, command, store);
     } catch (e) {
-      this.finish(status, "failed", e instanceof Error ? e.message : String(e));
+      this.fail(status, e);
     }
   }
 
@@ -58,6 +58,14 @@ export class Controller {
     this.link.speed = 1;
     this.forecaster.reset();
     if (inRun(this.link)) this.link.game?.setPaused(false);
+  }
+
+  private fail(status: CommandStatus, e: unknown) {
+    if (e instanceof CommandFailure) {
+      status.failure = e.failure;
+      if (e.offered !== undefined) status.offered = e.offered;
+    }
+    this.finish(status, "failed", e instanceof Error ? e.message : String(e));
   }
 
   private finish(status: CommandStatus, state: CommandStatus["state"], detail?: string) {
@@ -71,7 +79,7 @@ export class Controller {
 
   private game(): Game {
     const game = this.link.game;
-    if (game === undefined || !inRun(this.link)) throw new Error("no run in progress");
+    if (game === undefined || !inRun(this.link)) throw new CommandFailure("noRun", "no run in progress");
     return game;
   }
 
@@ -121,10 +129,10 @@ export class Controller {
         this.finish(status, "done");
         return;
       case "start":
-        this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy", command.weapon).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+        this.start(status, command.mode ?? "openWorld", command.difficulty ?? "easy", command.weapon).catch((e) => this.fail(status, e));
         return;
       case "summary":
-        this.summary(status).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+        this.summary(status).catch((e) => this.fail(status, e));
         return;
       case "seed":
         requestSeed(command.seed);
@@ -133,7 +141,7 @@ export class Controller {
         setTimeout(() => location.reload(), 1500);
         return;
       case "checkpoint":
-        this.checkpoint(status, command, store).catch((e) => this.finish(status, "failed", e instanceof Error ? e.message : String(e)));
+        this.checkpoint(status, command, store).catch((e) => this.fail(status, e));
         return;
       case "loadout": {
         const game = this.game();
@@ -251,14 +259,14 @@ export class Controller {
     }
 
     if (elapsed >= (command.timeout ?? 60) * TICKS_PER_SECOND) {
-      this.finish(status, "failed", "timeout");
+      this.fail(status, new CommandFailure("timeout", "timeout"));
       return STILL;
     }
     active.to ??= anchored(s, command.to);
     const goal = place(this.link.enums, s, active.to, command.within);
     if (goal === undefined) {
       if (command.stay === "done" && active.arrivedTick !== undefined) this.finish(status, "done", "used up");
-      else this.finish(status, "failed", "the target is gone");
+      else this.fail(status, new CommandFailure("targetGone", "the target is gone"));
       return STILL;
     }
     const me = s.me;

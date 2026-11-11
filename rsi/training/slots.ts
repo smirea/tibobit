@@ -204,7 +204,7 @@ export class Slot {
     await this.connected(90_000);
     // A training profile has not unlocked every starting weapon, so one it lacks is swapped in at 0:00.
     const offered = await this.agent.run({ type: "start", mode: "openWorld", difficulty: "highest", ...(weapon === "" ? {} : { weapon }) });
-    const lacking = offered.state !== "done" && /is not offered/.test(offered.detail ?? "");
+    const lacking = offered.failure === "weaponNotOffered";
     if (offered.state !== "done" && !lacking) throw new Error(`start ${offered.state}: ${offered.detail ?? ""}`);
     const started = lacking ? await this.command({ type: "start", mode: "openWorld", difficulty: "highest" }) : offered;
     if (lacking) await this.command({ type: "loadout", weapons: [{ id: weapon, level: 1 }], passives: [], items: [] });
@@ -262,7 +262,7 @@ export class Slot {
     const loaded = await this.agent.run({ type: "checkpoint", op: "load", name: `gym-${ready.name}` });
     if (loaded.state === "done") return ready;
     // The screen read a moment before can be stale: the last game's run had just ended.
-    if (!/no run in progress/.test(loaded.detail ?? "")) throw new Error(`checkpoint ${loaded.state}: ${loaded.detail ?? ""}`);
+    if (loaded.failure !== "noRun") throw new Error(`checkpoint ${loaded.state}: ${loaded.detail ?? ""}`);
     await this.command({ type: "start", mode: "openWorld", difficulty: "nightmare" });
     await this.command({ type: "checkpoint", op: "load", name: `gym-${ready.name}` });
     return ready;
