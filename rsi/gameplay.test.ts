@@ -1,5 +1,16 @@
 import { expect, test } from "bun:test";
-import { type BeliefRow, checkEdits, checkLoopFiles, checkPromptPart, checkTemplates, DEFAULT_TEMPLATES, type Experiment, hasFreshGames, LOCKSTEP_CRUTCH, notesName, notesTemplates, overdueAreas, parseCsv, parseExperiment, promptLoss, renderExperiment, renderNotes, type RunSetup, splitPrompts, stampBeliefs, stateFromLog, totalsBetween, totalsLines, upsert, withReview, wordsChanged } from "./gameplay";
+import { type BeliefRow, stampBeliefs } from "./store/beliefs";
+import { checkEdits } from "./store/edits";
+import { checkLoopFiles } from "./store/startup";
+import { checkPromptPart, promptLoss, splitPrompts } from "./store/coach-prompts";
+import { checkTemplates, DEFAULT_TEMPLATES, LOCKSTEP_CRUTCH } from "../bot/templates";
+import { type Experiment, hasFreshGames, overdueAreas, parseExperiment, renderExperiment } from "./store/experiments";
+import { notesName, notesTemplates, renderNotes, type RunSetup, withReview } from "../bot/notes";
+import { parseCsv } from "./store/csv";
+import { stateFromLog } from "./store/coach-log";
+import { totalsBetween, totalsLines } from "../bot/tallies";
+import { upsert } from "./store/lock";
+import { wordsChanged } from "./wording";
 
 const setup: RunSetup = { started: new Date(2026, 10, 7, 15, 4, 9), difficulty: "nightmare", mode: "daily", surface: "headless", seed: "S1", planner: "jev", action: "jev", coach: "grok", bot: "abc1234" };
 

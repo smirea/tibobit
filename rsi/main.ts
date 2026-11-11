@@ -12,10 +12,29 @@ import { ENTRY, GAMEPLAY, ROOT, RUNS, USERSCRIPT } from "../paths";
 import { type LoadoutSpec, parseLoadout } from "../protocol/commands";
 import { ladderCleared } from "../protocol/view";
 import { checkHarness, type HarnessName, jsonObject, runCoach } from "./coach";
-import { type BeliefRow, type Checked, clock, type Experiment, type Gym, type Playbook, type PromptKey, type Templates } from "./gameplay";
+import type { BeliefRow } from "./store/beliefs";
+import { type Checked, isText } from "../protocol/parse";
+import { clock } from "../format";
+import { addGames, coverage, type Experiment, gameLoops, hasFreshGames, overdueAreas, readExperiments, renderExperiment } from "./store/experiments";
+import { type Gym, GYM_NAME, gymLine, readGyms, updateGyms } from "./store/gyms";
+import { type Playbook, readPlaybook, writePlaybook } from "../bot/playbook";
+import { checkPromptPart, PROMPT_TITLES, type PromptKey, promptLoss, readPrompts, writePrompts } from "./store/coach-prompts";
+import { checkTemplates, type Templates } from "../bot/templates";
 import { DECISION_MODEL, freshSeed, type GameResult, type GameSpec, onSlots, Slot, type Start } from "../training/slots";
 import type { Encyclopedia } from "../protocol/snapshot";
-import * as loop from "./gameplay";
+import { botFacts, catalog } from "./coach-facts";
+import { applyEdits, checkEdits, EDITS_CONTRACT, type LoopEdits, readTables, type Tables } from "./store/edits";
+import { WORDING_ONLY, wordsChanged } from "./wording";
+import { NOTES_DIR, notesField, notesFiles, notesTemplates, withReview } from "../bot/notes";
+import { type Held, heldCoverage, readHeld, recordHeld, untried } from "./store/held";
+import { logForPrompt } from "../bot/run-log/stats";
+import { BELIEFS_CSV, COACH_LOG, INFRA_CSV } from "./store/paths";
+import { campaign, latestNotes } from "./store/campaign";
+import { GOAL_LEVEL } from "./rules";
+import { totalsLines } from "../bot/tallies";
+import { upsert, withLock } from "./store/lock";
+import { type CoachState, readCoachState } from "./store/coach-log";
+import { checkLoopFiles } from "./store/startup";
 
 const USAGE = `usage: scripts/recursive-self-improvement.ts [--coach claude:<model>@<effort>] [--loops <n>] [--slots <n>] [--eval-seed <seed>]
 
@@ -66,7 +85,7 @@ if (Bun.which("gai") === null) throw new Error("committing gameplay/ needs gai o
 
 // The notes of a full run name the coach and the model that coached it, which can change over time.
 const COACH_LABEL = `coach ${COMMITTER}`;
-await loop.checkLoopFiles();
+await checkLoopFiles();
 const LOGS = path.join(RUNS, "rsi");
 mkdirSync(LOGS, { recursive: true });
 
@@ -153,7 +172,7 @@ const IDS = { weapons: idsOf("weapons"), base: idsOf("weapons", (w) => w.tier ==
 // While a base weapon or a passive has never been held in a game, every experiment iteration tries this many of them, over at least this many games.
 const EXPLORE_PER_ITERATION = 8;
 const EXPLORE_GAMES = 3;
-const unexplored = (held: loop.Held) => new Set([...loop.untried(IDS.base, held), ...loop.untried(IDS.passives, held)]);
+const unexplored = (held: Held) => new Set([...untried(IDS.base, held), ...untried(IDS.passives, held)]);
 /** The untried weapons and passives a game is sure to hold: its starting weapon and its swapped-in build. */
 const explores = (spec: GameSpec, open: Set<string>) =>
   [...("fresh" in spec.from ? [spec.from.fresh.weapon] : []), ...(spec.loadout?.weapons ?? []).map((w) => w.id), ...(spec.loadout?.passives ?? []).map((p) => p.id)].filter((id) => open.has(id));
@@ -222,8 +241,8 @@ function editableFiles(phase: "experiments" | "fullRun" | "reflect"): string {
   ].join("\n");
 }
 
-const GAMES_CONTRACT = `"games": 1 to ${MAX_GAMES} training games, played side by side, each {"experiment": the name of the experiment it serves (one that exists or that this reply adds), "label": a few words, "from": {"gym": a gym's name} or {"fresh": {"difficulty": Nightmare level 1 to ${loop.GOAL_LEVEL}, "weapon": a base weapon id or "random", "seed": optional, to give several fresh games the same map}}, "loadout": optional, replaces the whole build when the game starts: {"weapons": [{"id", "level"}], "passives": [{"id", "level"}], "items": [{"id", "count"}], "gold", "hp": a number or "full"} with ids from the encyclopedia, "seconds": 10 to ${MAX_GAME_SECONDS} of game time, "changes": optional {"planner", "action", "knobs"} over your playbook (only the keys that change), "saveGym": optional {"name", "purpose"} to keep the state the game ends in as a gym, if Tibo lives}. A game from a gym replays the same game state each time, so two games from one gym differ only in what the models chose; fresh games with the same seed share a map. Fresh games never get the evaluation seed.`;
-const GYMS_CONTRACT = `"gyms": gyms to build or retire: {"name": kebab-case, "purpose": what it lets you test, "difficulty": 1 to ${loop.GOAL_LEVEL}, "at": game seconds 0 to ${MAX_GYM_SECONDS} to save it at, "weapon": a base weapon id or "random", "loadout": optional, swapped in at 0:00} is built before this iteration's games by playing a fresh game with your playbook to that time, in 5-minute stages: a death replays that stage from its start, up to 3 times (a loadout helps for late gyms), at most ${MAX_NEW_GYMS} per reply; {"name", "retire": true} retires one.`;
+const GAMES_CONTRACT = `"games": 1 to ${MAX_GAMES} training games, played side by side, each {"experiment": the name of the experiment it serves (one that exists or that this reply adds), "label": a few words, "from": {"gym": a gym's name} or {"fresh": {"difficulty": Nightmare level 1 to ${GOAL_LEVEL}, "weapon": a base weapon id or "random", "seed": optional, to give several fresh games the same map}}, "loadout": optional, replaces the whole build when the game starts: {"weapons": [{"id", "level"}], "passives": [{"id", "level"}], "items": [{"id", "count"}], "gold", "hp": a number or "full"} with ids from the encyclopedia, "seconds": 10 to ${MAX_GAME_SECONDS} of game time, "changes": optional {"planner", "action", "knobs"} over your playbook (only the keys that change), "saveGym": optional {"name", "purpose"} to keep the state the game ends in as a gym, if Tibo lives}. A game from a gym replays the same game state each time, so two games from one gym differ only in what the models chose; fresh games with the same seed share a map. Fresh games never get the evaluation seed.`;
+const GYMS_CONTRACT = `"gyms": gyms to build or retire: {"name": kebab-case, "purpose": what it lets you test, "difficulty": 1 to ${GOAL_LEVEL}, "at": game seconds 0 to ${MAX_GYM_SECONDS} to save it at, "weapon": a base weapon id or "random", "loadout": optional, swapped in at 0:00} is built before this iteration's games by playing a fresh game with your playbook to that time, in 5-minute stages: a death replays that stage from its start, up to 3 times (a loadout helps for late gyms), at most ${MAX_NEW_GYMS} per reply; {"name", "retire": true} retires one.`;
 const PLAYBOOK_CONTRACT = `"playbook": optional changes to your playbook: {"planner", "action", "knobs"} (only the keys that change), "weapon": a base weapon id or "random", "why": what makes this better than the playbook it replaces, "evidence": the names of the experiments that show it}. A change goes in only on evidence: every experiment named must have the result confirmed (in this reply or before) and games from 0:00 on fresh seeds, so the change beat the playbook where every run starts. Before the full run the loop plays the last full run's playbook against yours on the same fresh seeds, and keeps the old one if yours does worse.`;
 
 // ---- Facts -------------------------------------------------------------------------------------
@@ -259,16 +278,16 @@ function gameEntry(r: GameResult, gyms: Gym[], full: boolean): string {
     "",
     `- Start: ${describeStart(s.from, gyms)}, seed ${r.seed || "?"}${s.loadout === undefined ? "" : `, build swapped for ${[...s.loadout.weapons.map((w) => `${w.id} ${w.level}`), ...s.loadout.passives.map((p) => `${p.id} ${p.level}`), ...s.loadout.items.map((x) => `${x.id} x${x.count}`)].join(", ")}`}; ${s.seconds}s; plays the playbook${s.changes === "" ? "" : ` with ${s.changes}`}.`,
     `- Outcome: ${outcome(r)}.`,
-    ...(r.result?.totals === undefined ? [] : loop.totalsLines(r.result.totals).map((l) => `- ${l}`)),
+    ...(r.result?.totals === undefined ? [] : totalsLines(r.result.totals).map((l) => `- ${l}`)),
     ...(full && r.stats !== undefined ? ["", r.stats] : []),
   ].join("\n");
 }
 
-async function facts(state: loop.CoachState, playbook: Playbook): Promise<string> {
-  const experiments = await loop.readExperiments();
-  const gyms = await loop.readGyms();
+async function facts(state: CoachState, playbook: Playbook): Promise<string> {
+  const experiments = await readExperiments();
+  const gyms = await readGyms();
   const last = await lastGames();
-  const log = await Bun.file(loop.COACH_LOG).text().catch(() => "");
+  const log = await Bun.file(COACH_LOG).text().catch(() => "");
   const cleared = await ladder();
   const open = experiments.filter((e) => e.status !== "done" && e.status !== "retired");
   const closed = experiments.filter((e) => e.status === "done" || e.status === "retired");
@@ -276,35 +295,35 @@ async function facts(state: loop.CoachState, playbook: Playbook): Promise<string
     "# Where the loop stands",
     `You are the coach (${coachSpec}). This is loop ${state.loop}, iteration ${state.iteration} of 10: iterations 1 to ${EXPERIMENT_ITERATIONS} are experiments in the training ground, and iteration 10 is a full run on the evaluation seed. Your Open World Nightmare ladder: ${cleared === 0 ? "no level won yet" : `won up to Nightmare ${cleared}`}, so the next full run plays Nightmare ${cleared + 1}. The goal of the whole campaign: survive 20:00 on Nightmare 10.`,
     "## Full runs so far",
-    await loop.campaign(),
+    await campaign(),
     "# Facts",
     "## The game and the bot",
-    loop.botFacts({ planner: DECISION_MODEL, action: DECISION_MODEL }),
+    botFacts({ planner: DECISION_MODEL, action: DECISION_MODEL }),
     "## Templates, state blocks and knobs",
-    loop.catalog(),
+    catalog(),
     "## Your playbook",
     `Updated ${playbook.updated}: ${playbook.why}. Starting weapon: ${playbook.weapon || "random"}. The full run can start with ${OFFERED.join(", ")} (more unlock as the profile plays); a training game can start with any base weapon.`,
     JSON.stringify(playbook.templates, null, 2),
     "## Beliefs (gameplay/beliefs.csv)",
-    await Bun.file(loop.BELIEFS_CSV).text(),
+    await Bun.file(BELIEFS_CSV).text(),
     "## Weapons and passives: what games have held (gameplay/held.json)",
-    loop.heldCoverage(await loop.readHeld(), IDS),
+    heldCoverage(await readHeld(), IDS),
     "## Experiments: coverage by area",
-    loop.coverage(experiments),
+    coverage(experiments),
     "## Open experiments",
-    open.map((e) => loop.renderExperiment(e)).join("\n\n---\n\n") || "(none)",
+    open.map((e) => renderExperiment(e)).join("\n\n---\n\n") || "(none)",
     "## Finished experiments",
     closed.map((e) => `- ${e.name} (${e.status}${e.result === "" ? "" : `, ${e.result}`}, ${e.area}): ${e.title}. ${e.findings.split("\n")[0] ?? ""}`).join("\n") || "(none)",
     "## Gyms (gameplay/gyms.jsonl)",
-    gyms.map(loop.gymLine).join("\n") || "(none)",
+    gyms.map(gymLine).join("\n") || "(none)",
     "## Your log, newest last",
     log.length > 40_000 ? `(older entries cut)\n${log.slice(-40_000)}` : log || "(empty)",
     "## The last iteration's games",
     last === undefined ? "(none yet)" : [`From ${last.tag}.`, ...last.gyms, ...last.results.map((r) => gameEntry(r, gyms, true))].join("\n\n"),
     "## The latest full run",
-    await loop.latestNotes(1),
+    await latestNotes(1),
     "## Infrastructure requests (gameplay/infrastructure_feedback.csv)",
-    await Bun.file(loop.INFRA_CSV).text(),
+    await Bun.file(INFRA_CSV).text(),
     "## The game's encyclopedia: every id you can use",
     JSON.stringify(BOOK),
     "## The game's cfg: the rules of the last game the full-run tab played (game.cfg in the state)",
@@ -345,7 +364,7 @@ function describeChanges(raw: { planner?: unknown; action?: unknown; knobs?: unk
 }
 
 /** The experiments and beliefs as they would stand with a reply's edits. */
-function afterEdits(before: loop.Tables, edits: loop.LoopEdits | undefined): { experiments: Experiment[]; beliefs: BeliefRow[] } {
+function afterEdits(before: Tables, edits: LoopEdits | undefined): { experiments: Experiment[]; beliefs: BeliefRow[] } {
   const defined = <T extends object>(o: T) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
   const experiments = before.experiments.map((e) => {
     const edit = edits?.experiments?.find((x) => x.name === e.name);
@@ -353,7 +372,7 @@ function afterEdits(before: loop.Tables, edits: loop.LoopEdits | undefined): { e
   });
   for (const edit of edits?.experiments ?? [])
     if (!experiments.some((e) => e.name === edit.name)) experiments.push({ title: "", status: "proposed", area: "models", result: "", created: "", updated: "", hypothesis: "", method: "", findings: "", games: "", ...defined(edit) } as Experiment);
-  return { experiments, beliefs: loop.upsert(edits?.beliefs ?? [], before.beliefs) };
+  return { experiments, beliefs: upsert(edits?.beliefs ?? [], before.beliefs) };
 }
 
 function checkPlaybook(raw: unknown, now: Playbook, stamp: string, experiments: Experiment[], errors: string[]): Playbook | undefined {
@@ -369,12 +388,12 @@ function checkPlaybook(raw: unknown, now: Playbook, stamp: string, experiments: 
     const e = experiments.find((x) => x.name === name);
     if (e === undefined) errors.push(`playbook.evidence: no experiment ${name}`);
     else if (e.result !== "confirmed") errors.push(`playbook.evidence: ${name} is ${e.result || "not concluded"}, not confirmed`);
-    else if (!loop.hasFreshGames(e)) errors.push(`playbook.evidence: ${name} has no games from 0:00 on a fresh seed, where every run starts`);
+    else if (!hasFreshGames(e)) errors.push(`playbook.evidence: ${name} has no games from 0:00 on a fresh seed, where every run starts`);
   }
-  const t = loop.checkTemplates(p as { planner?: unknown; action?: unknown; knobs?: unknown }, now.templates);
+  const t = checkTemplates(p as { planner?: unknown; action?: unknown; knobs?: unknown }, now.templates);
   if ("errors" in t) errors.push(...t.errors.map((e) => `playbook: ${e}`));
   const weapon = p.weapon === undefined ? now.weapon : startWeapon(p.weapon, "playbook.weapon", errors);
-  if (!loop.isText(p.why)) errors.push("playbook.why must say what makes it better than the playbook it replaces");
+  if (!isText(p.why)) errors.push("playbook.why must say what makes it better than the playbook it replaces");
   return "value" in t ? { templates: t.value, weapon, updated: stamp, why: String(p.why ?? "") } : undefined;
 }
 
@@ -389,7 +408,7 @@ function checkGyms(raw: unknown, gyms: Gym[], stamp: string, errors: string[]): 
   for (const [i, g] of (raw as Record<string, unknown>[]).entries()) {
     const at = `gyms[${i}]`;
     const name = String(g?.name ?? "");
-    if (!loop.GYM_NAME.test(name)) {
+    if (!GYM_NAME.test(name)) {
       errors.push(`${at}.name must be kebab-case`);
       continue;
     }
@@ -399,9 +418,9 @@ function checkGyms(raw: unknown, gyms: Gym[], stamp: string, errors: string[]): 
       continue;
     }
     if (gyms.some((x) => x.name === name && x.status !== "failed" && x.status !== "retired")) errors.push(`${at}: gym ${name} exists; pick another name`);
-    if (!loop.isText(g.purpose)) errors.push(`${at}.purpose must say what the gym lets you test`);
+    if (!isText(g.purpose)) errors.push(`${at}.purpose must say what the gym lets you test`);
     const difficulty = Number(g.difficulty);
-    if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > loop.GOAL_LEVEL) errors.push(`${at}.difficulty must be 1 to ${loop.GOAL_LEVEL}`);
+    if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > GOAL_LEVEL) errors.push(`${at}.difficulty must be 1 to ${GOAL_LEVEL}`);
     const seconds = Number(g.at);
     if (!Number.isInteger(seconds) || seconds < 0 || seconds > MAX_GYM_SECONDS) errors.push(`${at}.at must be whole seconds from 0 to ${MAX_GYM_SECONDS}`);
     const weapon = startWeapon(g.weapon, `${at}.weapon`, errors);
@@ -426,7 +445,7 @@ function checkGames(raw: unknown, ctx: { playbook: Playbook; gyms: Gym[]; experi
       continue;
     }
     if (typeof g.experiment !== "string" || !ctx.experiments.has(g.experiment)) errors.push(`${at}.experiment must name an experiment that exists or that this reply adds`);
-    if (!loop.isText(g.label)) errors.push(`${at}.label must be a few words`);
+    if (!isText(g.label)) errors.push(`${at}.label must be a few words`);
     const seconds = Number(g.seconds);
     if (!Number.isInteger(seconds) || seconds < 10 || seconds > MAX_GAME_SECONDS) errors.push(`${at}.seconds must be whole seconds from 10 to ${MAX_GAME_SECONDS}`);
     const from = g.from as Record<string, unknown> | undefined;
@@ -440,7 +459,7 @@ function checkGames(raw: unknown, ctx: { playbook: Playbook; gyms: Gym[]; experi
     } else if (typeof from?.fresh === "object" && from.fresh !== null) {
       const f = from.fresh as Record<string, unknown>;
       const difficulty = Number(f.difficulty);
-      if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > loop.GOAL_LEVEL) errors.push(`${at}.from.fresh.difficulty must be 1 to ${loop.GOAL_LEVEL}`);
+      if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > GOAL_LEVEL) errors.push(`${at}.from.fresh.difficulty must be 1 to ${GOAL_LEVEL}`);
       const weapon = startWeapon(f.weapon, `${at}.from.fresh.weapon`, errors);
       const seed = f.seed === undefined ? undefined : String(f.seed).toUpperCase();
       if (seed !== undefined && (!/^[0-9A-Z]{1,7}$/.test(seed) || parseInt(seed, 36) > 0xffffffff)) errors.push(`${at}.from.fresh.seed must be 1 to 7 letters and digits`);
@@ -449,13 +468,13 @@ function checkGames(raw: unknown, ctx: { playbook: Playbook; gyms: Gym[]; experi
     } else errors.push(`${at}.from must be {"gym": name} or {"fresh": {"difficulty", "weapon"}}`);
     const loadout = checkLoadout(g.loadout, at, errors);
     const changes = g.changes as { planner?: unknown; action?: unknown; knobs?: unknown } | undefined;
-    const t = loop.checkTemplates(changes ?? {}, ctx.playbook.templates);
+    const t = checkTemplates(changes ?? {}, ctx.playbook.templates);
     if ("errors" in t) errors.push(...t.errors.map((e) => `${at}.changes: ${e}`));
     let saveGym: GameSpec["saveGym"];
     if (g.saveGym !== undefined) {
       const s = g.saveGym as Record<string, unknown>;
       const name = String(s?.name ?? "");
-      if (!loop.GYM_NAME.test(name) || !loop.isText(s.purpose)) errors.push(`${at}.saveGym must be {"name": kebab-case, "purpose"}`);
+      if (!GYM_NAME.test(name) || !isText(s.purpose)) errors.push(`${at}.saveGym must be {"name": kebab-case, "purpose"}`);
       else if (ctx.gyms.some((x) => x.name === name && x.status !== "failed" && x.status !== "retired") || saved.has(name)) errors.push(`${at}.saveGym: gym ${name} exists; pick another name`);
       saved.add(name);
       saveGym = { name, purpose: String(s.purpose) };
@@ -476,8 +495,8 @@ function checkGames(raw: unknown, ctx: { playbook: Playbook; gyms: Gym[]; experi
   // Two games that are the same game but for a few words test phrasing, not play.
   const sameStart = (a: GameSpec, b: GameSpec) => JSON.stringify([a.from, a.loadout, a.seconds]) === JSON.stringify([b.from, b.loadout, b.seconds]);
   const close = (a: Templates, b: Templates) => {
-    const n = loop.wordsChanged(a, b);
-    return n !== undefined && n > 0 && n <= loop.WORDING_ONLY ? n : undefined;
+    const n = wordsChanged(a, b);
+    return n !== undefined && n > 0 && n <= WORDING_ONLY ? n : undefined;
   };
   for (const [i, a] of out.entries()) {
     const fromPlaybook = a.changes === "" ? undefined : close(a.templates, ctx.playbook.templates);
@@ -500,8 +519,8 @@ function standardGyms(next: number): Gym[] {
     gym(`first-boss-nm${next}`, next, 105, "Just before the 2:00 boss on the next ladder level."),
     gym(`minute-5-nm${next}`, next, 300, "Minute 5 on the next ladder level, with a build of its own."),
     gym(`minute-10-nm${next}`, next, 600, "Minute 10 on the next ladder level, where the pests have reached full health."),
-    gym(`opening-nm${loop.GOAL_LEVEL}`, loop.GOAL_LEVEL, 0, `The opening on Nightmare ${loop.GOAL_LEVEL}, the campaign's goal.`),
-    gym(`first-boss-nm${loop.GOAL_LEVEL}`, loop.GOAL_LEVEL, 105, `Just before the 2:00 boss on Nightmare ${loop.GOAL_LEVEL}.`),
+    gym(`opening-nm${GOAL_LEVEL}`, GOAL_LEVEL, 0, `The opening on Nightmare ${GOAL_LEVEL}, the campaign's goal.`),
+    gym(`first-boss-nm${GOAL_LEVEL}`, GOAL_LEVEL, 105, `Just before the 2:00 boss on Nightmare ${GOAL_LEVEL}.`),
   ];
 }
 
@@ -516,7 +535,7 @@ function buildGym(slot: Slot, gym: Gym, templates: Templates): Promise<Gym> {
     const built = await slot.buildGym({ ...gym, status: "building" }, gym.templates ?? templates, EVAL_SEED);
     // A build cut off by a stop stays building, and goes back to pending on restart.
     if (stopping) return built;
-    await loop.updateGyms((gyms) => {
+    await updateGyms((gyms) => {
       const at = gyms.findIndex((g) => g.name === gym.name);
       if (at >= 0) gyms[at] = built;
       else gyms.push(built);
@@ -530,7 +549,7 @@ function buildGym(slot: Slot, gym: Gym, templates: Templates): Promise<Gym> {
 
 /** Marks the pending gyms as building and returns them to build. */
 const claimPending = () =>
-  loop.updateGyms((gyms) => {
+  updateGyms((gyms) => {
     const claimed = gyms.filter((g) => g.status === "pending");
     for (const g of claimed) g.status = "building";
     return claimed.map((g) => ({ ...g }));
@@ -543,21 +562,21 @@ async function buildClaimed(claimed: Gym[], templates: Templates): Promise<strin
 
 // ---- Iterations --------------------------------------------------------------------------------
 
-const stampOf = (s: loop.CoachState) => `L${s.loop}.I${s.iteration}`;
-const tagOf = (s: loop.CoachState) => `L${s.loop}.I${s.iteration}`;
+const stampOf = (s: CoachState) => `L${s.loop}.I${s.iteration}`;
+const tagOf = (s: CoachState) => `L${s.loop}.I${s.iteration}`;
 
 /** One entry per iteration; the last one also tells a restarted loop where it stands (see stateFromLog). */
-async function appendLog(state: loop.CoachState, title: string, body: string) {
-  await Bun.write(loop.COACH_LOG, `${await Bun.file(loop.COACH_LOG).text().catch(() => "")}\n## ${tagOf(state)}: ${title} (${new Date().toISOString().slice(0, 16).replace("T", " ")})\n\n${body.trim()}\n`);
+async function appendLog(state: CoachState, title: string, body: string) {
+  await Bun.write(COACH_LOG, `${await Bun.file(COACH_LOG).text().catch(() => "")}\n## ${tagOf(state)}: ${title} (${new Date().toISOString().slice(0, 16).replace("T", " ")})\n\n${body.trim()}\n`);
 }
 
-type ExperimentReply = { summary: string; edits: loop.LoopEdits; games: GameSpec[]; gyms: GymRequest; playbook?: Playbook };
+type ExperimentReply = { summary: string; edits: LoopEdits; games: GameSpec[]; gyms: GymRequest; playbook?: Playbook };
 
-async function experimentIteration(state: loop.CoachState) {
+async function experimentIteration(state: CoachState) {
   const tag = tagOf(state);
   const stamp = stampOf(state);
-  const playbook = await loop.readPlaybook();
-  const instructions = (await loop.readPrompts()).experiments;
+  const playbook = await readPlaybook();
+  const instructions = (await readPrompts()).experiments;
   const prompt = [
     editableFiles("experiments"),
     instructions,
@@ -568,22 +587,22 @@ async function experimentIteration(state: loop.CoachState) {
     GAMES_CONTRACT,
     GYMS_CONTRACT,
     PLAYBOOK_CONTRACT,
-    loop.EDITS_CONTRACT,
+    EDITS_CONTRACT,
   ].join("\n\n");
-  const before = await loop.readTables();
-  const gymsBefore = await loop.readGyms();
-  const heldBefore = await loop.readHeld();
+  const before = await readTables();
+  const gymsBefore = await readGyms();
+  const heldBefore = await readHeld();
   const reply = await ask<ExperimentReply>(tag, prompt, (raw) => {
     const errors: string[] = [];
-    const edits = loop.checkEdits(raw, before);
+    const edits = checkEdits(raw, before);
     if ("errors" in edits) errors.push(...edits.errors);
-    if (!loop.isText(raw.summary)) errors.push("summary must be a short paragraph");
+    if (!isText(raw.summary)) errors.push("summary must be a short paragraph");
     const gyms = checkGyms(raw.gyms, gymsBefore, stamp, errors);
     const after = afterEdits(before, "value" in edits ? edits.value : undefined);
     const pb = checkPlaybook(raw.playbook, playbook, stamp, after.experiments, errors);
     const experiments = new Set(after.experiments.map((e) => e.name));
     const games = checkGames(raw.games, { playbook: pb ?? playbook, gyms: [...gymsBefore, ...gyms.build], experiments, tag }, errors);
-    const overdue = loop.overdueAreas(after.experiments, state.loop);
+    const overdue = overdueAreas(after.experiments, state.loop);
     const areaOf = (name: string | undefined) => after.experiments.find((e) => e.name === name)?.area;
     const open = unexplored(heldBefore);
     const exploring = games.map((g) => explores(g, open));
@@ -602,12 +621,12 @@ async function experimentIteration(state: loop.CoachState) {
     await appendLog(state, "no usable plan", "The coach gave no usable reply, so this iteration played nothing.");
     return;
   }
-  const done = await loop.applyEdits(reply.edits, stamp);
+  const done = await applyEdits(reply.edits, stamp);
   if (reply.playbook !== undefined) {
-    await loop.writePlaybook(reply.playbook);
+    await writePlaybook(reply.playbook);
     done.push("the playbook");
   }
-  await loop.updateGyms((gyms) => {
+  await updateGyms((gyms) => {
     for (const name of reply.gyms.retire) for (const g of gyms) if (g.name === name) g.status = "retired";
     for (const g of reply.gyms.build) {
       const at = gyms.findIndex((x) => x.name === g.name);
@@ -616,17 +635,17 @@ async function experimentIteration(state: loop.CoachState) {
     }
   });
   console.log(`${tag}: ${reply.summary}\n  changed ${done.join(", ") || "nothing"}; ${reply.games.length} games`);
-  const templates = (await loop.readPlaybook()).templates;
+  const templates = (await readPlaybook()).templates;
   await refreshGames();
   const gymLines = await buildClaimed(await claimPending(), templates);
   // A gym another coach's loop is building for a game here is waited for.
   const wanted = new Set(reply.games.flatMap((g) => ("gym" in g.from ? [g.from.gym] : [])));
   for (let waited = 0; waited < 60; waited++) {
-    const busy = (await loop.readGyms()).filter((g) => wanted.has(g.name) && (g.status === "building" || g.status === "pending"));
+    const busy = (await readGyms()).filter((g) => wanted.has(g.name) && (g.status === "building" || g.status === "pending"));
     if (busy.length === 0) break;
     await Bun.sleep(30_000);
   }
-  const gyms = await loop.readGyms();
+  const gyms = await readGyms();
   const results = await onSlots(slots, reply.games, async (slot, spec) => {
     console.log(`${spec.id} on ${slot.name}: ${spec.label}`);
     // A gym is built again on the slot that needs it, which runs the newest game build.
@@ -656,7 +675,7 @@ async function experimentIteration(state: loop.CoachState) {
       templates: r.spec.templates,
       checkpoint: r.savedGym,
     };
-    await loop.updateGyms((all) => {
+    await updateGyms((all) => {
       const at = all.findIndex((x) => x.name === gym.name);
       if (at >= 0) all[at] = gym;
       else all.push(gym);
@@ -664,11 +683,11 @@ async function experimentIteration(state: loop.CoachState) {
   }
   const usedGyms = new Set(results.flatMap((r) => ("gym" in r.spec.from && r.error === undefined ? [r.spec.from.gym] : [])));
   if (usedGyms.size > 0)
-    await loop.updateGyms((all) => {
+    await updateGyms((all) => {
       for (const g of all) if (usedGyms.has(g.name) && !g.used?.some((u) => u.iteration === tag)) g.used = [...(g.used ?? []), { iteration: tag, at: new Date().toISOString() }];
     });
-  for (const r of results) if (r.spec.experiment !== undefined) await loop.addGames(r.spec.experiment, [gameEntry(r, gyms, false)]);
-  for (const r of results) if (r.result !== undefined) await loop.recordHeld(r.spec.id, [...r.result.weapons, ...r.result.passives]);
+  for (const r of results) if (r.spec.experiment !== undefined) await addGames(r.spec.experiment, [gameEntry(r, gyms, false)]);
+  for (const r of results) if (r.result !== undefined) await recordHeld(r.spec.id, [...r.result.weapons, ...r.result.passives]);
   await Bun.write(path.join(LOGS, "last-games.json"), JSON.stringify({ tag, results, gyms: gymLines } satisfies LastGames, null, 2));
   const lived = results.filter((r) => r.result !== undefined && !r.result.died).length;
   const played = [...new Set(results.map((r) => r.spec.experiment))].join(", ");
@@ -676,16 +695,16 @@ async function experimentIteration(state: loop.CoachState) {
   await appendLog(state, "experiments", `${reply.summary}\n\nGames: ${results.length}, ${lived} lived, for ${played || "no experiment"}.${gymLines.length === 0 ? "" : ` ${gymLines.join(" ")}`}`);
 }
 
-type FullRunReply = { summary: string; intent: string; edits: loop.LoopEdits };
+type FullRunReply = { summary: string; intent: string; edits: LoopEdits };
 
 /** The playbook the last full run played, from its notes: what a candidate playbook has to beat. */
 async function lastFullRunPlaybook(): Promise<{ templates: Templates; weapon: string; from: string } | undefined> {
-  for (const name of await loop.notesFiles()) {
-    const text = await Bun.file(path.join(loop.NOTES_DIR, name)).text();
-    const t = loop.notesTemplates(text);
+  for (const name of await notesFiles()) {
+    const text = await Bun.file(path.join(NOTES_DIR, name)).text();
+    const t = notesTemplates(text);
     // Runs from before the lockstep ban carry the knob and do not parse; they are not a baseline any more.
     if (!("value" in t)) continue;
-    const started = loop.notesField(text, "Starting weapon")?.split(" ")[0] ?? "";
+    const started = notesField(text, "Starting weapon")?.split(" ")[0] ?? "";
     return { templates: t.value, weapon: IDS.base.has(started) ? started : "", from: name };
   }
   return undefined;
@@ -699,7 +718,7 @@ type Rehearsal = { text: string; reverted: boolean };
  * (sonnet-medium's loop 2 tuned minutes 16 to 20 and its full run died at 6:42), so a candidate
  * that lives in fewer games than the old playbook is set aside, and the full run plays the old one.
  */
-async function rehearse(state: loop.CoachState, playbook: Playbook): Promise<Rehearsal> {
+async function rehearse(state: CoachState, playbook: Playbook): Promise<Rehearsal> {
   const tag = tagOf(state);
   const level = (await ladder()) + 1;
   await refreshGames();
@@ -709,7 +728,7 @@ async function rehearse(state: loop.CoachState, playbook: Playbook): Promise<Reh
   const arm = (label: string, templates: Templates, weapon: string, mark: string): GameSpec[] =>
     seeds.map((seed, i) => ({ id: `${tag}.R${i + 1}${mark}`, label, from: { fresh: { difficulty: level, weapon, seed } }, seconds: MAX_GAME_SECONDS, templates, changes: "" }));
   const specs = [...arm("your playbook", playbook.templates, playbook.weapon, same ? "" : "a"), ...(same || baseline === undefined ? [] : arm("the last full run's playbook", baseline.templates, baseline.weapon, "b"))];
-  const gyms = await loop.readGyms();
+  const gyms = await readGyms();
   const results = await onSlots(slots, specs, async (slot, spec) => {
     const r = await playGame(slot, spec, gyms, (g) => buildGym(slot, g, spec.templates));
     console.log(`${spec.id}: ${outcome(r)}`);
@@ -720,7 +739,7 @@ async function rehearse(state: loop.CoachState, playbook: Playbook): Promise<Reh
   const theirs = results.filter((r) => r.spec.label !== "your playbook");
   const reverted = !same && baseline !== undefined && livedOf(mine) < livedOf(theirs);
   if (reverted && baseline !== undefined)
-    await loop.writePlaybook({ templates: baseline.templates, weapon: baseline.weapon, updated: stampOf(state), why: `set back by the loop before the full run: on the same ${seeds.length} fresh seeds the candidate lived in ${livedOf(mine)} games and the last full run's playbook (${baseline.from}) in ${livedOf(theirs)}` });
+    await writePlaybook({ templates: baseline.templates, weapon: baseline.weapon, updated: stampOf(state), why: `set back by the loop before the full run: on the same ${seeds.length} fresh seeds the candidate lived in ${livedOf(mine)} games and the last full run's playbook (${baseline.from}) in ${livedOf(theirs)}` });
   const verdict = same
     ? `Your playbook is the one the last full run played; it lived in ${livedOf(mine)} of ${mine.length} fresh Nightmare ${level} games of ${MAX_GAME_SECONDS}s.`
     : `On the same ${seeds.length} fresh Nightmare ${level} seeds, your playbook lived in ${livedOf(mine)} games and the last full run's in ${livedOf(theirs)}. ${reverted ? "Yours did worse, so the loop set it back to the last full run's playbook, which the full run will play." : "Yours did no worse, so the full run plays it."}`;
@@ -728,13 +747,13 @@ async function rehearse(state: loop.CoachState, playbook: Playbook): Promise<Reh
   return { reverted, text: ["## The rehearsal", verdict, ...results.map((r) => gameEntry(r, gyms, false))].join("\n\n") };
 }
 
-async function fullRun(state: loop.CoachState): Promise<string | undefined> {
+async function fullRun(state: CoachState): Promise<string | undefined> {
   const tag = tagOf(state);
   const stamp = stampOf(state);
-  const instructions = (await loop.readPrompts()).fullRun;
-  const rehearsal = await rehearse(state, await loop.readPlaybook());
+  const instructions = (await readPrompts()).fullRun;
+  const rehearsal = await rehearse(state, await readPlaybook());
   if (stopping) return undefined;
-  const playbook = await loop.readPlaybook();
+  const playbook = await readPlaybook();
   const prompt = [
     editableFiles("fullRun"),
     instructions,
@@ -745,26 +764,26 @@ async function fullRun(state: loop.CoachState): Promise<string | undefined> {
     '"summary": what this loop\'s games showed and what the full run puts into practice, in a short paragraph for your log.',
     '"intent": what the full run plays and why, in a short paragraph for the notes and for a person watching. The full run plays the playbook the rehearsal settled; it cannot change here.',
     "Every experiment that had games this loop needs its verdict now: its result (confirmed, refuted or inconclusive) and status done, and a belief in beliefs.csv whose experiments column names it, carrying what it found.",
-    loop.EDITS_CONTRACT,
+    EDITS_CONTRACT,
   ].join("\n\n");
-  const before = await loop.readTables();
+  const before = await readTables();
   const reply = await ask<FullRunReply>(tag, prompt, (raw) => {
     const errors: string[] = [];
-    const edits = loop.checkEdits(raw, before);
+    const edits = checkEdits(raw, before);
     if ("errors" in edits) errors.push(...edits.errors);
-    if (!loop.isText(raw.summary)) errors.push("summary must be a short paragraph");
-    if (!loop.isText(raw.intent)) errors.push("intent must be a short paragraph");
+    if (!isText(raw.summary)) errors.push("summary must be a short paragraph");
+    if (!isText(raw.intent)) errors.push("intent must be a short paragraph");
     if (raw.playbook !== undefined) errors.push("the full run plays the playbook the rehearsal settled; leave playbook out, and change it in an experiment iteration, on evidence");
     const after = afterEdits(before, "value" in edits ? edits.value : undefined);
-    for (const e of after.experiments.filter((x) => loop.gameLoops(x).includes(state.loop))) {
+    for (const e of after.experiments.filter((x) => gameLoops(x).includes(state.loop))) {
       if (e.result === "" || e.status !== "done") errors.push(`experiment ${e.name} had games this loop: give it a result (confirmed, refuted or inconclusive) and status done`);
       if (!after.beliefs.some((b) => b.experiments.split(/[\s,;]+/).includes(e.name))) errors.push(`experiment ${e.name} had games this loop: add or update a belief whose experiments column names it, with what it found`);
     }
     if (errors.length > 0 || !("value" in edits)) return { errors };
     return { value: { summary: String(raw.summary), intent: String(raw.intent), edits: edits.value } };
   });
-  if (reply !== undefined) await loop.applyEdits(reply.edits, stamp);
-  const final = await loop.readPlaybook();
+  if (reply !== undefined) await applyEdits(reply.edits, stamp);
+  const final = await readPlaybook();
   const intent = reply?.intent ?? "The coach gave no plan; the run plays the playbook as it stands.";
   await appendLog(state, "full run", reply?.summary ?? intent);
   const templatesFile = path.join(LOGS, `${tag}.full-run.templates.json`);
@@ -785,23 +804,23 @@ async function fullRun(state: loop.CoachState): Promise<string | undefined> {
   );
   const code = await bot.exited;
   if (code !== 0) console.error(`${tag}: the full run's bot exited with code ${code}; see ${out.name}`);
-  for (const name of await loop.notesFiles()) {
-    const file = path.join(loop.NOTES_DIR, name);
-    if (Bun.file(file).lastModified >= startedAt && loop.notesField(await Bun.file(file).text(), "Coach") === COACH_LABEL) return file;
+  for (const name of await notesFiles()) {
+    const file = path.join(NOTES_DIR, name);
+    if (Bun.file(file).lastModified >= startedAt && notesField(await Bun.file(file).text(), "Coach") === COACH_LABEL) return file;
   }
   return undefined;
 }
 
-type ReflectReply = { review: string; summary: string; edits: loop.LoopEdits; prompts: Partial<Record<PromptKey, string>>; gyms: GymRequest; playbook?: Playbook };
+type ReflectReply = { review: string; summary: string; edits: LoopEdits; prompts: Partial<Record<PromptKey, string>>; gyms: GymRequest; playbook?: Playbook };
 
-async function reflect(state: loop.CoachState, notesFile: string | undefined) {
+async function reflect(state: CoachState, notesFile: string | undefined) {
   const tag = `${tagOf(state)}.reflect`;
   const stamp = stampOf(state);
-  const playbook = await loop.readPlaybook();
-  const keys = Object.keys(loop.PROMPT_TITLES) as PromptKey[];
-  const prompts = await loop.readPrompts();
+  const playbook = await readPlaybook();
+  const keys = Object.keys(PROMPT_TITLES) as PromptKey[];
+  const prompts = await readPrompts();
   const notes = notesFile === undefined ? "(the full run left no notes: it was cut short)" : await Bun.file(notesFile).text();
-  const runLog = notesFile === undefined ? "" : await loop.logForPrompt(loop.notesField(notes, "Log") ?? "", 200_000);
+  const runLog = notesFile === undefined ? "" : await logForPrompt(notesField(notes, "Log") ?? "", 200_000);
   const prompt = [
     editableFiles("reflect"),
     prompts.reflect,
@@ -821,27 +840,27 @@ async function reflect(state: loop.CoachState, notesFile: string | undefined) {
     `"prompts": {"experiments", "fullRun", "reflect"}: the whole new text of each part of coach.md you rewrite, with its # heading (under ${PROMPT_LIMIT} characters, keeping every ## section and adding no other # heading). Rewrite what this loop showed works badly for you; leave a prompt out to keep it.`,
     GYMS_CONTRACT,
     PLAYBOOK_CONTRACT,
-    loop.EDITS_CONTRACT,
+    EDITS_CONTRACT,
   ].join("\n\n");
-  const before = await loop.readTables();
-  const gymsBefore = await loop.readGyms();
+  const before = await readTables();
+  const gymsBefore = await readGyms();
   const reply = await ask<ReflectReply>(tag, prompt, (raw) => {
     const errors: string[] = [];
-    const edits = loop.checkEdits(raw, before);
+    const edits = checkEdits(raw, before);
     if ("errors" in edits) errors.push(...edits.errors);
-    if (!loop.isText(raw.review) || /<!--/.test(raw.review)) errors.push("review must be Markdown without HTML comments");
-    if (!loop.isText(raw.summary)) errors.push("summary must be a short paragraph");
+    if (!isText(raw.review) || /<!--/.test(raw.review)) errors.push("review must be Markdown without HTML comments");
+    if (!isText(raw.summary)) errors.push("summary must be a short paragraph");
     const rewrites: Partial<Record<PromptKey, string>> = {};
     for (const [k, v] of Object.entries((raw.prompts ?? {}) as Record<string, unknown>)) {
-      if (!(k in loop.PROMPT_TITLES)) errors.push(`prompts.${k} is not a part of coach.md; they are ${keys.join(", ")}`);
-      else if (!loop.isText(v) || v.length > PROMPT_LIMIT) errors.push(`prompts.${k} must be the whole new text of the part, under ${PROMPT_LIMIT} characters`);
+      if (!(k in PROMPT_TITLES)) errors.push(`prompts.${k} is not a part of coach.md; they are ${keys.join(", ")}`);
+      else if (!isText(v) || v.length > PROMPT_LIMIT) errors.push(`prompts.${k} must be the whole new text of the part, under ${PROMPT_LIMIT} characters`);
       else {
-        const part = loop.checkPromptPart(k as PromptKey, v);
+        const part = checkPromptPart(k as PromptKey, v);
         if ("errors" in part) {
           errors.push(...part.errors);
           continue;
         }
-        const loss = loop.promptLoss(prompts[k as PromptKey], part.value, `coach.md # ${loop.PROMPT_TITLES[k as PromptKey]}`);
+        const loss = promptLoss(prompts[k as PromptKey], part.value, `coach.md # ${PROMPT_TITLES[k as PromptKey]}`);
         if (loss !== undefined) errors.push(loss);
         else rewrites[k as PromptKey] = part.value;
       }
@@ -855,27 +874,27 @@ async function reflect(state: loop.CoachState, notesFile: string | undefined) {
     await appendLog(state, "reflection", "The coach gave no usable reflection.");
     return;
   }
-  await loop.applyEdits(reply.edits, stamp);
-  if (reply.playbook !== undefined) await loop.writePlaybook(reply.playbook);
-  if (Object.keys(reply.prompts).length > 0) await loop.writePrompts({ ...prompts, ...reply.prompts });
-  await loop.updateGyms((gyms) => {
+  await applyEdits(reply.edits, stamp);
+  if (reply.playbook !== undefined) await writePlaybook(reply.playbook);
+  if (Object.keys(reply.prompts).length > 0) await writePrompts({ ...prompts, ...reply.prompts });
+  await updateGyms((gyms) => {
     for (const name of reply.gyms.retire) for (const g of gyms) if (g.name === name) g.status = "retired";
     gyms.push(...reply.gyms.build.filter((g) => !gyms.some((x) => x.name === g.name)));
   });
-  if (notesFile !== undefined) await Bun.write(notesFile, loop.withReview(await Bun.file(notesFile).text(), reply.review));
-  const rewrote = Object.keys(reply.prompts).map((k) => `coach.md # ${loop.PROMPT_TITLES[k as PromptKey]}`);
+  if (notesFile !== undefined) await Bun.write(notesFile, withReview(await Bun.file(notesFile).text(), reply.review));
+  const rewrote = Object.keys(reply.prompts).map((k) => `coach.md # ${PROMPT_TITLES[k as PromptKey]}`);
   await appendLog(state, "reflection", `${reply.summary}${rewrote.length === 0 ? "" : `\n\nRewrote ${rewrote.join(", ")}.`}`);
 }
 
 /** Commits gameplay/ alone, under the lock so another coach's write is never half in it, and pushes. */
-async function commit(state: loop.CoachState, notesFile: string | undefined) {
+async function commit(state: CoachState, notesFile: string | undefined) {
   const run = (cmd: string[], env?: Record<string, string>) => {
     const p = Bun.spawnSync(cmd, { cwd: GAMEPLAY, stdout: "pipe", stderr: "pipe", env: { ...process.env, ...env } });
     return { ok: p.exitCode === 0, out: `${p.stdout.toString()}${p.stderr.toString()}`.trim() };
   };
   const lived = notesFile?.match(/lived-(\d+)-(\d+)/);
   const title = `docs(gameplay): the coach finishes loop ${state.loop}${lived === null || lived === undefined ? "" : `, its full run lived ${Number(lived[1])}:${lived[2]}`}`;
-  const result = await loop.locked(async () => {
+  const result = await withLock(async () => {
     run(["git", "add", "-A", "--", "."]);
     if (run(["git", "diff", "--cached", "--quiet", "--", "."]).ok) return undefined;
     let tried = run(["gai", "-m", title, "--only", "--", "."], { AI_COMITTER_NAME: COMMITTER });
@@ -895,12 +914,12 @@ async function commit(state: loop.CoachState, notesFile: string | undefined) {
 // ---- Main --------------------------------------------------------------------------------------
 
 const next = (await ladder()) + 1;
-await loop.updateGyms((gyms) => {
+await updateGyms((gyms) => {
   for (const g of standardGyms(next)) if (!gyms.some((x) => x.name === g.name)) gyms.push(g);
   // A build the loop was running when it stopped never finished, and one of the loop's own that failed gets another try.
   for (const g of gyms) if (g.status === "building" || (g.status === "failed" && g.coach === "loop")) g.status = "pending";
 });
-let state = await loop.readCoachState();
+let state = await readCoachState();
 for (let played = 0; played < LOOPS && !stopping; played++) {
   while (state.iteration <= EXPERIMENT_ITERATIONS && !stopping) {
     console.log(`== ${tagOf(state)}: experiments`);

@@ -16,9 +16,13 @@ import { type ChoiceOption, type DirectionView, ladderCleared, type State } from
 import { type Direction, DIRECTIONS } from "../protocol/geometry";
 import { type Book, readBook as bookOf, line } from "../agent-server/book";
 import { type Chest, type Sector, see, type Spot, type World } from "./world";
-import { type BlockName, DEFAULT_TEMPLATES, type Knobs, render, type RunPlan, type RunSetup, type Templates } from "../rsi/gameplay";
+import { type BlockName, checkTemplates, DEFAULT_TEMPLATES, type Knobs, render, type Templates } from "./templates";
+import { NOTES_DIR, notesName, renderNotes, type RunEnd, runId, type RunPlan, type RunSetup } from "./notes";
 import { AgentServer } from "../agent-server/client";
-import * as loop from "../rsi/gameplay";
+import { keyNumbers, runStats } from "./run-log/stats";
+import { talliesOf, totalsBetween, totalsLines } from "./tallies";
+import { readPlaybook } from "./playbook";
+import { GIVE_UP_SECONDS, PLAN_RANGE } from "./limits";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {
@@ -37,11 +41,11 @@ const BASE: { templates: Templates; weapon?: string; source: string } = await (a
   const file = option("templates", "");
   if (file === "" && TRIAL !== undefined) throw new Error("--trial needs --templates <file>, a JSON object with planner, action and knobs");
   if (file !== "") {
-    const checked = loop.checkTemplates(await Bun.file(file).json(), DEFAULT_TEMPLATES);
+    const checked = checkTemplates(await Bun.file(file).json(), DEFAULT_TEMPLATES);
     if ("errors" in checked) throw new Error(`${file}: ${checked.errors.join("; ")}`);
     return { templates: checked.value, source: file };
   }
-  const playbook = await loop.readPlaybook();
+  const playbook = await readPlaybook();
   return { templates: playbook.templates, weapon: playbook.weapon, source: playbook.updated === "never" ? "the built-in defaults" : "the coach's playbook" };
 })();
 // The decision model's planner persona, which picks cards and goals; the same model unless named.
@@ -227,7 +231,7 @@ class RunNotes {
   picks: string[] = [];
   review = "(not reviewed yet)";
   file?: string;
-  private end?: loop.RunEnd;
+  private end?: RunEnd;
 
   /** A run the bot took over from a person is not saved, and neither is an incognito one. */
   constructor(
@@ -238,16 +242,16 @@ class RunNotes {
     public saved: boolean,
   ) {
     // Ids have one-second steps, and two bots can start a run in the same second; a later one moves on.
-    const logFor = () => path.join(LOG_DIR, `${loop.runId(setup.started)}_${setup.difficulty}_${setup.mode}_${setup.surface}.csv`);
+    const logFor = () => path.join(LOG_DIR, `${runId(setup.started)}_${setup.difficulty}_${setup.mode}_${setup.surface}.csv`);
     while (existsSync(logFor())) setup.started = new Date(setup.started.getTime() + 1000);
-    this.id = loop.runId(setup.started);
+    this.id = runId(setup.started);
     this.log = logFor();
   }
 
   /** The run is over, so its notes get their name, which says how long Tibo lived. */
-  async finish(end: loop.RunEnd) {
+  async finish(end: RunEnd) {
     this.end = end;
-    this.file = path.join(loop.NOTES_DIR, loop.notesName(this.setup, end.lived));
+    this.file = path.join(NOTES_DIR, notesName(this.setup, end.lived));
     await this.write();
   }
 
@@ -255,9 +259,9 @@ class RunNotes {
     if (!this.saved || this.file === undefined || this.end === undefined) return;
     const log = Bun.file(this.log);
     const csv = (await log.exists()) ? await log.text() : "";
-    const stats = csv === "" ? "(no log)" : loop.runStats(csv);
-    const key = csv === "" ? "(no log)" : loop.keyNumbers(csv);
-    await Bun.write(this.file, loop.renderNotes({ setup: this.setup, plan: this.plan, end: this.end, link: this.link, log: this.log, prompts: this.prompts, picks: this.picks, review: this.review, started: this.started, stats, key }));
+    const stats = csv === "" ? "(no log)" : runStats(csv);
+    const key = csv === "" ? "(no log)" : keyNumbers(csv);
+    await Bun.write(this.file, renderNotes({ setup: this.setup, plan: this.plan, end: this.end, link: this.link, log: this.log, prompts: this.prompts, picks: this.picks, review: this.review, started: this.started, stats, key }));
   }
 }
 
@@ -463,7 +467,6 @@ const planEvery = () => (piloted ? pace.planEvery : args.includes("--plan-every"
 /** What the coach set for this run: the in-game models' prompts and the knobs below. */
 let templates: Templates = DEFAULT_TEMPLATES;
 const knobs = (): Knobs => templates.knobs;
-const { PLAN_RANGE, GIVE_UP_SECONDS } = loop;
 const ON_CHEST = 14;
 // A goto that runs out its time, and food collected on touch ("gone" before the goto counts it as
 // reached), end without saying how the goal went; the next step's look at the target tells.
@@ -1281,7 +1284,7 @@ class Planner {
       ending: `${lived >= WIN_SECONDS ? "won (passed 20:00), then " : ""}died at ${clock(lived)}, level ${end.loadout.level}, ${kills} kills`,
       outcome: [
         `Lived **${clock(lived)}** (${lived}s), level ${end.loadout.level}, ${kills} kills.`,
-        ...loop.totalsLines(loop.totalsBetween(loop.talliesOf(end))),
+        ...totalsLines(totalsBetween(talliesOf(end))),
         `Health gained over the run, by food, regeneration and anything else: about ${healed} (the game does not say from what).`,
         ...(last === undefined ? [] : loadoutLines(last)),
         `Planner asked ${this.calls} times.`,
@@ -1424,7 +1427,7 @@ async function main() {
     const start = trialStart;
     if (start === undefined || end === undefined) throw new Error("the trial ended before its first step");
     const tallies = (r: World) => ({ run: r.run, counters: r.counters, loadout: { shrineTotals: r.view.tibo.shrineTotals } });
-    const totals = loop.totalsBetween(loop.talliesOf(died ?? tallies(end)), loop.talliesOf(tallies(start)));
+    const totals = totalsBetween(talliesOf(died ?? tallies(end)), talliesOf(tallies(start)));
     const endTime = died?.runClock ?? end.time;
     const run = (totals.run ?? {}) as Record<string, unknown>;
     const result = {
