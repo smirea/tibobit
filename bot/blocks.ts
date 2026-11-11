@@ -129,6 +129,7 @@ export function stateVars(r: World, extra: Record<string, string>): Record<strin
   return { ...blocks(r, book), ...Object.fromEntries(Object.entries(extra).map(([k, x]) => [k, () => x])) };
 }
 
+// Health samples by game time, to tell the planner whether Tibo is bleeding.
 const healthHistory: { time: number; hp: number }[] = [];
 
 function healthTrend(r: World): string {
