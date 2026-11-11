@@ -1,7 +1,7 @@
 import path from "node:path";
 import { campaign, latestNotes } from "../store/campaign";
 import { coachSpec } from "../flags";
-import { BOOK, IDS, ladder, LOGS, main, OFFERED } from "../session";
+import { BOOK, gameBuilds, IDS, ladder, LOGS, main, OFFERED } from "../session";
 import { coverage, readExperiments, renderExperiment } from "../store/experiments";
 import { heldCoverage, readHeld } from "../store/held";
 import { BELIEFS_CSV, COACH_LOG, INFRA_CSV } from "../store/paths";
@@ -52,6 +52,7 @@ async function lastGames(): Promise<LastGames | undefined> {
 export async function facts(state: CoachState, playbook: Playbook): Promise<string> {
   const experiments = await readExperiments();
   const gyms = await readGyms();
+  const builds = await gameBuilds();
   const last = await lastGames();
   const log = await Bun.file(COACH_LOG).text().catch(() => "");
   const cleared = await ladder();
@@ -81,7 +82,8 @@ export async function facts(state: CoachState, playbook: Playbook): Promise<stri
     "## Finished experiments",
     closed.map((e) => `- ${e.name} (${e.status}${e.result === "" ? "" : `, ${e.result}`}, ${e.area}): ${e.title}. ${e.findings.split("\n")[0] ?? ""}`).join("\n") || "(none)",
     "## Gyms (gameplay/gyms.jsonl)",
-    gyms.map(gymLine).join("\n") || "(none)",
+    "When tibo.dog ships a new game build, a saved gym no longer loads. It is built again when a game first starts from it: a fresh game on its seed starts with what the gym held, the gym's templates play it to the gym's time, and there exactly that build, health and gold are put back. Tibo's level, its place on the map and the enemies around it differ from the first save. If Tibo cannot live to that time, the gym fails and its games are not played.",
+    gyms.map((g) => gymLine(g, builds)).join("\n") || "(none)",
     "## Your log, newest last",
     log.length > 40_000 ? `(older entries cut)\n${log.slice(-40_000)}` : log || "(empty)",
     "## The last iteration's games",

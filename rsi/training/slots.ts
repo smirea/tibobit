@@ -35,7 +35,7 @@ export type GameSpec = {
   saveGym?: { name: string; purpose: string };
 };
 
-export type GameResult = { spec: GameSpec; seed: string; difficulty: string; result?: TrialResult; stats?: string; economy?: string; picks?: string[]; savedGym?: CheckpointMeta; error?: string };
+export type GameResult = { spec: GameSpec; seed: string; difficulty: string; result?: TrialResult; stats?: string; economy?: string; picks?: string[]; savedGym?: { checkpoint: CheckpointMeta; held: LoadoutSpec }; error?: string };
 
 /** A random Open World seed, as the game rolls them, that is not the evaluation seed. */
 export function freshSeed(evalSeed: string): string {
@@ -233,7 +233,6 @@ export class Slot {
     return { result, stats: csv === "" ? "(no log)" : runStats(csv), economy: csv === "" ? "(no log)" : economy(csv), picks: picks(csv) };
   }
 
-  /** Loads a gym into a run here, building it first when this game build cannot load it. */
   /**
    * Loads a gym into a run here. A gym saved on another game build means tibo.dog shipped a new
    * one: this game restarts onto the newest build first, and the gym is built again only when it is
@@ -250,7 +249,10 @@ export class Slot {
       page = (await this.state()).gameBuild;
     }
     let ready = gym;
-    if (gym.checkpoint.build !== page) ready = await build(gym);
+    if (gym.checkpoint.build !== page) {
+      ready = await build(gym);
+      if (ready.status !== "ready") throw new Error(`gym ${gym.name} was saved on game build ${gym.checkpoint.build}, this game runs ${page ?? "?"}, and building it again failed: ${ready.error ?? ready.status}`);
+    }
     // Another slot may have built the gym again since this page last loaded it.
     await this.command({ type: "checkpoint", op: "drop", name: `gym-${ready.name}` });
     const loaded = await this.agent.run({ type: "checkpoint", op: "load", name: `gym-${ready.name}` });
@@ -280,23 +282,39 @@ export class Slot {
       }
       if (spec.loadout !== undefined) await this.command({ type: "loadout", ...spec.loadout });
       const { result, stats, economy, picks } = await this.trial(spec.id, spec.seconds, spec.templates);
-      let savedGym: CheckpointMeta | undefined;
-      if (spec.saveGym !== undefined && !result.died) {
-        await this.command({ type: "checkpoint", op: "save", name: `gym-${spec.saveGym.name}` });
-        savedGym = (await this.agent.checkpoints()).find((c) => c.name === `gym-${spec.saveGym?.name}`);
-      }
+      const savedGym = spec.saveGym === undefined || result.died ? undefined : await this.saveGym(spec.saveGym.name);
       return { spec, seed, difficulty, result, stats, economy, picks, ...(savedGym === undefined ? {} : { savedGym }) };
     } catch (e) {
       return { spec, seed, difficulty, error: e instanceof Error ? e.message : String(e) };
     }
   }
 
-  /** Builds a gym from its recipe: a fresh game played to its time, then saved. */
+  /** What Tibo holds now, as a loadout that puts it back. */
+  private async held(): Promise<LoadoutSpec> {
+    const tibo = (await this.state()).tibo;
+    if (tibo === undefined) throw new Error("no run to read what Tibo holds from");
+    const leveled = (list: { id: string; level: number }[]) => list.map(({ id, level }) => ({ id, level }));
+    return { weapons: leveled(tibo.weapons), passives: leveled(tibo.passives), items: tibo.items.map(({ id, count }) => ({ id, count })), gold: tibo.gold, hp: tibo.life.hp };
+  }
+
+  private async saveGym(name: string): Promise<{ checkpoint: CheckpointMeta; held: LoadoutSpec }> {
+    await this.command({ type: "checkpoint", op: "save", name: `gym-${name}` });
+    const checkpoint = (await this.agent.checkpoints()).find((c) => c.name === `gym-${name}`);
+    if (checkpoint === undefined) throw new Error("the checkpoint was saved but is not listed");
+    return { checkpoint, held: await this.held() };
+  }
+
+  /**
+   * Builds a gym: a fresh game played to its time, then saved. A gym built before starts with what
+   * it held then, so Tibo lives to a time the playbook alone may not reach, and gets exactly that
+   * back at the end: the state differs from the first save only in the map, the level and the enemies.
+   */
   async buildGym(gym: Gym, templates: Templates, evalSeed: string): Promise<Gym> {
     const seed = gym.seed === "" || gym.seed.toUpperCase() === evalSeed.toUpperCase() ? freshSeed(evalSeed) : gym.seed;
     try {
       await this.fresh(seed, gym.difficulty, gym.weapon);
-      if (gym.loadout !== undefined) await this.command({ type: "loadout", ...gym.loadout });
+      const start = gym.held === undefined ? gym.loadout : { ...gym.held, hp: "full" as const };
+      if (start !== undefined) await this.command({ type: "loadout", ...start });
       // Played in stages, each saved: a death replays that stage from its start (the models choose
       // differently each time) rather than the whole game from 0:00.
       const stage = `gym-${gym.name}-stage`;
@@ -318,11 +336,17 @@ export class Slot {
           await this.command({ type: "checkpoint", op: "load", name: stage });
         }
       }
-      await this.command({ type: "checkpoint", op: "save", name: `gym-${gym.name}` });
-      const checkpoint = (await this.agent.checkpoints()).find((c) => c.name === `gym-${gym.name}`);
-      if (checkpoint === undefined) throw new Error("the checkpoint was saved but is not listed");
+      if (gym.held !== undefined) {
+        // A loadout cannot replace a build while a choice is open; the bot picks it.
+        for (let tries = 0; (await this.state()).screen === "choice"; tries++) {
+          if (tries >= 5) throw new Error("a choice stayed open at the gym's time");
+          await this.trial(`gym-${gym.name}-${Date.now()}`, 2, templates);
+        }
+        await this.command({ type: "loadout", ...gym.held });
+      }
+      const saved = await this.saveGym(gym.name);
       const { error: _, ...rest } = gym;
-      return { ...rest, seed, status: "ready", checkpoint, templates };
+      return { ...rest, seed, status: "ready", checkpoint: saved.checkpoint, held: gym.held ?? saved.held, templates };
     } catch (e) {
       return { ...gym, seed, status: "failed", error: e instanceof Error ? e.message : String(e), templates };
     }

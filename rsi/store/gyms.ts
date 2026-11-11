@@ -1,7 +1,7 @@
 // Saved game states the training ground starts games from, kept so ideas can be tried again and
 // again under known conditions. A gym is built by playing a fresh game on a seed other than the
-// evaluation seed to its time, or saved from the end of a game. Its recipe stays, so a gym the game
-// can no longer load (a new game build) is built again.
+// evaluation seed to its time, or saved from the end of a game. A gym the game can no longer load
+// (tibo.dog shipped a new game build) is built again on its seed with the build it held.
 
 import type { CheckpointMeta, LoadoutSpec } from "../../protocol/commands";
 import type { Templates } from "../../bot/templates";
@@ -29,6 +29,8 @@ export type Gym = {
   used?: { iteration: string; at: string }[];
   /** The templates that played up to it, for a rebuild. */
   templates?: Templates;
+  /** What Tibo held when it was saved, which a rebuild starts with and puts back at its time. */
+  held?: LoadoutSpec;
   checkpoint?: CheckpointMeta;
   error?: string;
 };
@@ -54,10 +56,14 @@ export async function updateGyms<T>(change: (gyms: Gym[]) => T | Promise<T>): Pr
   });
 }
 
-export function gymLine(g: Gym): string {
+/** A ready gym no game here can load as it is, because a game runs another game build than the one it was saved on. */
+export const stale = (g: Gym, gameBuilds: string[]) => g.status === "ready" && g.checkpoint !== undefined && gameBuilds.some((b) => b !== g.checkpoint?.build);
+
+export function gymLine(g: Gym, gameBuilds: string[]): string {
   const build = g.checkpoint === undefined ? "" : `; lv ${g.checkpoint.level}, hp ${g.checkpoint.hp}, ${[...g.checkpoint.weapons, ...g.checkpoint.passives, ...g.checkpoint.items].join(", ")}`;
   const used = g.used === undefined || g.used.length === 0 ? "never used" : `used in ${g.used.length} iterations, last ${g.used.at(-1)?.iteration}`;
-  return `- ${g.name} (${g.status}${g.error === undefined ? "" : `: ${g.error}`}): Nightmare ${g.difficulty} at ${clockPadded(g.at)}${g.weapon === "" ? "" : `, started with ${g.weapon}`}${g.loadout === undefined ? "" : ", build swapped in at the start"}${build}. ${g.purpose} (by ${g.coach}, ${g.source}; ${used})`;
+  const status = stale(g, gameBuilds) ? `ready, but saved on an older game build: ${g.held === undefined ? "replayed from 0:00 by its recipe" : "built again with the build listed here"} before the first game from it` : g.status;
+  return `- ${g.name} (${status}${g.error === undefined ? "" : `: ${g.error}`}): Nightmare ${g.difficulty} at ${clockPadded(g.at)}${g.weapon === "" ? "" : `, started with ${g.weapon}`}${g.loadout === undefined ? "" : ", build swapped in at the start"}${build}. ${g.purpose} (by ${g.coach}, ${g.source}; ${used})`;
 }
 
 /** Puts a gym in the list, in place of the one with its name. */

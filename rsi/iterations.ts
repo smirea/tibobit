@@ -115,7 +115,8 @@ export async function experimentIteration(state: CoachState) {
       seed: r.seed,
       source: `saved at the end of game ${r.spec.id}`,
       templates: r.spec.templates,
-      checkpoint: r.savedGym,
+      checkpoint: r.savedGym.checkpoint,
+      held: r.savedGym.held,
     };
     await updateGyms((all) => upsertGym(all, gym));
   }

@@ -41,6 +41,9 @@ export const main = first;
 /** The training slots. */
 export const slots = rest;
 
+/** The game build each training slot runs. */
+export const gameBuilds = async () => (await Promise.all(slots.map((s) => s.state()))).flatMap((s) => (s.gameBuild === undefined ? [] : [s.gameBuild]));
+
 // A rebuilt userscript reaches the games when they restart, which happens between iterations.
 let gamesBuilt = Bun.file(USERSCRIPT).lastModified;
 
