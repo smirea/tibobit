@@ -5,23 +5,35 @@ import { DIRECTIONS, type Direction, type Surroundings, type Threats } from "./p
 const REACH = 300;
 // Enemies this close count as on Tibo, for standing still.
 const NEAR = 60;
-const HURT_WINDOW_TICKS = 180;
+const TICKS_PER_SECOND = 60;
+const WINDOW_TICKS = 3 * TICKS_PER_SECOND;
 
-// Damage taken by source at recent ticks, to say what hurt Tibo lately.
-let hurtHistory: { tick: number; totals: Map<string, number> }[] = [];
+type Tally = { tick: number; totals: Map<string, number> }[];
+const takenHistory: Tally = [];
+const dealtHistory: Tally = [];
+
+/** How much each source of one of the game's running tallies grew in the last 3 seconds, and over how many seconds that was measured. */
+function recent(history: Tally, s: GameState, tally: Map<string, number>): { seconds: number; grown: Map<string, number> } {
+  if ((history.at(-1)?.tick ?? 0) > s.tick) history.length = 0;
+  history.push({ tick: s.tick, totals: new Map(tally) });
+  while (history.length > 1 && (history[1]?.tick ?? 0) <= s.tick - WINDOW_TICKS) history.shift();
+  const first = history[0] ?? { tick: s.tick, totals: new Map<string, number>() };
+  const grown = new Map<string, number>();
+  for (const [source, total] of tally) grown.set(source, total - (first.totals.get(source) ?? 0));
+  return { seconds: (s.tick - first.tick) / TICKS_PER_SECOND, grown };
+}
 
 function recentHurt(s: GameState): Record<string, number> {
-  const totals = new Map(s.run.damageTakenBySource);
-  if (hurtHistory.length > 0 && (hurtHistory.at(-1)?.tick ?? 0) > s.tick) hurtHistory = [];
-  hurtHistory.push({ tick: s.tick, totals });
-  while (hurtHistory.length > 1 && (hurtHistory[1]?.tick ?? 0) <= s.tick - HURT_WINDOW_TICKS) hurtHistory.shift();
-  const before = hurtHistory[0]?.totals ?? new Map<string, number>();
   const out: Record<string, number> = {};
-  for (const [source, total] of totals) {
-    const delta = total - (before.get(source) ?? 0);
-    if (delta >= 0.5) out[source] = round(delta);
-  }
+  for (const [source, taken] of recent(takenHistory, s, s.run.damageTakenBySource).grown) if (taken >= 0.5) out[source] = round(taken);
   return out;
+}
+
+function recentDps(s: GameState): number {
+  const { seconds, grown } = recent(dealtHistory, s, s.run.damageBySource);
+  let dealt = 0;
+  for (const amount of grown.values()) dealt += amount;
+  return seconds === 0 ? 0 : round(dealt / seconds);
 }
 const PATH_SAMPLES = [0.25, 0.5, 0.75, 1];
 
@@ -70,7 +82,7 @@ export function surroundings(link: GameLink, s: GameState, seconds: number, rows
   }
   items.sort((a, z) => a.dist - z.dist);
 
-  return { seconds, hurtBy: recentHurt(s), ...threats(link, s, seconds), elites, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
+  return { seconds, hurtBy: recentHurt(s), dps: recentDps(s), ...threats(link, s, seconds), elites, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
 }
 
 /** What could hit Tibo, or what Tibo would walk into within `seconds`, in any game state, a copy included. Shapes use the game's own hit test for pools. */

@@ -90,8 +90,12 @@ export type Command =
 export const CHOICE_ACTIONS = ["pick", "banish", "buy", "reroll", "skip", "close", "accept", "continue", "endRun"] as const;
 export type ChoiceAction = { type: "pick" | "banish" | "buy"; index: number } | { type: "reroll" | "skip" | "close" | "accept" | "continue" | "endRun" };
 
-/** What one plan cost on a copy of the game taken at game tick `tick`; `bySource` uses the game's damage-by-source keys. */
-export type Outcome = { tick: number; damage: number; dead: boolean; bySource: Record<string, number> };
+/**
+ * What one plan cost and did on a copy of the game taken at game tick `tick`: the damage Tibo took,
+ * with `bySource` in the game's damage-by-source keys, and the damage he dealt a second while the
+ * plan played, by the game's `run.damageBySource` tally.
+ */
+export type Outcome = { tick: number; damage: number; dead: boolean; bySource: Record<string, number>; dps: number };
 
 /**
  * Whole trips to the `forecast` command's `route.to`, each played on a copy of the game until it is
@@ -133,6 +137,8 @@ export type Surroundings = Threats & {
   seconds: number;
   /** Damage taken in the last 3 seconds, by the game's damage source keys. */
   hurtBy: Record<string, number>;
+  /** Damage Tibo dealt a second over the last 3 seconds, by the game's `run.damageBySource` tally. */
+  dps: number;
   /** Every elite alive: the game's own enemy entries, nearest first, with where each is. */
   elites: (Record<string, unknown> & Bearing)[];
   /** The game's pickups: how many of each kind, the total `value` of the xp and gold on the ground, and every pickup that is neither (chests, food, rerolls and the like) as the game's own entries, nearest first. */
@@ -352,6 +358,8 @@ export type LiveView = {
     recipes: string[];
     /** Damage taken in the last 3 seconds, by source. */
     hurtBy: Record<string, number>;
+    /** Damage dealt a second over the last 3 seconds. */
+    dps: number;
   };
   directions: { horizonMilliseconds: number } & Partial<Record<Direction | "still", DirectionView>>;
   attacks: {

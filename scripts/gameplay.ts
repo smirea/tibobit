@@ -165,6 +165,7 @@ export const BLOCKS = {
   evolutions: "what the next chest evolves, or that no recipe is complete",
   standing_on: "the chest or spot Tibo stands on and how far it is charged, and the ground damage sources standing still would take, by the forecast",
   hurt_by: "damage taken in the last 3 seconds by source",
+  dps: "damage dealt a second over the last 3 seconds, e.g. 'Damage dealt a second over the last 3 seconds: 412.' (not part of {{state}})",
   bosses: "bosses with distance, direction and health",
   enemies: "enemies on screen, and the directions with the most and the fewest",
   current_goal: "the goal under way and since when",

@@ -18,7 +18,7 @@ test("templates may only use the values their slot has, and must use the require
   const checked = checkTemplates({ planner: { goal: "Is {{move}} good?" }, knobs: { evadeSeconds: 99 } }, DEFAULT_TEMPLATES);
   expect(checked).toEqual({
     errors: [
-      "planner.goal uses {{move}}, which it cannot: it may use time, difficulty, mode, health, level, gold, dash, weapons, passives, items, banished, recipes, evolutions, standing_on, hurt_by, bosses, enemies, current_goal, recent_goals, weapon_damage, stats, resources, buffs, schedule, enemy_kinds, elites, hazards, pickups, spots, dogs, events, counters, state, goal",
+      "planner.goal uses {{move}}, which it cannot: it may use time, difficulty, mode, health, level, gold, dash, weapons, passives, items, banished, recipes, evolutions, standing_on, hurt_by, dps, bosses, enemies, current_goal, recent_goals, weapon_damage, stats, resources, buffs, schedule, elites, hazards, pickups, spots, dogs, events, counters, state, goal",
       "planner.goal must use {{goal}}",
       "knobs.evadeSeconds must be a number from 2 to 30",
     ],

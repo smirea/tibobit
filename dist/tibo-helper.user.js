@@ -393,23 +393,35 @@
   // src/agent/surroundings.ts
   var REACH = 300;
   var NEAR = 60;
-  var HURT_WINDOW_TICKS = 180;
-  var hurtHistory = [];
+  var TICKS_PER_SECOND = 60;
+  var WINDOW_TICKS = 3 * TICKS_PER_SECOND;
+  var takenHistory = [];
+  var dealtHistory = [];
+  function recent(history, s, tally) {
+    if ((history.at(-1)?.tick ?? 0) > s.tick)
+      history.length = 0;
+    history.push({ tick: s.tick, totals: new Map(tally) });
+    while (history.length > 1 && (history[1]?.tick ?? 0) <= s.tick - WINDOW_TICKS)
+      history.shift();
+    const first = history[0] ?? { tick: s.tick, totals: new Map };
+    const grown = new Map;
+    for (const [source, total] of tally)
+      grown.set(source, total - (first.totals.get(source) ?? 0));
+    return { seconds: (s.tick - first.tick) / TICKS_PER_SECOND, grown };
+  }
   function recentHurt(s) {
-    const totals = new Map(s.run.damageTakenBySource);
-    if (hurtHistory.length > 0 && (hurtHistory.at(-1)?.tick ?? 0) > s.tick)
-      hurtHistory = [];
-    hurtHistory.push({ tick: s.tick, totals });
-    while (hurtHistory.length > 1 && (hurtHistory[1]?.tick ?? 0) <= s.tick - HURT_WINDOW_TICKS)
-      hurtHistory.shift();
-    const before = hurtHistory[0]?.totals ?? new Map;
     const out = {};
-    for (const [source, total] of totals) {
-      const delta = total - (before.get(source) ?? 0);
-      if (delta >= 0.5)
-        out[source] = round(delta);
-    }
+    for (const [source, taken] of recent(takenHistory, s, s.run.damageTakenBySource).grown)
+      if (taken >= 0.5)
+        out[source] = round(taken);
     return out;
+  }
+  function recentDps(s) {
+    const { seconds, grown } = recent(dealtHistory, s, s.run.damageBySource);
+    let dealt = 0;
+    for (const amount of grown.values())
+      dealt += amount;
+    return seconds === 0 ? 0 : round(dealt / seconds);
   }
   var PATH_SAMPLES = [0.25, 0.5, 0.75, 1];
   function directionOf(dx, dy) {
@@ -447,7 +459,7 @@
         items.push({ ...p, ...bearing(dx, dy) });
     }
     items.sort((a, z) => a.dist - z.dist);
-    return { seconds, hurtBy: recentHurt(s), ...threats(link, s, seconds), elites, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
+    return { seconds, hurtBy: recentHurt(s), dps: recentDps(s), ...threats(link, s, seconds), elites, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
   }
   function threats(link, s, seconds) {
     const enums = link.enums;
@@ -565,7 +577,7 @@
   }
 
   // src/agent/snapshot.ts
-  var TICKS_PER_SECOND = 60;
+  var TICKS_PER_SECOND2 = 60;
   function choiceCards() {
     const cards = [...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")];
     const buttons = [...document.querySelectorAll("button")].filter((b) => !b.matches(".ui-card, .ui-pause-btn, .ui-sound") && !b.closest("#tibo-helper") && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "" && !/^banish/i.test((b.textContent ?? "").trim()));
@@ -609,7 +621,7 @@
       capturedAt: Date.now(),
       screen,
       ...reflection === undefined ? {} : { game: reflection, gameEvents: link.events.map(json) },
-      ...reflection === undefined || !playing ? {} : { surroundings: surroundings(link, game.state, link.forecastTicks / TICKS_PER_SECOND, { enemies: reflection.enemies ?? [], pickups: reflection.pickups ?? [] }) },
+      ...reflection === undefined || !playing ? {} : { surroundings: surroundings(link, game.state, link.forecastTicks / TICKS_PER_SECOND2, { enemies: reflection.enemies ?? [], pickups: reflection.pickups ?? [] }) },
       storage: gameStorage(),
       headless: navigator.webdriver,
       ...link.simBuild === undefined ? {} : { gameBuild: link.simBuild },
@@ -653,8 +665,8 @@
     const name = proto.constructor?.name ?? "?";
     return `${name}(${Object.getOwnPropertyNames(proto).sort().join(",")})`;
   }
-  var TICKS_PER_SECOND2 = 60;
-  var WARM_UP_TICKS = 3 * TICKS_PER_SECOND2;
+  var TICKS_PER_SECOND3 = 60;
+  var WARM_UP_TICKS = 3 * TICKS_PER_SECOND3;
   var WEAPON_SLOTS = 6;
   var MAX_CACHED = 3;
 
@@ -1002,7 +1014,7 @@
   }
 
   // src/agent/control.ts
-  var TICKS_PER_SECOND3 = 60;
+  var TICKS_PER_SECOND4 = 60;
   var STUCK_TICKS = 90;
   var KEEP_STATUSES = 10;
   function anchored(s, to) {
@@ -1183,7 +1195,7 @@
             this.link.forecastLagTicks = Math.round(command.lag * 60);
           if (command.seconds !== undefined)
             this.link.forecastTicks = Math.round(command.seconds * 60);
-          this.link.forecastRoute = command.route === undefined ? undefined : { to: anchored(this.game().state, command.route.to), stayTicks: Math.round((command.route.stay ?? 0) * TICKS_PER_SECOND3), ticks: Math.round((command.route.seconds ?? 4) * TICKS_PER_SECOND3), legTicks: Math.round((command.route.leg ?? 0.5) * TICKS_PER_SECOND3) };
+          this.link.forecastRoute = command.route === undefined ? undefined : { to: anchored(this.game().state, command.route.to), stayTicks: Math.round((command.route.stay ?? 0) * TICKS_PER_SECOND4), ticks: Math.round((command.route.seconds ?? 4) * TICKS_PER_SECOND4), legTicks: Math.round((command.route.leg ?? 0.5) * TICKS_PER_SECOND4) };
           this.finish(status, "done");
           return;
         case "start":
@@ -1311,13 +1323,13 @@
       const elapsed = s.tick - active.startTick;
       const { command, status } = active;
       if (command.type === "move") {
-        if (command.seconds !== undefined && elapsed >= command.seconds * TICKS_PER_SECOND3) {
+        if (command.seconds !== undefined && elapsed >= command.seconds * TICKS_PER_SECOND4) {
           this.finish(status, "done");
           return STILL;
         }
         return vector(command.dir);
       }
-      if (elapsed >= (command.timeout ?? 60) * TICKS_PER_SECOND3) {
+      if (elapsed >= (command.timeout ?? 60) * TICKS_PER_SECOND4) {
         this.finish(status, "failed", "timeout");
         return STILL;
       }
@@ -1346,7 +1358,7 @@
       active.arrivedTick ??= s.tick;
       active.best = undefined;
       const stay = command.stay;
-      if (stay === undefined || stay === 0 || typeof stay === "number" && s.tick - active.arrivedTick >= stay * TICKS_PER_SECOND3) {
+      if (stay === undefined || stay === 0 || typeof stay === "number" && s.tick - active.arrivedTick >= stay * TICKS_PER_SECOND4) {
         this.finish(status, "done");
       }
       return STILL;
@@ -1359,7 +1371,7 @@
       const { command } = active;
       if (command.type === "move") {
         const held = vector(command.dir);
-        const end = command.seconds === undefined ? Infinity : (active.startTick ?? live.tick) + command.seconds * TICKS_PER_SECOND3;
+        const end = command.seconds === undefined ? Infinity : (active.startTick ?? live.tick) + command.seconds * TICKS_PER_SECOND4;
         return (s) => s.tick >= end ? STILL : held;
       }
       const to = active.to ?? anchored(live, command.to);
@@ -1385,16 +1397,22 @@
   }
 
   // src/agent/foresight.ts
-  var TICKS_PER_SECOND4 = 60;
+  var TICKS_PER_SECOND5 = 60;
   var SLICE_MS = 4;
   var SHARE = 0.75;
-  var KEEP_TICKS = 2 * TICKS_PER_SECOND4;
+  var KEEP_TICKS = 2 * TICKS_PER_SECOND5;
   var unit2 = (dir) => {
     const a = DIRECTIONS.indexOf(dir) * Math.PI / 4;
     return { x: Math.cos(a), y: Math.sin(a) };
   };
   var STILL2 = { x: 0, y: 0 };
   var playing = (s) => !s.over && s.choiceQueue.length === 0;
+  var dealt = (s) => {
+    let total = 0;
+    for (const amount of s.run.damageBySource.values())
+      total += amount;
+    return total;
+  };
 
   class Foresight {
     link;
@@ -1463,13 +1481,16 @@
         sim.dash(plan.dash.x, plan.dash.y);
       }
       const before = new Map(s.run.damageTakenBySource);
+      const dealtBefore = dealt(s);
       let arrived;
       let stood = 0;
       let done;
+      let played = 0;
       for (let i = 0;i < plan.ticks && playing(s) && done === undefined; i++) {
         const held = plan.input(s, i);
         setInput(held.x, held.y);
         step();
+        played++;
         if (plan.trip !== undefined) {
           const goal = plan.trip.goal(s);
           const there = goal !== undefined && Math.hypot(goal.x - (s.player.x[me] ?? 0), goal.y - (s.player.y[me] ?? 0)) <= goal.within;
@@ -1495,8 +1516,9 @@
         damage,
         dead: s.over,
         bySource,
-        ...arrived === undefined ? {} : { arrives: arrived / TICKS_PER_SECOND4 },
-        ...done === undefined ? {} : { done: done / TICKS_PER_SECOND4 }
+        dps: played === 0 ? 0 : (dealt(s) - dealtBefore) * TICKS_PER_SECOND5 / played,
+        ...arrived === undefined ? {} : { arrives: arrived / TICKS_PER_SECOND5 },
+        ...done === undefined ? {} : { done: done / TICKS_PER_SECOND5 }
       });
     }
     forget() {
@@ -1512,9 +1534,9 @@
       const me = s.me;
       return {
         tick: game.state.tick,
-        seconds: lagTicks / TICKS_PER_SECOND4,
+        seconds: lagTicks / TICKS_PER_SECOND5,
         player: { x: s.player.x[me] ?? 0, y: s.player.y[me] ?? 0, hp: s.player.hp[me] ?? 0, dashCharges: s.player.dashCharges[me] ?? 0 },
-        threats: threats(this.link, s, this.link.forecastTicks / TICKS_PER_SECOND4)
+        threats: threats(this.link, s, this.link.forecastTicks / TICKS_PER_SECOND5)
       };
     }
     current(game) {
@@ -1579,10 +1601,10 @@
           outcomes[name] = outcome;
       }
       return {
-        lag: s.paused ? 0 : this.link.forecastLagTicks / TICKS_PER_SECOND4,
-        seconds: this.link.forecastTicks / TICKS_PER_SECOND4,
+        lag: s.paused ? 0 : this.link.forecastLagTicks / TICKS_PER_SECOND5,
+        seconds: this.link.forecastTicks / TICKS_PER_SECOND5,
         ahead,
-        ...this.routed && route !== undefined ? { routes: { seconds: route.ticks / TICKS_PER_SECOND4, leg: route.legTicks / TICKS_PER_SECOND4, stay: route.stayTicks / TICKS_PER_SECOND4, options: outcomes } } : { moves: outcomes }
+        ...this.routed && route !== undefined ? { routes: { seconds: route.ticks / TICKS_PER_SECOND5, leg: route.legTicks / TICKS_PER_SECOND5, stay: route.stayTicks / TICKS_PER_SECOND5, options: outcomes } } : { moves: outcomes }
       };
     }
   }

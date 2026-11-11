@@ -1054,6 +1054,7 @@ function blocks(r: World, b: Book): Record<BlockName, () => string> {
     evolutions: () => (t.evolves.length === 0 ? "No recipe is complete yet." : `The next chest opened evolves ${t.evolves.join(" and ")}.`),
     standing_on: () => `Tibo stands ${spotLine(r) ?? "on no chest or spot"}.${groundSources(r).length === 0 ? "" : ` Underfoot: ${groundSources(r).join(", ")}.`}`,
     hurt_by: () => `Hurt in the last 3 seconds by: ${fields(r.hurtBy) || "nothing"}.`,
+    dps: () => `Damage dealt a second over the last 3 seconds: ${Math.round(r.dps)}.`,
     bosses: () => `Bosses: ${r.bosses.map((x) => `${x.name} (${x.type}) ${Math.round(x.dist)} away to the ${x.dir}, ${pct(x.hp, x.maxHp)}% health`).join("; ") || "none"}.`,
     enemies: () => {
       const crowd = [...r.sectors].sort((a, z) => z.enemies - a.enemies);

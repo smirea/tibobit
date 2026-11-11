@@ -180,6 +180,7 @@ function display(s: Snap): Record<string, unknown> {
       evolves: tibo.evolves,
       recipes: tibo.recipes,
       hurtBy: tibo.hurtBy,
+      dps: tibo.dps,
     };
   if (directions !== undefined) {
     const { horizonMilliseconds, ...ways } = directions;

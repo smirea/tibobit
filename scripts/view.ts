@@ -339,6 +339,7 @@ export function liveView(s: Snapshot, b: Book): LiveView | undefined {
             .join(" + ")}`,
       ),
       hurtBy: Object.fromEntries(Object.entries(around.hurtBy).map(([k, v]) => [sourceName(b, k), v])),
+      dps: around.dps,
     },
     directions: { horizonMilliseconds: Math.round(around.seconds * 1000), ...directions },
     attacks: {

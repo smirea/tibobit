@@ -36,6 +36,7 @@ export type World = {
   spots: Spot[];
   sectors: Sector[];
   hurtBy: Record<string, number>;
+  dps: number;
 };
 
 export function see(s: State): World | undefined {
@@ -71,5 +72,6 @@ export function see(s: State): World | undefined {
     spots: gather((d) => d.spots).map((x) => ({ ...x, inside: x.dir === "still" })),
     sectors: DIRECTIONS.map((dir) => ({ dir, enemies: directions[dir]?.enemies ?? 0, bullets: directions[dir]?.bullets ?? 0 })),
     hurtBy: tibo.hurtBy,
+    dps: tibo.dps,
   };
 }

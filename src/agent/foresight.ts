@@ -27,6 +27,11 @@ const unit = (dir: Direction) => {
 };
 const STILL = { x: 0, y: 0 };
 const playing = (s: GameState) => !s.over && s.choiceQueue.length === 0;
+const dealt = (s: GameState) => {
+  let total = 0;
+  for (const amount of s.run.damageBySource.values()) total += amount;
+  return total;
+};
 
 /**
  * Prices plans on copies of the game, off the snapshot's path: a running game gets one plan at a
@@ -105,13 +110,16 @@ export class Foresight {
       sim.dash(plan.dash.x, plan.dash.y);
     }
     const before = new Map(s.run.damageTakenBySource);
+    const dealtBefore = dealt(s);
     let arrived: number | undefined;
     let stood = 0;
     let done: number | undefined;
+    let played = 0;
     for (let i = 0; i < plan.ticks && playing(s) && done === undefined; i++) {
       const held = plan.input(s, i);
       setInput(held.x, held.y);
       step();
+      played++;
       if (plan.trip !== undefined) {
         const goal = plan.trip.goal(s);
         const there = goal !== undefined && Math.hypot(goal.x - (s.player.x[me] ?? 0), goal.y - (s.player.y[me] ?? 0)) <= goal.within;
@@ -135,6 +143,7 @@ export class Foresight {
       damage,
       dead: s.over,
       bySource,
+      dps: played === 0 ? 0 : ((dealt(s) - dealtBefore) * TICKS_PER_SECOND) / played,
       ...(arrived === undefined ? {} : { arrives: arrived / TICKS_PER_SECOND }),
       ...(done === undefined ? {} : { done: done / TICKS_PER_SECOND }),
     });
