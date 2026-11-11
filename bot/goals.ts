@@ -3,9 +3,9 @@
 // move, by the game's own forecast. When it costs more, the action model picks the step, told
 // only the goal and what each move costs. A goal ends when it is used up, reached, stuck or late.
 
-import { knobs } from "./playing";
+import { knobs } from "./run-templates";
 import { GIVE_UP_SECONDS, PLAN_RANGE } from "./limits";
-import { onChest, plural, priceWords } from "./words";
+import { onChest, plural, priceWords } from "./phrasing";
 import type { ActionTag, GoalResult, Inspect } from "../protocol/pilot";
 import type { Direction } from "../protocol/geometry";
 import type { CommandStatus } from "../protocol/commands";

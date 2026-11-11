@@ -5,7 +5,7 @@
 // choice, when a boss appears, and every pace.planEvery seconds, so a better goal can take over.
 
 /** One thing Tibo can do on the open choice: the game's own action, and the words the planner weighs it by. */
-import { book, fields, groundSources, onScreen, pct, poiWhat, priceWords, spotLine } from "./words";
+import { book, fields, groundSources, onScreen, pct, poiWhat, priceWords, spotLine } from "./phrasing";
 import { difficulty, MODE_NAME } from "./run-context";
 import type { BlockName } from "./templates";
 import type { ChoiceAction } from "../protocol/commands";
@@ -14,7 +14,7 @@ import type { ChoiceOption } from "../protocol/view";
 import type { World } from "./world";
 import { outcomes, pursuit } from "./goals";
 import type { Book } from "../game/book";
-import { clock } from "../format";
+import { clock } from "../clock";
 
 
 export type Card = { action: ChoiceAction; name: string; notes: string[]; text: string };

@@ -6,7 +6,7 @@ import { type Gym, updateGyms, upsertGym } from "./store/gyms";
 import { onSlots, Slot } from "./training/slots";
 import { slots } from "./session";
 import { GOAL_LEVEL } from "./rules";
-import { clockPadded } from "../format";
+import { clockPadded } from "../clock";
 
 export function standardGyms(next: number): Gym[] {
   const gym = (name: string, difficulty: number, at: number, purpose: string): Gym => ({ name, status: "pending", purpose, coach: "loop", created: "start", difficulty, at, weapon: "", seed: "", source: `built from a fresh game to ${clockPadded(at)}` });

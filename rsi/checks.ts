@@ -11,7 +11,7 @@ import type { Experiment } from "./store/experiments";
 import { gameId, hasFreshGames } from "./store/games";
 import { type LoadoutSpec, parseLoadout } from "../protocol/commands";
 import type { GameSpec, Start } from "./training/slots";
-import { clockPadded } from "../format";
+import { clockPadded } from "../clock";
 
 export const unexplored = (held: Held) => new Set([...untried(IDS.base, held), ...untried(IDS.passives, held)]);
 

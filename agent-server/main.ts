@@ -24,9 +24,9 @@ const WAIT_LIMIT_MS = 120_000;
 const PILOT_ARGS: BotArgs = process.argv.includes("--pilot") ? parseBotArgs(option("pilot", "").split(/\s+/).filter(Boolean)) : { ...JEV, mode: "current", difficulty: "nightmare" };
 
 let latest: { snapshot: Snapshot; view?: LiveView } | undefined;
-/** The game's content for building the live view; rebuilt whenever the page sends its encyclopedia. */
-let content: Book | undefined;
-let book: Encyclopedia | undefined;
+/** The game's book for building the live view; rebuilt whenever the page sends its encyclopedia. */
+let book: Book | undefined;
+let encyclopedia: Encyclopedia | undefined;
 let page: ReadableStreamDefaultController<Uint8Array> | undefined;
 // Which tab holds the stream, so that tab can take it back when its old stream outlives a reconnect.
 let pageTab: string | undefined;
@@ -174,7 +174,7 @@ const server = Bun.serve<{ raw: string[] }>({
         }
         case "POST /bridge/state": {
           const snapshot = (await req.json()) as Snapshot;
-          const view = content === undefined ? undefined : liveView(snapshot, content);
+          const view = book === undefined ? undefined : liveView(snapshot, book);
           latest = { snapshot, ...(view === undefined ? {} : { view }) };
           for (const done of [...waiters]) done();
           for (const ws of sockets) {
@@ -187,9 +187,9 @@ const server = Bun.serve<{ raw: string[] }>({
           return new Response(null, { status: 204 });
         }
         case "POST /bridge/encyclopedia":
-          book = (await req.json()) as Encyclopedia;
-          content = bookFrom(book);
-          console.log(`encyclopedia: ${book.weapons.length} weapons, ${book.passives.length} passives, ${book.items.length} items, ${book.dogs.length} dogs, ${book.pois.length} pois`);
+          encyclopedia = (await req.json()) as Encyclopedia;
+          book = bookFrom(encyclopedia);
+          console.log(`encyclopedia: ${encyclopedia.weapons.length} weapons, ${encyclopedia.passives.length} passives, ${encyclopedia.items.length} items, ${encyclopedia.dogs.length} dogs, ${encyclopedia.pois.length} pois`);
           return new Response(null, { status: 204 });
         case "GET /state": {
           let raw: string[];
@@ -238,7 +238,7 @@ const server = Bun.serve<{ raw: string[] }>({
         case "GET /checkpoints":
           return Response.json(await listCheckpoints());
         case "GET /encyclopedia":
-          return book === undefined ? errorResponse("no encyclopedia yet; is the tibo.dog tab open?", 503) : Response.json(book);
+          return encyclopedia === undefined ? errorResponse("no encyclopedia yet; is the tibo.dog tab open?", 503) : Response.json(encyclopedia);
         case "POST /command": {
           let sent: { id: number };
           try {

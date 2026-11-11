@@ -5,7 +5,7 @@
 
 import type { CheckpointMeta, LoadoutSpec } from "../../protocol/commands";
 import type { Templates } from "../../bot/templates";
-import { clockPadded } from "../../format";
+import { clockPadded } from "../../clock";
 import { GYMS_JSONL } from "./paths";
 import { withLock } from "./lock";
 
@@ -13,7 +13,7 @@ export type Gym = {
   name: string;
   status: "pending" | "building" | "ready" | "failed" | "retired";
   purpose: string;
-  /** "loop" for the gyms the loop keeps from the start, else "coach". Gyms from before the one coach name the coach that asked. */
+  /** "loop" for the gyms the loop keeps from the start, else "coach". */
   coach: string;
   created: string;
   /** The Nightmare level, 1 to GOAL_LEVEL. */

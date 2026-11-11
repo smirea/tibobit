@@ -6,7 +6,7 @@ import { coverage, readExperiments, renderExperiment } from "../store/experiment
 import { heldCoverage, readHeld } from "../store/held";
 import { BELIEFS_CSV, COACH_LOG, INFRA_CSV } from "../store/paths";
 import type { GameResult } from "../training/slots";
-import { EXPERIMENT_ITERATIONS, GOAL_LEVEL, MAX_GAME_SECONDS, MAX_GAMES, MAX_GYM_SECONDS, MAX_NEW_GYMS } from "../rules";
+import { EXPERIMENT_ITERATIONS, FULL_RUN_ITERATION, GOAL_LEVEL, MAX_GAME_SECONDS, MAX_GAMES, MAX_GYM_SECONDS, MAX_NEW_GYMS } from "../rules";
 import type { Playbook } from "../../bot/playbook";
 import { BLOCKS, KNOBS, QUESTION_LIMIT, SLOTS, STATE_LIMIT, type TemplateSlot } from "../../bot/templates";
 import { gymLine, readGyms } from "../store/gyms";
@@ -59,7 +59,7 @@ export async function facts(state: CoachState, playbook: Playbook): Promise<stri
   const closed = experiments.filter((e) => e.status === "done" || e.status === "retired");
   return [
     "# Where the loop stands",
-    `You are the coach (${coachSpec}). This is loop ${state.loop}, iteration ${state.iteration} of 10: iterations 1 to ${EXPERIMENT_ITERATIONS} are experiments in the training ground, and iteration 10 is a full run on the evaluation seed. Your Open World Nightmare ladder: ${cleared === 0 ? "no level won yet" : `won up to Nightmare ${cleared}`}, so the next full run plays Nightmare ${cleared + 1}. The goal of the whole campaign: survive 20:00 on Nightmare 10.`,
+    `You are the coach (${coachSpec}). This is loop ${state.loop}, iteration ${state.iteration} of ${FULL_RUN_ITERATION}: iterations 1 to ${EXPERIMENT_ITERATIONS} are experiments in the training ground, and iteration ${FULL_RUN_ITERATION} is a full run on the evaluation seed. Your Open World Nightmare ladder: ${cleared === 0 ? "no level won yet" : `won up to Nightmare ${cleared}`}, so the next full run plays Nightmare ${cleared + 1}. The goal of the whole campaign: survive 20:00 on Nightmare ${GOAL_LEVEL}.`,
     "## Full runs so far",
     await campaign(),
     "# Facts",

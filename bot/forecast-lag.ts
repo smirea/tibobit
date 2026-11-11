@@ -3,7 +3,7 @@
 // game, as it does for a person.
 /** Whether this run's game has been set to play live; a new run starts paused at tick 0. */
 import { command, send } from "./server";
-import { knobs } from "./playing";
+import { knobs } from "./run-templates";
 
 export let modeSet = false;
 

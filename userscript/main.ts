@@ -2,8 +2,8 @@ import { startBridge } from "./agent/bridge";
 import { Controller } from "./agent/control";
 import { Discovery } from "./combos/discovery";
 import { GameLink } from "./link/game-link";
-import { guardPanelKeys, startHelper } from "./panel/panel";
-import { startPickShow } from "./pilot/pick-overlay";
+import { guardPanelKeys, startPanel } from "./panel/panel";
+import { startPickOverlay } from "./pilot/pick-overlay";
 import { installSeedHook } from "./agent/seed";
 import { Forecaster } from "./agent/forecast";
 
@@ -20,8 +20,8 @@ guardPanelKeys();
 function start() {
   forecaster.start();
   const bridge = startBridge(link, controller, forecaster);
-  startHelper(link, discovery, bridge);
-  startPickShow(bridge);
+  startPanel(link, discovery, bridge);
+  startPickOverlay(bridge);
 }
 
 if (document.body === null) document.addEventListener("DOMContentLoaded", start, { once: true });

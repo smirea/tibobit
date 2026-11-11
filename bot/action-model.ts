@@ -1,18 +1,18 @@
 // Health samples by game time, to tell the planner whether Tibo is bleeding.
 import { type Course, ELITE_REACH, type Pursuit } from "./goals";
-import { knobs, templates } from "./playing";
+import { knobs, templates } from "./run-templates";
 import { command, say, send } from "./server";
 import type { DirectionView } from "../protocol/view";
-import { dashCharges, onScreen, plural, spotLine } from "./words";
+import { dashCharges, onScreen, plural, spotLine } from "./phrasing";
 import { decide, type Question } from "./decider";
 import { type Direction, DIRECTIONS } from "../protocol/geometry";
 import type { Sector, World } from "./world";
 import { render } from "./templates";
-import { MODEL } from "./flags";
+import { MODEL } from "./config";
 import { stateVars } from "./blocks";
 import { RunLog } from "./run-log/writer";
 import type { MoveOption } from "../protocol/pilot";
-import { noteModelStep } from "./live";
+import { noteModelStep } from "./forecast-lag";
 
 // Words, not percentages: on 50 replayed states Laya picked a move within 2% of the least
 // damaging one 90% of the time with these words, 80% with "would lose N%", and 38% when the

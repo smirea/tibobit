@@ -1,8 +1,8 @@
-import { book, onChest, plural, priceWords, readBook, said, spotSaid } from "./words";
-import { knobs, planEvery, templates } from "./playing";
+import { book, onChest, plural, priceWords, readBook, said, spotSaid } from "./phrasing";
+import { knobs, planEvery, templates } from "./run-templates";
 import { blocks, type Card, cards } from "./blocks";
 import { WIN_SECONDS } from "./run-context";
-import { PLAN_MODEL } from "./flags";
+import { PLAN_MODEL } from "./config";
 import { RunNotes } from "./run-notes";
 import { command, PICK_SHOW_MS, piloted, say } from "./server";
 import { decide, type Question } from "./decider";
@@ -13,7 +13,7 @@ import type { CardOption, Inspect } from "../protocol/pilot";
 import { PLAN_RANGE } from "./limits";
 import type { EndJson, World } from "./world";
 import { RunLog } from "./run-log/writer";
-import { clock } from "../format";
+import { clock } from "../clock";
 
 type GoalOption = { goal: Goal; text: string };
 

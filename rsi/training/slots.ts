@@ -7,13 +7,13 @@ import { closeSync, mkdirSync, openSync } from "node:fs";
 import { ENTRY, ROOT } from "../../paths";
 import type { CheckpointMeta, Command, CommandStatus, LoadoutSpec } from "../../protocol/commands";
 import type { State } from "../../protocol/view";
-import { clockPadded } from "../../format";
+import { clockPadded } from "../../clock";
 import type { Gym } from "../store/gyms";
-import { runStats } from "../../bot/run-log/stats";
+import { runStats } from "../../bot/run-log/reader";
 import type { Templates } from "../../bot/templates";
 import { AgentServer } from "../../agent-server/client";
 import { bridgeOrigin } from "../../protocol/address";
-import type { TrialResult } from "../../bot/trial";
+import type { TrialResult } from "../../bot/trial-result";
 import { botArgv, JEV } from "../../bot/args";
 
 const GYM_STAGE_SECONDS = 300;

@@ -258,7 +258,7 @@ function actionTile(m: ChatMessage): HTMLElement {
  * The bot's models while it plays: its latest plan pinned at the top, and the latest actions under
  * it, newest first. Hovering either shows what the model was asked and what it weighed.
  */
-export function chatBox(bridge: Bridge): HTMLElement {
+export function botFeed(bridge: Bridge): HTMLElement {
   const giveBack = h("button", "tbh-giveback");
   giveBack.type = "button";
   giveBack.addEventListener("click", () => bridge.setPilot({ on: false }));

@@ -2,13 +2,13 @@ import { buildCatalog, type Catalog, type Combo, toCombo } from "../../game/cata
 import type { Content } from "../../game/types";
 import type { GameLink } from "../link/game-link";
 
-export type Data = { catalog: Catalog; combos: Combo[] };
+export type RunCombos = { catalog: Catalog; combos: Combo[] };
 
-let data: Data | undefined;
+let data: RunCombos | undefined;
 let dataFrom: { content: Content; messages: number } | undefined;
 
 /** Catalog for the current run, rebuilt only when the run's content or the loaded names change. */
-export function liveData(link: GameLink): Data | undefined {
+export function runCombos(link: GameLink): RunCombos | undefined {
   const content = link.content();
   if (content === undefined) return undefined;
   const messages = Object.keys(link.messages).length;

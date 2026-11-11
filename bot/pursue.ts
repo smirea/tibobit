@@ -1,13 +1,13 @@
 /** Why the action model is asked even though the forecast calls the way to the goal cheap, if it is. */
-import { aimAt, type Course, distrusted, ending, everListed, finish, outcomes, type Pursuit, pursuit, setDistrust } from "./goals";
-import { knobs } from "./playing";
+import { aimAt, type Course, distrusted, ending, everListed, finish, outcomes, pursuit, type Pursuit, setDistrust } from "./goals";
+import { knobs } from "./run-templates";
 import { cheapestMove, dashOnTheWay, dashWorthAsking, moveCost, steer } from "./action-model";
 import type { Command, CommandStatus } from "../protocol/commands";
 import { send, type Snap } from "./server";
 import type { World } from "./world";
 import { RunLog } from "./run-log/writer";
 import type { Planner } from "./planner";
-import { clock } from "../format";
+import { clock } from "../clock";
 
 function distrustReason(r: World): string | undefined {
   if (distrusted !== undefined && r.time < distrusted.until) return `the forecast was not trusted: Tibo lost ${distrusted.lost} health on a step it called free at ${clock(distrusted.at)}`;

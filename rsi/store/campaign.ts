@@ -1,7 +1,7 @@
 import path from "node:path";
 /** A finished run as the ladder sees it, read from its notes file name and header. */
 import { NOTES_DIR, notesField, notesFiles } from "../../bot/notes";
-import { clock } from "../../format";
+import { clock } from "../../clock";
 
 type RunRecord = { name: string; coach: string; difficulty: string; level: number; mode: string; lived: number; won: boolean; text: string };
 
@@ -22,13 +22,10 @@ async function runRecords(): Promise<RunRecord[]> {
 export async function campaign(): Promise<string> {
   const records = (await runRecords()).filter((r) => r.mode === "world" && r.level > 0);
   if (records.length === 0) return "No Open World Nightmare run yet.";
-  const lines = ["| Run | Level | Lived | Won | Coach | Lockstep |", "| --- | --- | --- | --- | --- | --- |"];
-  for (const r of records) lines.push(`| ${r.name.slice(0, 16).replace("_", " ")} | Nightmare ${r.level} | ${clock(r.lived)} | ${r.won ? "yes" : "no"} | ${r.coach} | ${r.name < LIVE_SINCE ? "yes (banned since)" : "no"} |`);
+  const lines = ["| Run | Level | Lived | Won | Coach |", "| --- | --- | --- | --- | --- |"];
+  for (const r of records) lines.push(`| ${r.name.slice(0, 16).replace("_", " ")} | Nightmare ${r.level} | ${clock(r.lived)} | ${r.won ? "yes" : "no"} | ${r.coach} |`);
   return lines.join("\n");
 }
-
-/** Runs from before this one played in lockstep, which is banned now. */
-const LIVE_SINCE = "2026-11-08_07-5";
 
 export async function latestNotes(count: number): Promise<string> {
   const out: string[] = [];

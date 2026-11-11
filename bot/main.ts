@@ -10,20 +10,20 @@ import { ladderCleared } from "../protocol/view";
 import { type EndJson, see, type World } from "./world";
 import type { RunPlan, RunSetup } from "./notes";
 import { talliesOf, totalsBetween } from "./tallies";
-import { onScreen, readBook } from "./words";
+import { onScreen, readBook } from "./phrasing";
 import { command, followPanel, pace, RAW, say, server, type Snap, timed, timings } from "./server";
 import { BOT_CODE, difficulty, MODE, MODE_NAME, setDifficulty, WIN_SECONDS } from "./run-context";
-import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RUN_COUNT, STEP, TAKEOVER, TRIAL, TRIAL_RESULT, WEAPON } from "./flags";
+import { BASE, COACH_LABEL, DIFFICULTY, INTENT, LOG, MODEL, NOTES, option, PLAN_MODEL, RELOAD, RUN_COUNT, STEP, TAKEOVER, TRIAL, TRIAL_RESULT, WEAPON } from "./config";
 import { RunNotes } from "./run-notes";
-import { setTemplates } from "./playing";
+import { setTemplates } from "./run-templates";
 import { choose, loadoutLines, Planner } from "./planner";
-import { beginStep, forgetMode, modelSteered, modeSet, setMode, tellLag } from "./live";
+import { beginStep, forgetMode, modelSteered, modeSet, setMode, tellLag } from "./forecast-lag";
 import { pursue } from "./pursue";
 import { latency, snapshotAges } from "./decider";
 import { LOG_DIR, RunLog } from "./run-log/writer";
 import { pursuit, resetGoals } from "./goals";
-import { clock } from "../format";
-import type { TrialResult } from "./trial";
+import { clock } from "../clock";
+import type { TrialResult } from "./trial-result";
 
 // The first run plays this Open World seed in a freshly reloaded tab, or the bot stops rather than play another.
 let SEED = option("seed", "").toUpperCase();

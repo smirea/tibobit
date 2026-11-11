@@ -2,7 +2,7 @@
  * `pace` is the panel's plan and action intervals, read every step so they can change mid-run, and
  * sent only to a bot the panel started.
  */
-import { PLAN_EVERY, SERVER, STEP } from "./flags";
+import { PLAN_EVERY, SERVER, STEP } from "./config";
 import type { ChatLine, PilotPace } from "../protocol/pilot";
 import type { Command } from "../protocol/commands";
 import { AgentServer } from "../agent-server/client";

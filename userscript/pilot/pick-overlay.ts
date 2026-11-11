@@ -24,7 +24,7 @@ function el(className: string, text = ""): HTMLDivElement {
  * While the bot has the wheel and picks at a level-up, chest or shrine, shows its plan above the
  * cards, its odds above each card, and an arrow that glides to its pick.
  */
-export function startPickShow(bridge: Bridge) {
+export function startPickOverlay(bridge: Bridge) {
   const layer = el("tbh-pick-layer");
   const banner = el("tbh-pick-banner");
   // Cards side by side get the arrow above them pointing down, under the plan and over the odds

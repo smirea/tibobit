@@ -1,5 +1,5 @@
 import { timed } from "./server";
-import { DECIDER, DECIDER_KEY, MODEL } from "./flags";
+import { DECIDER, DECIDER_KEY, MODEL } from "./config";
 
 export type Question =
   | { type: "choice"; instructions: string; criteria: Record<string, string | null> }

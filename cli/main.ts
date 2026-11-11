@@ -3,7 +3,7 @@ import { bridgeOrigin, BRIDGE_ORIGIN as DEFAULT_ORIGIN, validPort } from "../pro
 import { parseCommand } from "../protocol/commands";
 import type { State } from "../protocol/view";
 import { AgentServer, Unreachable } from "../agent-server/client";
-import { clock } from "../format";
+import { clock } from "../clock";
 
 const USAGE = `usage: cli/main.ts [--port <port> | --server <url>] <command>
 

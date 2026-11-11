@@ -27,19 +27,17 @@ export function runStats(csv: string): string {
       }
     return [...tally].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => k).join(", ") || "-";
   };
-  // `dealt` is the run's damage dealt so far; logs before 2026-11-09 lack it.
-  const hasDealt = live.some((r) => (r.dealt ?? "") !== "");
   let dealtBefore = num(live[0]?.dealt);
   const table = [
-    `| Minute | Health at the end | Lost | Gained |${hasDealt ? " Damage dealt |" : ""} Level | Enemies | Hurt most by |`,
-    `| --- | --- | --- | --- |${hasDealt ? " --- |" : ""} --- | --- | --- |`,
+    `| Minute | Health at the end | Lost | Gained | Damage dealt | Level | Enemies | Hurt most by |`,
+    `| --- | --- | --- | --- | --- | --- | --- | --- |`,
     ...[...minutes].map(([m, rs]) => {
       const last = rs.at(-1) ?? {};
       const lost = rs.reduce((a, r) => a + num(r.hp_lost), 0);
       const gained = rs.reduce((a, r) => a + num(r.hp_gained), 0);
       const dealt = num(last.dealt) - dealtBefore;
       dealtBefore = num(last.dealt);
-      return `| ${m}:00 | ${last.hp}/${last.max_hp} | ${lost} | ${gained} |${hasDealt ? ` ${dealt} |` : ""} ${last.level} | ${last.enemies} | ${sources(rs.filter((r) => num(r.hp_lost) > 0))} |`;
+      return `| ${m}:00 | ${last.hp}/${last.max_hp} | ${lost} | ${gained} | ${dealt} | ${last.level} | ${last.enemies} | ${sources(rs.filter((r) => num(r.hp_lost) > 0))} |`;
     }),
   ];
   const seenBoss = new Map<string, string>();
@@ -120,8 +118,8 @@ export function runStats(csv: string): string {
     "",
     `- Bosses first seen: ${[...seenBoss].map(([k, t]) => `${k} at ${t}`).join("; ") || "none"}.`,
     `- Bosses alive at ${lastRow.time ?? "the end"}, each a separate boss with its own health: ${bossesAtEnd.join("; ") || "none"}.`,
-    `- ${byTwo}: damage dealt ${hasDealt ? num(atTwo.dealt) : "not logged"}, elites killed ${(atTwo.elites ?? "") === "" ? "not logged" : num(atTwo.elites)}, chests opened ${openedByTwo}. Chests opened in the whole game: ${opened.length}, the first at ${opened[0]?.time ?? "never"}.`,
-    `- Elites first seen: ${elitesSeen.join(" | ") || (live.some((r) => r.elite_list !== undefined) ? "none" : "not logged")}.`,
+    `- ${byTwo}: damage dealt ${num(atTwo.dealt)}, elites killed ${num(atTwo.elites)}, chests opened ${openedByTwo}. Chests opened in the whole game: ${opened.length}, the first at ${opened[0]?.time ?? "never"}.`,
+    `- Elites first seen: ${elitesSeen.join(" | ") || "none"}.`,
     `- Bursts of 40+ health lost within 3 s, hit by hit: ${bursts.join(" | ") || "none"}.`,
     `- First chest listed: ${firstChest ?? "never"}. First time under 25% health: ${low ?? "never"}.`,
     `- Goals by kind (done / gave up / dropped): ${[...goals].map(([k, g]) => `${k} ${g.done}/${g.failed}/${g.dropped}`).join("; ") || "none"}.`,

@@ -2,7 +2,7 @@ import path from "node:path";
 import type { Checked } from "../protocol/parse";
 import { checkTemplates, DEFAULT_TEMPLATES, SLOTS, slotText, type Templates, type TemplateSlot } from "./templates";
 import { GAMEPLAY } from "../paths";
-import { clockPadded } from "../format";
+import { clockPadded } from "../clock";
 export const NOTES_DIR = path.join(GAMEPLAY, "notes");
 
 // One file per run, written when the run ends, named for when it started and how long Tibo lived.

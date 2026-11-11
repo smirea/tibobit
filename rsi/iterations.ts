@@ -20,7 +20,7 @@ import { addGames, overdueAreas } from "./store/experiments";
 import { ENTRY, ROOT } from "../paths";
 import { buildClaimed, buildGym, claimPending } from "./gym-builds";
 import { stopping } from "./stop";
-import { logForPrompt } from "../bot/run-log/stats";
+import { logForPrompt } from "../bot/run-log/reader";
 import { botArgv, JEV } from "../bot/args";
 type ExperimentReply = { summary: string; edits: LoopEdits; games: GameSpec[]; gyms: GymRequest; playbook?: Playbook };
 
@@ -86,13 +86,6 @@ export async function experimentIteration(state: CoachState) {
   const templates = (await readPlaybook()).templates;
   await refreshGames();
   const gymLines = await buildClaimed(await claimPending(), templates);
-  // A gym another coach's loop is building for a game here is waited for.
-  const wanted = new Set(reply.games.flatMap((g) => ("gym" in g.from ? [g.from.gym] : [])));
-  for (let waited = 0; waited < 60; waited++) {
-    const busy = (await readGyms()).filter((g) => wanted.has(g.name) && (g.status === "building" || g.status === "pending"));
-    if (busy.length === 0) break;
-    await Bun.sleep(30_000);
-  }
   const gyms = await readGyms();
   const results = await onSlots(slots, reply.games, async (slot, spec) => {
     console.log(`${spec.id} on ${slot.name}: ${spec.label}`);
@@ -146,8 +139,7 @@ async function lastFullRunPlaybook(): Promise<{ templates: Templates; weapon: st
   for (const name of await notesFiles()) {
     const text = await Bun.file(path.join(NOTES_DIR, name)).text();
     const t = notesTemplates(text);
-    // Runs from before the lockstep ban carry the knob and do not parse; they are not a baseline any more.
-    if (!("value" in t)) continue;
+    if (!("value" in t)) throw new Error(`${name}: ${t.errors.join("; ")}`);
     const started = notesField(text, "Starting weapon")?.split(" ")[0] ?? "";
     return { templates: t.value, weapon: IDS.base.has(started) ? started : "", from: name };
   }

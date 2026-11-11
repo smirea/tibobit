@@ -1,15 +1,15 @@
 import { type Combo, comboProgress, combosUsing, idOf, type Key, type Kind, type Loadout, nameOf, type Part, partner, partState, readLoadout, relevantCombos, unpaired } from "../../game/catalog";
 import type { Bridge } from "../agent/bridge";
 import { validPort } from "../../protocol/address";
-import { chatBox } from "../pilot/feed";
-import { type Data, liveData } from "../combos/live";
+import { botFeed } from "../pilot/feed";
+import { runCombos, type RunCombos } from "../combos/run-combos";
 import type { Discovery } from "../combos/discovery";
 import type { GameLink } from "../link/game-link";
 import type { IconSheet } from "../../game/types";
 import { css } from "./style";
 import { inRun, PANEL_ID } from "../link/screen";
 
-type View = { d: Data; discovery: Discovery; icons: IconSheet | undefined; loadout: Loadout; banished: ReadonlySet<string> };
+type View = { d: RunCombos; discovery: Discovery; icons: IconSheet | undefined; loadout: Loadout; banished: ReadonlySet<string> };
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
@@ -290,8 +290,8 @@ function mount(chat: HTMLElement, footer: HTMLElement): { panel: HTMLElement; co
   return { panel, content };
 }
 
-export function startHelper(link: GameLink, discovery: Discovery, bridge: Bridge) {
-  const { panel, content } = mount(chatBox(bridge), connectionRow(bridge));
+export function startPanel(link: GameLink, discovery: Discovery, bridge: Bridge) {
+  const { panel, content } = mount(botFeed(bridge), connectionRow(bridge));
   // While the bot plays, its chat takes the corner and the combos fold to their header.
   let collapsedBefore: boolean | undefined;
   const followPilot = () => {
@@ -309,7 +309,7 @@ export function startHelper(link: GameLink, discovery: Discovery, bridge: Bridge
   let panelSignature = "";
   let queued = false;
   let version = 0;
-  let lastInputs: [Data, IconSheet | undefined] | undefined;
+  let lastInputs: [RunCombos, IconSheet | undefined] | undefined;
 
   const update = () => {
     queued = false;
@@ -327,7 +327,7 @@ export function startHelper(link: GameLink, discovery: Discovery, bridge: Bridge
     panel.classList.toggle("tbh-choice", offered.length > 0);
     if (offered.length === 0) panel.classList.remove("tbh-peek");
 
-    const d = liveData(link);
+    const d = runCombos(link);
     if (d === undefined) {
       const problem = link.error === undefined ? "Reading the game's content..." : `Can't read the game's content: ${link.error}. The game changed; tibobit needs an update.`;
       if (panelSignature !== problem) renderProblem(panel, content, problem);

@@ -1,6 +1,6 @@
 import type { GameMode } from "../protocol/commands";
 import { RAW, server } from "./server";
-import { DIFFICULTY, MODE_ARG } from "./flags";
+import { DIFFICULTY, MODE_ARG } from "./config";
 import { ROOT } from "../paths";
 
 export let difficulty: string = DIFFICULTY;
