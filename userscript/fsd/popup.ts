@@ -307,12 +307,14 @@ export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly State
     );
     markUsed(draft().code);
   };
-  /** Marks the things the function names in a string literal, by the game's key or its English name. */
+  // A plain search for each quoted name, not a tokenizer: the function's strings nest inside template
+  // literals and its comments hold apostrophes, which throw a tokenizer out of step.
+  const quoted = (source: string, word: string) => ["\"", "'", "`"].some((q) => source.includes(`${q}${word}${q}`));
+  /** Marks the things the function names in quotes, by the game's key or its English name. */
   const markUsed = (source: string) => {
-    const literals = new Set([...source.matchAll(/(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)].map((m) => m[2]));
     let used = 0;
     for (const { entity, el } of chips) {
-      const named = literals.has(entity.key) || literals.has(entity.name);
+      const named = quoted(source, entity.key) || quoted(source, entity.name);
       if (named) used++;
       el.classList.toggle("tbh-fsd-unused", !named);
     }

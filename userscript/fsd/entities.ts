@@ -50,7 +50,12 @@ const PICKUPS: Entity[] = [
   { section: "Chests", key: "chest", name: "chest", tag: "Loot", about: "A chest an elite, a loot runner or a place left on the ground. Standing on it for 1 second opens it." },
   { section: "Chests", key: "goldChest", name: "goldChest", tag: "Loot", about: "A chest a boss or Poteto left. It opens like a chest, after 1.5 seconds." },
   { section: "Pickups", key: "heal", name: "heal", tag: "Eat", about: "Food on the ground, which gives health back." },
+  { section: "Chests", key: "item", name: "item", tag: "Loot", about: "An item on the ground. Standing on it opens a choice of an item, as a chest does." },
   { section: "Pickups", key: "magnet", name: "magnet", tag: "Magnet", about: "A magnet on the ground, which pulls in all the xp lying there." },
+  { section: "Pickups", key: "reroll", name: "reroll", tag: "Loot", about: "One more reroll for a later choice. Elites and lanterns drop it." },
+  { section: "Pickups", key: "skip", name: "skip", tag: "Loot", about: "One more skip for a later choice." },
+  { section: "Pickups", key: "banish", name: "banish", tag: "Loot", about: "One more banish for a later choice. Elites and lanterns drop it." },
+  { section: "Pickups", key: "beacon", name: "beacon", tag: "Bot", about: "A Bot Beacon, which calls a swarm of bots around Tibo for a while." },
 ];
 
 /**
