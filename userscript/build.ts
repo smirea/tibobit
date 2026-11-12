@@ -22,6 +22,7 @@ const header = `// ==UserScript==
 `;
 
 const result = await Bun.build({
+  define: { __DRIVER_TYPES__: JSON.stringify(await Bun.file(path.join(ROOT, "protocol", "driver.ts")).text()) },
   entrypoints: [path.join(import.meta.dir, "main.ts")],
   target: "browser",
   format: "iife",

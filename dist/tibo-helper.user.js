@@ -306,7 +306,7 @@
       bosses: { def: (n) => table.bossIdAt(n) ?? n },
       pets: { breed: (n) => table.dogAt(n)?.id ?? n },
       grokBots: { help: (n) => table.botHelpAt(n)?.id ?? n, mode: name(enums?.botModes) },
-      pickups: { kind: (n) => enums?.pickupKinds[n] ?? n },
+      pickups: { kind: (n) => enums?.pickupKinds[n] ?? n, source: (n) => enums?.pickupSources[n] ?? n },
       zones: { kind: name(enums?.zoneKinds), shape: name(enums?.zoneShapes) },
       "*": { src: source, burnSrc: source, lastSrc: source }
     };
@@ -622,357 +622,36 @@
     };
   }
 
-  // protocol/guard.ts
-  var TOKEN = /\s*(\d+(?:\.\d+)?|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|&&|\|\||[<>=!]=|[-+*/<>!()])/y;
-  var COMPARE = {
-    "<": (a, b) => a < b,
-    "<=": (a, b) => a <= b,
-    ">": (a, b) => a > b,
-    ">=": (a, b) => a >= b
-  };
-  function read(input, path) {
-    let at = input;
-    for (const key of path.split("."))
-      at = at?.[key];
-    if (typeof at !== "number" && typeof at !== "boolean")
-      throw new Error(`the machine's input has no ${path}`);
-    return at;
-  }
-  var number = (v, what) => {
-    if (typeof v !== "number")
-      throw new Error(`${what} needs numbers`);
-    return v;
-  };
-  function compileGuard(source) {
-    const tokens = [];
-    TOKEN.lastIndex = 0;
-    while (TOKEN.lastIndex < source.length) {
-      const from = TOKEN.lastIndex;
-      const m = TOKEN.exec(source);
-      if (m === null) {
-        if (source.slice(from).trim() === "")
-          break;
-        throw new Error(`cannot read "${source.slice(from).trim().slice(0, 20)}"`);
-      }
-      tokens.push(m[1] ?? "");
-    }
-    if (tokens.length === 0)
-      throw new Error("the guard is empty");
-    let at = 0;
-    const paths = [];
-    const peek = () => tokens[at];
-    const take = (token) => tokens[at] === token ? (at++, true) : false;
-    const atom = () => {
-      const token = tokens[at++];
-      if (token === undefined)
-        throw new Error("the expression ends early");
-      if (token === "(") {
-        const inner = or();
-        if (!take(")"))
-          throw new Error("a ( is never closed");
-        return inner;
-      }
-      if (/^\d/.test(token))
-        return () => Number(token);
-      if (token === "true" || token === "false")
-        return () => token === "true";
-      if (!/^[A-Za-z_]/.test(token))
-        throw new Error(`"${token}" is not a value`);
-      paths.push(token);
-      return (input) => read(input, token);
-    };
-    const unary = () => {
-      if (!take("-"))
-        return atom();
-      const inner = unary();
-      return (input) => -number(inner(input), "-");
-    };
-    const arithmetic = (next, ops) => () => {
-      let left = next();
-      for (let op = peek();op !== undefined && op in ops; op = peek()) {
-        at++;
-        const [a, b, apply, sign] = [left, next(), ops[op] ?? (() => 0), op];
-        left = (input) => apply(number(a(input), sign), number(b(input), sign));
-      }
-      return left;
-    };
-    const product = arithmetic(unary, { "*": (a, b) => a * b, "/": (a, b) => a / b });
-    const sum = arithmetic(product, { "+": (a, b) => a + b, "-": (a, b) => a - b });
-    const comparison = () => {
-      const left = sum();
-      const op = peek();
-      if (op === "==" || op === "!=") {
-        at++;
-        const right = sum();
-        return (input) => left(input) === right(input) === (op === "==");
-      }
-      const compare = op === undefined ? undefined : COMPARE[op];
-      if (compare === undefined)
-        return left;
-      at++;
-      const right = sum();
-      return (input) => compare(number(left(input), op ?? ""), number(right(input), op ?? ""));
-    };
-    const not = () => {
-      if (!take("!"))
-        return comparison();
-      const inner = not();
-      return (input) => !inner(input);
-    };
-    const and = () => {
-      let left = not();
-      while (take("&&")) {
-        const [a, b] = [left, not()];
-        left = (input) => a(input) === true && b(input) === true;
-      }
-      return left;
-    };
-    function or() {
-      let left = and();
-      while (take("||")) {
-        const [a, b] = [left, and()];
-        left = (input) => a(input) === true || b(input) === true;
-      }
-      return left;
-    }
-    const whole = or();
-    if (at < tokens.length)
-      throw new Error(`"${tokens[at]}" is out of place`);
-    return { test: (input) => whole(input) === true, paths: [...new Set(paths)] };
+  // protocol/drive.ts
+  var EXAMPLE_REQUEST = "Farm xp by walking toward the fewest enemies. Open gold chests and chests and grab magnets when they are close, and use Spud Shrines while it is calm. Under 40% health, eat food if there is any; otherwise get away, dashing when hit hard, and keep clear until health is back over 70%.";
+  var EXAMPLE_CODE = `function drive(state: State): Action {
+  const { tibo, enemies, previous } = state;
+  const pickups = state.pickups.filter((p) => !p.gaveUp);
+  const pois = state.pois.filter((p) => !p.gaveUp);
+  const health = (tibo.hp / tibo.maxHp) * 100;
+  const retreating = previous?.action.why?.startsWith("retreat") === true && health < 70;
+
+  if (health < 40 || retreating) {
+    const heal = pickups.find((p) => p.kind === "heal");
+    if (heal) return { type: "pickup", id: heal.id, why: "retreat: eat" };
+    if (tibo.hurt > 15) return { type: "dash", dir: enemies.fewest, why: "retreat: dash out" };
+    return { type: "move", dir: enemies.fewest, why: "retreat" };
   }
 
-  // protocol/machine.ts
-  var FAR = 99999;
-  var near = (what) => ({ count: `how many ${what}`, dist: `how far the nearest of them is, in world units (Tibo walks about 62 a second); ${FAR} when there is none` });
-  var FIELDS = {
-    time: "seconds of game time since the run began; a run is won at 1200",
-    stateSeconds: "seconds of game time since the machine entered the state it is in",
-    "health.hp": "Tibo's health",
-    "health.max": "Tibo's full health",
-    "health.pct": "health as a share of full health, 0 to 100",
-    "health.lost": "health lost over the last 3 seconds",
-    level: "Tibo's level",
-    gold: "gold held, which some spots cost",
-    dps: "damage Tibo dealt a second over the last 3 seconds",
-    "dash.charges": "dashes ready to use now",
-    "dash.max": "the most dashes Tibo can hold",
-    "loadout.weapons": "weapons held, of 6 slots",
-    "loadout.passives": "passives held, of 6 slots",
-    "loadout.evolutionsReady": "weapons the next chest opened would evolve, because their recipe is complete",
-    "enemies.count": "enemies on screen",
-    "enemies.most": "enemies on screen in the most crowded of the 8 directions",
-    "enemies.fewest": "enemies on screen in the least crowded of the 8 directions",
-    "enemies.bullets": "bullets about to arrive, all directions together",
-    "ground.xp": "the xp lying on the ground, which a magnet pulls in",
-    "ground.gold": "the gold lying on the ground",
-    "bosses.count": near("bosses are alive").count,
-    "bosses.dist": near("bosses are alive").dist,
-    "elites.count": near("elites are alive").count,
-    "elites.dist": near("elites are alive").dist,
-    "chests.count": near("chests lie on the loaded map").count,
-    "chests.dist": near("chests lie on the loaded map").dist,
-    "food.count": near("food pickups lie on the ground").count,
-    "food.dist": near("food pickups lie on the ground").dist,
-    "magnets.count": near("magnet pickups lie on the ground").count,
-    "magnets.dist": near("magnet pickups lie on the ground").dist,
-    "spots.count": near("spots of any kind are unused on the loaded map").count,
-    "spots.dist": near("spots of any kind are unused on the loaded map").dist
-  };
-  var WAYS = [...DIRECTIONS, "fewestEnemies", "mostEnemies"];
-  var ACTIONS = {
-    chest: { form: '{ "type": "chest" }', about: "walk to the nearest chest and stand on it until it opens, then the next nearest. A chest gives a free pick, and evolves a weapon whose recipe is complete" },
-    food: { form: '{ "type": "food" }', about: "walk to the nearest food and eat it, which heals Tibo, then the next nearest" },
-    magnet: { form: '{ "type": "magnet" }', about: "walk to the nearest magnet pickup, which pulls in the xp on the ground" },
-    elite: { form: '{ "type": "elite" }', about: "fight the nearest elite: keep it within reach of Tibo's weapons until it dies, which drops a chest" },
-    spot: { form: '{ "type": "spot", "kind": "chargeShrine" }', about: "walk to the nearest unused spot of that kind and stand inside it until it has charged, then the next nearest. Without `kind`, the nearest spot of any kind" },
-    explore: { form: '{ "type": "explore", "dir": "fewestEnemies" }', about: "walk that way, 300 units at a time, collecting what Tibo walks over. The way is chosen again after each 300 units" },
-    dash: { form: '{ "type": "dash", "dir": "fewestEnemies" }', about: "dash that way each time a dash charge is ready, a quick burst that covers ground; with no charge, Tibo stands still" },
-    still: { form: '{ "type": "still" }', about: "stand still, stepping aside only when standing would cost more health than moving" }
-  };
-  var MAX_STATES = 16;
-  var isObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
-  var NAME = /^[A-Za-z_]\w*$/;
-  function actionErrors(action, spotKinds) {
-    if (!isObject(action))
-      return ['meta.action must be an object such as { "type": "chest" }'];
-    const { type, ...rest } = action;
-    if (typeof type !== "string" || !(type in ACTIONS))
-      return [`meta.action.type must be one of ${Object.keys(ACTIONS).join(", ")}, not ${JSON.stringify(type)}`];
-    const allowed = type === "spot" ? ["kind"] : type === "explore" || type === "dash" ? ["dir"] : [];
-    const errors = Object.keys(rest).filter((k) => !allowed.includes(k)).map((k) => `a ${type} action takes no "${k}"`);
-    if (allowed.includes("dir") && !WAYS.includes(rest.dir))
-      errors.push(`a ${type} action needs "dir", one of ${WAYS.join(", ")}`);
-    if (type === "spot" && rest.kind !== undefined && (typeof rest.kind !== "string" || spotKinds !== undefined && !spotKinds.has(rest.kind)))
-      errors.push(`${JSON.stringify(rest.kind)} is not a kind of spot${spotKinds === undefined ? "" : `; the kinds are ${[...spotKinds].join(", ")}`}`);
-    return errors;
-  }
-  function guardErrors(source, spotKinds) {
-    let paths;
-    try {
-      paths = compileGuard(source).paths;
-    } catch (e) {
-      return [`${e.message} in the guard "${source}"`];
-    }
-    return paths.flatMap((path) => {
-      if (path in FIELDS)
-        return [];
-      const kind = /^spot\.([A-Za-z_]\w*)\.(?:count|dist)$/.exec(path)?.[1];
-      if (kind === undefined)
-        return [`the guard "${source}" reads ${path}, which is not part of the input`];
-      return spotKinds === undefined || spotKinds.has(kind) ? [] : [`the guard "${source}" reads ${path}, and ${kind} is not a kind of spot`];
-    });
-  }
-  function machineErrors(input, spotKinds) {
-    if (!isObject(input))
-      return ["the machine must be a JSON object"];
-    const errors = [];
-    const extra = (where, o, allowed) => {
-      for (const k of Object.keys(o))
-        if (!allowed.includes(k))
-          errors.push(`${where} has "${k}", which this machine cannot use; it takes only ${allowed.join(", ")}`);
-    };
-    const described = (where, o) => {
-      if (o.description !== undefined && typeof o.description !== "string")
-        errors.push(`${where}.description must be a string`);
-    };
-    extra("the machine", input, ["id", "description", "initial", "states"]);
-    described("the machine", input);
-    if (typeof input.id !== "string" || input.id === "")
-      errors.push("the machine needs an id");
-    const states = input.states;
-    if (!isObject(states) || Object.keys(states).length === 0)
-      return [...errors, "the machine needs states"];
-    const names = Object.keys(states);
-    if (names.length > MAX_STATES)
-      errors.push(`${names.length} states; keep it to ${MAX_STATES}`);
-    if (typeof input.initial !== "string" || !names.includes(input.initial))
-      errors.push(`initial must name one of the states: ${names.join(", ")}`);
-    const leadsTo = new Map;
-    for (const [name, state] of Object.entries(states)) {
-      const where = `state ${name}`;
-      if (!NAME.test(name))
-        errors.push(`${where}: a state's name is letters, digits and _ only`);
-      if (!isObject(state)) {
-        errors.push(`${where} must be an object`);
-        continue;
-      }
-      extra(where, state, ["description", "meta", "on"]);
-      described(where, state);
-      if (!isObject(state.meta))
-        errors.push(`${where} needs meta.action, what the autopilot does while it is active`);
-      else {
-        extra(`${where}.meta`, state.meta, ["action"]);
-        errors.push(...actionErrors(state.meta.action, spotKinds).map((e) => `${where}: ${e}`));
-      }
-      if (state.on === undefined)
-        continue;
-      if (!isObject(state.on) || !Array.isArray(state.on.tick)) {
-        errors.push(`${where}.on must be { "tick": [ ...transitions ] }`);
-        continue;
-      }
-      extra(`${where}.on`, state.on, ["tick"]);
-      const targets = [];
-      for (const [i, t] of state.on.tick.entries()) {
-        const at = `${where}, transition ${i + 1}`;
-        if (!isObject(t)) {
-          errors.push(`${at} must be an object`);
-          continue;
-        }
-        extra(at, t, ["target", "guard", "description"]);
-        described(at, t);
-        if (typeof t.target !== "string" || !names.includes(t.target))
-          errors.push(`${at}: target must name one of the states, not ${JSON.stringify(t.target)}`);
-        else if (t.target === name)
-          errors.push(`${at} targets its own state`);
-        else
-          targets.push(t.target);
-        if (t.guard !== undefined)
-          errors.push(...(typeof t.guard === "string" ? guardErrors(t.guard, spotKinds) : ["guard must be a string"]).map((e) => `${at}: ${e}`));
-      }
-      leadsTo.set(name, targets);
-    }
-    if (typeof input.initial === "string" && names.includes(input.initial)) {
-      const reached = new Set([input.initial]);
-      for (const name of reached)
-        for (const next of leadsTo.get(name) ?? [])
-          reached.add(next);
-      for (const name of names)
-        if (!reached.has(name))
-          errors.push(`state ${name} can never be reached from ${input.initial}`);
-    }
-    return errors;
-  }
-  function parseMachine(input, spotKinds) {
-    const errors = machineErrors(input, spotKinds);
-    if (errors.length > 0)
-      throw new Error(`the machine cannot be played: ${errors.join("; ")}`);
-    return input;
-  }
-  var EXAMPLE_REQUEST = "Farm xp by walking toward the fewest enemies. Open chests and grab magnets when they are close, and use Spud Shrines while it is calm. Under 40% health, eat food if there is any; otherwise dash away and keep clear until health is back over 70%.";
-  var hurt = [
-    { target: "eat", guard: "health.pct < 40 && food.count > 0", description: "Hurt, and there is food" },
-    { target: "escape", guard: "health.pct < 40", description: "Hurt, with nothing to eat" }
-  ];
-  var EXAMPLE_MACHINE = {
-    id: "tibo",
-    description: "Farm and loot while healthy; eat or get clear when hurt.",
-    initial: "farm",
-    states: {
-      farm: {
-        description: "Walk toward the thinnest crowd, collecting xp on the way.",
-        meta: { action: { type: "explore", dir: "fewestEnemies" } },
-        on: {
-          tick: [
-            ...hurt,
-            { target: "loot", guard: "chests.dist < 500", description: "A chest is close" },
-            { target: "vacuum", guard: "magnets.dist < 400 && ground.xp > 50", description: "A magnet is close and there is xp to pull in" },
-            { target: "shrine", guard: "spot.chargeShrine.dist < 400 && enemies.count < 25", description: "A Spud Shrine is close and it is calm" }
-          ]
-        }
-      },
-      loot: {
-        description: "Open the nearest chest.",
-        meta: { action: { type: "chest" } },
-        on: { tick: [...hurt, { target: "farm", guard: "chests.count == 0 || chests.dist > 800 || stateSeconds > 25", description: "No chest left in reach, or it took too long" }] }
-      },
-      vacuum: {
-        description: "Pick up the nearest magnet.",
-        meta: { action: { type: "magnet" } },
-        on: { tick: [...hurt, { target: "farm", guard: "magnets.count == 0 || stateSeconds > 15", description: "The magnet is taken, or it took too long" }] }
-      },
-      shrine: {
-        description: "Charge the nearest Spud Shrine.",
-        meta: { action: { type: "spot", kind: "chargeShrine" } },
-        on: { tick: [...hurt, { target: "farm", guard: "spot.chargeShrine.count == 0 || enemies.count > 40 || stateSeconds > 20", description: "The shrine is used, the crowd grew, or it took too long" }] }
-      },
-      eat: {
-        description: "Walk to the nearest food.",
-        meta: { action: { type: "food" } },
-        on: {
-          tick: [
-            { target: "farm", guard: "health.pct >= 70", description: "Healthy again" },
-            { target: "escape", guard: "food.count == 0", description: "The food ran out before Tibo healed" }
-          ]
-        }
-      },
-      escape: {
-        description: "Dash out of the crowd.",
-        meta: { action: { type: "dash", dir: "fewestEnemies" } },
-        on: { tick: [{ target: "retreat", guard: "dash.charges == 0 || stateSeconds > 1", description: "The dash is spent" }] }
-      },
-      retreat: {
-        description: "Keep walking away from the crowd until healed.",
-        meta: { action: { type: "explore", dir: "fewestEnemies" } },
-        on: {
-          tick: [
-            { target: "farm", guard: "health.pct >= 70", description: "Healthy again" },
-            { target: "eat", guard: "food.count > 0", description: "Food showed up" },
-            { target: "escape", guard: "health.lost > 15 && dash.charges > 0", description: "Still taking hits, and a dash is ready" }
-          ]
-        }
-      }
-    }
-  };
+  const goldChest = pickups.find((p) => p.kind === "goldChest" && p.dist < 700);
+  if (goldChest) return { type: "pickup", id: goldChest.id, why: "open the gold chest" };
+
+  const chest = pickups.find((p) => p.kind === "chest" && p.dist < 500);
+  if (chest) return { type: "pickup", id: chest.id, why: "open the chest" };
+
+  const magnet = pickups.find((p) => p.kind === "magnet" && p.dist < 400);
+  if (magnet && state.ground.xp > 50) return { type: "pickup", id: magnet.id, why: "grab the magnet" };
+
+  const shrine = pois.find((p) => p.kind === "chargeShrine" && p.dist < 400);
+  if (shrine && enemies.onScreen < 25) return { type: "poi", id: shrine.id, why: "charge the Spud Shrine" };
+
+  return { type: "move", dir: enemies.fewest, why: "farm" };
+}`;
 
   // protocol/pilot.ts
   var PICK_SHOW_MS = 2000;
@@ -1116,18 +795,18 @@ Goal: {{goal}}.
   }
 
   // userscript/fsd/draft.ts
-  var DEFAULT_DRAFT = { prompt: EXAMPLE_REQUEST, machine: EXAMPLE_MACHINE, builtFrom: EXAMPLE_REQUEST, loadout: DEFAULT_TEMPLATES.planner.pick };
+  var DEFAULT_DRAFT = { prompt: EXAMPLE_REQUEST, code: EXAMPLE_CODE, builtFrom: EXAMPLE_REQUEST, loadout: DEFAULT_TEMPLATES.planner.pick };
   function checkDraft(d) {
     const loadout = loadoutErrors(d.loadout);
-    return loadout.length === 0 ? { loadout, drive: { machine: d.machine, loadout: d.loadout } } : { loadout };
+    return loadout.length === 0 ? { loadout, drive: { code: d.code, loadout: d.loadout } } : { loadout };
   }
   var KEY = "tibobit.fsd";
   function loadDraft() {
     try {
       const d = JSON.parse(localStorage.getItem(KEY) ?? "null");
-      if (d === null || typeof d.prompt !== "string" || typeof d.loadout !== "string" || typeof d.builtFrom !== "string" || machineErrors(d.machine).length > 0)
+      if (d === null || typeof d.prompt !== "string" || typeof d.loadout !== "string" || typeof d.builtFrom !== "string" || typeof d.code !== "string" || d.code.trim() === "")
         return DEFAULT_DRAFT;
-      return { prompt: d.prompt, machine: d.machine, builtFrom: d.builtFrom, loadout: d.loadout };
+      return { prompt: d.prompt, code: d.code, builtFrom: d.builtFrom, loadout: d.loadout };
     } catch {
       return DEFAULT_DRAFT;
     }
@@ -1174,7 +853,7 @@ Goal: {{goal}}.
       return this.shown;
     }
     active() {
-      return this.current.state !== "off" && this.live && this.shown !== undefined ? { state: this.shown.state, seconds: this.shown.input.stateSeconds } : undefined;
+      return this.current.state !== "off" && this.live && this.shown !== undefined ? { ...this.shown.action === undefined ? {} : { action: this.shown.action }, ...this.shown.error === undefined ? {} : { error: this.shown.error } } : undefined;
     }
     building() {
       return this.build?.since;
@@ -1182,14 +861,14 @@ Goal: {{goal}}.
     buildError() {
       return this.buildProblem;
     }
-    buildMachine() {
+    buildCode() {
       const prompt = this.written.prompt;
       if (this.build !== undefined || prompt.trim() === "" || !this.server.connected())
         return;
       this.build = { since: Date.now() };
       this.buildProblem = undefined;
       this.notify();
-      this.server.build(prompt).then((machine) => this.edit({ ...this.written, machine: parseMachine(machine), builtFrom: prompt }), (e) => {
+      this.server.build(prompt).then((code) => this.edit({ ...this.written, code, builtFrom: prompt }), (e) => {
         this.buildProblem = e instanceof Error ? e.message : String(e);
       }).finally(() => {
         this.build = undefined;
@@ -1316,17 +995,17 @@ Goal: {{goal}}.
       ontimeout: () => resolve(false)
     }));
   }
-  function buildMachine(origin, prompt) {
+  function buildCode(origin, prompt) {
     return new Promise((resolve, reject) => GM_xmlhttpRequest({
       method: "POST",
-      url: `${origin}/pilot/machine`,
+      url: `${origin}/pilot/code`,
       data: JSON.stringify({ prompt }),
       headers: { "content-type": "application/json" },
       timeout: BUILD_TIMEOUT_MS,
       onload: (r) => {
         if (r.status >= 300)
           return reject(new Error(refusal(r, origin)));
-        resolve(JSON.parse(r.responseText ?? String(r.response ?? "")).machine);
+        resolve(JSON.parse(r.responseText ?? String(r.response ?? "")).code);
       },
       onerror: () => reject(new Error(`the agent server on ${origin} did not answer`)),
       ontimeout: () => reject(new Error("the builder took more than 10 minutes"))
@@ -1361,7 +1040,7 @@ Goal: {{goal}}.
       for (const listener of listeners)
         listener();
     };
-    const pilot = new Pilot({ connected: () => connected, origin: () => origin, ask: (change) => post(origin, "/pilot", change), build: (prompt) => buildMachine(origin, prompt) }, () => controller.release());
+    const pilot = new Pilot({ connected: () => connected, origin: () => origin, ask: (change) => post(origin, "/pilot", change), build: (prompt) => buildCode(origin, prompt) }, () => controller.release());
     let inFlight = 0;
     let lastPush = 0;
     let screen = "title";
@@ -2583,6 +2262,9 @@ Goal: {{goal}}.
     const enemyFlags = values.find((v) => isRecord(v) && typeof v.Elite === "number" && typeof v.Hidden === "number");
     if (pickupKinds === undefined)
       throw new Error("could not find the pickup kinds table");
+    const pickupSources = values.find((v) => Array.isArray(v) && v[0] === "none" && v.includes("boss") && v.includes("poteto"));
+    if (pickupSources === undefined)
+      throw new Error("could not find the pickup sources table");
     if (zoneKinds === undefined)
       throw new Error("could not find the zone kinds table");
     const zoneShapes = values.find((v) => isRecord(v) && v.circle === 0 && typeof v.line === "number" && typeof v.cone === "number");
@@ -2593,7 +2275,7 @@ Goal: {{goal}}.
     const botModes = values.find((v) => isRecord(v) && v.wander === 0 && typeof v.hop === "number" && typeof v.beam === "number");
     if (botModes === undefined)
       throw new Error("could not find the grok bot modes table");
-    return { pickupKinds, zoneKinds, zoneShapes, enemyFlags, botModes };
+    return { pickupKinds, pickupSources, zoneKinds, zoneShapes, enemyFlags, botModes };
   }
   function assertContent(value) {
     const c = value;
@@ -3037,7 +2719,7 @@ Goal: {{goal}}.
           folded("Prompt", inspect.prompt)
         ];
       case "state":
-        return [...words, section(`State ${inspect.state}`, pre(inspect.about)), ...inspect.because === undefined ? [] : [section("Entered because", pre(inspect.because))]];
+        return [...words, section("Action", pre(inspect.about))];
       case "moves": {
         const rows = inspect.moves.map((m) => h("div", `tbh-opt tbh-opt-${m.outcome.replace(" ", "-")}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name tbh-opt-arrow", ARROWS[m.move]), h("span", "tbh-opt-outcome", m.outcome), h("span", "tbh-opt-scores", ...m.forecast === undefined ? [] : [h("span", `tbh-chip${costly(m.forecast) ? "" : " tbh-chip-ok"}`, m.forecast.dead ? "dead" : costly(m.forecast) ? `-${Math.round(m.forecast.damage)} hp` : "no damage")], ...m.hurt === undefined ? [] : [meter(`hurt ${percent(m.hurt)}`, m.hurt, "tbh-meter-hurt")], ...m.useful === undefined ? [] : [meter(`useful ${percent(m.useful)}`, m.useful, "tbh-meter-useful")])), h("div", "tbh-opt-desc", m.description)));
         return [
@@ -3176,7 +2858,7 @@ Goal: {{goal}}.
     giveBack.addEventListener("click", () => pilot.stop());
     const instructions = h("button", "tbh-fsd-open", "FSD");
     instructions.type = "button";
-    instructions.title = "Open Full Self Driving's machine and loadout (pauses the game)";
+    instructions.title = "Open Full Self Driving's function and loadout (pauses the game)";
     instructions.addEventListener("click", () => openFsd(instructions));
     const tools = h("div", "tbh-chat-tools", giveBack, instructions);
     const plan = h("div", "tbh-plan");
@@ -3195,7 +2877,7 @@ Goal: {{goal}}.
       const latest = [...messages].reverse().find((m) => m.role === "planner");
       if (latest !== shownPlan || latest === undefined) {
         shownPlan = latest;
-        plan.replaceChildren(h("span", "tbh-plan-label", latest === undefined || latest.model === "machine" ? "State" : "Pick"), ...latest?.time === undefined ? [] : [h("span", "tbh-row-time", clock(latest.time))], h("span", "tbh-plan-text", latest === undefined ? "Waiting for the machine…" : arrowed(latest.text)), ...latest?.stream === undefined ? [] : [h("div", "tbh-plan-stream", h("span", "", latest.stream, h("b", "tbh-cursor", "▍")))]);
+        plan.replaceChildren(h("span", "tbh-plan-label", latest === undefined || latest.model === "code" ? "Action" : "Pick"), ...latest?.time === undefined ? [] : [h("span", "tbh-row-time", clock(latest.time))], h("span", "tbh-plan-text", latest === undefined ? "Waiting for the function…" : arrowed(latest.text)), ...latest?.stream === undefined ? [] : [h("div", "tbh-plan-stream", h("span", "", latest.stream, h("b", "tbh-cursor", "▍")))]);
         plan.classList.toggle("tbh-row-inspectable", latest !== undefined);
       }
       if (list.matches(":hover"))
@@ -3604,7 +3286,7 @@ Goal: {{goal}}.
 .tbh-fsd-block[hidden] { display: none; }
 .tbh-fsd-block-head { display: flex; align-items: baseline; gap: 6px; }
 .tbh-fsd-block-head b { color: var(--violet); }
-.tbh-fsd-block-head b { min-width: 0; overflow-wrap: anywhere; }
+.tbh-fsd-block-head b { flex: none; white-space: nowrap; }
 .tbh-fsd-block-count { margin-left: auto; font-size: 10.5px; font-weight: 800; color: var(--gold); }
 .tbh-fsd-block-used { border-color: rgba(255,211,107,.45); }
 .tbh-fsd-block-about { color: var(--muted); font-size: 10.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -3624,6 +3306,7 @@ Goal: {{goal}}.
   background: #1b1622; border: 1px solid #8e74c9; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.6); font-size: 11.5px; }
 .tbh-fsd-tip[hidden] { display: none; }
 .tbh-fsd-tip-name { color: var(--violet); }
+.tbh-fsd-tip-key { margin-left: 8px; font: inherit; font-size: 10.5px; color: var(--gold); }
 .tbh-fsd-tip-about { margin-top: 3px; color: var(--muted); }
 .tbh-fsd-tip-label { margin-top: 7px; font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
 .tbh-fsd-tip-value { margin: 3px 0 0; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 11px; color: #dbe6ff; background: rgba(0,0,0,.35); border-radius: 5px; }
@@ -3645,11 +3328,13 @@ Goal: {{goal}}.
 .tbh-fsd-build:disabled { opacity: .5; cursor: not-allowed; }
 .tbh-fsd-build-note { flex: 1; min-width: 0; font-size: 11px; color: var(--muted); }
 .tbh-fsd-build-stale { color: var(--gold); }
-.tbh-fsd-machine-label { margin-top: 12px; }
-.tbh-fsd-machine-title { font-size: 11.5px; color: var(--muted); }
-.tbh-fsd-machine-title b { color: var(--text); }
-.tbh-fsd-machine { padding: 14px 0; overflow-x: auto; border: 1px solid rgba(255,255,255,.07); border-radius: 8px; background: rgba(0,0,0,.28); }
-.tbh-fsd-block-value { flex: none; max-width: 9ch; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; font-variant-numeric: tabular-nums; color: #dbe6ff; }
+.tbh-fsd-code-label { margin-top: 12px; }
+.tbh-fsd-now { font-size: 11.5px; color: #7fe3a4; }
+.tbh-fsd-now[hidden] { display: none; }
+.tbh-fsd-now-error { color: var(--bad); }
+.tbh-fsd-builder .tbh-code { max-height: 52vh; }
+.tbh-fsd-block-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 10px; color: #7fd6ff; }
+.tbh-fsd-block-value { flex: none; margin-left: auto; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; font-variant-numeric: tabular-nums; color: #dbe6ff; }
 .tbh-fsd-fold summary { font-size: 11px; color: var(--muted); cursor: pointer; }
 .tbh-fsd-fold[open] summary { margin-bottom: 6px; }
 .tbh-fsd-embed { padding: 2px 7px; font-size: 10.5px; color: var(--violet); }
@@ -3676,206 +3361,346 @@ Goal: {{goal}}.
 }
 `;
 
-  // userscript/fsd/machine-view.css.ts
+  // userscript/fsd/code-view.css.ts
   var css8 = `
-.tbh-mv { --gold: #ffd36b; --text: #f3e6c4; --muted: #a8977a; --violet: #c9a0ff; --live: #7fe3a4; position: relative; min-width: 0; }
-.tbh-mv-ranks { display: flex; flex-direction: column; gap: 34px; padding: 4px 34px; }
-.tbh-mv-rank { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 34px 48px; }
-.tbh-mv-node { position: relative; z-index: 1; flex: 0 1 264px; min-width: 0; box-sizing: border-box; padding: 7px 9px 8px; color: var(--text); background: #1c1724; border: 1px solid rgba(201,160,255,.35); border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.35); transition: border-color .2s, box-shadow .2s, background .2s; }
-.tbh-mv-head { display: flex; align-items: center; gap: 6px; }
-.tbh-mv-icon { flex: none; width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--gold); }
-.tbh-mv-icon .tbh-svg-fill { fill: currentColor; stroke: none; }
-.tbh-mv-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
-.tbh-mv-start { flex: none; padding: 0 5px; font-size: 9.5px; font-style: normal; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #1d1530; background: var(--violet); border-radius: 999px; }
-.tbh-mv-time { margin-left: auto; font-size: 10.5px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--live); }
-.tbh-mv-action { margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--gold); }
-.tbh-mv-about { margin: 3px 0 0; font-size: 10.5px; color: var(--muted); }
-.tbh-mv-outs { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 0; padding: 5px 0 0; list-style: none; border-top: 1px solid rgba(255,255,255,.08); }
-.tbh-mv-out { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: baseline; gap: 5px; padding: 1px 3px; font-size: 10.5px; border-radius: 4px; cursor: default; }
-.tbh-mv-out:hover { background: rgba(255,211,107,.12); }
-.tbh-mv-order { font-size: 9px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.tbh-mv-guard { font: inherit; color: #dbe6ff; overflow-wrap: break-word; }
-.tbh-mv-arrow { color: var(--muted); }
-.tbh-mv-target { color: var(--violet); }
-.tbh-mv-active { border-color: var(--live); background: #18251f; box-shadow: 0 0 0 2px rgba(127,227,164,.28), 0 2px 14px rgba(127,227,164,.18); }
-.tbh-mv-active .tbh-mv-name { color: var(--live); }
-.tbh-mv-node-focus { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(255,211,107,.3); }
-.tbh-mv-edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-.tbh-mv-edge { fill: none; stroke: rgba(201,160,255,.3); stroke-width: 1.3; }
-.tbh-mv-edge-live { stroke: rgba(127,227,164,.8); stroke-width: 1.6; }
-.tbh-mv-edge-focus { stroke: var(--gold); stroke-width: 2.2; }
-.tbh-mv-compact .tbh-mv-ranks { gap: 12px; padding: 2px 16px; }
-.tbh-mv-compact .tbh-mv-rank { gap: 10px 20px; }
-.tbh-mv-compact .tbh-mv-node { flex: 0 1 auto; padding: 3px 7px 4px; border-radius: 6px; }
-.tbh-mv-compact .tbh-mv-active { flex-basis: 100%; }
-.tbh-mv-compact .tbh-mv-icon { width: 13px; height: 13px; }
-.tbh-mv-compact .tbh-mv-name { font-size: 10.5px; }
-.tbh-mv-compact .tbh-mv-about, .tbh-mv-compact .tbh-mv-start, .tbh-mv-compact .tbh-mv-order { display: none; }
-.tbh-mv-compact .tbh-mv-node:not(.tbh-mv-active) :is(.tbh-mv-action, .tbh-mv-outs) { display: none; }
-.tbh-mv-compact .tbh-mv-action { font-size: 10px; }
-.tbh-mv-compact .tbh-mv-outs { margin-top: 3px; padding-top: 3px; }
-.tbh-mv-compact .tbh-mv-out { font-size: 9.5px; grid-template-columns: minmax(0, 1fr) auto auto; }
+.tbh-code { margin: 0; padding: 10px 0; overflow: auto; font: 11.5px/1.55 ui-monospace, Menlo, Consolas, monospace; color: #e8dcc0; background: rgba(0,0,0,.34); border: 1px solid rgba(255,255,255,.07); border-radius: 8px; tab-size: 2; }
+.tbh-code-line { display: block; min-width: max-content; padding: 0 12px; border-left: 3px solid transparent; }
+.tbh-code-live { background: rgba(127,227,164,.14); border-left-color: #7fe3a4; }
+.tbh-code-keyword { color: #c9a0ff; }
+.tbh-code-type { color: #7fd6ff; }
+.tbh-code-string { color: #ffd36b; }
+.tbh-code-number { color: #ff9f7a; }
+.tbh-code-comment { color: #8d7c5c; font-style: italic; }
+.tbh-code-field { border-bottom: 1px dotted rgba(127,214,255,.6); cursor: help; }
+.tbh-code-field:hover { background: rgba(127,214,255,.16); }
+.tbh-code-compact { padding: 4px 0; font-size: 9.5px; line-height: 1.4; border: 0; background: transparent; overflow: hidden; }
+.tbh-code-compact .tbh-code-line { padding: 0 6px; border-left-width: 2px; }
+.tbh-code-compact .tbh-code-field { border-bottom: 0; }
 `;
 
-  // userscript/fsd/machine-view.ts
-  var SVG2 = "http://www.w3.org/2000/svg";
-  var TAGS = { chest: "Loot", food: "Eat", magnet: "Magnet", elite: "Hunt", explore: "Wander", dash: "Dash", still: "Hold" };
-  var tagOf = (a) => a.type !== "spot" ? TAGS[a.type] : a.kind === undefined ? "Spot" : SPOT_TAGS[a.kind] ?? "Spot";
-  var wayWords = (way) => way === "fewestEnemies" ? "toward the fewest enemies" : way === "mostEnemies" ? "toward the most enemies" : way;
-  function actionWords(a, spotName) {
-    switch (a.type) {
-      case "chest":
-        return "open chests";
-      case "food":
-        return "eat food";
-      case "magnet":
-        return "grab magnets";
-      case "elite":
-        return "fight elites";
-      case "spot":
-        return a.kind === undefined ? "use the nearest spot" : `use ${spotName(a.kind) ?? a.kind}`;
-      case "explore":
-        return `explore ${wayWords(a.dir)}`;
-      case "dash":
-        return `dash ${wayWords(a.dir)}`;
-      case "still":
-        return "stand still";
-    }
-  }
-  function ranks(machine) {
-    const depth = new Map([[machine.initial, 0]]);
-    for (const [name, d] of depth)
-      for (const t of machine.states[name]?.on?.tick ?? [])
-        if (!depth.has(t.target))
-          depth.set(t.target, d + 1);
-    const rows = [];
-    for (const [name, d] of depth)
-      (rows[d] ??= []).push(name);
-    return rows;
-  }
-  function boxIn(root, el) {
-    let [left, top] = [0, 0];
-    for (let at = el;at !== null && at !== root; at = at.offsetParent) {
-      left += at.offsetLeft;
-      top += at.offsetTop;
-    }
-    return { left, top, width: el.offsetWidth, height: el.offsetHeight };
-  }
+  // userscript/fsd/code-view.ts
+  var KEYWORDS = new Set(["const", "let", "if", "else", "return", "function", "type", "export", "true", "false", "null", "undefined", "extends", "typeof", "in"]);
   var styled = false;
-  function machineView(compact, spotName = () => {
-    return;
-  }) {
+  function codeView(fields, compact = false) {
     if (!styled)
       addStyle(css8);
     styled = true;
-    const edges = document.createElementNS(SVG2, "svg");
-    edges.setAttribute("class", "tbh-mv-edges");
-    edges.setAttribute("aria-hidden", "true");
-    const rows = h("div", "tbh-mv-ranks");
-    const el = h("div", `tbh-mv${compact ? " tbh-mv-compact" : ""}`);
-    el.append(edges, rows);
-    const nodes = new Map;
-    let drawn = "";
-    let lit;
-    const card = (machine, name) => {
-      const state = machine.states[name];
-      if (state === undefined)
-        throw new Error(`the machine has no state ${name}`);
-      const action = state.meta.action;
-      const time = h("span", "tbh-mv-time");
-      const outs = (state.on?.tick ?? []).map((t, i) => {
-        const li = h("li", "tbh-mv-out", h("span", "tbh-mv-order", String(i + 1)), h("code", "tbh-mv-guard", t.guard ?? "always"), h("span", "tbh-mv-arrow", "→"), h("b", "tbh-mv-target", t.target));
-        li.dataset.target = t.target;
-        li.title = [t.description, t.guard].filter(Boolean).join(`
-`);
-        li.addEventListener("pointerenter", () => focus(li));
-        li.addEventListener("pointerleave", () => focus(undefined));
-        return li;
-      });
-      const head = h("header", "tbh-mv-head", svgIcon(ACTION_ICONS[tagOf(action)], "tbh-mv-icon"), h("b", "tbh-mv-name", name), ...name === machine.initial ? [h("i", "tbh-mv-start", "start")] : [], time);
-      const el = h("article", "tbh-mv-node", head, h("div", "tbh-mv-action", actionWords(action, spotName)), ...state.description === undefined ? [] : [h("p", "tbh-mv-about", state.description)], ...outs.length === 0 ? [h("p", "tbh-mv-about tbh-mv-end", "Stays here for the rest of the run.")] : [h("ol", "tbh-mv-outs", ...outs)]);
-      el.dataset.state = name;
-      el.title = `${JSON.stringify(action)}
-${ACTIONS[action.type].about}`;
-      return { card: el, time };
+    const known = new Set(fields.map((f) => f.path));
+    const roots = [...new Set(fields.map((f) => f.path.split(".")[0] ?? ""))];
+    const token = new RegExp([
+      "(\\/\\/.*|\\/\\*[\\s\\S]*?\\*\\/)",
+      "(\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|`(?:\\\\.|[^`\\\\])*`)",
+      "\\b(\\d+(?:\\.\\d+)?)\\b",
+      `(?<![.\\w])((?:state\\??\\.)?(?:${roots.join("|")})(?:\\??\\.[A-Za-z_]\\w*)*)(?![\\w:])`,
+      "\\b([A-Za-z_]\\w*)\\b"
+    ].join("|"), "g");
+    const fieldOf = (read) => {
+      const parts = read.replace(/\?/g, "").replace(/^state\./, "").split(".");
+      while (parts.length > 0 && !known.has(parts.join(".")))
+        parts.pop();
+      return parts.length === 0 ? undefined : parts.join(".");
     };
-    const focus = (li) => {
-      for (const path of edges.querySelectorAll("path[data-edge]"))
-        path.classList.toggle("tbh-mv-edge-focus", li !== undefined && path.getAttribute("data-edge") === li.dataset.edge);
-      for (const [name, node] of nodes)
-        node.card.classList.toggle("tbh-mv-node-focus", li?.dataset.target === name);
-    };
-    const draw = () => {
-      if (el.offsetWidth === 0)
-        return;
-      edges.setAttribute("viewBox", `0 0 ${el.offsetWidth} ${el.offsetHeight}`);
-      const paths = [];
-      let n = 0;
-      for (const [name, { card }] of nodes) {
-        const from = boxIn(el, card);
-        for (const li of card.querySelectorAll("li[data-target]")) {
-          const target = nodes.get(li.dataset.target ?? "")?.card;
-          if (target === undefined || li.offsetHeight === 0)
-            continue;
-          const row = boxIn(el, li);
-          const to = boxIn(el, target);
-          const y = row.top + row.height / 2;
-          const sameColumn = Math.abs(to.left + to.width / 2 - (from.left + from.width / 2)) < 12;
-          const right = sameColumn || to.left + to.width / 2 > from.left + from.width / 2;
-          const x = right ? from.left + from.width : from.left;
-          const out = right ? 34 : -34;
-          const lane = (n++ % 5 - 2) * 9;
-          let d;
-          if (sameColumn) {
-            const ey = to.top + to.height / 2 + lane;
-            d = `M${x} ${y} C${x + 46} ${y} ${to.left + to.width + 46} ${ey} ${to.left + to.width} ${ey}`;
-          } else if (to.top >= from.top + from.height) {
-            const ex = to.left + to.width / 2 + lane;
-            d = `M${x} ${y} C${x + out} ${y} ${ex} ${to.top - 34} ${ex} ${to.top}`;
-          } else if (to.top + to.height <= from.top) {
-            const ex = to.left + to.width / 2 + lane;
-            d = `M${x} ${y} C${x + out} ${y} ${ex} ${to.top + to.height + 34} ${ex} ${to.top + to.height}`;
-          } else {
-            const ex = right ? to.left : to.left + to.width;
-            const ey = to.top + to.height / 2 + lane;
-            d = `M${x} ${y} C${x + out} ${y} ${ex - out} ${ey} ${ex} ${ey}`;
-          }
-          const path = document.createElementNS(SVG2, "path");
-          path.setAttribute("d", d);
-          path.setAttribute("class", `tbh-mv-edge${name === lit ? " tbh-mv-edge-live" : ""}`);
-          path.setAttribute("marker-end", "url(#tbh-mv-head)");
-          li.dataset.edge = String(n);
-          path.setAttribute("data-edge", String(n));
-          paths.push(path);
-        }
+    const paint = (line) => {
+      const out = [];
+      let at = 0;
+      for (const m of line.matchAll(token)) {
+        if (m.index > at)
+          out.push(line.slice(at, m.index));
+        at = m.index + m[0].length;
+        const [text, comment, string, number, read, word] = m;
+        if (comment !== undefined)
+          out.push(h("span", "tbh-code-comment", text));
+        else if (string !== undefined)
+          out.push(h("span", "tbh-code-string", text));
+        else if (number !== undefined)
+          out.push(h("span", "tbh-code-number", text));
+        else if (read !== undefined) {
+          const path = fieldOf(read);
+          const el = h("span", path === undefined ? "" : "tbh-code-field", text);
+          if (path !== undefined)
+            el.dataset.path = path;
+          out.push(el);
+        } else if (word !== undefined && KEYWORDS.has(word))
+          out.push(h("span", "tbh-code-keyword", text));
+        else if (word !== undefined && /^[A-Z]/.test(word))
+          out.push(h("span", "tbh-code-type", text));
+        else
+          out.push(text);
       }
-      const defs = document.createElementNS(SVG2, "defs");
-      defs.innerHTML = '<marker id="tbh-mv-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="context-stroke"/></marker>';
-      edges.replaceChildren(defs, ...paths);
+      if (at < line.length)
+        out.push(line.slice(at));
+      return out;
     };
-    new ResizeObserver(draw).observe(el);
+    const whyOf = (line) => {
+      const literal = /\bwhy:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/.exec(line)?.[1];
+      if (literal === undefined)
+        return;
+      const parts = literal.slice(1, -1).split(literal.startsWith("`") ? /\$\{[^}]*\}/ : /(?!)/);
+      return new RegExp(`^${parts.map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
+    };
+    const el = h("pre", `tbh-code${compact ? " tbh-code-compact" : ""}`);
+    let shown = "";
+    let lines = [];
+    let lit = "";
     return {
       el,
-      show(machine, active) {
-        const spots = Object.values(machine.states).map((s) => s.meta.action.type === "spot" && s.meta.action.kind !== undefined ? spotName(s.meta.action.kind) ?? "" : "");
-        const key = `${JSON.stringify(machine)}|${spots.join("|")}`;
-        if (key !== drawn) {
-          drawn = key;
-          nodes.clear();
-          rows.replaceChildren(...ranks(machine).map((names) => h("div", "tbh-mv-rank", ...names.map((name) => {
-            const node = card(machine, name);
-            nodes.set(name, node);
-            return node.card;
-          }))));
+      show(source, why) {
+        if (source !== shown) {
+          shown = source;
+          lines = source.split(`
+`).map((line) => ({ el: h("span", "tbh-code-line", ...paint(line), `
+`), returns: whyOf(line) }));
+          el.replaceChildren(...lines.map((l) => l.el));
+          lit = "";
         }
-        lit = active?.state;
-        for (const [name, node] of nodes) {
-          node.card.classList.toggle("tbh-mv-active", name === lit);
-          node.time.textContent = name === lit && active !== undefined ? `${Math.round(active.seconds)}s` : "";
+        if ((why ?? "") === lit)
+          return;
+        lit = why ?? "";
+        let first;
+        for (const line of lines) {
+          const live = why !== undefined && line.returns?.test(why) === true;
+          line.el.classList.toggle("tbh-code-live", live);
+          if (live)
+            first ??= line.el;
         }
-        draw();
+        if (compact && first !== undefined)
+          el.scrollTop = Math.max(0, first.offsetTop - el.clientHeight / 2);
+      },
+      fieldAt(target) {
+        const field = target instanceof HTMLElement ? target.closest(".tbh-code-field") : null;
+        const path = field?.dataset.path;
+        return field === null || field === undefined || path === undefined || !el.contains(field) ? undefined : { path, box: field.getBoundingClientRect() };
       }
     };
+  }
+
+  // userscript/fsd/drive-overlay.css.ts
+  var css9 = `
+.tbh-do { position: fixed; top: 8px; left: 8px; z-index: 2147483000; box-sizing: border-box; width: min(430px, calc(100vw - 16px)); padding: 6px 0 4px;
+  pointer-events: none; color: #f3e6c4; background: rgba(17,14,22,.84); border: 1px solid rgba(142,116,201,.7); border-radius: 8px; box-shadow: 0 4px 18px rgba(0,0,0,.5);
+  font: 11px/1.35 ui-monospace, Menlo, Consolas, monospace; }
+.tbh-do[hidden] { display: none; }
+.tbh-do-head { display: flex; align-items: baseline; gap: 7px; padding: 0 8px 4px; }
+.tbh-do-logo { padding: 1px 5px; border-radius: 4px; font-size: 9.5px; font-weight: 900; letter-spacing: .12em; color: #1d1530; background: linear-gradient(135deg, #c9a0ff, #ffd36b); }
+.tbh-do-why { color: #7fe3a4; white-space: nowrap; }
+.tbh-do-action { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: #c9b58a; }
+.tbh-do-error :is(.tbh-do-why, .tbh-do-action) { color: #ff8f80; }
+.tbh-do .tbh-code { max-height: 40vh; }
+@media (max-width: 699px) {
+  /* The panel sits under it on a phone, so only what the function returned. */
+  .tbh-do { width: min(260px, 64vw); }
+  .tbh-do .tbh-code { display: none; }
+  .tbh-do-head { flex-wrap: wrap; }
+}
+`;
+
+  // userscript/fsd/drive-overlay.ts
+  var actionWords = (action) => {
+    const { type, why: _, ...rest } = action;
+    return [type, ...Object.entries(rest).map(([k, v]) => k === "id" ? `#${v}` : String(v))].join(" ");
+  };
+  function driveOverlay(pilot, fields) {
+    addStyle(css9);
+    const view = codeView(fields, true);
+    const why = h("b", "tbh-do-why");
+    const action = h("span", "tbh-do-action");
+    const box = h("aside", "tbh-do", h("header", "tbh-do-head", h("span", "tbh-do-logo", "FSD"), why, action), view.el);
+    box.setAttribute("aria-label", "Full Self Driving's function");
+    box.hidden = true;
+    document.body.append(box);
+    const render = () => {
+      box.hidden = pilot.state().state === "off";
+      if (box.hidden)
+        return;
+      const now = pilot.active();
+      why.textContent = now?.error !== undefined ? "drive threw" : now?.action?.why ?? "";
+      action.textContent = now?.error ?? (now?.action === undefined ? "waiting for the first call" : actionWords(now.action));
+      box.classList.toggle("tbh-do-error", now?.error !== undefined);
+      view.show(pilot.draft().code, now?.action?.why);
+    };
+    pilot.onChange(render);
+    render();
+  }
+
+  // userscript/fsd/driver-source.ts
+  var DRIVER_TYPES = `// What Full Self Driving's function reads and returns. The bot calls \`drive(state)\` four times a
+// second and has the autopilot carry out the action it returns. This file stands alone, with no
+// imports: its text is the type check's prelude, part of the builder's prompt, and what the popup
+// shows beside the code. Names are the game's own.
+
+export type Direction = "right" | "down-right" | "down" | "down-left" | "left" | "up-left" | "up" | "up-right";
+
+/** Where something is from Tibo. Distances are world units; Tibo walks about 62 a second. */
+export type Placed = {
+  /** The id an action names it by. */
+  id: number;
+  dist: number;
+  /** The way to walk to it; "still" when Tibo stands on or in it. */
+  dir: Direction | "still";
+  /** Tibo gave up on it in the last 45 seconds: it could not be reached, charged or paid for. */
+  gaveUp: boolean;
+};
+
+/** A weapon or passive Tibo holds, by the game's id, with its level of the most it can reach. */
+export type Held = { id: string; name: string; level: number; max: number };
+
+export type Pickup = Placed & {
+  /**
+   * The game's pickup kind. A chest opens after Tibo has stood on it; the game calls it a goldChest
+   * when a boss or Poteto left it. heal is food. magnet pulls in all the xp on the ground.
+   */
+  kind: "chest" | "goldChest" | "heal" | "magnet" | "reroll" | "skip" | "banish" | "item" | "beacon";
+  /** For a chest: seconds stood on it so far, and the seconds it takes to open. */
+  charged?: number;
+  chargeSeconds?: number;
+};
+
+/** A point of interest: a place that does something once Tibo has stood inside it. Only unused ones are listed. */
+export type Poi = Placed & {
+  /** The game's kind, such as chargeShrine or paidChest; a variety place goes by its own id, such as lighthouse. */
+  kind: string;
+  /** The game's English name, such as Spud Shrine or Potato Crate. */
+  name: string;
+  inside: boolean;
+  /** Seconds stood inside so far, and the seconds it takes to charge. */
+  charged: number;
+  chargeSeconds: number;
+};
+
+export type Enemy = Placed & {
+  /** The game's id of the enemy or boss. */
+  kind: string;
+  name: string;
+  hp: number;
+  maxHp: number;
+};
+
+export type State = {
+  /** Seconds of game time since the run began. */
+  time: number;
+  /** The second the run counts as won; it goes on after that until Tibo dies. */
+  winAt: number;
+  tibo: {
+    hp: number;
+    maxHp: number;
+    /** Health lost over the last 3 seconds. */
+    hurt: number;
+    /** Damage dealt a second over the last 3 seconds. */
+    dps: number;
+    level: number;
+    gold: number;
+    x: number;
+    y: number;
+    dash: { charges: number; max: number };
+    /** Up to 6 of each. */
+    weapons: Held[];
+    passives: Held[];
+    items: { id: string; name: string; count: number }[];
+    /** Weapons the next chest opened would evolve, because their recipe is complete. */
+    evolves: string[];
+    /** The effective stats, by the game's own names, such as damageMult, armor and magnetRadius. */
+    stats: Record<string, number>;
+  };
+  enemies: {
+    onScreen: number;
+    /** Enemies on screen in each direction. */
+    byDirection: Record<Direction, number>;
+    /** The direction with the fewest enemies on screen, and the one with the most. */
+    fewest: Direction;
+    most: Direction;
+    /** Bullets about to arrive from each direction. */
+    bullets: Record<Direction, number>;
+  };
+  /** Every list below is nearest first. */
+  elites: Enemy[];
+  bosses: Enemy[];
+  /** What lies on the ground, other than xp and gold. */
+  pickups: Pickup[];
+  pois: Poi[];
+  /** The total value of the xp and of the gold lying on the ground. */
+  ground: { xp: number; gold: number };
+  /** Gold a Potato Crate (paidChest) costs now, and a Tater Slots spin. */
+  prices: { crate: number; slots: number };
+  /** Timed boosts running, by the game's key, with the seconds left. */
+  boosts: { name: string; endsIn: number }[];
+  /** The next boss, elite and event to come, with the run second each comes at. */
+  upcoming: { at: number; text: string }[];
+  /** What \`drive\` returned last time and for how many seconds it has returned the same; null on the first call. */
+  previous: { action: Action; seconds: number } | null;
+};
+
+/**
+ * What the autopilot does until the next call. It walks there and dodges on its own. \`why\` is a
+ * few words shown to the person watching, and comes back as \`state.previous.action.why\`.
+ */
+export type Action = (
+  /** Walk to a pickup and take it; a chest is stood on until it opens. */
+  | { type: "pickup"; id: number }
+  /** Walk to a point of interest and stand inside it until it has charged. */
+  | { type: "poi"; id: number }
+  /** Fight an elite: keep it within reach of Tibo's weapons until it dies. */
+  | { type: "elite"; id: number }
+  /** Walk that way. */
+  | { type: "move"; dir: Direction }
+  /** Dash that way, a quick burst that spends a dash charge; with none, walk that way. */
+  | { type: "dash"; dir: Direction }
+  /** Stand still, stepping aside only when standing would cost more health than moving. */
+  | { type: "still" }
+) & { why?: string };
+`;
+
+  // userscript/fsd/entities.ts
+  var SECTIONS = ["Chests", "Pickups", "Shrines", "Buffs", "Upgrades", "Loot", "Travel", "Other"];
+  var POI_SECTIONS = {
+    paidChest: "Chests",
+    chargeShrine: "Shrines",
+    curseShrine: "Shrines",
+    goldenShrine: "Shrines",
+    botDock: "Buffs",
+    chiliBottle: "Buffs",
+    dinnerBell: "Buffs",
+    frenzyFryer: "Buffs",
+    mashBomb: "Buffs",
+    spudFreezer: "Buffs",
+    taterMagnet: "Buffs",
+    dog: "Upgrades",
+    dogKennel: "Upgrades",
+    microwave: "Upgrades",
+    seedVault: "Upgrades",
+    taterSlots: "Upgrades",
+    vendor: "Upgrades",
+    whetstone: "Upgrades",
+    bossLair: "Loot",
+    crops: "Loot",
+    digSpot: "Loot",
+    eliteNest: "Loot",
+    lighthouse: "Loot",
+    taterLantern: "Loot",
+    treasureMap: "Loot",
+    rootTunnel: "Travel",
+    rowboat: "Travel"
+  };
+  var PICKUPS = [
+    { section: "Chests", key: "chest", name: "chest", tag: "Loot", about: "A chest an elite, a loot runner or a place left on the ground. Standing on it for 1 second opens it." },
+    { section: "Chests", key: "goldChest", name: "goldChest", tag: "Loot", about: "A chest a boss or Poteto left. It opens like a chest, after 1.5 seconds." },
+    { section: "Pickups", key: "heal", name: "heal", tag: "Eat", about: "Food on the ground, which gives health back." },
+    { section: "Pickups", key: "magnet", name: "magnet", tag: "Magnet", about: "A magnet on the ground, which pulls in all the xp lying there." }
+  ];
+  function worldEntities(link) {
+    const found = [...PICKUPS];
+    const place = (key, name, about) => found.push({ section: POI_SECTIONS[key] ?? "Other", key, name, about: about ?? "", tag: SPOT_TAGS[key] ?? "Spot" });
+    for (const { kind } of link.table?.pois ?? []) {
+      const name = link.message(`content.poi.${kind}.name`);
+      if (kind !== "varietyPlace" && name !== undefined)
+        place(kind, name, link.message(`content.poi.${kind}.desc`));
+    }
+    for (const key of Object.keys(link.messages)) {
+      const id = /^content\.varietyPlace\.([^.]+)\.name$/.exec(key)?.[1];
+      const name = id === undefined ? undefined : link.message(key);
+      if (name !== undefined && id !== undefined)
+        place(id.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase()), name, link.message(`content.varietyPlace.${id}.desc`));
+    }
+    return found.sort((a, z) => SECTIONS.indexOf(a.section) - SECTIONS.indexOf(z.section) || a.name.localeCompare(z.name));
   }
 
   // userscript/panel/keys.ts
@@ -3895,311 +3720,687 @@ ${ACTIONS[action.type].about}`;
       }, true);
     }
   }
-
-  // userscript/fsd/entities.ts
-  var ENTITY_TYPES = { pickup: "Pickups", spot: "Spots", varietyPlace: "Variety places" };
-  function worldEntities(link) {
-    const found = [
-      { type: "pickup", name: "chest", about: "A chest on the ground, from an elite or the map. Standing on it opens it for a free pick.", tag: "Loot" },
-      { type: "pickup", name: "food", about: "Food on the ground (the game's heal pickup), which gives Tibo back health.", tag: "Eat" },
-      { type: "pickup", name: "magnet", about: "The game's magnet pickup on the ground.", tag: "Magnet" }
-    ];
-    for (const { kind } of link.table?.pois ?? []) {
-      const name = link.message(`content.poi.${kind}.name`);
-      if (kind !== "varietyPlace" && name !== undefined)
-        found.push({ type: "spot", name, about: link.message(`content.poi.${kind}.desc`) ?? "", tag: SPOT_TAGS[kind] ?? "Spot", kind });
-    }
-    for (const key of Object.keys(link.messages)) {
-      const place = /^content\.varietyPlace\.([^.]+)\.name$/.exec(key)?.[1];
-      const name = place === undefined ? undefined : link.message(key);
-      if (name !== undefined && place !== undefined)
-        found.push({ type: "varietyPlace", name, about: link.message(`content.varietyPlace.${place}.desc`) ?? "", tag: "Spot", kind: place.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase()) });
-    }
-    const types = Object.keys(ENTITY_TYPES);
-    return found.sort((a, z) => types.indexOf(a.type) - types.indexOf(z.type) || a.name.localeCompare(z.name));
-  }
   // protocol/state.example.json
   var state_example_default = {
     time: 84.4,
-    state: "farm",
-    input: {
+    state: {
       time: 84.4,
-      stateSeconds: 8.8,
-      health: {
-        hp: 90,
-        max: 130,
-        pct: 69,
-        lost: 1
-      },
-      level: 6,
-      gold: 86,
-      dps: 75,
-      dash: {
-        charges: 1,
-        max: 1
-      },
-      loadout: {
-        weapons: 2,
-        passives: 2,
-        evolutionsReady: 0
+      winAt: 1200,
+      tibo: {
+        hp: 132,
+        maxHp: 137,
+        hurt: 0,
+        dps: 38,
+        level: 4,
+        gold: 0,
+        x: 605,
+        y: 1944,
+        dash: {
+          charges: 2,
+          max: 2
+        },
+        weapons: [
+          {
+            id: "seeker-sprouts",
+            name: "Seeker Sprouts",
+            level: 3,
+            max: 8
+          },
+          {
+            id: "reset-button",
+            name: "Reset Button",
+            level: 1,
+            max: 8
+          }
+        ],
+        passives: [],
+        items: [],
+        evolves: [],
+        stats: {
+          damageMult: 1.899,
+          areaMult: 1,
+          cooldownMult: 0.964,
+          amountBonus: 1,
+          durationMult: 1.25,
+          projSpeedMult: 1,
+          moveSpeedMult: 1,
+          maxHp: 137.28,
+          recovery: 0,
+          armor: 8.438,
+          magnetRadius: 50.2,
+          luck: 0,
+          growthMult: 1.575,
+          greedMult: 1.05,
+          curse: 0.1,
+          critChance: 0,
+          critMult: 2,
+          evasion: 0,
+          knockbackMult: 1,
+          pierceBonus: 0,
+          revivals: 0,
+          eliteMult: 1,
+          healOnKill: 0,
+          explodeOnKillChance: 0,
+          thorns: 0,
+          chestPriceMult: 1,
+          dashCharges: 0,
+          dashCooldownMult: 1,
+          dashGraceSec: 0
+        }
       },
       enemies: {
-        count: 18,
-        most: 5,
-        fewest: 0,
-        bullets: 0
-      },
-      ground: {
-        xp: 132,
-        gold: 3
-      },
-      bosses: {
-        count: 0,
-        dist: 99999
-      },
-      elites: {
-        count: 0,
-        dist: 99999
-      },
-      chests: {
-        count: 0,
-        dist: 99999
-      },
-      food: {
-        count: 0,
-        dist: 99999
-      },
-      magnets: {
-        count: 0,
-        dist: 99999
-      },
-      spots: {
-        count: 42,
-        dist: 135
-      },
-      spot: {
-        bossLair: {
-          count: 0,
-          dist: 99999
+        onScreen: 12,
+        byDirection: {
+          right: 2,
+          "down-right": 3,
+          down: 0,
+          "down-left": 2,
+          left: 1,
+          "up-left": 0,
+          up: 2,
+          "up-right": 2
         },
-        botDock: {
-          count: 1,
-          dist: 282
-        },
-        chargeShrine: {
-          count: 3,
-          dist: 920
-        },
-        chiliBottle: {
-          count: 0,
-          dist: 99999
-        },
-        crops: {
-          count: 0,
-          dist: 99999
-        },
-        curseShrine: {
-          count: 4,
-          dist: 269
-        },
-        digSpot: {
-          count: 0,
-          dist: 99999
-        },
-        dinnerBell: {
-          count: 2,
-          dist: 282
-        },
-        dog: {
-          count: 3,
-          dist: 681
-        },
-        dogKennel: {
-          count: 1,
-          dist: 135
-        },
-        eliteNest: {
-          count: 3,
-          dist: 529
-        },
-        frenzyFryer: {
-          count: 2,
-          dist: 642
-        },
-        goldenShrine: {
-          count: 1,
-          dist: 812
-        },
-        lighthouse: {
-          count: 0,
-          dist: 99999
-        },
-        mashBomb: {
-          count: 0,
-          dist: 99999
-        },
-        microwave: {
-          count: 2,
-          dist: 538
-        },
-        paidChest: {
-          count: 7,
-          dist: 547
-        },
-        rootTunnel: {
-          count: 1,
-          dist: 376
-        },
-        rowboat: {
-          count: 1,
-          dist: 229
-        },
-        seedVault: {
-          count: 1,
-          dist: 700
-        },
-        spudFreezer: {
-          count: 3,
-          dist: 390
-        },
-        taterLantern: {
-          count: 2,
-          dist: 499
-        },
-        taterMagnet: {
-          count: 1,
-          dist: 511
-        },
-        taterSlots: {
-          count: 0,
-          dist: 99999
-        },
-        treasureMap: {
-          count: 0,
-          dist: 99999
-        },
-        vendor: {
-          count: 4,
-          dist: 294
-        },
-        whetstone: {
-          count: 0,
-          dist: 99999
+        fewest: "down",
+        most: "down-right",
+        bullets: {
+          right: 0,
+          "down-right": 0,
+          down: 0,
+          "down-left": 0,
+          left: 0,
+          "up-left": 0,
+          up: 0,
+          "up-right": 0
         }
+      },
+      elites: [
+        {
+          id: 65566,
+          dist: 150,
+          dir: "up",
+          gaveUp: false,
+          kind: "cave-grub",
+          name: "Cave Grub",
+          hp: 509,
+          maxHp: 509
+        },
+        {
+          id: 65565,
+          dist: 152,
+          dir: "up",
+          gaveUp: false,
+          kind: "cave-grub",
+          name: "Cave Grub",
+          hp: 454,
+          maxHp: 509
+        },
+        {
+          id: 65559,
+          dist: 206,
+          dir: "up",
+          gaveUp: false,
+          kind: "cave-grub",
+          name: "Cave Grub",
+          hp: 381,
+          maxHp: 557
+        },
+        {
+          id: 65560,
+          dist: 225,
+          dir: "up",
+          gaveUp: false,
+          kind: "cave-grub",
+          name: "Cave Grub",
+          hp: 450,
+          maxHp: 557
+        }
+      ],
+      bosses: [],
+      pickups: [
+        {
+          id: 65594,
+          dist: 767,
+          dir: "up",
+          gaveUp: false,
+          kind: "skip"
+        },
+        {
+          id: 65559,
+          dist: 1567,
+          dir: "up",
+          gaveUp: false,
+          kind: "heal"
+        }
+      ],
+      pois: [
+        {
+          id: 79,
+          dist: 12,
+          dir: "still",
+          gaveUp: false,
+          kind: "chargeShrine",
+          name: "Spud Shrine",
+          inside: true,
+          charged: 4.8,
+          chargeSeconds: 5
+        },
+        {
+          id: 78,
+          dist: 135,
+          dir: "left",
+          gaveUp: false,
+          kind: "paidChest",
+          name: "Potato Crate",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 84,
+          dist: 159,
+          dir: "down",
+          gaveUp: false,
+          kind: "chargeShrine",
+          name: "Spud Shrine",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 5
+        },
+        {
+          id: 72,
+          dist: 255,
+          dir: "up",
+          gaveUp: false,
+          kind: "vendor",
+          name: "Fry Cart",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 83,
+          dist: 257,
+          dir: "down-left",
+          gaveUp: false,
+          kind: "taterLantern",
+          name: "Tater Lantern",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 85,
+          dist: 314,
+          dir: "down",
+          gaveUp: false,
+          kind: "taterLantern",
+          name: "Tater Lantern",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 80,
+          dist: 358,
+          dir: "right",
+          gaveUp: false,
+          kind: "crops",
+          name: "Crop Patch",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 86,
+          dist: 394,
+          dir: "down-right",
+          gaveUp: false,
+          kind: "eliteNest",
+          name: "Beetle Nest",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 71,
+          dist: 394,
+          dir: "up-left",
+          gaveUp: false,
+          kind: "spudFreezer",
+          name: "Spud Freezer",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 77,
+          dist: 457,
+          dir: "left",
+          gaveUp: false,
+          kind: "chargeShrine",
+          name: "Spud Shrine",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 5
+        },
+        {
+          id: 73,
+          dist: 462,
+          dir: "up-right",
+          gaveUp: false,
+          kind: "dog",
+          name: "Stray Dog",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 76,
+          dist: 499,
+          dir: "up-left",
+          gaveUp: false,
+          kind: "curseShrine",
+          name: "Moldy Shrine",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 81,
+          dist: 525,
+          dir: "right",
+          gaveUp: false,
+          kind: "frenzyFryer",
+          name: "Frenzy Fryer",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 2
+        },
+        {
+          id: 82,
+          dist: 552,
+          dir: "down-left",
+          gaveUp: false,
+          kind: "taterMagnet",
+          name: "Tater Magnet",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 90,
+          dist: 559,
+          dir: "down",
+          gaveUp: false,
+          kind: "botDock",
+          name: "Bot Dock",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 2
+        },
+        {
+          id: 59,
+          dist: 561,
+          dir: "up-right",
+          gaveUp: false,
+          kind: "taterLantern",
+          name: "Tater Lantern",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 58,
+          dist: 593,
+          dir: "up",
+          gaveUp: false,
+          kind: "frenzyFryer",
+          name: "Frenzy Fryer",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 2
+        },
+        {
+          id: 89,
+          dist: 600,
+          dir: "down",
+          gaveUp: false,
+          kind: "dog",
+          name: "Stray Dog",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 87,
+          dist: 606,
+          dir: "down-right",
+          gaveUp: false,
+          kind: "dog",
+          name: "Stray Dog",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 56,
+          dist: 614,
+          dir: "up-left",
+          gaveUp: false,
+          kind: "paidChest",
+          name: "Potato Crate",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 60,
+          dist: 620,
+          dir: "up",
+          gaveUp: false,
+          kind: "botDock",
+          name: "Bot Dock",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 2
+        },
+        {
+          id: 91,
+          dist: 621,
+          dir: "down-right",
+          gaveUp: false,
+          kind: "dog",
+          name: "Stray Dog",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 74,
+          dist: 663,
+          dir: "up-right",
+          gaveUp: false,
+          kind: "taterLantern",
+          name: "Tater Lantern",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 88,
+          dist: 672,
+          dir: "down-left",
+          gaveUp: false,
+          kind: "taterSlots",
+          name: "Tater Slots",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 92,
+          dist: 680,
+          dir: "down-right",
+          gaveUp: false,
+          kind: "paidChest",
+          name: "Potato Crate",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 48,
+          dist: 729,
+          dir: "up",
+          gaveUp: false,
+          kind: "whetstone",
+          name: "Spud Whetstone",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 55,
+          dist: 746,
+          dir: "up-left",
+          gaveUp: false,
+          kind: "paidChest",
+          name: "Potato Crate",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 75,
+          dist: 808,
+          dir: "up-right",
+          gaveUp: false,
+          kind: "crops",
+          name: "Crop Patch",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 65,
+          dist: 840,
+          dir: "up-right",
+          gaveUp: false,
+          kind: "taterLantern",
+          name: "Tater Lantern",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 46,
+          dist: 844,
+          dir: "up",
+          gaveUp: false,
+          kind: "crops",
+          name: "Crop Patch",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 53,
+          dist: 919,
+          dir: "up",
+          gaveUp: false,
+          kind: "paidChest",
+          name: "Potato Crate",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 64,
+          dist: 925,
+          dir: "up-right",
+          gaveUp: false,
+          kind: "seedVault",
+          name: "Seed Vault",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 2
+        },
+        {
+          id: 45,
+          dist: 947,
+          dir: "up-left",
+          gaveUp: false,
+          kind: "paidChest",
+          name: "Potato Crate",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 69,
+          dist: 1027,
+          dir: "up-right",
+          gaveUp: false,
+          kind: "microwave",
+          name: "Microwave",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 70,
+          dist: 1080,
+          dir: "up-right",
+          gaveUp: false,
+          kind: "curseShrine",
+          name: "Moldy Shrine",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        }
+      ],
+      ground: {
+        xp: 114,
+        gold: 1
+      },
+      prices: {
+        crate: 30,
+        slots: 15
+      },
+      boosts: [],
+      upcoming: [
+        {
+          at: 120,
+          text: "boss The Festival Mascot"
+        },
+        {
+          at: 120,
+          text: "event Fry Fly Swarm"
+        },
+        {
+          at: 180,
+          text: "elite"
+        }
+      ],
+      previous: {
+        action: {
+          type: "poi",
+          id: 79,
+          why: "charge the Spud Shrine"
+        },
+        seconds: 14
       }
+    },
+    action: {
+      type: "poi",
+      id: 79,
+      why: "charge the Spud Shrine"
     },
     blocks: {
       time: "1:24",
       difficulty: "nightmare",
       mode: "daily",
-      health: "Health 90/130 (69%, down from 90% 31 seconds ago).",
-      level: "Level 6, 72% of the way to the next.",
-      gold: "Gold 86.",
-      dash: "Dash charges 1 of 1.",
+      health: "Health 132/137 (96%).",
+      level: "Level 4, 97% of the way to the next.",
+      gold: "Gold 0.",
+      dash: "Dash charges 2 of 2.",
       weapons: `Weapons (2 of 6 slots):
-  - Fry Cook Sentry 4/8: Drops a fry-cook turret that shoots nearby enemies.
-  - Spud Dynamo 1/8: Two starch sparks orbit Tibo and zap what they touch.`,
-      passives: `Passives (2 of 6 slots):
-  - Rotten Spud 2/5: +10% curse per level: stronger, faster, more enemies, but more XP and gold.
-  - Slow Cooker 1/5: +10% weapon duration per level.`,
+  - Seeker Sprouts 3/8: Sprouts that steer toward enemies.
+  - Reset Button 1/8: We reset the limits. Clears every enemy on screen. Bosses only flinch.`,
+      passives: "Passives (0 of 6 slots): none",
       items: "Items: none",
       banished: "Banished this run: nothing.",
-      recipes: "Recipes in reach: Cold Storage: Root Cellar missing + Slow Cooker done 1/5; Dynamo Coil: Spud Dynamo leveling 1/8 + Slow Cooker done 1/5; Eternal Sprouts: Sprout Satellites missing + Slow Cooker done 1/5; Fry Fortress: Fry Cook Sentry leveling 4/8 + Slow Cooker done 1/5; Landmine Harvest: Tater Mines missing + Rotten Spud done 2/5; Moon Cleaver: Mezzaluna missing + Rotten Spud done 2/5; Glacier Spud: Freezer Burn missing + Slow Cooker leveling 1/5; Kaboom Spud: Boom Spud missing + Rotten Spud leveling 2/5.",
+      recipes: "Recipes in reach: Factory Reset: Reset Button leveling 1/8 + Four-Eyed Spud missing; Overgrowth: Seeker Sprouts leveling 3/8 + Fertilizer missing.",
       evolutions: "No recipe is complete yet.",
-      standing_on: "Tibo stands on no chest or spot.",
-      hurt_by: "Hurt in the last 3 seconds by: Ketchup Drop 1.3.",
-      dps: "Damage dealt a second over the last 3 seconds: 75.",
+      standing_on: "Tibo stands inside the Spud Shrine (stand inside to charge it, then pick a stat), charged 4.8 of 5 seconds.",
+      hurt_by: "Hurt in the last 3 seconds by: nothing.",
+      dps: "Damage dealt a second over the last 3 seconds: 38.",
       bosses: "Bosses: none.",
-      enemies: "Enemies: 18 on screen. Most to the right (5), fewest to the up (0).",
-      current_goal: "Current goal: Explore up, since 1:22.",
-      recent_goals: "Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 Explore up: the machine is in loot since 1:07; 1:11 Open the chest: the machine is in farm since 1:11; 1:12 Explore down: the machine is in loot since 1:12; 1:15 Open the chest: the machine is in farm since 1:15; 1:22 Explore up: walked 300 units and found nothing new.",
-      stats: "Stats: damageMult 1, areaMult 1, cooldownMult 1, amountBonus 1, durationMult 1.35, projSpeedMult 1, moveSpeedMult 1.027, maxHp 130.125, recovery 0, armor 26.25, magnetRadius 40, luck 0, growthMult 1.725, greedMult 1.15, curse 0.3, critChance 0, critMult 2, evasion 0, knockbackMult 1, pierceBonus 0, revivals 0, eliteMult 1, healOnKill 0, explodeOnKillChance 0, thorns 0, chestPriceMult 1, dashCharges 0, dashCooldownMult 1, dashGraceSec 0. Added by shrines: curse 0.1.",
-      resources: "Rerolls 1, skips 0, banishes 0, revives 0; curses 1, which add 1 elites and 0.3 bosses.",
+      enemies: "Enemies: 12 on screen. Most to the down-right (3), fewest to the up-left (0).",
+      current_goal: "Current goal: Charge the Spud Shrine, since 1:10.",
+      recent_goals: "Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore down-right: drive returned another action; 1:07 Charge the Spud Shrine: drive returned another action; 1:08 Explore down-right: drive returned another action; 1:08 Explore right: drive returned another action; 1:10 Explore down: drive returned another action.",
+      stats: "Stats: damageMult 1.899, areaMult 1, cooldownMult 0.964, amountBonus 1, durationMult 1.25, projSpeedMult 1, moveSpeedMult 1, maxHp 137.28, recovery 0, armor 8.438, magnetRadius 50.2, luck 0, growthMult 1.575, greedMult 1.05, curse 0.1, critChance 0, critMult 2, evasion 0, knockbackMult 1, pierceBonus 0, revivals 0, eliteMult 1, healOnKill 0, explodeOnKillChance 0, thorns 0, chestPriceMult 1, dashCharges 0, dashCooldownMult 1, dashGraceSec 0. Added by shrines: maxHp 14.399999999999999, magnet 0.255, curse 0.1.",
+      resources: "Rerolls 0, skips 0, banishes 0, revives 0; curses 1, which add 1 elites and 0.3 bosses.",
       spots: `Spots on the loaded map, nearest first:
-  - Dog Kennel (dogKennel) 135 away to the down-right (stand by it to buy up to three levels for your dogs) Charged 0 of 1.5 s; its levels cost 120, 240, 450, 720 gold, and Tibo has 86.
-  - Rowboat (rowboat) 229 away to the up (stand in it to row to the far shore) Charged 0 of 1.5 s.
-  - Moldy Shrine (curseShrine) 269 away to the right (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.
-  - Dinner Bell (dinnerBell) 282 away to the right (ring it to call a ring of pests; they drop triple xp) Charged 0 of 1.5 s.
-  - Bot Dock (botDock) 282 away to the down-left (stand by it to call a swarm of grok bots) Charged 0 of 2 s.
-  - Fry Cart (vendor) 294 away to the down (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 86.
-  - Root Tunnel (rootTunnel) 376 away to the up-left (stand by it to tunnel to a far place) Charged 0 of 2 s.
-  - Spud Freezer (spudFreezer) 390 away to the down-left (stand by it to freeze every enemy on the map for 7.5 s; bosses only slow down) Charged 0 of 1.5 s.
-  - Spud Freezer (spudFreezer) 419 away to the up-right (stand by it to freeze every enemy on the map for 7.5 s; bosses only slow down) Charged 0 of 1.5 s.
-  - Spud Freezer (spudFreezer) 462 away to the up (stand by it to freeze every enemy on the map for 7.5 s; bosses only slow down) Charged 0 of 1.5 s.
-  - Moldy Shrine (curseShrine) 480 away to the up-left (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.
-  - Tater Lantern (taterLantern) 499 away to the up-left (break it for a surprise) Charged 0 of 1 s.
-  - Tater Magnet (taterMagnet) 511 away to the down-right (stand by it to pull in every gem and coin) Charged 0 of 1 s.
-  - Moldy Shrine (curseShrine) 520 away to the up-right (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.
-  - Beetle Nest (eliteNest) 529 away to the up (an elite waits here; it drops a chest) Charged 0 of 1.5 s.
-  - Microwave (microwave) 538 away to the right (stand by it to charge it, then copy one of your items; the copy melts another item of the same rarity) Charged 0 of 1.5 s.
-  - Fry Cart (vendor) 541 away to the down (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 86.
-  - Potato Crate (paidChest) 547 away to the right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 86.
-  - Beetle Nest (eliteNest) 548 away to the left (an elite waits here; it drops a chest) Charged 0 of 1.5 s.
-  - Beetle Nest (eliteNest) 603 away to the down-right (an elite waits here; it drops a chest) Charged 0 of 1.5 s.
-  - Frenzy Fryer (frenzyFryer) 642 away to the down (stand by it for a 20 s frenzy) Charged 0 of 2 s.
-  - Potato Crate (paidChest) 643 away to the down (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 86.
-  - Potato Crate (paidChest) 654 away to the up-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 86.
-  - Potato Crate (paidChest) 672 away to the down (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 86.
-  - Stray Dog (dog) 681 away to the left (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
-  - Seed Vault (seedVault) 700 away to the down-left (stand by it to charge it for rerolls, a skip and a banish) Charged 0 of 2 s.
-  - Dinner Bell (dinnerBell) 719 away to the down-left (ring it to call a ring of pests; they drop triple xp) Charged 0 of 1.5 s.
-  - Potato Crate (paidChest) 723 away to the down-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 86.
-  - Fry Cart (vendor) 783 away to the up-right (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 86.
-  - Tater Lantern (taterLantern) 809 away to the left (break it for a surprise) Charged 0 of 1 s.
-  - Golden Spud Shrine (goldenShrine) 812 away to the down-left (stand by it to charge it, then pick a big blessing) Charged 0 of 5 s.
-  - Stray Dog (dog) 830 away to the up-left (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
-  - Potato Crate (paidChest) 845 away to the down (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 86.
-  - Microwave (microwave) 881 away to the down (stand by it to charge it, then copy one of your items; the copy melts another item of the same rarity) Charged 0 of 1.5 s.
-  - Stray Dog (dog) 886 away to the down-left (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
-  - Moldy Shrine (curseShrine) 891 away to the down (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.
-  - Spud Shrine (chargeShrine) 920 away to the down-right (stand inside to charge it, then pick a stat) Charged 0 of 5 s.
-  - Fry Cart (vendor) 959 away to the down-left (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 86.
-  - Spud Shrine (chargeShrine) 968 away to the down (stand inside to charge it, then pick a stat) Charged 0 of 5 s.
-  - Potato Crate (paidChest) 1026 away to the down-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 86.
-  - Frenzy Fryer (frenzyFryer) 1036 away to the down-left (stand by it for a 20 s frenzy) Charged 0 of 2 s.
-  - Spud Shrine (chargeShrine) 1209 away to the down-left (stand inside to charge it, then pick a stat) Charged 0 of 5 s.`,
+  - Spud Shrine (chargeShrine) under Tibo (stand inside to charge it, then pick a stat) Charged 4.8 of 5 s.
+  - Potato Crate (paidChest) 135 away to the left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
+  - Spud Shrine (chargeShrine) 159 away to the down (stand inside to charge it, then pick a stat) Charged 0 of 5 s.
+  - Fry Cart (vendor) 255 away to the up (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 0.
+  - Tater Lantern (taterLantern) 257 away to the down-left (break it for a surprise) Charged 0 of 1 s.
+  - Tater Lantern (taterLantern) 314 away to the down (break it for a surprise) Charged 0 of 1 s.
+  - Crop Patch (crops) 358 away to the right (break it for gold and a snack) Charged 0 of 1 s.
+  - Beetle Nest (eliteNest) 394 away to the down-right (an elite waits here; it drops a chest) Charged 0 of 1.5 s.
+  - Spud Freezer (spudFreezer) 394 away to the up-left (stand by it to freeze every enemy on the map for 7.5 s; bosses only slow down) Charged 0 of 1.5 s.
+  - Spud Shrine (chargeShrine) 457 away to the left (stand inside to charge it, then pick a stat) Charged 0 of 5 s.
+  - Stray Dog (dog) 462 away to the up-right (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
+  - Moldy Shrine (curseShrine) 499 away to the up-left (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.
+  - Frenzy Fryer (frenzyFryer) 525 away to the right (stand by it for a 20 s frenzy) Charged 0 of 2 s.
+  - Tater Magnet (taterMagnet) 552 away to the down-left (stand by it to pull in every gem and coin) Charged 0 of 1 s.
+  - Bot Dock (botDock) 559 away to the down (stand by it to call a swarm of grok bots) Charged 0 of 2 s.
+  - Tater Lantern (taterLantern) 561 away to the up-right (break it for a surprise) Charged 0 of 1 s.
+  - Frenzy Fryer (frenzyFryer) 593 away to the up (stand by it for a 20 s frenzy) Charged 0 of 2 s.
+  - Stray Dog (dog) 600 away to the down (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
+  - Stray Dog (dog) 606 away to the down-right (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
+  - Potato Crate (paidChest) 614 away to the up-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
+  - Bot Dock (botDock) 620 away to the up (stand by it to call a swarm of grok bots) Charged 0 of 2 s.
+  - Stray Dog (dog) 621 away to the down-right (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
+  - Tater Lantern (taterLantern) 663 away to the up-right (break it for a surprise) Charged 0 of 1 s.
+  - Tater Slots (taterSlots) 672 away to the down-left (pay gold to spin; match two for an item) Charged 0 of 1.5 s; a spin costs 15 gold, and Tibo has 0.
+  - Potato Crate (paidChest) 680 away to the down-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
+  - Spud Whetstone (whetstone) 729 away to the up (stand by it to charge it, then level up one of your weapons) Charged 0 of 1.5 s.
+  - Potato Crate (paidChest) 746 away to the up-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
+  - Crop Patch (crops) 808 away to the up-right (break it for gold and a snack) Charged 0 of 1 s.
+  - Tater Lantern (taterLantern) 840 away to the up-right (break it for a surprise) Charged 0 of 1 s.
+  - Crop Patch (crops) 844 away to the up (break it for gold and a snack) Charged 0 of 1 s.
+  - Potato Crate (paidChest) 919 away to the up (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
+  - Seed Vault (seedVault) 925 away to the up-right (stand by it to charge it for rerolls, a skip and a banish) Charged 0 of 2 s.
+  - Potato Crate (paidChest) 947 away to the up-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
+  - Microwave (microwave) 1027 away to the up-right (stand by it to charge it, then copy one of your items; the copy melts another item of the same rarity) Charged 0 of 1.5 s.
+  - Moldy Shrine (curseShrine) 1080 away to the up-right (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.`,
       dogs: "Dogs: none.",
-      pickups: "On the ground: xp worth 132 and gold worth 3.1. Chests: none. Food: none. Other pickups: none.",
+      pickups: "On the ground: xp worth 113.7 and gold worth 1.1. Chests: none. Food: 1567 up. Other pickups: skip 767 up.",
       buffs: "Timed boosts: none.",
       schedule: "Coming up: 2:00 boss The Festival Mascot; 2:00 event Fry Fly Swarm; 3:00 elite.",
       hazards: "Within 0.5 s: underfoot nothing; walking into nothing. Attacks near: none. Bullets that would hit a Tibo standing still: none.",
-      events: "Recent game events: 1:11 chest; 1:12 chestDropped; 1:13 levelUp; 1:15 chest; 1:19 biome Mash Swamp.",
-      elites: "Elites alive: none.",
-      counters: "What the game has counted this run: counters kills 151, hits 277, gems 33, coins 3, shots 11; run timeSec 63.3, level 6, kills 151, distance 3928.819277604217, dodgePoints 740.2971157824913, dodgeSecond 84, curseHeldPeak 4.4971037388098996, curseTicks 74.4, curseSince 3316, goldEarned 86.06666666666666, bossChests 2, elitesKilled 2, peakEnemies 56, grokBotHelps 2.",
-      weapon_damage: "Damage dealt so far by weapon: Fry Cook Sentry 2367 (1683 a minute), Spud Dynamo 454 (322 a minute).",
-      state: `Time 1:24. Health 90/130 (69%, down from 90% 31 seconds ago). Level 6, 72% of the way to the next. Gold 86. Dash charges 1 of 1.
+      events: "Recent game events: 1:09 biome Ketchup Bog; 1:15 biome Mash Swamp.",
+      elites: "Elites alive: Cave Grub (cave-grub) 509/509 hp, 150 away to the up; Cave Grub (cave-grub) 454/509 hp, 152 away to the up; Cave Grub (cave-grub) 381/557 hp, 206 away to the up; Cave Grub (cave-grub) 450/557 hp, 225 away to the up.",
+      counters: "What the game has counted this run: counters kills 126, hits 147, gems 25, shots 166; run timeSec 63.31666666666667, level 4, kills 126, distance 3045.233333333253, dodgePoints 826.2243523091407, dodgeSecond 84, curseSince 3034, peakEnemies 47, shrinesUsed 2, grokBotHelps 1.",
+      weapon_damage: "Damage dealt so far by weapon: Seeker Sprouts 2126 (1512 a minute), Reset Button 65 (46 a minute).",
+      state: `Time 1:24. Health 132/137 (96%). Level 4, 97% of the way to the next. Gold 0. Dash charges 2 of 2.
 Weapons (2 of 6 slots):
-  - Fry Cook Sentry 4/8: Drops a fry-cook turret that shoots nearby enemies.
-  - Spud Dynamo 1/8: Two starch sparks orbit Tibo and zap what they touch.
-Passives (2 of 6 slots):
-  - Rotten Spud 2/5: +10% curse per level: stronger, faster, more enemies, but more XP and gold.
-  - Slow Cooker 1/5: +10% weapon duration per level.
+  - Seeker Sprouts 3/8: Sprouts that steer toward enemies.
+  - Reset Button 1/8: We reset the limits. Clears every enemy on screen. Bosses only flinch.
+Passives (0 of 6 slots): none
 Items: none
-Recipes in reach: Cold Storage: Root Cellar missing + Slow Cooker done 1/5; Dynamo Coil: Spud Dynamo leveling 1/8 + Slow Cooker done 1/5; Eternal Sprouts: Sprout Satellites missing + Slow Cooker done 1/5; Fry Fortress: Fry Cook Sentry leveling 4/8 + Slow Cooker done 1/5; Landmine Harvest: Tater Mines missing + Rotten Spud done 2/5; Moon Cleaver: Mezzaluna missing + Rotten Spud done 2/5; Glacier Spud: Freezer Burn missing + Slow Cooker leveling 1/5; Kaboom Spud: Boom Spud missing + Rotten Spud leveling 2/5.
+Recipes in reach: Factory Reset: Reset Button leveling 1/8 + Four-Eyed Spud missing; Overgrowth: Seeker Sprouts leveling 3/8 + Fertilizer missing.
 No recipe is complete yet.
-Tibo stands on no chest or spot.
-Hurt in the last 3 seconds by: Ketchup Drop 1.3.
+Tibo stands inside the Spud Shrine (stand inside to charge it, then pick a stat), charged 4.8 of 5 seconds.
+Hurt in the last 3 seconds by: nothing.
 Bosses: none.
-Enemies: 18 on screen. Most to the right (5), fewest to the up (0).
-Current goal: Explore up, since 1:22.
-Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 Explore up: the machine is in loot since 1:07; 1:11 Open the chest: the machine is in farm since 1:11; 1:12 Explore down: the machine is in loot since 1:12; 1:15 Open the chest: the machine is in farm since 1:15; 1:22 Explore up: walked 300 units and found nothing new.`
+Enemies: 12 on screen. Most to the down-right (3), fewest to the up-left (0).
+Current goal: Charge the Spud Shrine, since 1:10.
+Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore down-right: drive returned another action; 1:07 Charge the Spud Shrine: drive returned another action; 1:08 Explore down-right: drive returned another action; 1:08 Explore right: drive returned another action; 1:10 Explore down: drive returned another action.`
     }
   };
 
   // userscript/fsd/popup.ts
   var EMBED = /(\{\{[\w.]+\}\})/;
-  var SPOT_PATH = /^spot\.\w+\.(count|dist)$/;
-  var isField = (name) => (name in FIELDS) || SPOT_PATH.test(name);
-  var known = { builder: isField, loadout: (name) => (name in EMBEDS) };
-  var read2 = (input, path) => path.split(".").reduce((at, key) => at?.[key], input);
-  var fieldAbout = (path) => {
-    const kind = SPOT_PATH.test(path) ? path.split(".")[1] : undefined;
-    if (kind === undefined)
-      return FIELDS[path];
-    return path.endsWith(".count") ? `how many unused ${kind} spots are on the loaded map` : `how far the nearest unused ${kind} spot is; 99999 when there is none`;
-  };
+  var read = (state, path) => path.split(".").reduce((at, key) => at?.[key], state);
+  function shown(value, room) {
+    if (value === undefined)
+      return "";
+    if (Array.isArray(value)) {
+      const first = value.slice(0, 3).map((x) => JSON.stringify(x)).join(`
+`);
+      return room < 20 ? `${value.length}` : `${value.length} in the list${value.length === 0 ? "" : `, nearest first:
+${first}${value.length > 3 ? `
+…` : ""}`}`;
+    }
+    const text = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
+    return text.length > room ? `${text.slice(0, room - 1)}…` : text;
+  }
   var reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-  function growField(kind, placeholder, onInput) {
+  function growField(embeds, placeholder, onInput) {
     const area = h("textarea", "tbh-fsd-area");
     area.placeholder = placeholder;
     area.spellcheck = false;
@@ -4210,7 +4411,7 @@ Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 E
     const paint = () => {
       mirror.replaceChildren(...area.value.split(EMBED).map((part) => {
         const name = EMBED.test(part) ? part.slice(2, -2) : undefined;
-        return name === undefined ? part : h("mark", `tbh-fsd-chip${known[kind](name) ? "" : " tbh-fsd-chip-bad"}`, part);
+        return name === undefined || !embeds ? part : h("mark", `tbh-fsd-chip${name in EMBEDS ? "" : " tbh-fsd-chip-bad"}`, part);
       }), " ");
     };
     area.addEventListener("input", () => {
@@ -4218,7 +4419,6 @@ Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 E
       onInput(area.value);
     });
     return {
-      kind,
       wrap,
       area,
       chipAt(x, y) {
@@ -4241,7 +4441,7 @@ Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 E
     el.hidden = messages.length === 0;
     return el;
   }
-  function fsdPopup(pilot, game) {
+  function fsdPopup(pilot, game, fields) {
     addStyle(css7);
     const dialog = h("dialog", "tbh-fsd");
     dialog.setAttribute("aria-labelledby", "tbh-fsd-title");
@@ -4281,17 +4481,16 @@ Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 E
       tip.hidden = true;
       tipFor = "";
     };
-    const valueTip = (name, box, about, live, example) => {
+    const valueLines = (live, example) => {
       const value = live ?? example;
-      showTip(`embed:${name}:${pilot.preview()?.time ?? ""}`, box, h("b", "tbh-fsd-tip-name", `{{${name}}}`), h("div", "tbh-fsd-tip-about", about ?? "Not part of the state: nothing can read this."), ...value === undefined ? [] : [h("div", "tbh-fsd-tip-label", live !== undefined ? `Last seen in a run, at ${clock(pilot.preview()?.time ?? 0)}` : "Example, from a real run"), h("pre", "tbh-fsd-tip-value", value)]);
+      return value === undefined || value === "" ? [] : [h("div", "tbh-fsd-tip-label", live !== undefined ? `Last seen in a run, at ${clock(pilot.preview()?.time ?? 0)}` : "Example, from a real run"), h("pre", "tbh-fsd-tip-value", value)];
     };
-    const shown = (v) => v === undefined ? undefined : String(v);
-    const embedTip = (kind, name, box) => {
+    const fieldTip = (path, box) => {
+      const field = fields.find((f) => f.path === path);
       const live = pilot.preview();
-      if (kind === "loadout")
-        return valueTip(name, box, EMBEDS[name], live?.blocks[name], state_example_default.blocks[name]);
-      valueTip(name, box, isField(name) ? fieldAbout(name) : undefined, live === undefined ? undefined : shown(read2(live.input, name)), shown(read2(state_example_default.input, name)));
+      showTip(`field:${path}:${live?.time ?? ""}`, box, h("b", "tbh-fsd-tip-name", `state.${path}`), h("code", "tbh-fsd-tip-key", field?.type ?? ""), h("div", "tbh-fsd-tip-about", field?.about ?? ""), ...valueLines(live === undefined ? undefined : shown(read(live.state, path), 400), shown(read(state_example_default.state, path), 400)));
     };
+    const embedTip = (name, box) => showTip(`embed:${name}:${pilot.preview()?.time ?? ""}`, box, h("b", "tbh-fsd-tip-name", `{{${name}}}`), h("div", "tbh-fsd-tip-about", EMBEDS[name] ?? "Not part of the state: the picker cannot read this."), ...valueLines(pilot.preview()?.blocks[name], state_example_default.blocks[name]));
     const inserter = (el, onClick) => {
       el.addEventListener("mousedown", (e) => e.preventDefault());
       el.addEventListener("click", onClick);
@@ -4299,63 +4498,78 @@ Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 E
       return el;
     };
     const search = h("input", "tbh-fsd-search");
-    Object.assign(search, { type: "search", placeholder: "Filter the input…" });
-    search.setAttribute("aria-label", "Filter the machine's input");
+    Object.assign(search, { type: "search", placeholder: "Filter the state…" });
+    search.setAttribute("aria-label", "Filter the state");
     const fieldList = h("div", "tbh-fsd-blocks");
     const fieldEls = new Map;
-    const paths = [...Object.keys(FIELDS), ...Object.keys(state_example_default.input.spot).flatMap((kind) => [`spot.${kind}.count`, `spot.${kind}.dist`])];
-    for (const path of paths) {
+    for (const field of fields) {
       const value = h("span", "tbh-fsd-block-value");
-      const count = h("span", "tbh-fsd-block-count");
-      const el = inserter(h("button", "tbh-fsd-block", h("span", "tbh-fsd-block-head", h("b", "", path), count, value), h("span", "tbh-fsd-block-about", fieldAbout(path))), () => insert(builder.area, `{{${path}}}`));
+      const el = inserter(h("button", "tbh-fsd-block", h("span", "tbh-fsd-block-head", h("b", "", field.path), h("code", "tbh-fsd-block-type", field.type), value), h("span", "tbh-fsd-block-about", field.about)), () => insert(builder.area, `state.${field.path}`));
       el.type = "button";
-      el.dataset.name = path;
-      el.addEventListener("pointerenter", () => embedTip("builder", path, el.getBoundingClientRect()));
-      fieldEls.set(path, { el, value, count });
+      el.dataset.name = field.path;
+      el.style.paddingLeft = `${8 + 10 * (field.path.split(".").length - 1)}px`;
+      el.addEventListener("pointerenter", () => fieldTip(field.path, el.getBoundingClientRect()));
+      fieldEls.set(field.path, { el, value });
       fieldList.append(el);
     }
     search.addEventListener("input", () => {
       const q = search.value.trim().toLowerCase();
-      for (const [path, { el }] of fieldEls)
-        el.hidden = q !== "" && !`${path} ${fieldAbout(path)}`.toLowerCase().includes(q);
+      for (const field of fields) {
+        const el = fieldEls.get(field.path)?.el;
+        if (el !== undefined)
+          el.hidden = q !== "" && !`${field.path} ${field.type} ${field.about}`.toLowerCase().includes(q);
+      }
     });
-    const statePane = h("aside", "tbh-fsd-state", h("h3", "tbh-fsd-label", "Machine input"), h("p", "tbh-fsd-hint", "What the state machine reads every step. Click a field to name it in your request."), search, fieldList);
-    const builder = growField("builder", "How should Tibo play? Say what to go after, when, and when to back off.", (value) => edit((d) => ({ ...d, prompt: value })));
+    const statePane = h("aside", "tbh-fsd-state", h("h3", "tbh-fsd-label", "State"), h("p", "tbh-fsd-hint", "What the function is called with, four times a second. Click a field to name it in your request."), search, fieldList);
+    const builder = growField(false, "How should Tibo play? Say what to go after, when, and when to back off.", (value) => edit((d) => ({ ...d, prompt: value })));
     const buildButton = h("button", "tbh-fsd-build");
     buildButton.type = "button";
-    buildButton.addEventListener("click", () => pilot.buildMachine());
+    buildButton.addEventListener("click", () => pilot.buildCode());
     onOwnKeydown((e) => {
       if (e.target === builder.area && e.key === "Enter" && (e.metaKey || e.ctrlKey))
-        pilot.buildMachine();
+        pilot.buildCode();
     });
     const buildNote = h("span", "tbh-fsd-build-note");
     const buildErrors = h("div", "");
-    const view = machineView(false, (kind) => entities.find((e) => e.kind === kind)?.name);
-    const machineTitle = h("div", "tbh-fsd-machine-title");
-    const builderPane = h("section", "tbh-fsd-builder", h("h3", "tbh-fsd-label", "State machine builder"), h("p", "tbh-fsd-hint", "Describe how Tibo should play. Opus 5.5 turns it into an XState machine: each state is one autopilot action, and each arrow a condition on the game."), builder.wrap, h("div", "tbh-fsd-build-row", buildButton, buildNote), buildErrors, h("h3", "tbh-fsd-label tbh-fsd-machine-label", "State machine"), machineTitle, h("div", "tbh-fsd-machine", view.el));
-    const loadout = growField("loadout", "How should the picker choose cards?", (value) => edit((d) => ({ ...d, loadout: value })));
+    const code = codeView(fields);
+    const types = codeView(fields);
+    types.show(DRIVER_TYPES.trim());
+    const now = h("div", "tbh-fsd-now");
+    const builderPane = h("section", "tbh-fsd-builder", h("h3", "tbh-fsd-label", "Function builder"), h("p", "tbh-fsd-hint", "Describe how Tibo should play. Opus 5.5 turns it into one TypeScript function that reads the state and returns what the autopilot does next. TypeScript checks that it always returns an action before the bot runs it."), builder.wrap, h("div", "tbh-fsd-build-row", buildButton, buildNote), buildErrors, h("h3", "tbh-fsd-label tbh-fsd-code-label", "Function"), now, code.el, h("details", "tbh-fsd-fold", h("summary", "", "The types it is written against"), types.el));
+    for (const view of [code, types]) {
+      view.el.addEventListener("pointerover", (e) => {
+        const field = view.fieldAt(e.target);
+        if (field === undefined) {
+          if (tipFor.startsWith("field:"))
+            hideTip();
+        } else
+          fieldTip(field.path, field.box);
+      });
+      view.el.addEventListener("pointerleave", hideTip);
+    }
+    const loadout = growField(true, "How should the picker choose cards?", (value) => edit((d) => ({ ...d, loadout: value })));
     const loadoutErrors = h("div", "");
     const blockList = h("div", "tbh-fsd-entities", ...Object.keys(EMBEDS).map((name) => {
       const el = inserter(h("button", "tbh-fsd-entity tbh-fsd-embed", `{{${name}}}`), () => insert(loadout.area, `{{${name}}}`));
       el.type = "button";
-      el.addEventListener("pointerenter", () => embedTip("loadout", name, el.getBoundingClientRect()));
+      el.addEventListener("pointerenter", () => embedTip(name, el.getBoundingClientRect()));
       return el;
     }));
     const loadoutPane = h("section", "tbh-fsd-loadout", h("h3", "tbh-fsd-label", "Loadout"), h("p", "tbh-fsd-hint", "The picker's question at every level-up, chest and shrine. It reads the game's state, and whatever you embed here."), loadout.wrap, loadoutErrors, h("details", "tbh-fsd-fold", h("summary", "", "State the picker can embed"), blockList));
     const entityList = h("div", "tbh-fsd-entity-groups");
-    const entityPane = h("section", "tbh-fsd-world", h("h3", "tbh-fsd-label", "In the world"), h("p", "tbh-fsd-hint", "What the autopilot can walk Tibo to. Click to add the name where the caret is."), entityList);
+    const entityPane = h("section", "tbh-fsd-world", h("h3", "tbh-fsd-label", "In the world"), h("p", "tbh-fsd-hint", "What the autopilot can walk Tibo to, under the game's own names. Click to add the name where the caret is."), entityList);
     const renderEntities = () => {
       entities = game.entities();
       const chip = (e) => {
         const el = inserter(h("button", "tbh-fsd-entity", svgIcon(ACTION_ICONS[e.tag], "tbh-fsd-entity-icon"), e.name), () => insert(target ?? builder.area, e.name));
         el.type = "button";
-        el.addEventListener("pointerenter", () => showTip(`entity:${e.name}`, el.getBoundingClientRect(), h("b", "tbh-fsd-tip-name", e.name), h("div", "tbh-fsd-tip-about", e.about || "No description in the game.")));
+        el.addEventListener("pointerenter", () => showTip(`entity:${e.key}`, el.getBoundingClientRect(), h("b", "tbh-fsd-tip-name", e.name), ...e.name === e.key ? [] : [h("code", "tbh-fsd-tip-key", e.key)], h("div", "tbh-fsd-tip-about", e.about || "No description in the game.")));
         return el;
       };
-      entityList.replaceChildren(...Object.entries(ENTITY_TYPES).flatMap(([type, label]) => {
-        const group = entities.filter((e) => e.type === type);
-        return group.length === 0 ? [] : [h("h4", "tbh-fsd-entity-type", label), h("div", "tbh-fsd-entities", ...group.map(chip))];
-      }), ...entities.some((e) => e.type !== "pickup") ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]);
+      entityList.replaceChildren(...SECTIONS.flatMap((section) => {
+        const group = entities.filter((e) => e.section === section);
+        return group.length === 0 ? [] : [h("h4", "tbh-fsd-entity-type", section), h("div", "tbh-fsd-entities", ...group.map(chip))];
+      }), ...entities.some((e) => e.name !== e.key) ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]);
     };
     const saved = h("span", "tbh-fsd-saved");
     const stopButton = h("button", "tbh-fsd-stop", "Stop driving");
@@ -4373,21 +4587,19 @@ Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 E
     const sheet = h("div", "tbh-fsd-sheet", head, body, foot);
     dialog.append(sheet, tip);
     document.body.append(dialog);
-    const fields = new Map([builder, loadout].map((f) => [f.area, f]));
     dialog.addEventListener("focusin", (e) => {
       if (e.target instanceof HTMLTextAreaElement)
         target = e.target;
     });
     dialog.addEventListener("pointermove", (e) => {
-      const field = e.target instanceof HTMLTextAreaElement ? fields.get(e.target) : undefined;
-      if (field === undefined)
+      if (e.target !== loadout.area)
         return;
-      const chip = field.chipAt(e.clientX, e.clientY);
+      const chip = loadout.chipAt(e.clientX, e.clientY);
       if (chip === undefined) {
         if (tipFor.startsWith("embed:"))
           hideTip();
       } else
-        embedTip(field.kind, chip.name, chip.box);
+        embedTip(chip.name, chip.box);
     });
     dialog.addEventListener("pointerout", (e) => {
       if (e.target instanceof HTMLTextAreaElement)
@@ -4419,26 +4631,26 @@ Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 E
         ticking = undefined;
       }
       const stale = d.prompt !== d.builtFrom;
-      buildButton.textContent = since === undefined ? "Build the machine" : "Building…";
+      buildButton.textContent = since === undefined ? "Write the function" : "Writing…";
       buildButton.disabled = since !== undefined || d.prompt.trim() === "" || !connected;
       buildButton.title = !connected ? "Start the agent server first: ./agent-server/main.ts" : "Sends your request to Opus 5.5 through the agent server (⌘↵)";
-      buildNote.textContent = since !== undefined ? `Opus 5.5 is writing the machine: ${Math.round((Date.now() - since) / 1000)} s. It takes about a minute.` : stale ? "The request changed since this machine was built." : "Built from this request.";
+      buildNote.textContent = since !== undefined ? `Opus 5.5 is writing the function: ${Math.round((Date.now() - since) / 1000)} s. It takes under a minute.` : stale ? "The request changed since this function was written." : "Written from this request.";
       buildNote.classList.toggle("tbh-fsd-build-stale", since === undefined && stale);
       buildErrors.replaceChildren(errorList(pilot.buildError() === undefined ? [] : [pilot.buildError() ?? ""]));
-      machineTitle.replaceChildren(h("b", "", d.machine.id), ...d.machine.description === undefined ? [] : [` ${d.machine.description}`]);
-      view.show(d.machine, pilot.active());
+      const active = pilot.active();
+      now.hidden = active === undefined;
+      now.classList.toggle("tbh-fsd-now-error", active?.error !== undefined);
+      now.textContent = active?.error !== undefined ? `drive threw: ${active.error}` : active?.action === undefined ? "" : `Now: ${active.action.why ?? ""} (${actionWords(active.action)})`;
+      code.show(d.code, active?.action?.why);
       const live = pilot.preview();
-      for (const [path, { el, value, count }] of fieldEls) {
-        const n = d.prompt.split(`{{${path}}}`).length - 1;
-        count.textContent = n === 0 ? "" : `×${n}`;
-        el.classList.toggle("tbh-fsd-block-used", n > 0);
-        value.textContent = shown(read2(live?.input ?? state_example_default.input, path)) ?? "";
-      }
-      status.textContent = driving ? "Driving: a machine you build takes over as soon as it is ready" : connected ? "" : "The agent server is not connected";
+      for (const [path, { value }] of fieldEls)
+        value.textContent = shown(read(live?.state ?? state_example_default.state, path), 14);
+      status.textContent = driving ? "Driving: a function you write takes over as soon as it is ready" : connected ? "" : "The agent server is not connected";
       status.dataset.state = driving ? "on" : connected ? "" : "error";
+      const refused = pilot.state().detail;
       const problems = check.loadout.length;
-      saved.textContent = problems === 0 ? "Saved in this browser" : `Saved in this browser · ${problems} to fix${driving ? " before the bot gets the change" : ""}`;
-      saved.classList.toggle("tbh-fsd-saved-bad", problems > 0);
+      saved.textContent = refused !== undefined && !driving ? refused : problems === 0 ? "Saved in this browser" : `Saved in this browser · ${problems} to fix${driving ? " before the bot gets the change" : ""}`;
+      saved.classList.toggle("tbh-fsd-saved-bad", problems > 0 || refused !== undefined && !driving);
       stopButton.hidden = !driving;
       engage.textContent = driving ? "Back to the game" : "Engage";
       engage.disabled = !driving && (problems > 0 || !connected);
@@ -4506,42 +4718,41 @@ Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 E
     };
   }
 
-  // userscript/fsd/machine-overlay.css.ts
-  var css9 = `
-.tbh-mo { position: fixed; top: 8px; left: 8px; z-index: 2147483000; box-sizing: border-box; width: min(330px, calc(100vw - 16px)); max-height: 52vh; overflow: hidden; padding: 6px 4px 8px;
-  pointer-events: none; color: #f3e6c4; background: rgba(17,14,22,.82); border: 1px solid rgba(142,116,201,.7); border-radius: 8px; box-shadow: 0 4px 18px rgba(0,0,0,.5);
-  font: 11px/1.35 ui-monospace, Menlo, Consolas, monospace; }
-.tbh-mo[hidden] { display: none; }
-.tbh-mo-head { display: flex; align-items: center; gap: 7px; padding: 0 6px 6px; }
-.tbh-mo-logo { padding: 1px 5px; border-radius: 4px; font-size: 9.5px; font-weight: 900; letter-spacing: .12em; color: #1d1530; background: linear-gradient(135deg, #c9a0ff, #ffd36b); }
-.tbh-mo-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-@media (max-width: 699px) {
-  /* The panel sits under it on a phone, so only the state it is in and what that state does. */
-  .tbh-mo { width: min(230px, 60vw); }
-  .tbh-mo :is(.tbh-mv-node:not(.tbh-mv-active), .tbh-mv-edges, .tbh-mv-outs) { display: none; }
-  .tbh-mo .tbh-mv-action { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-}
-`;
-
-  // userscript/fsd/machine-overlay.ts
-  function machineOverlay(pilot, entities) {
-    addStyle(css9);
-    const view = machineView(true, (kind) => entities().find((e) => e.kind === kind)?.name);
-    const name = h("b", "tbh-mo-name");
-    const box = h("aside", "tbh-mo", h("header", "tbh-mo-head", h("span", "tbh-mo-logo", "FSD"), name), view.el);
-    box.setAttribute("aria-label", "Full Self Driving's state machine");
-    box.hidden = true;
-    document.body.append(box);
-    const render = () => {
-      box.hidden = pilot.state().state === "off";
-      if (box.hidden)
-        return;
-      const machine = pilot.draft().machine;
-      name.textContent = machine.id;
-      view.show(machine, pilot.active());
-    };
-    pilot.onChange(render);
-    render();
+  // userscript/fsd/driver-types.ts
+  function stateFields(types) {
+    const lines = types.split(`
+`);
+    const start = lines.findIndex((l) => l.startsWith("export type State = {"));
+    if (start < 0)
+      throw new Error("protocol/driver.ts declares no State");
+    const fields = [];
+    const parents = [];
+    let about = [];
+    for (const raw of lines.slice(start + 1)) {
+      const line = raw.trim();
+      if (raw.startsWith("};"))
+        break;
+      if (line.startsWith("/**") || line.startsWith("*")) {
+        const text = line.replace(/^\/\*\*\s?|^\*\/$|^\*\s?|\s?\*\/$/g, "").trim();
+        if (text !== "")
+          about.push(text);
+        continue;
+      }
+      if (line.startsWith("}")) {
+        parents.pop();
+        continue;
+      }
+      const member = /^(\w+)\??: (.*?);?$/.exec(line);
+      if (member === null)
+        continue;
+      const [, name = "", type = ""] = member;
+      const nested = type === "{";
+      fields.push({ path: [...parents, name].join("."), type: nested ? "object" : type, about: about.join(" ") });
+      about = [];
+      if (nested)
+        parents.push(name);
+    }
+    return fields;
   }
 
   // userscript/panel/panel.ts
@@ -4573,8 +4784,9 @@ Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 E
     };
   }
   function startPanel(link, discovery, bridge) {
-    const fsd = fsdPopup(bridge.pilot, gameControl(link));
-    machineOverlay(bridge.pilot, () => worldEntities(link));
+    const fields = stateFields(DRIVER_TYPES);
+    const fsd = fsdPopup(bridge.pilot, gameControl(link), fields);
+    driveOverlay(bridge.pilot, fields);
     const { panel, content } = mount(botFeed(bridge.pilot, fsd.open), connectionRow(bridge, fsd.open));
     let collapsedBefore;
     const followPilot = () => {

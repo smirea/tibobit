@@ -19,7 +19,7 @@ function distrustReason(r: World): string | undefined {
 
 /**
  * One step toward the current goal: walk on while it is safe, else ask the action model. `direct`
- * sets the next goal when there is none: the planner's choice, or what the panel's machine asks for.
+ * sets the next goal when there is none: the planner's choice, or what the panel's function returned.
  */
 export async function pursue(s: State, r: World, log: RunLog, planner: Planner, direct: (r: World, why: string) => Promise<unknown> | void) {
   for (const c of r.chests) everListed.add(goalId({ kind: "chest", uid: c.id }));

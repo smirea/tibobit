@@ -52,13 +52,15 @@ export function findEnums(module: Record<string, unknown>): Enums {
   const zoneKinds = values.find((v): v is Record<string, number> => isRecord(v) && typeof v.telegraph === "number" && typeof v.hazardPool === "number");
   const enemyFlags = values.find((v): v is Record<string, number> => isRecord(v) && typeof v.Elite === "number" && typeof v.Hidden === "number");
   if (pickupKinds === undefined) throw new Error("could not find the pickup kinds table");
+  const pickupSources = values.find((v): v is string[] => Array.isArray(v) && v[0] === "none" && v.includes("boss") && v.includes("poteto"));
+  if (pickupSources === undefined) throw new Error("could not find the pickup sources table");
   if (zoneKinds === undefined) throw new Error("could not find the zone kinds table");
   const zoneShapes = values.find((v): v is Record<string, number> => isRecord(v) && v.circle === 0 && typeof v.line === "number" && typeof v.cone === "number");
   if (zoneShapes === undefined) throw new Error("could not find the zone shapes table");
   if (enemyFlags === undefined) throw new Error("could not find the enemy flags table");
   const botModes = values.find((v): v is Record<string, number> => isRecord(v) && v.wander === 0 && typeof v.hop === "number" && typeof v.beam === "number");
   if (botModes === undefined) throw new Error("could not find the grok bot modes table");
-  return { pickupKinds, zoneKinds, zoneShapes, enemyFlags, botModes };
+  return { pickupKinds, pickupSources, zoneKinds, zoneShapes, enemyFlags, botModes };
 }
 
 export function assertContent(value: unknown): asserts value is Content {

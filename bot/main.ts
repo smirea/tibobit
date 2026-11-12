@@ -20,7 +20,7 @@ import { latency, snapshotAges } from "./decider";
 import { RunLog } from "./run-log/writer";
 import { pursuit, resetGoals } from "./goals";
 import { driveTemplates } from "./drive";
-import { MachineDriver } from "./machine-driver";
+import { Driver } from "./driver";
 import { clock } from "../clock";
 import type { TrialResult } from "./trial-result";
 import { type Book, bookFrom } from "../game/book";
@@ -93,8 +93,8 @@ async function main() {
   let steps = 0;
   let notes: RunNotes | undefined;
   let planner: Planner | undefined;
-  /** The panel's state machine, which sets the goals under Full Self Driving instead of the planner. */
-  let driver: MachineDriver | undefined;
+  /** The panel's function, which sets the goals under Full Self Driving instead of the planner. */
+  let driver: Driver | undefined;
   let runLog: RunLog | undefined;
   let last: World | undefined;
   let shownPaused = false;
@@ -160,7 +160,7 @@ async function main() {
     tag: adopted ? "Take over" : "Start",
     time: runClock(now),
     text: `${adopted ? `Taking over the run at ${clock(runClock(now))}` : `Starting a ${MODE === "daily" ? "Daily" : "Open World"} run on ${DIFFICULTY}`}.`,
-    detail: drive === undefined ? `Planner ${PLAN_MODEL}, action model ${MODEL}, templates from ${BASE.source}. Run logs: ${LOG_DIR}` : `Full Self Driving: your state machine sets the goals, the autopilot steps, and ${PLAN_MODEL} picks the cards. Run logs: ${LOG_DIR}`,
+    detail: drive === undefined ? `Planner ${PLAN_MODEL}, action model ${MODEL}, templates from ${BASE.source}. Run logs: ${LOG_DIR}` : `Full Self Driving: your function sets the goals, the autopilot steps, and ${PLAN_MODEL} picks the cards. Run logs: ${LOG_DIR}`,
   });
   const plan: RunPlan = { source: drive === undefined ? BASE.source : "Full Self Driving", intent: INTENT, templates: BASE.templates, weapon: WEAPON };
   /** The loadout question the picker's templates were last made from. */
@@ -273,7 +273,7 @@ async function main() {
       const skip = !NOTES ? "no --notes" : adopted ? "taken over mid-run" : undefined;
       setTemplates(plan.templates);
       loadout = undefined;
-      driver = drive === undefined ? undefined : new MachineDriver();
+      driver = drive === undefined ? undefined : new Driver();
       notes = new RunNotes(setup, plan, skip === undefined);
       const first = r.weapons[0]?.id ?? "none";
       notes.started = startNote === "chosen" ? `${first} (chosen by the coach)` : `${first} (${startNote})`;
@@ -317,9 +317,9 @@ async function main() {
     await tellLag(s.ageMs);
     if (s.screen === "choice") await choose(r, planner, runLog);
     else if (driver !== undefined) {
-      const [machine, log] = [driver, runLog];
-      machine.step(r, log);
-      await pursue(s, r, log, planner, (now) => machine.direct(now, log));
+      const [driving, log] = [driver, runLog];
+      driving.step(r, log);
+      await pursue(s, r, log, planner, (now) => driving.direct(now, log));
       planner.picked = false;
     } else {
       const [asked, why] = [planner, pursuit === undefined ? undefined : planner.due(r)];

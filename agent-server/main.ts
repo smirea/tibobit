@@ -8,8 +8,8 @@ import { type LiveView, RAW_TOP, type Settled, type State } from "../protocol/vi
 import { parseRaw, rawParts } from "./raw";
 import { type PageLine, parsePilotChange, type PilotChange } from "../protocol/pilot";
 import { loadoutErrors } from "../bot/drive";
-import { spotKinds } from "../bot/machine-input";
-import { buildMachine, checkBuilder, REQUEST_LIMIT } from "./machine-builder";
+import { buildCode, checkBuilder, REQUEST_LIMIT } from "./code-builder";
+import { codeErrors } from "./code-check";
 import type { Encyclopedia, Snapshot } from "../protocol/snapshot";
 import { listCheckpoints, readCheckpoint, saveCheckpoint } from "./checkpoints";
 import { Pilot } from "./pilot";
@@ -22,14 +22,14 @@ const option = (name: string, fallback: string) => {
 };
 const PORT = Number(option("port", String(BRIDGE_PORT)));
 const WAIT_LIMIT_MS = 120_000;
-// What the bot Full Self Driving starts is told: Jev plans. Override with
+// What the bot Full Self Driving starts is told: Jev picks the cards, and the function is called four times a second. Override with
 // --pilot "<the bot's flags>", such as --pilot "--model laya@q8_0" for LM Studio.
-const PILOT_ARGS: BotArgs = process.argv.includes("--pilot") ? parseBotArgs(option("pilot", "").split(/\s+/).filter(Boolean)) : { ...JEV, mode: "current", difficulty: "nightmare" };
+const PILOT_ARGS: BotArgs = process.argv.includes("--pilot") ? parseBotArgs(option("pilot", "").split(/\s+/).filter(Boolean)) : { ...JEV, mode: "current", difficulty: "nightmare", step: 0.25 };
 
 checkBuilder();
 
 let latest: { snapshot: Snapshot; view?: LiveView } | undefined;
-/** One machine is built at a time: each is a model call of a minute or more. */
+/** One function is written at a time: each is a model call of up to a few minutes. */
 let building = false;
 /** The game's book for building the live view; rebuilt whenever the page sends its encyclopedia. */
 let book: Book | undefined;
@@ -41,9 +41,6 @@ let nextId = 1;
 const sockets = new Set<ServerWebSocket<{ raw: string[] }>>();
 const waiters = new Set<() => void>();
 const encoder = new TextEncoder();
-
-/** The game's kinds of spot, once the page has sent its encyclopedia. */
-const kinds = () => (book === undefined ? undefined : new Set(spotKinds(book).map((k) => k.kind)));
 
 const toPage = (line: PageLine) => page?.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
 const pilot = new Pilot(localOrigin(PORT), PILOT_ARGS, toPage);
@@ -114,13 +111,14 @@ GET  /state          the game as a live game needs it (LiveView in protocol/view
 WS   /ws?raw=...     pushes every snapshot, raw groups as for /state; send a JSON command to run it
 GET  /encyclopedia   every weapon, passive, item, recipe, enemy, boss, point of interest and biome
 POST /command        JSON command, see protocol/commands.ts; add ?wait=1 to block until it finishes
-POST /pilot          {"drive": {"machine", "loadout"}} sets Full Self Driving's state machine and picker question
-                     (protocol/drive.ts), {"on": true} starts the bot for the tab with them, {"on": false} stops it
-POST /pilot/machine  {"prompt": "..."} has Opus 5.5 write a state machine from the request, through the claude CLI;
-                     answers {"machine": {...}} (protocol/machine.ts), which can take a minute or more
+POST /pilot          {"drive": {"code", "loadout"}} sets Full Self Driving's function and picker question
+                     (protocol/drive.ts); the code must type-check against protocol/driver.ts. {"on": true}
+                     starts the bot for the tab with them, {"on": false} stops it
+POST /pilot/code     {"prompt": "..."} has Opus 5.5 write the function from the request, through the claude CLI;
+                     answers {"code": "function drive(state: State): Action {...}"}, which can take a minute or more
 GET  /checkpoints    the saved checkpoints' summaries, oldest first (see the checkpoint command)
 POST /pilot/say      the bot's chat line for the panel: {"role": "planner" | "action" | "system", "text", "detail"?, "model"?, "time"?}
-POST /pilot/state    the game as the bot last read it, for the panel: {"time", "state", "input", "blocks"}
+POST /pilot/state    the game as the bot last read it, for the panel: {"time", "state", "action"?, "error"?, "blocks"}
                      (StatePreview in protocol/pilot.ts); GET returns it
 `;
 
@@ -222,7 +220,10 @@ const server = Bun.serve<{ raw: string[] }>({
         case "POST /pilot": {
           let change: PilotChange;
           try {
-            change = parsePilotChange(await jsonBody(req), kinds());
+            change = parsePilotChange(await jsonBody(req));
+            // The bot runs this code, so it is checked here, where every drive comes in.
+            const refused = change.drive === undefined ? [] : await codeErrors(change.drive.code);
+            if (refused.length > 0) throw new Error(`the function does not type-check: ${refused.join("; ")}`);
             const errors = change.drive === undefined ? [] : loadoutErrors(change.drive.loadout);
             if (errors.length > 0) throw new Error(`the loadout cannot be played: ${errors.join("; ")}`);
             pilot.change(change);
@@ -231,20 +232,20 @@ const server = Bun.serve<{ raw: string[] }>({
           }
           return Response.json(pilot.state);
         }
-        case "POST /pilot/machine": {
+        case "POST /pilot/code": {
           let request: string;
           try {
             const { prompt } = ((await jsonBody(req)) ?? {}) as { prompt?: unknown };
-            if (typeof prompt !== "string" || prompt.trim() === "") throw new Error('send {"prompt": "what the machine should do"}');
+            if (typeof prompt !== "string" || prompt.trim() === "") throw new Error('send {"prompt": "how Tibo should play"}');
             if (prompt.length > REQUEST_LIMIT) throw new Error(`the prompt is ${prompt.length} characters; keep it under ${REQUEST_LIMIT}`);
             request = prompt;
           } catch (e) {
             return errorResponse(e);
           }
-          if (building) return errorResponse("a machine is already being built; wait for it", 409);
+          if (building) return errorResponse("a function is already being written; wait for it", 409);
           building = true;
           try {
-            return Response.json({ machine: await buildMachine(request, book === undefined ? undefined : spotKinds(book)) });
+            return Response.json({ code: await buildCode(request, book) });
           } catch (e) {
             return errorResponse(e, 502);
           } finally {

@@ -63,6 +63,7 @@ type GameJson = {
 // A pickup this close is under Tibo; the game's own reach for chests is about this.
 const UNDER = 14;
 const round = (n: number) => Math.round(n * 10) / 10;
+const GOLD_CHEST_SOURCES = new Set(["boss", "poteto"]);
 // The game charges these two for 1.5 s in its code; they are not in its cfg.activation.seconds.
 const UNLISTED_CHARGE = new Set(["spudForge", "varietyPlace"]);
 
@@ -257,12 +258,15 @@ export function liveView(s: Snapshot, b: Book): LiveView | undefined {
       chargeSeconds: UNLISTED_CHARGE.has(p.kind) ? 1.5 : (activation[p.kind] ?? 0),
     });
   }
-  for (const p of around.pickups.items as unknown as (Row & { kind: string; charge: number })[]) {
+  for (const p of around.pickups.items as unknown as (Row & { kind: string; charge: number; source: string })[]) {
     const at = place(p.x, p.y);
     const aim: Aim = { id: p.uid, type: p.kind, name: p.kind, distance: at.distance };
     const where = at.distance <= UNDER ? "still" : at.direction;
-    if (p.kind === "chest") add("chests", where, { ...aim, charged: round(p.charge / TICKS_PER_SECOND), chargeSeconds: activation.chest ?? 1 });
-    else add(p.kind === "heal" ? "food" : "pickups", where, aim);
+    if (p.kind === "chest") {
+      // The game's own rule, from its activation table: a chest a boss or Poteto left is a goldChest, any other a chest.
+      const type = GOLD_CHEST_SOURCES.has(p.source) ? "goldChest" : "chest";
+      add("chests", where, { ...aim, type, name: type, charged: round(p.charge / TICKS_PER_SECOND), chargeSeconds: activation[type] ?? 1 });
+    } else add(p.kind === "heal" ? "food" : "pickups", where, aim);
   }
   for (const x of g.bosses) {
     const at = place(x.x, x.y);

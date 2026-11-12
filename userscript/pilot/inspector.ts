@@ -72,7 +72,7 @@ function inspectBody(m: ChatMessage): Node[] {
         folded("Prompt", inspect.prompt),
       ];
     case "state":
-      return [...words, section(`State ${inspect.state}`, pre(inspect.about)), ...(inspect.because === undefined ? [] : [section("Entered because", pre(inspect.because))])];
+      return [...words, section("Action", pre(inspect.about))];
     case "moves": {
       const rows = inspect.moves.map((m) =>
         h(

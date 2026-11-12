@@ -1,13 +1,16 @@
 import { css as popupCss } from "./popup.css";
+import { codeView } from "./code-view";
 import type { Draft } from "./draft";
-import { machineView } from "./machine-view";
+import { actionWords } from "./drive-overlay";
+import { DRIVER_TYPES } from "./driver-source";
+import type { StateField } from "./driver-types";
+import { type Entity, SECTIONS } from "./entities";
 import { EMBEDS } from "../../bot/drive";
-import { FIELDS, type MachineInput } from "../../protocol/machine";
+import type { State } from "../../protocol/driver";
 import type { Pilot } from "../pilot/pilot";
 import { addStyle, h } from "../panel/dom";
 import { onOwnKeydown } from "../panel/keys";
 import { clock } from "../../clock";
-import { type Entity, ENTITY_TYPES } from "./entities";
 import { ACTION_ICONS, svgIcon } from "../pilot/icons";
 import EXAMPLE from "../../protocol/state.example.json";
 
@@ -16,25 +19,24 @@ export type GameControl = {
   /** Pauses a run that is playing; true when this call paused it. */
   pause(): boolean;
   resume(): void;
-  /** What the autopilot can be sent to, by the names the game shows. */
+  /** What the autopilot can be sent to, under the game's own names. */
   entities(): Entity[];
 };
 
-/** What a field's {{embeds}} name: the machine's input in the builder's request, the state blocks in the picker's question. */
-type FieldKind = "builder" | "loadout";
-
 const EMBED = /(\{\{[\w.]+\}\})/;
-const SPOT_PATH = /^spot\.\w+\.(count|dist)$/;
-const isField = (name: string) => name in FIELDS || SPOT_PATH.test(name);
-const known: Record<FieldKind, (name: string) => boolean> = { builder: isField, loadout: (name) => name in EMBEDS };
 
-const read = (input: MachineInput, path: string) => path.split(".").reduce<unknown>((at, key) => (at as Record<string, unknown> | undefined)?.[key], input);
+const read = (state: State, path: string) => path.split(".").reduce<unknown>((at, key) => (at as Record<string, unknown> | undefined)?.[key], state);
 
-const fieldAbout = (path: string): string => {
-  const kind = SPOT_PATH.test(path) ? path.split(".")[1] : undefined;
-  if (kind === undefined) return FIELDS[path as keyof typeof FIELDS];
-  return path.endsWith(".count") ? `how many unused ${kind} spots are on the loaded map` : `how far the nearest unused ${kind} spot is; 99999 when there is none`;
-};
+/** A value of the state in the room a list row or a tooltip has: a list by its length and its first entries. */
+function shown(value: unknown, room: number): string {
+  if (value === undefined) return "";
+  if (Array.isArray(value)) {
+    const first = value.slice(0, 3).map((x) => JSON.stringify(x)).join("\n");
+    return room < 20 ? `${value.length}` : `${value.length} in the list${value.length === 0 ? "" : `, nearest first:\n${first}${value.length > 3 ? "\n…" : ""}`}`;
+  }
+  const text = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
+  return text.length > room ? `${text.slice(0, room - 1)}…` : text;
+}
 
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -42,7 +44,7 @@ const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").match
  * A textarea that grows with its text and shows each {{embed}} as a chip: a copy of the text sits
  * under the transparent textarea in the same grid cell, so it sets the height and draws the chips.
  */
-function growField(kind: FieldKind, placeholder: string, onInput: (value: string) => void) {
+function growField(embeds: boolean, placeholder: string, onInput: (value: string) => void) {
   const area = h("textarea", "tbh-fsd-area");
   area.placeholder = placeholder;
   area.spellcheck = false;
@@ -54,7 +56,7 @@ function growField(kind: FieldKind, placeholder: string, onInput: (value: string
     mirror.replaceChildren(
       ...area.value.split(EMBED).map((part) => {
         const name = EMBED.test(part) ? part.slice(2, -2) : undefined;
-        return name === undefined ? part : h("mark", `tbh-fsd-chip${known[kind](name) ? "" : " tbh-fsd-chip-bad"}`, part);
+        return name === undefined || !embeds ? part : h("mark", `tbh-fsd-chip${name in EMBEDS ? "" : " tbh-fsd-chip-bad"}`, part);
       }),
       // A trailing newline only takes up a line with something after it.
       " ",
@@ -65,7 +67,6 @@ function growField(kind: FieldKind, placeholder: string, onInput: (value: string
     onInput(area.value);
   });
   return {
-    kind,
     wrap,
     area,
     /** The embed under a point, if any, with its box. */
@@ -91,11 +92,11 @@ function errorList(messages: readonly string[]): HTMLElement {
 
 /**
  * Full Self Driving's setup: a dialog that flips out of the button that opened it. On the left is
- * what the state machine reads; in the middle the request Opus 5.5 builds the machine from, with
- * the machine drawn under it; on the right the picker's loadout question. Everything is kept in
- * this browser.
+ * the state the function is called with; in the middle the request Opus 5.5 writes the function
+ * from, with the function shown under it; on the right the picker's loadout question. Everything is
+ * kept in this browser.
  */
-export function fsdPopup(pilot: Pilot, game: GameControl): { open(from: HTMLElement): void } {
+export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly StateField[]): { open(from: HTMLElement): void } {
   addStyle(popupCss);
   const dialog = h("dialog", "tbh-fsd");
   dialog.setAttribute("aria-labelledby", "tbh-fsd-title");
@@ -118,7 +119,7 @@ export function fsdPopup(pilot: Pilot, game: GameControl): { open(from: HTMLElem
   closeX.addEventListener("click", () => close());
   const head = h("header", "tbh-fsd-head", title, status, closeX);
 
-  // One tooltip for everything hovered: an input field, an embed in a text, or a thing in the world.
+  // One tooltip for everything hovered: a field of the state, an embed in the loadout, or a thing in the world.
   const tip = h("div", "tbh-fsd-tip");
   tip.hidden = true;
   tip.setAttribute("role", "tooltip");
@@ -141,22 +142,31 @@ export function fsdPopup(pilot: Pilot, game: GameControl): { open(from: HTMLElem
     tipFor = "";
   };
   /** A value the bot showed while driving if it has, else the one from a real run that ships with the script. */
-  const valueTip = (name: string, box: DOMRect, about: string | undefined, live: string | undefined, example: string | undefined) => {
+  const valueLines = (live: string | undefined, example: string | undefined) => {
     const value = live ?? example;
+    return value === undefined || value === "" ? [] : [h("div", "tbh-fsd-tip-label", live !== undefined ? `Last seen in a run, at ${clock(pilot.preview()?.time ?? 0)}` : "Example, from a real run"), h("pre", "tbh-fsd-tip-value", value)];
+  };
+  /** A field of the state as the types declare it: its type, its comment, and what it held. */
+  const fieldTip = (path: string, box: DOMRect) => {
+    const field = fields.find((f) => f.path === path);
+    const live = pilot.preview();
+    showTip(
+      `field:${path}:${live?.time ?? ""}`,
+      box,
+      h("b", "tbh-fsd-tip-name", `state.${path}`),
+      h("code", "tbh-fsd-tip-key", field?.type ?? ""),
+      h("div", "tbh-fsd-tip-about", field?.about ?? ""),
+      ...valueLines(live === undefined ? undefined : shown(read(live.state, path), 400), shown(read(EXAMPLE.state as State, path), 400)),
+    );
+  };
+  const embedTip = (name: string, box: DOMRect) =>
     showTip(
       `embed:${name}:${pilot.preview()?.time ?? ""}`,
       box,
       h("b", "tbh-fsd-tip-name", `{{${name}}}`),
-      h("div", "tbh-fsd-tip-about", about ?? "Not part of the state: nothing can read this."),
-      ...(value === undefined ? [] : [h("div", "tbh-fsd-tip-label", live !== undefined ? `Last seen in a run, at ${clock(pilot.preview()?.time ?? 0)}` : "Example, from a real run"), h("pre", "tbh-fsd-tip-value", value)]),
+      h("div", "tbh-fsd-tip-about", EMBEDS[name as keyof typeof EMBEDS] ?? "Not part of the state: the picker cannot read this."),
+      ...valueLines(pilot.preview()?.blocks[name], (EXAMPLE.blocks as Record<string, string>)[name]),
     );
-  };
-  const shown = (v: unknown) => (v === undefined ? undefined : String(v));
-  const embedTip = (kind: FieldKind, name: string, box: DOMRect) => {
-    const live = pilot.preview();
-    if (kind === "loadout") return valueTip(name, box, EMBEDS[name as keyof typeof EMBEDS], live?.blocks[name], (EXAMPLE.blocks as Record<string, string>)[name]);
-    valueTip(name, box, isField(name) ? fieldAbout(name) : undefined, live === undefined ? undefined : shown(read(live.input, name)), shown(read(EXAMPLE.input, name)));
-  };
   /** A chip that puts its text into a field when clicked, without taking the caret out of it. */
   const inserter = <E extends HTMLElement>(el: E, onClick: () => void): E => {
     el.addEventListener("mousedown", (e) => e.preventDefault());
@@ -165,55 +175,69 @@ export function fsdPopup(pilot: Pilot, game: GameControl): { open(from: HTMLElem
     return el;
   };
 
-  // What the machine reads.
+  // The state the function is called with.
   const search = h("input", "tbh-fsd-search");
-  Object.assign(search, { type: "search", placeholder: "Filter the input…" });
-  search.setAttribute("aria-label", "Filter the machine's input");
+  Object.assign(search, { type: "search", placeholder: "Filter the state…" });
+  search.setAttribute("aria-label", "Filter the state");
   const fieldList = h("div", "tbh-fsd-blocks");
-  const fieldEls = new Map<string, { el: HTMLButtonElement; value: HTMLElement; count: HTMLElement }>();
-  const paths = [...Object.keys(FIELDS), ...Object.keys(EXAMPLE.input.spot).flatMap((kind) => [`spot.${kind}.count`, `spot.${kind}.dist`])];
-  for (const path of paths) {
+  const fieldEls = new Map<string, { el: HTMLButtonElement; value: HTMLElement }>();
+  for (const field of fields) {
     const value = h("span", "tbh-fsd-block-value");
-    const count = h("span", "tbh-fsd-block-count");
-    const el = inserter(h("button", "tbh-fsd-block", h("span", "tbh-fsd-block-head", h("b", "", path), count, value), h("span", "tbh-fsd-block-about", fieldAbout(path))), () => insert(builder.area, `{{${path}}}`));
+    const el = inserter(h("button", "tbh-fsd-block", h("span", "tbh-fsd-block-head", h("b", "", field.path), h("code", "tbh-fsd-block-type", field.type), value), h("span", "tbh-fsd-block-about", field.about)), () => insert(builder.area, `state.${field.path}`));
     el.type = "button";
-    el.dataset.name = path;
-    el.addEventListener("pointerenter", () => embedTip("builder", path, el.getBoundingClientRect()));
-    fieldEls.set(path, { el, value, count });
+    el.dataset.name = field.path;
+    el.style.paddingLeft = `${8 + 10 * (field.path.split(".").length - 1)}px`;
+    el.addEventListener("pointerenter", () => fieldTip(field.path, el.getBoundingClientRect()));
+    fieldEls.set(field.path, { el, value });
     fieldList.append(el);
   }
   search.addEventListener("input", () => {
     const q = search.value.trim().toLowerCase();
-    for (const [path, { el }] of fieldEls) el.hidden = q !== "" && !`${path} ${fieldAbout(path)}`.toLowerCase().includes(q);
+    for (const field of fields) {
+      const el = fieldEls.get(field.path)?.el;
+      if (el !== undefined) el.hidden = q !== "" && !`${field.path} ${field.type} ${field.about}`.toLowerCase().includes(q);
+    }
   });
-  const statePane = h("aside", "tbh-fsd-state", h("h3", "tbh-fsd-label", "Machine input"), h("p", "tbh-fsd-hint", "What the state machine reads every step. Click a field to name it in your request."), search, fieldList);
+  const statePane = h("aside", "tbh-fsd-state", h("h3", "tbh-fsd-label", "State"), h("p", "tbh-fsd-hint", "What the function is called with, four times a second. Click a field to name it in your request."), search, fieldList);
 
-  // The request, and the machine built from it.
-  const builder = growField("builder", "How should Tibo play? Say what to go after, when, and when to back off.", (value) => edit((d) => ({ ...d, prompt: value })));
+  // The request, and the function written from it.
+  const builder = growField(false, "How should Tibo play? Say what to go after, when, and when to back off.", (value) => edit((d) => ({ ...d, prompt: value })));
   const buildButton = h("button", "tbh-fsd-build");
   buildButton.type = "button";
-  buildButton.addEventListener("click", () => pilot.buildMachine());
+  buildButton.addEventListener("click", () => pilot.buildCode());
   onOwnKeydown((e) => {
-    if (e.target === builder.area && e.key === "Enter" && (e.metaKey || e.ctrlKey)) pilot.buildMachine();
+    if (e.target === builder.area && e.key === "Enter" && (e.metaKey || e.ctrlKey)) pilot.buildCode();
   });
   const buildNote = h("span", "tbh-fsd-build-note");
   const buildErrors = h("div", "");
-  const view = machineView(false, (kind) => entities.find((e) => e.kind === kind)?.name);
-  const machineTitle = h("div", "tbh-fsd-machine-title");
+  const code = codeView(fields);
+  const types = codeView(fields);
+  types.show(DRIVER_TYPES.trim());
+  const now = h("div", "tbh-fsd-now");
   const builderPane = h(
     "section",
     "tbh-fsd-builder",
-    h("h3", "tbh-fsd-label", "State machine builder"),
-    h("p", "tbh-fsd-hint", "Describe how Tibo should play. Opus 5.5 turns it into an XState machine: each state is one autopilot action, and each arrow a condition on the game."),
+    h("h3", "tbh-fsd-label", "Function builder"),
+    h("p", "tbh-fsd-hint", "Describe how Tibo should play. Opus 5.5 turns it into one TypeScript function that reads the state and returns what the autopilot does next. TypeScript checks that it always returns an action before the bot runs it."),
     builder.wrap,
     h("div", "tbh-fsd-build-row", buildButton, buildNote),
     buildErrors,
-    h("h3", "tbh-fsd-label tbh-fsd-machine-label", "State machine"),
-    machineTitle,
-    h("div", "tbh-fsd-machine", view.el),
+    h("h3", "tbh-fsd-label tbh-fsd-code-label", "Function"),
+    now,
+    code.el,
+    h("details", "tbh-fsd-fold", h("summary", "", "The types it is written against"), types.el),
   );
+  for (const view of [code, types]) {
+    view.el.addEventListener("pointerover", (e) => {
+      const field = view.fieldAt(e.target);
+      if (field === undefined) {
+        if (tipFor.startsWith("field:")) hideTip();
+      } else fieldTip(field.path, field.box);
+    });
+    view.el.addEventListener("pointerleave", hideTip);
+  }
 
-  const loadout = growField("loadout", "How should the picker choose cards?", (value) => edit((d) => ({ ...d, loadout: value })));
+  const loadout = growField(true, "How should the picker choose cards?", (value) => edit((d) => ({ ...d, loadout: value })));
   const loadoutErrors = h("div", "");
   const blockList = h(
     "div",
@@ -221,7 +245,7 @@ export function fsdPopup(pilot: Pilot, game: GameControl): { open(from: HTMLElem
     ...Object.keys(EMBEDS).map((name) => {
       const el = inserter(h("button", "tbh-fsd-entity tbh-fsd-embed", `{{${name}}}`), () => insert(loadout.area, `{{${name}}}`));
       el.type = "button";
-      el.addEventListener("pointerenter", () => embedTip("loadout", name, el.getBoundingClientRect()));
+      el.addEventListener("pointerenter", () => embedTip(name, el.getBoundingClientRect()));
       return el;
     }),
   );
@@ -235,21 +259,23 @@ export function fsdPopup(pilot: Pilot, game: GameControl): { open(from: HTMLElem
     h("details", "tbh-fsd-fold", h("summary", "", "State the picker can embed"), blockList),
   );
   const entityList = h("div", "tbh-fsd-entity-groups");
-  const entityPane = h("section", "tbh-fsd-world", h("h3", "tbh-fsd-label", "In the world"), h("p", "tbh-fsd-hint", "What the autopilot can walk Tibo to. Click to add the name where the caret is."), entityList);
+  const entityPane = h("section", "tbh-fsd-world", h("h3", "tbh-fsd-label", "In the world"), h("p", "tbh-fsd-hint", "What the autopilot can walk Tibo to, under the game's own names. Click to add the name where the caret is."), entityList);
   const renderEntities = () => {
     entities = game.entities();
     const chip = (e: Entity) => {
       const el = inserter(h("button", "tbh-fsd-entity", svgIcon(ACTION_ICONS[e.tag], "tbh-fsd-entity-icon"), e.name), () => insert(target ?? builder.area, e.name));
       el.type = "button";
-      el.addEventListener("pointerenter", () => showTip(`entity:${e.name}`, el.getBoundingClientRect(), h("b", "tbh-fsd-tip-name", e.name), h("div", "tbh-fsd-tip-about", e.about || "No description in the game.")));
+      el.addEventListener("pointerenter", () =>
+        showTip(`entity:${e.key}`, el.getBoundingClientRect(), h("b", "tbh-fsd-tip-name", e.name), ...(e.name === e.key ? [] : [h("code", "tbh-fsd-tip-key", e.key)]), h("div", "tbh-fsd-tip-about", e.about || "No description in the game.")),
+      );
       return el;
     };
     entityList.replaceChildren(
-      ...Object.entries(ENTITY_TYPES).flatMap(([type, label]) => {
-        const group = entities.filter((e) => e.type === type);
-        return group.length === 0 ? [] : [h("h4", "tbh-fsd-entity-type", label), h("div", "tbh-fsd-entities", ...group.map(chip))];
+      ...SECTIONS.flatMap((section) => {
+        const group = entities.filter((e) => e.section === section);
+        return group.length === 0 ? [] : [h("h4", "tbh-fsd-entity-type", section), h("div", "tbh-fsd-entities", ...group.map(chip))];
       }),
-      ...(entities.some((e) => e.type !== "pickup") ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]),
+      ...(entities.some((e) => e.name !== e.key) ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]),
     );
   };
 
@@ -270,18 +296,16 @@ export function fsdPopup(pilot: Pilot, game: GameControl): { open(from: HTMLElem
   dialog.append(sheet, tip);
   document.body.append(dialog);
 
-  const fields = new Map([builder, loadout].map((f) => [f.area, f]));
   dialog.addEventListener("focusin", (e) => {
     if (e.target instanceof HTMLTextAreaElement) target = e.target;
   });
-  // The embeds sit under the transparent text, so the pointer is matched against their boxes.
+  // The loadout's embeds sit under its transparent text, so the pointer is matched against their boxes.
   dialog.addEventListener("pointermove", (e) => {
-    const field = e.target instanceof HTMLTextAreaElement ? fields.get(e.target) : undefined;
-    if (field === undefined) return;
-    const chip = field.chipAt(e.clientX, e.clientY);
+    if (e.target !== loadout.area) return;
+    const chip = loadout.chipAt(e.clientX, e.clientY);
     if (chip === undefined) {
       if (tipFor.startsWith("embed:")) hideTip();
-    } else embedTip(field.kind, chip.name, chip.box);
+    } else embedTip(chip.name, chip.box);
   });
   dialog.addEventListener("pointerout", (e) => {
     if (e.target instanceof HTMLTextAreaElement) hideTip();
@@ -317,33 +341,33 @@ export function fsdPopup(pilot: Pilot, game: GameControl): { open(from: HTMLElem
       ticking = undefined;
     }
     const stale = d.prompt !== d.builtFrom;
-    buildButton.textContent = since === undefined ? "Build the machine" : "Building…";
+    buildButton.textContent = since === undefined ? "Write the function" : "Writing…";
     buildButton.disabled = since !== undefined || d.prompt.trim() === "" || !connected;
     buildButton.title = !connected ? "Start the agent server first: ./agent-server/main.ts" : "Sends your request to Opus 5.5 through the agent server (⌘↵)";
     buildNote.textContent =
       since !== undefined
-        ? `Opus 5.5 is writing the machine: ${Math.round((Date.now() - since) / 1000)} s. It takes about a minute.`
+        ? `Opus 5.5 is writing the function: ${Math.round((Date.now() - since) / 1000)} s. It takes under a minute.`
         : stale
-          ? "The request changed since this machine was built."
-          : "Built from this request.";
+          ? "The request changed since this function was written."
+          : "Written from this request.";
     buildNote.classList.toggle("tbh-fsd-build-stale", since === undefined && stale);
     buildErrors.replaceChildren(errorList(pilot.buildError() === undefined ? [] : [pilot.buildError() ?? ""]));
-    machineTitle.replaceChildren(h("b", "", d.machine.id), ...(d.machine.description === undefined ? [] : [` ${d.machine.description}`]));
-    view.show(d.machine, pilot.active());
+
+    const active = pilot.active();
+    now.hidden = active === undefined;
+    now.classList.toggle("tbh-fsd-now-error", active?.error !== undefined);
+    now.textContent = active?.error !== undefined ? `drive threw: ${active.error}` : active?.action === undefined ? "" : `Now: ${active.action.why ?? ""} (${actionWords(active.action)})`;
+    code.show(d.code, active?.action?.why);
 
     const live = pilot.preview();
-    for (const [path, { el, value, count }] of fieldEls) {
-      const n = d.prompt.split(`{{${path}}}`).length - 1;
-      count.textContent = n === 0 ? "" : `×${n}`;
-      el.classList.toggle("tbh-fsd-block-used", n > 0);
-      value.textContent = shown(read(live?.input ?? EXAMPLE.input, path)) ?? "";
-    }
+    for (const [path, { value }] of fieldEls) value.textContent = shown(read(live?.state ?? (EXAMPLE.state as State), path), 14);
 
-    status.textContent = driving ? "Driving: a machine you build takes over as soon as it is ready" : connected ? "" : "The agent server is not connected";
+    status.textContent = driving ? "Driving: a function you write takes over as soon as it is ready" : connected ? "" : "The agent server is not connected";
     status.dataset.state = driving ? "on" : connected ? "" : "error";
+    const refused = pilot.state().detail;
     const problems = check.loadout.length;
-    saved.textContent = problems === 0 ? "Saved in this browser" : `Saved in this browser · ${problems} to fix${driving ? " before the bot gets the change" : ""}`;
-    saved.classList.toggle("tbh-fsd-saved-bad", problems > 0);
+    saved.textContent = refused !== undefined && !driving ? refused : problems === 0 ? "Saved in this browser" : `Saved in this browser · ${problems} to fix${driving ? " before the bot gets the change" : ""}`;
+    saved.classList.toggle("tbh-fsd-saved-bad", problems > 0 || (refused !== undefined && !driving));
     stopButton.hidden = !driving;
     engage.textContent = driving ? "Back to the game" : "Engage";
     engage.disabled = !driving && (problems > 0 || !connected);

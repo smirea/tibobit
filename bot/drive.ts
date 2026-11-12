@@ -1,4 +1,4 @@
-// Full Self Driving as the bot plays it: the panel's state machine sets the goals, the autopilot
+// Full Self Driving as the bot plays it: the panel's function sets the goals, the autopilot
 // takes every step, and the decision model is asked only to pick cards, by the loadout question.
 import type { Drive } from "../protocol/drive";
 import { BLOCKS, checkTemplates, DEFAULT_TEMPLATES, QUESTION_LIMIT, type Templates } from "./templates";

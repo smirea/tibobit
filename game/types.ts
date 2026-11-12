@@ -179,6 +179,8 @@ export type Game = {
 /** Enum tables the game exports from its boot chunk, found by shape rather than by minified name. */
 export type Enums = {
   pickupKinds: string[];
+  /** What left a pickup, by the number in its `source` column. */
+  pickupSources: string[];
   zoneKinds: Record<string, number>;
   zoneShapes: Record<string, number>;
   enemyFlags: Record<string, number>;

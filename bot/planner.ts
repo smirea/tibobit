@@ -3,7 +3,7 @@
 // picks every level-up, chest and shrine option, and weighs every goal Tibo could take on next,
 // one question each; the most promising becomes the goal. It is asked when a goal ends, at every
 // choice, when a boss appears, and every planEvery() seconds, so a
-// better goal can take over. Under Full Self Driving it only picks: the panel's state machine sets the goals.
+// better goal can take over. Under Full Self Driving it only picks: the panel's function sets the goals.
 
 import { onChest, plural, priceWords, said, spotSaid } from "./phrasing";
 import { knobs, planEvery, templates } from "./run-templates";
@@ -102,7 +102,7 @@ export class Planner {
     this.calls++;
     const vars = { ...blocks(r, r.book), why: () => why };
     const state = render(templates.planner.state, vars);
-    // Under Full Self Driving the panel's machine sets the goals, and the planner only picks cards.
+    // Under Full Self Driving the panel's function sets the goals, and the planner only picks cards.
     const goals = drive === undefined ? goalOptions(r) : [];
     const questions: Record<string, Question> = {};
     const goalQuestion = (text: string) => render(templates.planner.goal, { ...vars, goal: () => text });

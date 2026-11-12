@@ -1,18 +1,19 @@
 import { type ChatMessage, type PilotChange, type PilotState, type StatePreview, trimChat } from "../../protocol/pilot";
 import { checkDraft, type Draft, type DraftCheck, loadDraft, saveDraft } from "../fsd/draft";
-import { type Machine, parseMachine } from "../../protocol/machine";
+import type { Action } from "../../protocol/driver";
 
 /**
  * The agent server as the pilot needs it: whether it is connected, where, a way to ask it for a
- * change, which resolves to whether it took it, and its machine builder, which rejects with why.
+ * change, which resolves to whether it took it, and its builder, which resolves to a function
+ * that type-checks or rejects with why there is none.
  */
-type PilotServer = { connected(): boolean; origin(): string; ask(change: PilotChange): Promise<boolean>; build(prompt: string): Promise<Machine> };
+type PilotServer = { connected(): boolean; origin(): string; ask(change: PilotChange): Promise<boolean>; build(prompt: string): Promise<string> };
 
 // Typing streams the loadout to a bot that is driving; this keeps it to a request per pause.
 const SEND_AFTER_MS = 400;
 
 /**
- * Full Self Driving as this page knows it: the machine and loadout kept in this browser, whether the
+ * Full Self Driving as this page knows it: the function and loadout kept in this browser, whether the
  * server's bot drives this tab with them, what the bot says, and the game as it last read it.
  */
 export class Pilot {
@@ -20,7 +21,7 @@ export class Pilot {
   private written = loadDraft();
   private checked = checkDraft(this.written);
   private shown: StatePreview | undefined;
-  /** Whether `shown` came from the bot driving now, so its machine state is the one in effect. */
+  /** Whether `shown` came from the bot driving now, so its action is the one in effect. */
   private live = false;
   private build: { since: number } | undefined;
   private buildProblem: string | undefined;
@@ -55,23 +56,23 @@ export class Pilot {
     return this.shown;
   }
 
-  /** The state the driving bot's machine is in, and for how many game seconds. */
-  active(): { state: string; seconds: number } | undefined {
-    return this.current.state !== "off" && this.live && this.shown !== undefined ? { state: this.shown.state, seconds: this.shown.input.stateSeconds } : undefined;
+  /** What the driving bot's function last returned, or why it threw. */
+  active(): { action?: Action; error?: string } | undefined {
+    return this.current.state !== "off" && this.live && this.shown !== undefined ? { ...(this.shown.action === undefined ? {} : { action: this.shown.action }), ...(this.shown.error === undefined ? {} : { error: this.shown.error }) } : undefined;
   }
 
-  /** When the machine being built was asked for, if one is. */
+  /** When the function being written was asked for, if one is. */
   building(): number | undefined {
     return this.build?.since;
   }
 
-  /** Why the last build gave no machine, until the next one starts. */
+  /** Why the last build gave no function, until the next one starts. */
   buildError(): string | undefined {
     return this.buildProblem;
   }
 
-  /** Has the server's builder write a machine from the prompt as written. It replaces the one kept here, and the one a driving bot runs. */
-  buildMachine() {
+  /** Has the server's builder write the function from the prompt as written. It replaces the one kept here, and the one a driving bot runs. */
+  buildCode() {
     const prompt = this.written.prompt;
     if (this.build !== undefined || prompt.trim() === "" || !this.server.connected()) return;
     this.build = { since: Date.now() };
@@ -80,7 +81,7 @@ export class Pilot {
     void this.server
       .build(prompt)
       .then(
-        (machine) => this.edit({ ...this.written, machine: parseMachine(machine), builtFrom: prompt }),
+        (code) => this.edit({ ...this.written, code, builtFrom: prompt }),
         (e: unknown) => {
           this.buildProblem = e instanceof Error ? e.message : String(e);
         },
@@ -115,7 +116,7 @@ export class Pilot {
     this.notify();
   }
 
-  /** Starts driving with the machine and loadout as they are; false when the loadout does not check yet. */
+  /** Starts driving with the function and loadout as they are; false when the loadout does not check yet. */
   engage(): boolean {
     const drive = this.checked.drive;
     if (drive === undefined) return false;

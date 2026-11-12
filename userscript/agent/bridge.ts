@@ -5,7 +5,6 @@ import { encyclopedia } from "./encyclopedia";
 import { Forecaster } from "./forecast";
 import { BRIDGE_ORIGIN_GLOBAL, BRIDGE_PORT, localOrigin, validPort } from "../../protocol/address";
 import type { PageLine } from "../../protocol/pilot";
-import type { Machine } from "../../protocol/machine";
 import { parseCommand } from "../../protocol/commands";
 import { inRun } from "../link/screen";
 import { snapshot } from "./snapshot";
@@ -92,18 +91,18 @@ function post(origin: string, path: string, body: unknown): Promise<boolean> {
   );
 }
 
-/** Asks the server's builder for a machine; rejects with the server's own words when it has none. */
-function buildMachine(origin: string, prompt: string): Promise<Machine> {
+/** Asks the server's builder for the function; rejects with the server's own words when it has none. */
+function buildCode(origin: string, prompt: string): Promise<string> {
   return new Promise((resolve, reject) =>
     GM_xmlhttpRequest({
       method: "POST",
-      url: `${origin}/pilot/machine`,
+      url: `${origin}/pilot/code`,
       data: JSON.stringify({ prompt }),
       headers: { "content-type": "application/json" },
       timeout: BUILD_TIMEOUT_MS,
       onload: (r) => {
         if (r.status >= 300) return reject(new Error(refusal(r, origin)));
-        resolve((JSON.parse(r.responseText ?? String(r.response ?? "")) as { machine: Machine }).machine);
+        resolve((JSON.parse(r.responseText ?? String(r.response ?? "")) as { code: string }).code);
       },
       onerror: () => reject(new Error(`the agent server on ${origin} did not answer`)),
       ontimeout: () => reject(new Error("the builder took more than 10 minutes")),
@@ -151,7 +150,7 @@ export function startBridge(link: GameLink, controller: Controller, forecaster: 
   const notify = () => {
     for (const listener of listeners) listener();
   };
-  const pilot = new Pilot({ connected: () => connected, origin: () => origin, ask: (change) => post(origin, "/pilot", change), build: (prompt) => buildMachine(origin, prompt) }, () => controller.release());
+  const pilot = new Pilot({ connected: () => connected, origin: () => origin, ask: (change) => post(origin, "/pilot", change), build: (prompt) => buildCode(origin, prompt) }, () => controller.release());
   let inFlight = 0;
   let lastPush = 0;
   let screen: Snapshot["screen"] = "title";

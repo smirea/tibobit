@@ -17,7 +17,9 @@ import { connectionRow } from "./connection";
 import { annotateCard, offerKey } from "./card-notes";
 import { fsdPopup, type GameControl } from "../fsd/popup";
 import { worldEntities } from "../fsd/entities";
-import { machineOverlay } from "../fsd/machine-overlay";
+import { driveOverlay } from "../fsd/drive-overlay";
+import { DRIVER_TYPES } from "../fsd/driver-source";
+import { stateFields } from "../fsd/driver-types";
 
 function mount(chat: HTMLElement, footer: HTMLElement): { panel: HTMLElement; content: HTMLElement } {
   for (const css of [panelCss, connectionCss, spritesCss, cardNotesCss]) addStyle(css);
@@ -48,8 +50,9 @@ function gameControl(link: GameLink): GameControl {
 }
 
 export function startPanel(link: GameLink, discovery: Discovery, bridge: Bridge) {
-  const fsd = fsdPopup(bridge.pilot, gameControl(link));
-  machineOverlay(bridge.pilot, () => worldEntities(link));
+  const fields = stateFields(DRIVER_TYPES);
+  const fsd = fsdPopup(bridge.pilot, gameControl(link), fields);
+  driveOverlay(bridge.pilot, fields);
   const { panel, content } = mount(botFeed(bridge.pilot, fsd.open), connectionRow(bridge, fsd.open));
   // While the bot plays, its chat takes the corner and the combos fold to their header.
   let collapsedBefore: boolean | undefined;

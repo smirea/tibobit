@@ -4,7 +4,7 @@ import type { Drive } from "../protocol/drive";
 import type { Command } from "../protocol/commands";
 import { AgentServer } from "../agent-server/client";
 
-/** Full Self Driving's machine and loadout, which the panel sends every step, so they can change mid-run. */
+/** Full Self Driving's function and loadout, which the panel sends every step, so they can change mid-run. */
 export let drive: Drive | undefined;
 
 /** Whether the panel started this bot, which someone is watching. */
@@ -55,7 +55,7 @@ export function followPanel(sent: Drive | undefined) {
   piloted = sent !== undefined;
 }
 
-/** The game as the machine reads it and the state the machine is in, for the panel. Never awaited, like `say`. */
+/** The game as the function reads it and the action it returned, for the panel. Never awaited, like `say`. */
 export function showState(preview: StatePreview) {
   const body = JSON.stringify(preview);
   chatQueue = chatQueue.then(() => fetch(`${SERVER}/pilot/state`, { method: "POST", headers: { "content-type": "application/json" }, body }).then(() => undefined, () => undefined));

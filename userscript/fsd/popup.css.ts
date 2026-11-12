@@ -24,7 +24,7 @@ export const css = `
 .tbh-fsd-block[hidden] { display: none; }
 .tbh-fsd-block-head { display: flex; align-items: baseline; gap: 6px; }
 .tbh-fsd-block-head b { color: var(--violet); }
-.tbh-fsd-block-head b { min-width: 0; overflow-wrap: anywhere; }
+.tbh-fsd-block-head b { flex: none; white-space: nowrap; }
 .tbh-fsd-block-count { margin-left: auto; font-size: 10.5px; font-weight: 800; color: var(--gold); }
 .tbh-fsd-block-used { border-color: rgba(255,211,107,.45); }
 .tbh-fsd-block-about { color: var(--muted); font-size: 10.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -44,6 +44,7 @@ export const css = `
   background: #1b1622; border: 1px solid #8e74c9; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.6); font-size: 11.5px; }
 .tbh-fsd-tip[hidden] { display: none; }
 .tbh-fsd-tip-name { color: var(--violet); }
+.tbh-fsd-tip-key { margin-left: 8px; font: inherit; font-size: 10.5px; color: var(--gold); }
 .tbh-fsd-tip-about { margin-top: 3px; color: var(--muted); }
 .tbh-fsd-tip-label { margin-top: 7px; font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
 .tbh-fsd-tip-value { margin: 3px 0 0; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 11px; color: #dbe6ff; background: rgba(0,0,0,.35); border-radius: 5px; }
@@ -65,11 +66,13 @@ export const css = `
 .tbh-fsd-build:disabled { opacity: .5; cursor: not-allowed; }
 .tbh-fsd-build-note { flex: 1; min-width: 0; font-size: 11px; color: var(--muted); }
 .tbh-fsd-build-stale { color: var(--gold); }
-.tbh-fsd-machine-label { margin-top: 12px; }
-.tbh-fsd-machine-title { font-size: 11.5px; color: var(--muted); }
-.tbh-fsd-machine-title b { color: var(--text); }
-.tbh-fsd-machine { padding: 14px 0; overflow-x: auto; border: 1px solid rgba(255,255,255,.07); border-radius: 8px; background: rgba(0,0,0,.28); }
-.tbh-fsd-block-value { flex: none; max-width: 9ch; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; font-variant-numeric: tabular-nums; color: #dbe6ff; }
+.tbh-fsd-code-label { margin-top: 12px; }
+.tbh-fsd-now { font-size: 11.5px; color: #7fe3a4; }
+.tbh-fsd-now[hidden] { display: none; }
+.tbh-fsd-now-error { color: var(--bad); }
+.tbh-fsd-builder .tbh-code { max-height: 52vh; }
+.tbh-fsd-block-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 10px; color: #7fd6ff; }
+.tbh-fsd-block-value { flex: none; margin-left: auto; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; font-variant-numeric: tabular-nums; color: #dbe6ff; }
 .tbh-fsd-fold summary { font-size: 11px; color: var(--muted); cursor: pointer; }
 .tbh-fsd-fold[open] summary { margin-bottom: 6px; }
 .tbh-fsd-embed { padding: 2px 7px; font-size: 10.5px; color: var(--violet); }

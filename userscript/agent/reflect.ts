@@ -51,7 +51,7 @@ function resolvers(link: GameLink, s: GameState, table: Table): Record<string, R
     bosses: { def: (n) => table.bossIdAt(n) ?? n },
     pets: { breed: (n) => table.dogAt(n)?.id ?? n },
     grokBots: { help: (n) => table.botHelpAt(n)?.id ?? n, mode: name(enums?.botModes) },
-    pickups: { kind: (n) => enums?.pickupKinds[n] ?? n },
+    pickups: { kind: (n) => enums?.pickupKinds[n] ?? n, source: (n) => enums?.pickupSources[n] ?? n },
     zones: { kind: name(enums?.zoneKinds), shape: name(enums?.zoneShapes) },
     "*": { src: source, burnSrc: source, lastSrc: source },
   };
