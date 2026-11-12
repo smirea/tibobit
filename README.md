@@ -95,12 +95,14 @@ The repository is split by program:
 | `game/` | What the game is, as every program needs it: the shapes of its state and content, the catalog of names and recipes, and the book built from the encyclopedia. |
 | `agent-server/` | The relay between the game tab and everything else: the HTTP API above, the checkpoint store, and **Full Self Driving**. `agent-server/client.ts` is that API for a program. |
 | `cli/` | A command line for that API, for a person or an agent at a terminal: one command per call (`state`, `move`, `start highest`, ...). It has no models and no memory. |
-| `headless/` | tibo.dog in a headless Chromium with the userscript, so nothing needs a visible browser. |
+| `headless/` | tibo.dog in a headless Chromium with the userscript, so nothing needs a visible browser, and `headless/encyclopedia.ts`, which reads the deployed game's content. |
 | `bot/` | The player: the planner and the action model in the game, the templates they play with, and the run log it writes. |
 
 ### Headless game and the bot
 
 `./headless/main.ts` runs tibo.dog in a headless Chromium with the userscript, so a bot can play without a visible browser. It reuses the newest Playwright headless shell on the machine, and serves `GET http://127.0.0.1:7358/screenshot` for a look at the game. `--profile <dir>` keeps the browser's profile, and with it the game's progress, in that folder; without it every launch starts fresh.
+
+`./headless/encyclopedia.ts` prints every evolution, union and item evolution in the game as deployed right now, with the game's English names, max levels and what each result does. It needs no agent server or open tab: a headless page imports the game's own chunks, as the userscript does, and the first line names the sim chunk it read. `--json` prints the whole encyclopedia `GET /encyclopedia` serves, and `--json <section>` (`weapons`, `passives`, `items`, `enemies`, ...) one part of it.
 
 `./bot/main.ts` plays through the agent server in three layers. In the game, everything is one System One decision model in two personas, the planner and the action model: TypeSafe's Jev through OpenRouter (`--decider openrouter --model typesafe/jev-1.14-20261014`, needs `OPENROUTER_API_KEY` in `.env.local`, managed by env-manager) or a local model in LM Studio (`--model laya@q8_0`, the default decider). `--plan-model` gives the planner a different model. grok only works between runs.
 

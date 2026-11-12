@@ -2,11 +2,10 @@
 // Runs tibo.dog in a headless browser with the userscript, so a bot can play without a visible
 // browser. Tampermonkey is not available there, so GM_xmlhttpRequest is shimmed with fetch; the
 // page's CSP and CORS would block that fetch, which is why both are turned off for this profile.
-import { readdirSync } from "node:fs";
 import { USERSCRIPT } from "../paths";
 import { chromium } from "playwright-core";
+import { executablePath } from "./chromium";
 import { BRIDGE_ORIGIN_GLOBAL, HEADLESS_PORT, localOrigin } from "../protocol/address";
-import os from "node:os";
 import path from "node:path";
 
 const args = process.argv.slice(2);
@@ -35,26 +34,8 @@ const shim = `window.GM_xmlhttpRequest = (d) => {
   return { abort: () => ctrl.abort() };
 };`;
 
-// Prefer the browser this Playwright version expects; otherwise reuse the newest headless shell
-// already downloaded, rather than requiring another download.
-function executablePath(): string | undefined {
-  const explicit = option("chrome", "");
-  if (explicit !== "") return explicit;
-  if (Bun.file(chromium.executablePath()).size > 0) return undefined;
-  const cache = path.join(os.homedir(), "Library", "Caches", "ms-playwright");
-  const shells = readdirSync(cache, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && d.name.startsWith("chromium_headless_shell-"))
-    .map((d) => d.name)
-    .sort((a, b) => Number(b.split("-")[1]) - Number(a.split("-")[1]));
-  for (const dir of shells) {
-    const exe = path.join(cache, dir, "chrome-headless-shell-mac-arm64", "chrome-headless-shell");
-    if (Bun.file(exe).size > 0) return exe;
-  }
-  throw new Error("no headless Chromium found; run bunx playwright-core install chromium-headless-shell or pass --chrome <path>");
-}
-
 const launch = {
-  executablePath: headed ? undefined : executablePath(),
+  executablePath: headed ? undefined : executablePath(option("chrome", "")),
   headless: !headed,
   args: ["--disable-web-security", "--disable-features=LocalNetworkAccessChecks", "--mute-audio", "--use-angle=metal"],
 };
