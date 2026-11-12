@@ -11,12 +11,9 @@ type Answer = { choice?: string; probabilities?: Record<string, number>; confide
 
 export const latency: number[] = [];
 
-/** How old each step's snapshot was, in ms: games side by side that starve each other of CPU show it here. */
-export const snapshotAges: number[] = [];
-
 // A decision asked while the game runs is worth nothing late: Tibo holds his last move until it
 // lands, and the state it was asked about is gone. An answer takes about a quarter of a second,
-// but over the loop's first 63 games one call in 220 took more than 3 seconds and the worst took
+// but over 63 games one call in 220 took more than 3 seconds and the worst took
 // 59. An answer this late is given up on, and the next step asks afresh about the game as it is then.
 
 /**

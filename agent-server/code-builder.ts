@@ -1,7 +1,7 @@
 // Has Opus 5.5 write Full Self Driving's function from a person's request, through the claude CLI,
 // and takes only a function that type-checks: a reply that does not goes back with the compiler's errors.
 import type { Book } from "../game/book";
-import { checkHarness, runCoach } from "../rsi/coach/harnesses";
+import { askClaude, checkClaude } from "./claude-cli";
 import { codeErrors, codeIn } from "./code-check";
 import { builderPrompt, retryPrompt } from "./code-prompt";
 
@@ -11,7 +11,7 @@ const TRIES = 3;
 export const REQUEST_LIMIT = 6000;
 
 /** Throws at startup when the claude CLI is not installed. */
-export const checkBuilder = () => void checkHarness("claude");
+export const checkBuilder = checkClaude;
 
 export async function buildCode(request: string, book: Book | undefined): Promise<string> {
   const first = builderPrompt(request, book);
@@ -19,7 +19,7 @@ export async function buildCode(request: string, book: Book | undefined): Promis
   let problems: string[] = [];
   for (let attempt = 1; attempt <= TRIES; attempt++) {
     const started = Date.now();
-    const said = await runCoach("claude", MODEL, prompt, TRY_MS);
+    const said = await askClaude(MODEL, prompt, TRY_MS);
     if (said.timedOut) throw new Error(`${MODEL} did not answer within ${TRY_MS / 1000} seconds`);
     if (said.text.trim() === "") throw new Error(`${MODEL} gave no reply: ${(said.error || said.stderr).slice(0, 400)}`);
     const code = codeIn(said.text);

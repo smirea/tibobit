@@ -1,10 +1,10 @@
 import { DEFAULT_TEMPLATES, type Knobs, type Templates } from "./templates";
 import { has, PLAN_EVERY } from "./config";
 
-/** --plan-every when given, else the coach's knob. */
+/** --plan-every when given, else the knob. */
 export const planEvery = () => (has("plan-every") ? PLAN_EVERY : knobs().planEvery);
 
-/** What the coach set for this run: the in-game models' prompts and the knobs below. */
+/** What this run plays with: the in-game models' prompts and the knobs below. */
 export let templates: Templates = DEFAULT_TEMPLATES;
 
 export const knobs = (): Knobs => templates.knobs;

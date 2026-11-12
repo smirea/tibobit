@@ -1,4 +1,5 @@
-// The planner's and the action model's prompts are templates the coach writes before every run.
+// The planner's and the action model's prompts are templates: the built-in defaults, a --templates
+// file over them, or under Full Self Driving the panel's loadout question.
 // `{{name}}` takes a piece of the game state, which the bot renders only when a template uses it.
 
 import type { Checked } from "../protocol/parse";
@@ -69,7 +70,7 @@ export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: strin
   bossOfferRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is offered every move, even those the one-second forecast prices above extraDamage, since boss attacks are not in that forecast; 0 keeps the usual rule" },
   eliteSeconds: { min: 5, max: 60, about: "seconds a fight-the-elite goal lasts at most: Tibo heads for the elite and keeps it within reach of its weapons until it dies" },
   forecastSeconds: { min: 0.1, max: 2, about: "how far ahead the game's own simulation prices each move, and how far surroundings look for bullets that would hit, attacks and hazards on each path, in seconds; the action model weighs moves by what they cost over this horizon" },
-  autopilot: { min: 0, max: 1, about: "1 takes every step without the action model: of the moves the forecast allows (those within extraDamage of the cheapest), Tibo takes the one nearest the way to the goal, and of two as near the cheaper; it never dashes and no action template is used. 0 asks the action model, as before. In the loop manager's own gym tests at minute 10, a mover that read only the forecast's prices lost no more health per trip than either action-model format, and it answers at once" },
+  autopilot: { min: 0, max: 1, about: "1 takes every step without the action model: of the moves the forecast allows (those within extraDamage of the cheapest), Tibo takes the one nearest the way to the goal, and of two as near the cheaper; it never dashes and no action template is used. 0 asks the action model, as before. In tests from a checkpoint at minute 10, a mover that read only the forecast's prices lost no more health per trip than either action-model format, and it answers at once" },
   planEvery: { min: 1, max: 60, about: "seconds between planner calls while a goal is under way (it is also asked whenever a goal ends, a choice opens, a card is taken or a boss appears); short re-plans switch goals often, long ones let a goal finish. A person watching in the panel sets this instead" },
   distrustBossRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is asked about every step, since boss attacks from afar are not in the one-second forecast; 0 turns it off" },
   dashThreshold: { min: 0.05, max: 0.95, about: "how sure the action model's answer to action.dash must be (a probability) for Tibo to dash; lower dashes more often" },
@@ -84,7 +85,7 @@ export const KNOBS: Record<keyof Knobs, { min: number; max: number; about: strin
 
 export type Templates = { planner: { state: string; goal: string; pick: string }; action: { state: string; hurt: string; useful: string; dash: string }; knobs: Knobs };
 
-/** The prompts the bot played with before the coach wrote any; used when no run has templates yet. */
+/** The prompts the bot plays with unless --templates or Full Self Driving changes them. */
 export const DEFAULT_TEMPLATES: Templates = {
   planner: {
     state: [
@@ -105,10 +106,6 @@ export const DEFAULT_TEMPLATES: Templates = {
   knobs: { exploreDistance: 300, evadeSeconds: 8, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1, distrustSeconds: 0, distrustBossRange: 0, planEvery: 5, eliteSeconds: 20, bossOfferRange: 0, dashThreshold: 0.5, bossDashThreshold: 0.5, bossDashRange: 0, eliteFrom: 0, eliteMinHp: 0, forecastSeconds: 0.5, autopilot: 0, holdAbortHurt: 0, planOnHurt: 0 },
 };
 
-export const STATE_LIMIT = 8000;
-
-export const QUESTION_LIMIT = 800;
-
 export function slotText(t: Templates, slot: TemplateSlot): string {
   const [model, key] = slot.split(".") as ["planner" | "action", string];
   return (t[model] as Record<string, string>)[key] ?? "";
@@ -123,7 +120,7 @@ export function render(template: string, values: Record<string, () => string>): 
   });
 }
 
-/** Reads templates from a coach reply or a notes file; anything left out keeps `base`. */
+/** Reads templates from a --templates file or the panel; anything left out keeps `base`. */
 export function checkTemplates(raw: { planner?: unknown; action?: unknown; knobs?: unknown }, base: Templates): Checked<Templates> {
   const errors: string[] = [];
   const pick = (model: "planner" | "action"): Record<string, string> => {
@@ -145,8 +142,6 @@ export function checkTemplates(raw: { planner?: unknown; action?: unknown; knobs
   for (const slot of Object.keys(SLOTS) as TemplateSlot[]) {
     const text = slotText(templates, slot);
     const { vars, required } = SLOTS[slot];
-    const limit = slot.endsWith(".state") ? STATE_LIMIT : QUESTION_LIMIT;
-    if (text.length > limit) errors.push(`${slot} is ${text.length} characters; keep it under ${limit}`);
     if (text.includes("~~~")) errors.push(`${slot} must not contain ~~~`);
     if (text.trim() === "" && slot !== "action.dash") errors.push(`${slot} is empty`);
     const used = [...text.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1] ?? "");

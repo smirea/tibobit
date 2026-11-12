@@ -1,6 +1,6 @@
 // The bot's command line, in one place for the bot that reads it and the programs that start it.
 
-/** The decision model the loop's games and the panel's pilot play with: TypeSafe's Jev, through OpenRouter. */
+/** The decision model the panel's pilot plays with: TypeSafe's Jev, through OpenRouter. */
 export const JEV = { decider: "openrouter", model: "typesafe/jev-1.14-20261014" } as const;
 
 /** Every flag the bot takes: one that takes a value, or a switch that is on when present. */
@@ -16,11 +16,6 @@ const FLAGS = {
   seed: "value",
   weapon: "value",
   templates: "value",
-  trial: "value",
-  result: "value",
-  notes: "switch",
-  "coach-label": "value",
-  intent: "value",
   takeover: "switch",
   "log-dir": "value",
   step: "value",

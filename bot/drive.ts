@@ -1,7 +1,7 @@
 // Full Self Driving as the bot plays it: the panel's function sets the goals, the autopilot
 // takes every step, and the decision model is asked only to pick cards, by the loadout question.
 import type { Drive } from "../protocol/drive";
-import { BLOCKS, checkTemplates, DEFAULT_TEMPLATES, QUESTION_LIMIT, type Templates } from "./templates";
+import { BLOCKS, checkTemplates, DEFAULT_TEMPLATES, type Templates } from "./templates";
 
 /** What the picker reads before the loadout question. */
 const PICKER = "You pick the upgrades of Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own.\n\nState now:\n\n{{state}}\n\n{{offer}}";
@@ -14,7 +14,6 @@ export function loadoutErrors(loadout: string): string[] {
   const errors = [...new Set([...loadout.matchAll(/\{\{([\w.]+)\}\}/g)].map((m) => m[1] ?? ""))].filter((name) => !(name in EMBEDS)).map((name) => `{{${name}}} is not part of the state`);
   if (loadout.includes("~~~")) errors.push("~~~ is not allowed");
   if (loadout.trim() === "") errors.push("the picker needs a question");
-  if (loadout.length > QUESTION_LIMIT) errors.push(`${loadout.length} characters; keep it under ${QUESTION_LIMIT}`);
   return errors;
 }
 

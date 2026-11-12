@@ -5,7 +5,6 @@ import type { Command, CommandStatus } from "../protocol/commands";
 import { command, send } from "./server";
 import type { World } from "./world";
 import { RunLog } from "./run-log/writer";
-import type { Planner } from "./planner";
 import { clock } from "../clock";
 import type { State } from "../protocol/view";
 
@@ -21,13 +20,10 @@ function distrustReason(r: World): string | undefined {
  * One step toward the current goal: walk on while it is safe, else ask the action model. `direct`
  * sets the next goal when there is none: the planner's choice, or what the panel's function returned.
  */
-export async function pursue(s: State, r: World, log: RunLog, planner: Planner, direct: (r: World, why: string) => Promise<unknown> | void) {
+export async function pursue(s: State, r: World, log: RunLog, direct: (r: World, why: string) => Promise<unknown> | void) {
   for (const c of r.chests) everListed.add(goalId({ kind: "chest", uid: c.id }));
   const gained = log.loadoutChange(r);
-  if (gained !== undefined) {
-    log.write(r, { event: "loadout", action: gained, ...(pursuit === undefined ? {} : { goal: pursuit.id }) });
-    if (!planner.picked) planner.notes.picks.push(`- **${clock(r.time)}** gained without a pick (a chest or other): ${gained}.`);
-  }
+  if (gained !== undefined) log.write(r, { event: "loadout", action: gained, ...(pursuit === undefined ? {} : { goal: pursuit.id }) });
   for (let starts = 0; ; starts++) {
     if (pursuit === undefined) await direct(r, outcomes.length === 0 ? "the run started" : "the last goal ended");
     const p = pursuit as Pursuit | undefined;

@@ -123,12 +123,6 @@ export type LiveView = {
   choice?: { kind: string; options: ChoiceOption[] } & Record<string, unknown>;
 };
 
-/** The highest Open World Nightmare level this browser has won, from the game's own `tibo.ladder.v1` entry (ask for `raw=storage`); the next one up is the hardest it can start. */
-export function ladderCleared(s: { storage?: Record<string, unknown> }): number {
-  const cleared = (s.storage?.["tibo.ladder.v1"] as { cleared?: unknown } | undefined)?.cleared;
-  return typeof cleared === "number" ? cleared : 0;
-}
-
 /**
  * What a waited-for command comes back as. A level-up or chest choice freezes game time, so a move
  * or goto under way when a choice opens or the run ends comes back early, still running, with what

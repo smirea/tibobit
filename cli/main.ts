@@ -37,7 +37,7 @@ const USAGE = `usage: cli/main.ts [--port <port> | --server <url>] <command>
                                   takes the hardest unlocked, up through the Nightmare levels
   summary                         after a death, step to the run summary and record its share link
 
-training ground:
+checkpoints and seeds:
   seed <seed>                     reload the page so its next Open World run plays this seed (a run's \`seed\`)
   checkpoint save <name>          save the run as it is now (kept in .runs/checkpoints)
   checkpoint load <name>          put a saved run in place of the run in progress; it waits paused

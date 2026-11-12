@@ -1,23 +1,21 @@
 // The planner is the decision model in a second persona. Before every decision it reads the state
-// its template asks for, which the coach wrote for this run with the game knowledge in it. It
+// its template asks for, with the game knowledge in it. It
 // picks every level-up, chest and shrine option, and weighs every goal Tibo could take on next,
 // one question each; the most promising becomes the goal. It is asked when a goal ends, at every
 // choice, when a boss appears, and every planEvery() seconds, so a
 // better goal can take over. Under Full Self Driving it only picks: the panel's function sets the goals.
 
-import { onChest, plural, priceWords, said, spotSaid } from "./phrasing";
+import { onChest, plural, priceWords, spotSaid } from "./phrasing";
 import { knobs, planEvery, templates } from "./run-templates";
 import { blocks, type Card, cards } from "./blocks";
 import { PLAN_MODEL } from "./config";
-import { RunNotes } from "./run-notes";
 import { command, drive, piloted, say } from "./server";
 import { decide, type Question } from "./decider";
-import { talliesOf, totalsBetween, totalsLines } from "./tallies";
 import { giveUps, type Goal, goalId, goalTitle, locate, outcomes, pursuit, setGoal } from "./goals";
 import { render } from "./templates";
 import { type CardOption, type Inspect, PICK_SHOW_MS } from "../protocol/pilot";
 import { GOAL_OPTIONS, HURT_SECONDS, PLAN_RANGE } from "./limits";
-import { type EndJson, recentLoss, type World } from "./world";
+import { recentLoss, type World } from "./world";
 import { RunLog } from "./run-log/writer";
 import { clock } from "../clock";
 import { UNANSWERED, weighedCell } from "./run-log/cells";
@@ -78,10 +76,7 @@ export class Planner {
   /** Bosses already planned for, by id: each new one gets a plan the moment it shows up. */
   private seenBosses = new Set<string>();
 
-  constructor(
-    readonly notes: RunNotes,
-    private log: RunLog,
-  ) {}
+  constructor(private log: RunLog) {}
 
   /** Why to plan again while a goal is under way, if anything. */
   due(r: World): string | undefined {
@@ -170,37 +165,9 @@ export class Planner {
       options: weighedCell.encode(placed, cards),
       ms,
     });
-    if (pick !== undefined) {
-      this.notes.picks.push(`- **${clock(r.time)}** ${kind}: took ${pick.name} from ${options?.map((o) => o.name).join(", ")}.`);
-    }
     return { ...(pick === undefined ? {} : { pick }), ms, ...(cards === undefined ? {} : { cards }), goals: weighed };
   }
-
-  /** The run ended: its notes are written. */
-  async finish(end: EndJson, last: World | undefined, ladder: number | undefined, healed: number) {
-    const lived = Math.round(end.runClock * 10) / 10;
-    const kills = Number(end.run.kills ?? 0);
-    await this.notes.finish({
-      lived,
-      ending: `${last !== undefined && lived >= last.view.world.winAt ? `won (passed ${clock(last.view.world.winAt)}), then ` : ""}died at ${clock(lived)}, level ${end.loadout.level}, ${kills} kills`,
-      outcome: [
-        `Lived **${clock(lived)}** (${lived}s), level ${end.loadout.level}, ${kills} kills.`,
-        ...totalsLines(totalsBetween(talliesOf(end))),
-        `Health gained over the run, by food, regeneration and anything else: about ${healed} (the game does not say from what).`,
-        ...(last === undefined ? [] : loadoutLines(last)),
-        `Planner asked ${this.calls} times.`,
-        ...(ladder === undefined ? [] : [`Nightmare ladder after the run: ${ladder === 0 ? "no level won yet" : `won up to Nightmare ${ladder}`}, so the next Open World Nightmare run plays Nightmare ${ladder + 1}.`]),
-      ],
-    });
-  }
-
 }
-
-export const loadoutLines = (r: World) => [
-  `Weapons: ${r.weapons.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
-  `Passives: ${r.passives.map((w) => `${w.name} ${w.level}/${w.max}`).join(", ") || "none"}.`,
-  `Items: ${r.items.map((i) => `${i.name} x${i.count}${said(r.book, "item", i.id)}`).join("; ") || "none"}.`,
-];
 
 // Picks that did nothing (an item Tibo cannot afford, say) for the choice now open, so they are
 // not taken again and again.

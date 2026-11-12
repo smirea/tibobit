@@ -1,4 +1,4 @@
-// The bot's fixed numbers that the coach is told about, in one place for the bot and for what the loop tells the coach.
+// The bot's fixed numbers, in one place.
 
 /** The bot's goal options reach this far. */
 export const PLAN_RANGE = 600;
