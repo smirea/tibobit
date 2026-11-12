@@ -63,7 +63,7 @@ export function driveState(r: World, previous: State["previous"]): State {
     pickups: pickups.sort((a, z) => a.dist - z.dist),
     // Only the ones that charge by standing in them: the autopilot has no other way to use one.
     pois: r.spots.filter((x) => x.chargeSeconds > 0).map((x) => ({ ...placed({ kind: "poi", uid: x.id }, x), kind: poiKind(x.type), name: x.name, inside: x.inside, charged: x.charged, chargeSeconds: x.chargeSeconds })),
-    ground: { xp: Math.round(w.ground.xp), gold: Math.round(w.ground.gold) },
+    ground: { xp: Math.round(w.ground.xp), gold: Math.round(w.ground.gold), xpByDirection: byDirection((s) => Math.round(s.xp)) },
     prices: { crate: w.prices.crate, slots: w.prices.slots },
     boosts: w.boosts,
     upcoming: w.upcoming,
@@ -87,6 +87,8 @@ function goalFor(action: Action, r: World): Goal | undefined {
       return { kind: "explore", dir: action.dir };
     case "dash":
       return r.view.tibo.dash.charges > 0 ? { kind: "dash", dir: action.dir } : { kind: "explore", dir: action.dir };
+    case "xp":
+      return { kind: "xp" };
     case "still":
       return { kind: "still" };
     default:

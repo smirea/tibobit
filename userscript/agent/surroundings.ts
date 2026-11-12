@@ -39,6 +39,9 @@ function recentDps(s: GameState): number {
 const PATH_SAMPLES = [0.25, 0.5, 0.75, 1];
 
 const round = (n: number) => Math.round(n * 10) / 10;
+// How far xp counts toward a direction's share, in world units: about a screen's half width. Nearer xp counts for more.
+const XP_REACH = 600;
+
 const bearing = (dx: number, dy: number) => ({ dist: round(Math.hypot(dx, dy)), dir: directionOf(dx, dy) });
 
 function* alive(p: { pool: { count: number; slotAt(n: number): number; isAlive(slot: number): boolean } }): Generator<number> {
@@ -64,17 +67,23 @@ export function surroundings(link: GameLink, s: GameState, seconds: number, rows
   const counts: Record<string, number> = {};
   const value = { xp: 0, gold: 0 };
   const items: Surroundings["pickups"]["items"] = [];
+  const xp = Object.fromEntries(DIRECTIONS.map((d) => [d, 0])) as Record<Direction, number>;
   for (const p of rows.pickups) {
     const kind = String(p.kind);
     counts[kind] = (counts[kind] ?? 0) + 1;
     const dx = Number(p.x) - px;
     const dy = Number(p.y) - py;
-    if (kind === "xp" || kind === "gold") value[kind] += Number(p.value) || 0;
-    else items.push({ ...p, ...bearing(dx, dy) });
+    if (kind !== "xp" && kind !== "gold") {
+      items.push({ ...p, ...bearing(dx, dy) });
+      continue;
+    }
+    value[kind] += Number(p.value) || 0;
+    const dist = Math.hypot(dx, dy);
+    if (kind === "xp" && dist < XP_REACH) xp[directionOf(dx, dy)] += (Number(p.value) || 0) * (1 - dist / XP_REACH);
   }
   items.sort((a, z) => a.dist - z.dist);
 
-  return { seconds, hurtBy: recentHurt(s), dps: recentDps(s), ...threats(link, s, seconds), elites, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
+  return { seconds, hurtBy: recentHurt(s), dps: recentDps(s), ...threats(link, s, seconds), elites, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, xp: Object.fromEntries(DIRECTIONS.map((d) => [d, round(xp[d])])) as Record<Direction, number>, items } };
 }
 
 /** What could hit Tibo, or what Tibo would walk into within `seconds`, in any game state, a copy included. Shapes use the game's own hit test for pools. */

@@ -51,5 +51,5 @@ function drive(state: State, memory: Memory): Action {
   const shrine = pois.find((p) => p.kind === "chargeShrine" && p.dist < 400);
   if (shrine && enemies.onScreen < 25) return { type: "poi", id: shrine.id, why: "charge the Spud Shrine" };
 
-  return { type: "move", dir: enemies.fewest, why: "farm" };
+  return { type: "xp", why: "gather xp" };
 }`;

@@ -53,8 +53,8 @@ export type Surroundings = Threats & {
   dps: number;
   /** Every elite alive: the game's own enemy entries, nearest first, with where each is. */
   elites: (Record<string, unknown> & Bearing)[];
-  /** The game's pickups: how many of each kind, the total `value` of the xp and gold on the ground, and every pickup that is neither (chests, food, rerolls and the like) as the game's own entries, nearest first. */
-  pickups: { counts: Record<string, number>; value: { xp: number; gold: number }; items: (Record<string, unknown> & Bearing)[] };
+  /** The game's pickups: how many of each kind, the total `value` of the xp and gold on the ground, the xp lying each way within 600 units (nearer xp counting for more), and every pickup that is neither (chests, food, rerolls and the like) as the game's own entries, nearest first. */
+  pickups: { counts: Record<string, number>; value: { xp: number; gold: number }; xp: Record<Direction, number>; items: (Record<string, unknown> & Bearing)[] };
 };
 
 /** What could hurt Tibo where he stands and along each direction, from the game's enemy, bullet, emitter, zone and hazard pools. */

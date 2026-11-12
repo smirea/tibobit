@@ -12,7 +12,7 @@ export type Chest = Target & { charged: number; chargeSeconds: number };
 type Fighter = Target & { hp: number; maxHp: number };
 export type Spot = Target & { charged: number; chargeSeconds: number; inside: boolean };
 /** One direction from Tibo: enemies on screen that way, and bullets coming from it within the horizon. */
-export type Sector = { dir: Direction; enemies: number; bullets: number };
+export type Sector = { dir: Direction; enemies: number; bullets: number; xp: number };
 
 /** The game's own run tallies the bot reads, under the game's keys (`raw=run,counters`). */
 type RunJson = Record<string, unknown> & { seed: string; kills: number; killer: string; damageTakenBySource: Record<string, number>; damageBySource: Record<string, number>; elitesKilled: number };
@@ -75,7 +75,7 @@ export function see(s: State, book: Book): World | undefined {
     food: gather((d) => d.food),
     pickups: gather((d) => d.pickups),
     spots: gather((d) => d.spots).map((x) => ({ ...x, inside: x.dir === "still" })),
-    sectors: DIRECTIONS.map((dir) => ({ dir, enemies: directions[dir]?.enemies ?? 0, bullets: directions[dir]?.bullets ?? 0 })),
+    sectors: DIRECTIONS.map((dir) => ({ dir, enemies: directions[dir]?.enemies ?? 0, bullets: directions[dir]?.bullets ?? 0, xp: directions[dir]?.xp ?? 0 })),
     hurtBy: tibo.hurtBy,
     dps: tibo.dps,
   };

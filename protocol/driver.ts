@@ -92,8 +92,8 @@ export type State = {
   /** What lies on the ground, other than xp and gold. */
   pickups: Pickup[];
   pois: Poi[];
-  /** The total value of the xp and of the gold lying on the ground. */
-  ground: { xp: number; gold: number };
+  /** The total value of the xp and of the gold lying on the ground, and the xp lying each way within about half a screen, nearer xp counting for more. */
+  ground: { xp: number; gold: number; xpByDirection: Record<Direction, number> };
   /** Gold a Potato Crate (paidChest) costs now, and a Tater Slots spin. */
   prices: { crate: number; slots: number };
   /** Timed boosts running, by the game's key, with the seconds left. */
@@ -119,6 +119,11 @@ export type Action = (
   | { type: "move"; dir: Direction }
   /** Dash that way, a quick burst that spends a dash charge; with none, walk that way. */
   | { type: "dash"; dir: Direction }
+  /**
+   * Gather xp: each step, walk the safe way with the most xp for the fewest enemies, and take any
+   * magnet within 500 on the way. With no xp near, keep away from enemies. It lasts until another action.
+   */
+  | { type: "xp" }
   /** Stand still, stepping aside only when standing would cost more health than moving. */
   | { type: "still" }
 ) & { why?: string };

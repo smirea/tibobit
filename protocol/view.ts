@@ -30,6 +30,8 @@ export type DirectionView = {
   dead?: true;
   /** The sources most of that damage comes from, in the game's English where it names them. */
   damageFrom?: string[];
+  /** The xp lying that way within 600 units, nearer xp counting for more; absent for standing still. */
+  xp?: number;
   /** Enemy bullets coming from that side that would hit Tibo standing still within the horizon. */
   bullets?: number;
   /** Hazards and attack zones (the game's kinds) that walking that way enters within the horizon; for standing still, those Tibo is in. */

@@ -430,6 +430,7 @@
   }
   var PATH_SAMPLES = [0.25, 0.5, 0.75, 1];
   var round = (n) => Math.round(n * 10) / 10;
+  var XP_REACH = 600;
   var bearing = (dx, dy) => ({ dist: round(Math.hypot(dx, dy)), dir: directionOf(dx, dy) });
   function* alive(p) {
     for (let n = 0;n < p.pool.count; n++) {
@@ -445,18 +446,23 @@
     const counts = {};
     const value = { xp: 0, gold: 0 };
     const items = [];
+    const xp = Object.fromEntries(DIRECTIONS.map((d) => [d, 0]));
     for (const p of rows.pickups) {
       const kind = String(p.kind);
       counts[kind] = (counts[kind] ?? 0) + 1;
       const dx = Number(p.x) - px;
       const dy = Number(p.y) - py;
-      if (kind === "xp" || kind === "gold")
-        value[kind] += Number(p.value) || 0;
-      else
+      if (kind !== "xp" && kind !== "gold") {
         items.push({ ...p, ...bearing(dx, dy) });
+        continue;
+      }
+      value[kind] += Number(p.value) || 0;
+      const dist = Math.hypot(dx, dy);
+      if (kind === "xp" && dist < XP_REACH)
+        xp[directionOf(dx, dy)] += (Number(p.value) || 0) * (1 - dist / XP_REACH);
     }
     items.sort((a, z) => a.dist - z.dist);
-    return { seconds, hurtBy: recentHurt(s), dps: recentDps(s), ...threats(link, s, seconds), elites, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, items } };
+    return { seconds, hurtBy: recentHurt(s), dps: recentDps(s), ...threats(link, s, seconds), elites, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, xp: Object.fromEntries(DIRECTIONS.map((d) => [d, round(xp[d])])), items } };
   }
   function threats(link, s, seconds) {
     const enums = link.enums;
@@ -648,14 +654,14 @@ function drive(state: State, memory: Memory): Action {
   const shrine = pois.find((p) => p.kind === "chargeShrine" && p.dist < 400);
   if (shrine && enemies.onScreen < 25) return { type: "poi", id: shrine.id, why: "charge the Spud Shrine" };
 
-  return { type: "move", dir: enemies.fewest, why: "farm" };
+  return { type: "xp", why: "gather xp" };
 }`;
 
   // protocol/pilot.ts
   var PICK_SHOW_MS = 2000;
   var ACTION_TAGS = [
     ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
-    ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
+    ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer", "Xp"],
     ...["Dash", "Hold", "Start", "Take over", "Over", "Stopped"]
   ];
   var SPOT_TAGS = {
@@ -2594,6 +2600,7 @@ Goal: {{goal}}.
     Bell: ["M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z", "M10 20.5a2 2 0 0 0 4 0", "M12 3v2"],
     Slots: ["M2 7h15v14H2z", "M5 7V4h9v3", "M4.5 11h3v5h-3zM8 11h3v5H8zM11.5 11h3v5h-3z", "M17 13h3V5", dot(20, 4, 1.6)],
     Vault: ["M3 4h18v15H3z", ring(12, 11.5, 4.2), dot(12, 11.5, 1.2), "M12 7.3v1.6M12 14.1v1.6M7.8 11.5h1.6M14.6 11.5h1.6", "M6 19v2M18 19v2"],
+    Xp: ["M8 4h8l4 5-8 11L4 9z", "M4 9h16", "M10 4 8.5 9 12 20l3.5-11L14 4"],
     Magnet: ["M5 3h5v9a2 2 0 0 0 4 0V3h5v9a7 7 0 0 1-14 0z", "M5 7.5h5M14 7.5h5"],
     Tunnel: ["M2 21h20", "M4.5 21v-8a7.5 7.5 0 0 1 15 0v8", { fill: "M8.5 21v-6a3.5 3.5 0 0 1 7 0v6z" }],
     Light: ["M9 5a3 3 0 0 1 6 0", "M7.5 7h9", "M9 7l-1.5 3v7L9 20h6l1.5-3v-7L15 7", "M9 20v1h6v-1", { fill: "M12 10.5c1.6 1.6 2.2 2.8 2.2 3.9a2.2 2.2 0 0 1-4.4 0c0-1.1.6-2.3 2.2-3.9z" }],
@@ -3657,8 +3664,8 @@ export type State = {
   /** What lies on the ground, other than xp and gold. */
   pickups: Pickup[];
   pois: Poi[];
-  /** The total value of the xp and of the gold lying on the ground. */
-  ground: { xp: number; gold: number };
+  /** The total value of the xp and of the gold lying on the ground, and the xp lying each way within about half a screen, nearer xp counting for more. */
+  ground: { xp: number; gold: number; xpByDirection: Record<Direction, number> };
   /** Gold a Potato Crate (paidChest) costs now, and a Tater Slots spin. */
   prices: { crate: number; slots: number };
   /** Timed boosts running, by the game's key, with the seconds left. */
@@ -3684,6 +3691,11 @@ export type Action = (
   | { type: "move"; dir: Direction }
   /** Dash that way, a quick burst that spends a dash charge; with none, walk that way. */
   | { type: "dash"; dir: Direction }
+  /**
+   * Gather xp: each step, walk the safe way with the most xp for the fewest enemies, and take any
+   * magnet within 500 on the way. With no xp near, keep away from enemies. It lasts until another action.
+   */
+  | { type: "xp" }
   /** Stand still, stepping aside only when standing would cost more health than moving. */
   | { type: "still" }
 ) & { why?: string };
@@ -4310,7 +4322,17 @@ export type Action = (
       ],
       ground: {
         xp: 119,
-        gold: 6
+        gold: 6,
+        xpByDirection: {
+          right: 0,
+          "down-right": 0,
+          down: 0,
+          "down-left": 0,
+          left: 0,
+          "up-left": 0,
+          up: 0,
+          "up-right": 0
+        }
       },
       prices: {
         crate: 30,

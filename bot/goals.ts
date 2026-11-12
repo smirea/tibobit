@@ -9,13 +9,13 @@ import { onChest, plural, priceWords } from "./phrasing";
 import { type ActionTag, type GoalResult, type Inspect, SPOT_TAGS } from "../protocol/pilot";
 import type { Direction } from "../protocol/geometry";
 import type { CommandStatus } from "../protocol/commands";
-import { recentLoss, type World } from "./world";
+import { recentLoss, type Sector, type World } from "./world";
 import { say } from "./server";
 import { RunLog } from "./run-log/writer";
 import { goalCell, goalTitleCell, hurtLeaveCell, targetCell } from "./run-log/cells";
 
 /** `pickup` is something the game drops on the ground other than xp, gold, chests and food, such as a magnet. `still` lasts until another goal takes over. */
-export type Goal = { kind: "chest" | "poi" | "food" | "elite" | "pickup"; uid: number } | { kind: "explore" | "dash"; dir: Direction } | { kind: "evade" } | { kind: "still" };
+export type Goal = { kind: "chest" | "poi" | "food" | "elite" | "pickup"; uid: number } | { kind: "explore" | "dash"; dir: Direction } | { kind: "evade" } | { kind: "still" } | { kind: "xp" };
 
 type TargetGoal = Extract<Goal, { uid: number }>;
 
@@ -43,6 +43,8 @@ export type Pursuit = {
   commandId?: number;
   /** The command now steering it, to send it again only when it changes or ends. */
   sent?: string;
+  /** The way an xp goal walks now, kept until another way is clearly better. */
+  way?: Direction;
 };
 
 /** Where a goal points now. `heading` is absent while evading, which always asks the action model. */
@@ -126,6 +128,8 @@ export function goalTitle(g: Goal, r: World): string {
       return `Dash ${g.dir}`;
     case "still":
       return "Stand still";
+    case "xp":
+      return "Gather xp";
   }
 }
 
@@ -151,6 +155,8 @@ function goalTag(g: Goal, r: World): ActionTag {
       return "Dash";
     case "still":
       return "Hold";
+    case "xp":
+      return "Xp";
   }
 }
 
@@ -193,7 +199,36 @@ export function aimAt(p: Pursuit, r: World): Course | Ended {
       return { heading: g.dir, progress: `dashing ${g.dir}` };
     case "still":
       return { heading: "stay", progress: `standing still for ${Math.round(age)}s` };
+    case "xp":
+      return gatherXp(p, r);
   }
+}
+
+const MAGNET_REACH = 500;
+// A way must beat the one walked by this much to take over, so Tibo does not turn back and forth every step.
+const XP_TURN = 1.3;
+
+/** One step of gathering xp: a magnet near and safe, else the safe way with the most xp for its enemies, else the emptiest safe way. */
+function gatherXp(p: Pursuit, r: World): Course {
+  const damage = (d: Direction) => {
+    const v = r.view.directions[d];
+    return v === undefined ? 0 : v.dead ? Number.POSITIVE_INFINITY : v.estimatedDamage;
+  };
+  const least = Math.min(...r.sectors.map((s) => damage(s.dir)));
+  const safe = r.sectors.filter((s) => damage(s.dir) <= least + knobs().extraDamage * r.maxHp);
+  const magnet = r.pickups.find((x) => x.type === "magnet" && x.dist < MAGNET_REACH && (x.dir === "still" || safe.some((s) => s.dir === x.dir)));
+  if (magnet !== undefined) return { heading: magnet.dir === "still" ? "stay" : magnet.dir, progress: `to the magnet ${Math.round(magnet.dist)} away`, to: { pickup: magnet.id } };
+  const worth = (s: Sector) => s.xp / (1 + s.enemies);
+  const best = [...safe].sort((a, z) => worth(z) - worth(a) || a.enemies - z.enemies)[0];
+  if (best === undefined || worth(best) < 1) {
+    const emptiest = [...safe].sort((a, z) => a.enemies - z.enemies)[0];
+    p.way = emptiest?.dir;
+    return emptiest === undefined ? { progress: "no safe way" } : { heading: emptiest.dir, progress: `no xp near; away from enemies, ${emptiest.dir}` };
+  }
+  const kept = safe.find((s) => s.dir === p.way);
+  const way = kept !== undefined && worth(kept) * XP_TURN >= worth(best) ? kept : best;
+  p.way = way.dir;
+  return { heading: way.dir, progress: `${Math.round(way.xp)} xp ${way.dir}, ${way.enemies} enemies that way` };
 }
 
 /** What a goal is after, by the game's kind for a spot or an elite, and where it is now. */
@@ -224,7 +259,7 @@ function begin(goal: Goal, r: World, log: RunLog, decision: Inspect) {
   };
   const aim = aimAt(p, r);
   const seconds = goal.kind === "evade" ? knobs().evadeSeconds : goal.kind === "elite" ? knobs().eliteSeconds : "left" in aim && aim.left !== undefined ? aim.left / GOAL_SPEED : 0;
-  p.deadline = goal.kind === "still" ? Number.POSITIVE_INFINITY : r.time + seconds + GOAL_SLACK;
+  p.deadline = goal.kind === "still" || goal.kind === "xp" ? Number.POSITIVE_INFINITY : r.time + seconds + GOAL_SLACK;
   pursuit = p;
   log.write(r, { event: "goal", goal: p.id, action: "start", detail: title, ...(target === undefined ? {} : { target: targetCell.encode(target) }) });
   say({ role: "action", model: "goal", time: r.time, text: title, tag: p.tag, detail: "done" in aim ? aim.done : aim.progress, inspect: decision });
@@ -253,7 +288,7 @@ export function setGoal(goal: Goal, r: World, log: RunLog, decision: Inspect, dr
 /** Why the current goal ends now, if it does. */
 export function ending(p: Pursuit, r: World, aim: Course | Ended, status: CommandStatus | undefined): Ended | undefined {
   if ("done" in aim) return aim;
-  if (status?.command.type === "goto" && status.state === "done") return { done: TARGET_DONE[(p.goal as TargetGoal).kind], success: true };
+  if (status?.command.type === "goto" && status.state === "done" && "uid" in p.goal) return { done: TARGET_DONE[(p.goal as TargetGoal).kind], success: true };
   // A goto that runs out its time, and food collected on touch (gone before the goto counts it as
   // reached), end without saying how the goal went; the next step's look at the target tells.
   if (status?.state === "failed" && status.failure !== "timeout" && status.failure !== "targetGone") return { done: `the game said: ${status.detail ?? "failed"}`, success: false };

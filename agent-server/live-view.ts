@@ -236,6 +236,7 @@ export function liveView(s: Snapshot, b: Book): LiveView | undefined {
               .map(([source]) => sourceName(b, source)),
           }),
       ...(bullets === 0 ? {} : { bullets }),
+      ...(dir === "still" || around.pickups.xp[dir] === 0 ? {} : { xp: around.pickups.xp[dir] }),
       ...(enters.length === 0 ? {} : { enters: [...new Set(enters)] }),
     };
   }

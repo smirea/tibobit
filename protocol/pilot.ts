@@ -75,7 +75,7 @@ export type Inspect =
  */
 const ACTION_TAGS = [
   ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
-  ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer"],
+  ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer", "Xp"],
   ...["Dash", "Hold", "Start", "Take over", "Over", "Stopped"],
 ] as const;
 export type ActionTag = (typeof ACTION_TAGS)[number];
