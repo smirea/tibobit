@@ -1,6 +1,6 @@
 // The game's content as agents use it, built from the encyclopedia: English names and descriptions
 // by kind and id, recipes from the game's own weapon and item definitions, and dog definitions.
-import { buildCatalog, type Catalog, type Combo, comboProgress, combosUsing, idOf, type Key, type Loadout, nameOf, partner, toCombo } from "./catalog";
+import { buildCatalog, type Catalog, type Combo, toCombo } from "./catalog";
 import type { Content, Messages } from "./types";
 import type { Encyclopedia } from "../protocol/snapshot";
 
@@ -62,15 +62,3 @@ export function bookFrom(e: Encyclopedia): Book {
 
 /** The game's English line for a content entry, such as its name or desc, or undefined when the game has none. */
 export const line = (b: Book, kind: string, id: string, field = "name") => b.text.get(`${kind}:${id}`)?.[field];
-
-/** Recipes that use `key` and are not made yet, with whether its partner is held or banished and whether holding `key` at `level` completes it. */
-export function pairings(b: Book, now: Loadout, banished: string[], key: Key, level: number) {
-  const after: Loadout = new Map(now);
-  after.set(key, key.startsWith("item:") ? (now.get(key) ?? 0) + 1 : level);
-  return combosUsing(b.combos, key)
-    .filter((c) => !now.has(c.result))
-    .map((c) => {
-      const other = partner(c, key).key;
-      return { combo: c, name: nameOf(b.catalog, c.result), partner: nameOf(b.catalog, other), partnerHeld: now.has(other), partnerBanished: banished.includes(idOf(other)), ready: comboProgress(c, after, b.catalog).every((s) => s === "done") };
-    });
-}

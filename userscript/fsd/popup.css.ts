@@ -68,7 +68,8 @@ export const css = `
 .tbh-fsd-build-stale { color: var(--gold); }
 .tbh-fsd-code-label { margin-top: 12px; }
 .tbh-fsd-now { font-size: 11.5px; color: #7fe3a4; }
-.tbh-fsd-now[hidden] { display: none; }
+.tbh-fsd-now[hidden], .tbh-fsd-memory[hidden] { display: none; }
+.tbh-fsd-memory { margin: 0; padding: 6px 10px; max-height: 18vh; overflow: auto; font: inherit; font-size: 11px; color: #dbe6ff; background: rgba(127,227,164,.07); border: 1px solid rgba(127,227,164,.25); border-radius: 6px; }
 .tbh-fsd-now-error { color: var(--bad); }
 .tbh-fsd-builder .tbh-code { max-height: 52vh; }
 .tbh-fsd-block-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 10px; color: #7fd6ff; }

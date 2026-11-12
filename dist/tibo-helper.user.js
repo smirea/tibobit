@@ -268,11 +268,6 @@
       return;
     return button("Leaderboard") === undefined ? "openWorld" : "daily";
   }
-  function choiceCards() {
-    const cards = [...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")];
-    const buttons = [...document.querySelectorAll("button")].filter((b) => !b.matches(".ui-card, .ui-pause-btn, .ui-sound") && !b.closest(OURS) && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "" && !/^banish/i.test((b.textContent ?? "").trim()));
-    return [...cards, ...buttons];
-  }
   function pauseMenuOpen() {
     return [...document.querySelectorAll("button")].some((b) => !b.closest(OURS) && b.textContent?.trim() === "Resume" && b.getClientRects().length > 0);
   }
@@ -624,14 +619,17 @@
 
   // protocol/drive.ts
   var EXAMPLE_REQUEST = "Farm xp by walking toward the fewest enemies. Open gold chests and chests and grab magnets when they are close, and use Spud Shrines while it is calm. Under 40% health, eat food if there is any; otherwise get away, dashing when hit hard, and keep clear until health is back over 70%.";
-  var EXAMPLE_CODE = `function drive(state: State): Action {
-  const { tibo, enemies, previous } = state;
+  var EXAMPLE_CODE = `type Memory = { retreating?: boolean };
+
+function drive(state: State, memory: Memory): Action {
+  const { tibo, enemies } = state;
   const pickups = state.pickups.filter((p) => !p.gaveUp);
   const pois = state.pois.filter((p) => !p.gaveUp);
   const health = (tibo.hp / tibo.maxHp) * 100;
-  const retreating = previous?.action.why?.startsWith("retreat") === true && health < 70;
+  if (health < 40) memory.retreating = true;
+  if (health >= 70) memory.retreating = false;
 
-  if (health < 40 || retreating) {
+  if (memory.retreating) {
     const heal = pickups.find((p) => p.kind === "heal");
     if (heal) return { type: "pickup", id: heal.id, why: "retreat: eat" };
     if (tibo.hurt > 15) return { type: "dash", dir: enemies.fewest, why: "retreat: dash out" };
@@ -733,6 +731,7 @@
     dogs: "each of Tibo's dogs: name, breed, the game's description, level, the game's own definition (ability, aura, levelUps and the rest) and what it has done so far by the game's counts",
     events: "what the game showed in the last 15 seconds (boss arrivals, banners, chests), with the times",
     counters: "every number in the game's counters and run that is not zero: distance, hits, crits, nearMisses, dodgePoints, peakEnemies, goldEarned, shrinesUsed and the rest",
+    offer: "the choice open now, for the picker: everything Tibo has equipped with the game's descriptions, every option offered with its description (a new weapon, passive or item marked when it leads to an evolution), and every evolution recipe that can still be found",
     state: "a short default, one per line: time, health, level, gold, dash, weapons, passives, items, banished (when any), recipes, evolutions, standing_on, hurt_by, bosses, enemies, current_goal and recent_goals. Every other block is left out unless a template names it"
   };
   var KNOBS = {
@@ -853,7 +852,7 @@ Goal: {{goal}}.
       return this.shown;
     }
     active() {
-      return this.current.state !== "off" && this.live && this.shown !== undefined ? { ...this.shown.action === undefined ? {} : { action: this.shown.action }, ...this.shown.error === undefined ? {} : { error: this.shown.error } } : undefined;
+      return this.current.state !== "off" && this.live && this.shown !== undefined ? { memory: this.shown.memory, ...this.shown.action === undefined ? {} : { action: this.shown.action }, ...this.shown.error === undefined ? {} : { error: this.shown.error } } : undefined;
     }
     building() {
       return this.build?.since;
@@ -2294,6 +2293,7 @@ Goal: {{goal}}.
     enums;
     messages = {};
     icons;
+    hand;
     error;
     steer;
     inPool;
@@ -2359,9 +2359,10 @@ Goal: {{goal}}.
       this.seen.add(url);
       if (SIM_CHUNK.test(url))
         this.attachSim(url).catch((e) => this.fail(e));
-      else if (BOOT_CHUNK.test(url))
+      else if (BOOT_CHUNK.test(url)) {
         this.loadIcons(url).catch((e) => console.warn("[tibobit] no game icons:", e instanceof Error ? e.message : e));
-      else if (ENGLISH_CHUNK.test(url))
+        this.loadHand(url).catch((e) => console.warn("[tibobit] no game hand:", e instanceof Error ? e.message : e));
+      } else if (ENGLISH_CHUNK.test(url))
         this.loadMessages(url).catch((e) => this.fail(e));
     }
     async attachSim(url) {
@@ -2440,6 +2441,29 @@ Goal: {{goal}}.
         throw new Error("the sim chunk does not export its pool hit test");
       this.inPool = inPool;
       this.contentFn = contentFn.value;
+      this.changed();
+    }
+    async loadHand(bootUrl) {
+      const boot = await (await fetch(bootUrl)).text();
+      const chunk = (pattern, what) => {
+        const name = boot.match(pattern)?.[1];
+        if (name === undefined)
+          throw new Error(`the boot chunk names no ${what}`);
+        return new URL(name, bootUrl).href;
+      };
+      const photoUrl = chunk(/"(\.\/hand-photo-[\w-]+\.js)"/, "hand photo chunk");
+      const shapeUrl = chunk(/"(\.\/hand-photo\.generated-[\w-]+\.js)"/, "hand shape chunk");
+      const [photo, shape] = await Promise.all([photoUrl, shapeUrl].map(async (u) => (await fetch(u)).text()));
+      const image = photo?.match(/`(hand-[\w-]+\.webp)`/)?.[1];
+      if (image === undefined)
+        throw new Error("the hand photo chunk names no image");
+      const n = (key) => {
+        const value = Number(shape?.match(new RegExp(`\\b${key}:(\\d+)`))?.[1]);
+        if (!Number.isFinite(value))
+          throw new Error(`the hand shape chunk has no ${key}`);
+        return value;
+      };
+      this.hand = { url: new URL(image, photoUrl).href, width: n("width"), height: n("height"), tipX: n("tipX"), tipY: n("tipY") };
       this.changed();
     }
     async loadIcons(url) {
@@ -3330,7 +3354,8 @@ Goal: {{goal}}.
 .tbh-fsd-build-stale { color: var(--gold); }
 .tbh-fsd-code-label { margin-top: 12px; }
 .tbh-fsd-now { font-size: 11.5px; color: #7fe3a4; }
-.tbh-fsd-now[hidden] { display: none; }
+.tbh-fsd-now[hidden], .tbh-fsd-memory[hidden] { display: none; }
+.tbh-fsd-memory { margin: 0; padding: 6px 10px; max-height: 18vh; overflow: auto; font: inherit; font-size: 11px; color: #dbe6ff; background: rgba(127,227,164,.07); border: 1px solid rgba(127,227,164,.25); border-radius: 6px; }
 .tbh-fsd-now-error { color: var(--bad); }
 .tbh-fsd-builder .tbh-code { max-height: 52vh; }
 .tbh-fsd-block-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 10px; color: #7fd6ff; }
@@ -3635,7 +3660,7 @@ export type State = {
   boosts: { name: string; endsIn: number }[];
   /** The next boss, elite and event to come, with the run second each comes at. */
   upcoming: { at: number; text: string }[];
-  /** What \`drive\` returned last time and for how many seconds it has returned the same; null on the first call. */
+  /** What \`drive\` returned last time and for how many seconds it has returned the same; null on the first call. To remember anything else, keep it in \`memory\`. */
   previous: { action: Action; seconds: number } | null;
 };
 
@@ -4562,7 +4587,8 @@ Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore dow
     const declared = codeView(fields, types);
     declared.show(DRIVER_TYPES.trim());
     const now = h("div", "tbh-fsd-now");
-    const builderPane = h("section", "tbh-fsd-builder", h("h3", "tbh-fsd-label", "Function builder"), h("p", "tbh-fsd-hint", "Describe how Tibo should play. Opus 5.5 turns it into one TypeScript function that reads the state and returns what the autopilot does next. TypeScript checks that it always returns an action before the bot runs it."), builder.wrap, h("div", "tbh-fsd-build-row", buildButton, buildNote), buildErrors, h("h3", "tbh-fsd-label tbh-fsd-code-label", "Function"), now, code.el, h("details", "tbh-fsd-fold", h("summary", "", "The types it is written against"), declared.el));
+    const memory = h("pre", "tbh-fsd-memory");
+    const builderPane = h("section", "tbh-fsd-builder", h("h3", "tbh-fsd-label", "Function builder"), h("p", "tbh-fsd-hint", "Describe how Tibo should play. Opus 5.5 turns it into one TypeScript function that reads the state and returns what the autopilot does next. It may keep anything it needs in a memory that lasts the run. TypeScript checks that it always returns an action before the bot runs it."), builder.wrap, h("div", "tbh-fsd-build-row", buildButton, buildNote), buildErrors, h("h3", "tbh-fsd-label tbh-fsd-code-label", "Function"), now, memory, code.el, h("details", "tbh-fsd-fold", h("summary", "", "The types it is written against"), declared.el));
     for (const view of [code, declared]) {
       view.el.addEventListener("pointerover", (e) => {
         const at = view.hoverAt(e.target);
@@ -4671,6 +4697,9 @@ Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore dow
       now.classList.toggle("tbh-fsd-now-error", active?.error !== undefined);
       now.textContent = active?.error !== undefined ? `drive threw: ${active.error}` : active?.action === undefined ? "" : `Now: ${active.action.why ?? ""} (${actionWords(active.action)})`;
       code.show(d.code, active?.action?.why);
+      const kept = active === undefined || Object.keys(active.memory).length === 0 ? undefined : active.memory;
+      memory.hidden = kept === undefined;
+      memory.textContent = kept === undefined ? "" : `memory: ${JSON.stringify(kept, null, 2)}`;
       const live = pilot.preview();
       for (const [path, { value }] of fieldEls)
         value.textContent = brief(read(live?.state ?? state_example_default.state, path));
@@ -4926,40 +4955,51 @@ Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore dow
 
   // userscript/pilot/pick-overlay.css.ts
   var css10 = `
-.tbh-pick-layer { position: fixed; inset: 0; z-index: 2147482999; pointer-events: none; font: 800 12px/1.3 ui-monospace, Menlo, Consolas, monospace; }
+.tbh-pick-layer { position: fixed; inset: 0; z-index: 2147483001; pointer-events: none; font: 800 12px/1.3 ui-monospace, Menlo, Consolas, monospace; }
 .tbh-pick-layer[hidden], .tbh-pick-layer [hidden] { display: none; }
 .tbh-pick-banner { position: fixed; transform: translate(-50%, -100%); box-sizing: border-box; padding: 5px 12px; text-align: center; color: #f3e6c4; background: rgba(42,33,64,.95); border: 1px solid #c9a0ff; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
 .tbh-pick-bar { position: fixed; display: flex; align-items: center; gap: 6px; box-sizing: border-box; padding: 0 2px; transition: opacity .3s; }
 .tbh-pick-track { flex: 1; height: 7px; border-radius: 4px; background: rgba(0,0,0,.55); box-shadow: 0 0 0 1px rgba(255,255,255,.15); overflow: hidden; }
 .tbh-pick-track > i { display: block; height: 100%; background: #7fa8ff; }
 .tbh-pick-pct { color: #fff; text-shadow: 0 1px 2px #000; }
+.tbh-pick-tag { padding: 0 4px; border-radius: 3px; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: #fff; background: #c4473a; }
+.tbh-pick-banish .tbh-pick-track > i { background: #ff7a6b; }
 .tbh-pick-dim { opacity: .35; }
 .tbh-pick-frame { position: fixed; box-sizing: border-box; border: 3px solid transparent; border-radius: 10px; transition: border-color .08s, box-shadow .08s; }
 .tbh-pick-on { border-color: #ffd36b; box-shadow: 0 0 14px rgba(255,211,107,.7); }
 .tbh-pick-final { border-color: #ffd36b; box-shadow: 0 0 26px 4px rgba(255,211,107,.9); animation: tbh-pick-pulse .7s ease-in-out infinite alternate; }
+.tbh-pick-frame-banish.tbh-pick-on, .tbh-pick-frame-banish.tbh-pick-final { border-color: #ff7a6b; box-shadow: 0 0 22px 3px rgba(255,122,107,.85); }
 @keyframes tbh-pick-pulse { to { box-shadow: 0 0 10px 1px rgba(255,211,107,.5); } }
-/* Positioned by its tip end: above a card pointing down, or left of it pointing right. */
-.tbh-pick-arrow { position: fixed; width: 48px; height: 48px; transform: translate(-100%, -50%); color: #ffd36b; filter: drop-shadow(0 0 6px rgba(255,211,107,.8)) drop-shadow(0 2px 2px rgba(0,0,0,.8)); }
-.tbh-pick-arrow.tbh-pick-arrow-down { transform: translate(-50%, -100%); }
-.tbh-pick-arrow-icon { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.tbh-pick-arrived .tbh-pick-arrow-icon { animation: tbh-pick-bob-x .45s ease-in-out infinite alternate; }
-.tbh-pick-arrived.tbh-pick-arrow-down .tbh-pick-arrow-icon { animation-name: tbh-pick-bob-y; }
-@keyframes tbh-pick-bob-x { to { transform: translateX(-8px); } }
-@keyframes tbh-pick-bob-y { to { transform: translateY(-8px); } }
-@media (prefers-reduced-motion: reduce) { .tbh-pick-final, .tbh-pick-arrived .tbh-pick-arrow-icon { animation: none; } }
+/* The game's own hand photo, placed by its fingertip; once there it presses the pick the way the menu's hand presses reset. */
+.tbh-pick-hand { position: fixed; filter: drop-shadow(0 6px 10px rgba(0,0,0,.55)); transform-origin: 83% 99%; }
+.tbh-pick-pressing { animation: tbh-pick-press .55s ease-in-out infinite; }
+@keyframes tbh-pick-press { 0%, 100% { transform: translateY(-6px); } 45% { transform: translateY(3px) scale(.97); } 60% { transform: translateY(3px) scale(.97); } }
+@media (prefers-reduced-motion: reduce) { .tbh-pick-final, .tbh-pick-pressing { animation: none; } }
 `;
 
   // userscript/pilot/pick-overlay.ts
   var SHOW_MS = PICK_SHOW_MS - 500;
   var ARRIVE_MS = 700;
   var FRESH_MS = 8000;
-  function startPickOverlay(pilot) {
+  var HAND_HEIGHT = 130;
+  function buttons() {
+    return [...document.querySelectorAll("button")].filter((b) => !b.matches(".ui-card, .ui-pause-btn, .ui-sound") && !b.closest(OURS) && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "");
+  }
+  var BUTTON_WORDS = { reroll: /reroll/i, skip: /skip/i, banish: /banish/i, close: /leave|close|keep|no thanks|done/i, continue: /continue|ok|take|collect/i, accept: /accept|take/i, endRun: /end/i };
+  function elementOf(option, cards, plain) {
+    const a = option.action;
+    if ("index" in a)
+      return cards[a.index];
+    const name = option.card.trim().toLowerCase();
+    return plain.find((b) => (b.textContent ?? "").trim().toLowerCase().startsWith(name)) ?? plain.find((b) => BUTTON_WORDS[a.type]?.test(b.textContent ?? "") === true);
+  }
+  function startPickOverlay(pilot, link) {
     addStyle(css10);
     const layer = h("div", "tbh-pick-layer");
     const banner = h("div", "tbh-pick-banner");
-    const arrows = { down: moveIcon("down", "tbh-pick-arrow-icon"), right: moveIcon("right", "tbh-pick-arrow-icon") };
-    const arrow = h("div", "tbh-pick-arrow");
-    layer.append(banner, arrow);
+    const hand = h("img", "tbh-pick-hand");
+    hand.alt = "";
+    layer.append(banner, hand);
     document.body.append(layer);
     let show;
     const bars = new Map;
@@ -4976,9 +5016,9 @@ Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore dow
       const m = latestPick();
       if (m === undefined || m.id === show?.id || m.inspect?.kind !== "plan" || m.inspect.choices === undefined)
         return;
-      const options = m.inspect.choices.filter((c) => c.index !== undefined);
-      const chosen = options.find((c) => c.chosen)?.index;
-      if (chosen === undefined)
+      const options = m.inspect.choices.filter((c) => c.action !== undefined);
+      const chosen = options.findIndex((c) => c.chosen);
+      if (chosen < 0)
         return;
       show = { id: m.id, seen: performance.now() - Math.max(0, Date.now() - m.at), text: m.text, options, chosen };
       for (const { bar, frame } of bars.values()) {
@@ -4986,62 +5026,70 @@ Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore dow
         frame.remove();
       }
       bars.clear();
-      for (const c of options) {
+      for (const [i, c] of options.entries()) {
+        const pct = Math.round((c.probability ?? 0) * 100);
         const fill = document.createElement("i");
-        const label = h("div", "tbh-pick-pct", `${Math.round((c.probability ?? 0) * 100)}%`);
-        const bar = h("div", "tbh-pick-bar");
+        fill.style.width = `${pct}%`;
         const track = h("div", "tbh-pick-track");
         track.append(fill);
-        fill.style.width = `${Math.round((c.probability ?? 0) * 100)}%`;
-        bar.append(track, label);
-        const frame = h("div", "tbh-pick-frame");
+        const banish = c.action.type === "banish";
+        const bar = h("div", `tbh-pick-bar${banish ? " tbh-pick-banish" : ""}`, ...banish ? [h("span", "tbh-pick-tag", "banish")] : [], track, h("div", "tbh-pick-pct", `${pct}%`));
+        const frame = h("div", `tbh-pick-frame${banish ? " tbh-pick-frame-banish" : ""}`);
         layer.append(bar, frame);
-        bars.set(c.index ?? 0, { bar, frame });
+        bars.set(i, { bar, frame });
       }
       banner.textContent = m.text;
     });
     const frame = () => {
       requestAnimationFrame(frame);
-      const cards = choiceCards();
       const age = show === undefined ? Number.POSITIVE_INFINITY : performance.now() - show.seen;
-      const choosing = document.querySelector(".ui-card") !== null;
-      const visible = show !== undefined && pilot.state().state !== "off" && choosing && cards.length > 0 && age < FRESH_MS;
+      const choosing = (link.game?.state.choiceQueue.length ?? 0) > 0;
+      const visible = show !== undefined && pilot.state().state !== "off" && choosing && age < FRESH_MS;
       layer.hidden = !visible;
       if (!visible || show === undefined)
         return;
+      const cards = [...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")].filter((c) => c.parentElement?.closest(OURS) === null);
+      const plain = buttons();
       const done = age >= SHOW_MS;
       const arrived = age >= ARRIVE_MS;
       let top = Number.POSITIVE_INFINITY;
       let left = Number.POSITIVE_INFINITY;
       let right = 0;
-      for (const [index, parts] of bars) {
-        const rect = cards[index]?.getBoundingClientRect();
+      let pick;
+      for (const [i, parts] of bars) {
+        const option = show.options[i];
+        const rect = option === undefined ? undefined : elementOf(option, cards, plain)?.getBoundingClientRect();
         const shown = rect !== undefined && rect.width > 0;
         parts.bar.hidden = parts.frame.hidden = !shown;
-        if (!shown)
+        if (!shown || option === undefined)
           continue;
+        if (i === show.chosen)
+          pick = rect;
         top = Math.min(top, rect.top);
         left = Math.min(left, rect.left);
         right = Math.max(right, rect.right);
-        Object.assign(parts.bar.style, { left: `${rect.left}px`, top: `${rect.top - 22}px`, width: `${rect.width}px` });
+        const below = option.action.type === "banish";
+        Object.assign(parts.bar.style, { left: `${rect.left}px`, top: `${below ? rect.bottom + 6 : rect.top - 22}px`, width: `${Math.max(rect.width, 90)}px` });
         Object.assign(parts.frame.style, { left: `${rect.left - 3}px`, top: `${rect.top - 3}px`, width: `${rect.width + 6}px`, height: `${rect.height + 6}px` });
-        parts.frame.classList.toggle("tbh-pick-on", arrived && index === show.chosen);
-        parts.frame.classList.toggle("tbh-pick-final", done && index === show.chosen);
-        parts.bar.classList.toggle("tbh-pick-dim", done && index !== show.chosen);
+        parts.frame.classList.toggle("tbh-pick-on", arrived && i === show.chosen);
+        parts.frame.classList.toggle("tbh-pick-final", done && i === show.chosen);
+        parts.bar.classList.toggle("tbh-pick-dim", done && i !== show.chosen);
       }
-      const pick = cards[show.chosen]?.getBoundingClientRect();
-      arrow.hidden = pick === undefined || pick.width === 0;
-      if (pick !== undefined && pick.width > 0) {
-        const sideBySide = right - left > pick.width * 1.5;
-        const icon = sideBySide ? arrows.down : arrows.right;
-        if (arrow.firstChild !== icon)
-          arrow.replaceChildren(icon);
+      const shape = link.hand;
+      hand.hidden = pick === undefined || shape === undefined;
+      if (pick !== undefined && shape !== undefined) {
+        if (hand.src !== shape.url)
+          hand.src = shape.url;
+        const scale = HAND_HEIGHT / shape.height;
+        hand.style.width = `${shape.width * scale}px`;
+        hand.style.height = `${HAND_HEIGHT}px`;
         const t = Math.min(1, age / ARRIVE_MS);
         const eased = 1 - (1 - t) ** 3;
-        const [fromX, fromY, toX, toY] = sideBySide ? [left, pick.top - 14, pick.left + pick.width / 2, pick.top - 14] : [left - 2, top, pick.left + 2, pick.top + pick.height / 2];
-        Object.assign(arrow.style, { left: `${fromX + (toX - fromX) * eased}px`, top: `${fromY + (toY - fromY) * eased}px` });
-        arrow.classList.toggle("tbh-pick-arrow-down", sideBySide);
-        arrow.classList.toggle("tbh-pick-arrived", arrived);
+        const [fromX, fromY, toX, toY] = [left, top - 60, pick.left + pick.width / 2, pick.top + Math.min(18, pick.height / 3)];
+        const x = fromX + (toX - fromX) * eased;
+        const y = fromY + (toY - fromY) * eased;
+        Object.assign(hand.style, { left: `${x - shape.tipX * scale}px`, top: `${y - shape.tipY * scale}px` });
+        hand.classList.toggle("tbh-pick-pressing", arrived);
       }
       if (Number.isFinite(top))
         Object.assign(banner.style, { left: `${(left + right) / 2}px`, top: `${top - 66}px`, maxWidth: `${Math.max(240, right - left)}px` });
@@ -5296,7 +5344,7 @@ Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore dow
     forecaster.start();
     const bridge = startBridge(link, controller, forecaster);
     startPanel(link, discovery, bridge);
-    startPickOverlay(bridge.pilot);
+    startPickOverlay(bridge.pilot, link);
   }
   if (document.body === null)
     document.addEventListener("DOMContentLoaded", start, { once: true });

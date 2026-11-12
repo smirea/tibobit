@@ -1,5 +1,5 @@
 // The bot at the wheel: its settings, and the lines it shows in the panel.
-import type { Envelope } from "./commands";
+import type { ChoiceAction, Envelope } from "./commands";
 import { fail, num } from "./parse";
 import type { Direction } from "./geometry";
 import { type Drive, parseDrive } from "./drive";
@@ -18,10 +18,10 @@ export type PilotState = { state: "off" | "on" | "stopping"; detail?: string };
 export type PilotChange = { on?: boolean; drive?: Drive };
 
 /**
- * The game as the bot last read it, for the panel: the state its function was called with, the
- * action that returned or why it threw, and every state block the picker can embed (bot/templates.ts BLOCKS).
+ * The game as the bot last read it, for the panel: the state its function was called with, what
+ * the function keeps in its memory, the action that returned or why it threw, and every state block the picker can embed (bot/templates.ts BLOCKS).
  */
-export type StatePreview = { time: number; state: State; action?: Action; error?: string; blocks: Record<string, string> };
+export type StatePreview = { time: number; state: State; memory: Record<string, unknown>; action?: Action; error?: string; blocks: Record<string, string> };
 
 /** Validates a change to the pilot from the panel or a script; throws with a message a caller can act on. */
 export function parsePilotChange(input: unknown): PilotChange {
@@ -39,7 +39,8 @@ export function parseStatePreview(input: unknown): StatePreview {
   if (typeof blocks !== "object" || blocks === null || Object.values(blocks).some((v) => typeof v !== "string")) fail("blocks must map each block name to its text");
   if (typeof p.state !== "object" || p.state === null) fail("state must be what the function was called with");
   const error = optionalString(p.error, "error");
-  return { time: num(p.time, "time"), state: p.state as State, ...(p.action === undefined ? {} : { action: p.action as Action }), ...(error === undefined ? {} : { error }), blocks: blocks as Record<string, string> };
+  if (typeof p.memory !== "object" || p.memory === null) fail("memory must be what the function keeps between calls");
+  return { time: num(p.time, "time"), state: p.state as State, memory: p.memory as Record<string, unknown>, ...(p.action === undefined ? {} : { action: p.action as Action }), ...(error === undefined ? {} : { error }), blocks: blocks as Record<string, string> };
 }
 /** How long the bot shows its pick on a choice before taking the card, for someone watching. */
 export const PICK_SHOW_MS = 2000;
@@ -55,8 +56,8 @@ export type MoveOption = {
   useful?: number;
   outcome: "chosen" | "safe" | "risky" | "ruled out";
 };
-/** `index` is the option's position in the open choice, so the page can find its card. */
-export type CardOption = { card: string; notes: string; probability?: number; chosen: boolean; index?: number };
+/** `action` is the game's own action that takes the option, so the page can find its card or button. */
+export type CardOption = { card: string; notes: string; probability?: number; chosen: boolean; action?: ChoiceAction };
 /**
  * What hovering a chat message shows: the question a model got and what it weighed. A plan carries
  * the cards it chose among and every goal it weighed, each with the model's odds.

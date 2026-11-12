@@ -18,6 +18,11 @@ const CONFIG = { compilerOptions: { noEmit: true, strict: true, noImplicitReturn
 // The function is branching over the state. These reach outside it, hide state between calls, or can hang the bot.
 const BANNED = ["import", "require", "eval", "Function", "globalThis", "async", "await", "while", "for", "do", "class", "this", "new"];
 
+/** The memory type a function that declares none gets. */
+export const DEFAULT_MEMORY = "type Memory = Record<string, unknown>;";
+
+export const declaresMemory = (code: string) => /^type Memory\b/m.test(code);
+
 /** The function a reply holds, without a code fence around it or `export` in front. */
 export function codeIn(reply: string): string {
   const fenced = /```(?:ts|typescript)?\n([\s\S]*?)```/.exec(reply)?.[1] ?? reply;
@@ -26,22 +31,23 @@ export function codeIn(reply: string): string {
 
 /** Everything that keeps the function from being run, by its own line numbers; empty when it checks. */
 export async function codeErrors(code: string): Promise<string[]> {
-  if (!/^function drive\s*\(/m.test(code)) return ["the code must declare `function drive(state: State): Action`"];
+  if (!/^function drive\s*\(/m.test(code)) return ["the code must declare `function drive(state: State, memory: Memory): Action`"];
   const bare = code.replace(/\/\/.*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/g, " ");
   const banned = BANNED.filter((word) => new RegExp(`\\b${word}\\b`).test(bare));
   if (banned.length > 0) return [`${banned.map((w) => `\`${w}\``).join(", ")} cannot be used: write plain branching over the state, with array methods such as find, filter and some instead of loops`];
   const dir = mkdtempSync(path.join(os.tmpdir(), "tibo-drive-"));
   try {
-    const prelude = `${DRIVER_TYPES}\n`;
+    // The code may declare what it keeps in its memory; when it does not, its memory holds anything.
+    const prelude = `${DRIVER_TYPES}\n${declaresMemory(code) ? "" : `${DEFAULT_MEMORY}\n`}`;
     const before = prelude.split("\n").length - 1;
     const lines = code.split("\n").length;
-    writeFileSync(path.join(dir, "check.ts"), `${prelude}${code}\nconst signature: (state: State) => Action = drive;\nvoid signature;\n`);
+    writeFileSync(path.join(dir, "check.ts"), `${prelude}${code}\nconst signature: (state: State, memory: Memory) => Action = drive;\nvoid signature;\n`);
     writeFileSync(path.join(dir, "tsconfig.json"), JSON.stringify(CONFIG));
     const tsc = Bun.spawn([TSC, "-p", dir], { cwd: dir, stdout: "pipe", stderr: "pipe" });
     const out = `${await new Response(tsc.stdout).text()}${await new Response(tsc.stderr).text()}`;
     const errors = [...out.matchAll(/check\.ts\((\d+),(\d+)\): error (TS\d+): (.*)$/gm)].map(([, line, column, id, message]) => {
       const at = Number(line) - before;
-      return at > lines ? `drive must be \`function drive(state: State): Action\`: ${message} (${id})` : `line ${at}, column ${column}: ${message} (${id})`;
+      return at > lines ? `drive must be \`function drive(state: State, memory: Memory): Action\`: ${message} (${id})` : `line ${at}, column ${column}: ${message} (${id})`;
     });
     if ((await tsc.exited) !== 0 && errors.length === 0) return [`TypeScript could not check the code: ${out.trim().slice(0, 400)}`];
     return errors;

@@ -298,6 +298,8 @@ const server = Bun.serve<{ raw: string[] }>({
       }
       return errorResponse(`no route ${route}`, 404);
     } catch (e) {
+      // A request the server fails on is its own bug, so it goes to the log as well as to the caller.
+      console.error(`${req.method} ${new URL(req.url).pathname} failed:`, e);
       return errorResponse(e, 500);
     }
   },

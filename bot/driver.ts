@@ -12,7 +12,8 @@ import { recentLoss, type World } from "./world";
 /** How often the panel is shown the state while the action stays the same, and the least time between two lines in its chat, in game seconds. */
 const SHOW_EVERY = 1;
 
-type DriveFunction = (state: State) => Action;
+/** `memory` is the same object on every call of a run, for the function to keep whatever it wants in. */
+type DriveFunction = (state: State, memory: Record<string, unknown>) => Action;
 
 /** The function from its source, which the agent server type-checked before it took the drive. */
 function compile(code: string): DriveFunction {
@@ -98,6 +99,8 @@ export class Driver {
   /** The source `fn` was made from, to tell when the panel sends another. */
   private source = "";
   private previous: { action: Action; key: string; since: number } | undefined;
+  /** What the function keeps between calls; it starts empty each run and with each new function. */
+  private memory: Record<string, unknown> = {};
   /** Why the last call gave no action, if it threw. */
   private problem: string | undefined;
   private shownAt = Number.NEGATIVE_INFINITY;
@@ -110,6 +113,7 @@ export class Driver {
     this.fn = compile(drive.code);
     this.source = drive.code;
     this.previous = undefined;
+    this.memory = {};
     return this.fn;
   }
 
@@ -119,7 +123,7 @@ export class Driver {
     const state = driveState(r, this.previous === undefined ? null : { action: this.previous.action, seconds: Math.round((r.time - this.previous.since) * 10) / 10 });
     let action: Action;
     try {
-      action = fn(state);
+      action = fn(state, this.memory);
       goalFor(action, r);
       this.problem = undefined;
     } catch (e) {
@@ -150,6 +154,6 @@ export class Driver {
   /** Tells the panel what the function reads now and what it returned. */
   show(r: World, state = driveState(r, null)) {
     this.shownAt = r.time;
-    showState({ time: r.time, state, ...(this.previous === undefined ? {} : { action: this.previous.action }), ...(this.problem === undefined ? {} : { error: this.problem }), blocks: renderBlocks(r) });
+    showState({ time: r.time, state, memory: this.memory, ...(this.previous === undefined ? {} : { action: this.previous.action }), ...(this.problem === undefined ? {} : { error: this.problem }), blocks: renderBlocks(r) });
   }
 }

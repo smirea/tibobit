@@ -1,8 +1,10 @@
 // Full Self Driving: what a person sets up in the panel for the bot that plays the tab.
 
 /**
- * `code` is one TypeScript function, `function drive(state: State): Action` (protocol/driver.ts),
- * which the bot calls four times a second and whose action the autopilot carries out. `loadout` is
+ * `code` is one TypeScript function, `function drive(state: State, memory: Memory): Action`
+ * (protocol/driver.ts), which the bot calls four times a second and whose action the autopilot
+ * carries out. `memory` is one object for the whole run that the function may keep anything in; the
+ * code may declare its shape as `type Memory = {...}` above the function. `loadout` is
  * the picker's question at every level-up, chest and shrine, where `{{name}}` embeds a piece of the
  * game state (bot/templates.ts BLOCKS).
  */
@@ -20,14 +22,17 @@ export function parseDrive(input: unknown): Drive {
 export const EXAMPLE_REQUEST =
   "Farm xp by walking toward the fewest enemies. Open gold chests and chests and grab magnets when they are close, and use Spud Shrines while it is calm. Under 40% health, eat food if there is any; otherwise get away, dashing when hit hard, and keep clear until health is back over 70%.";
 
-export const EXAMPLE_CODE = `function drive(state: State): Action {
-  const { tibo, enemies, previous } = state;
+export const EXAMPLE_CODE = `type Memory = { retreating?: boolean };
+
+function drive(state: State, memory: Memory): Action {
+  const { tibo, enemies } = state;
   const pickups = state.pickups.filter((p) => !p.gaveUp);
   const pois = state.pois.filter((p) => !p.gaveUp);
   const health = (tibo.hp / tibo.maxHp) * 100;
-  const retreating = previous?.action.why?.startsWith("retreat") === true && health < 70;
+  if (health < 40) memory.retreating = true;
+  if (health >= 70) memory.retreating = false;
 
-  if (health < 40 || retreating) {
+  if (memory.retreating) {
     const heal = pickups.find((p) => p.kind === "heal");
     if (heal) return { type: "pickup", id: heal.id, why: "retreat: eat" };
     if (tibo.hurt > 15) return { type: "dash", dir: enemies.fewest, why: "retreat: dash out" };

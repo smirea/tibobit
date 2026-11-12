@@ -4,7 +4,7 @@ import type { Drive } from "../protocol/drive";
 import { BLOCKS, checkTemplates, DEFAULT_TEMPLATES, QUESTION_LIMIT, type Templates } from "./templates";
 
 /** What the picker reads before the loadout question. */
-const PICKER = "You pick the upgrades of Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own.\n\nState now:\n\n{{state}}";
+const PICKER = "You pick the upgrades of Tibo, a potato hero in tibo.dog, a survivors game. Weapons fire on their own.\n\nState now:\n\n{{state}}\n\n{{offer}}";
 
 /** What the loadout question may embed: the state blocks, and the kind of choice that is open. */
 export const EMBEDS = { ...BLOCKS, choice: "level-up, chest or shrine" };

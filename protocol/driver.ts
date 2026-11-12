@@ -100,7 +100,7 @@ export type State = {
   boosts: { name: string; endsIn: number }[];
   /** The next boss, elite and event to come, with the run second each comes at. */
   upcoming: { at: number; text: string }[];
-  /** What `drive` returned last time and for how many seconds it has returned the same; null on the first call. */
+  /** What `drive` returned last time and for how many seconds it has returned the same; null on the first call. To remember anything else, keep it in `memory`. */
   previous: { action: Action; seconds: number } | null;
 };
 

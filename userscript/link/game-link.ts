@@ -1,5 +1,5 @@
 import { assertContent, BOOT_CHUNK, ENGLISH_CHUNK, findEnums, findGameClass, importBinding, isRecord, localAt, SIM_CHUNK } from "./chunks";
-import type { Content, Enums, Game, GameEvent, GameState, IconFrame, IconPage, IconSheet, InPool, Messages, Steer, Table } from "../../game/types";
+import type { Content, Enums, Game, GameEvent, GameState, Hand, IconFrame, IconPage, IconSheet, InPool, Messages, Steer, Table } from "../../game/types";
 import { cloneState, isRuleModule, NO_RECORDER, reachable } from "./clone";
 
 // Page-world access to the running game. tibo.dog ships native ES modules, and a module URL
@@ -17,6 +17,8 @@ export class GameLink {
   enums: Enums | undefined;
   messages: Messages = {};
   icons: IconSheet | undefined;
+  /** The photo of a pointing hand the game's main menu presses its reset button with, and where its fingertip is. */
+  hand: Hand | undefined;
   error: string | undefined;
   steer: Steer | undefined;
   inPool: InPool | undefined;
@@ -92,9 +94,12 @@ export class GameLink {
     if (this.seen.has(url)) return;
     this.seen.add(url);
     if (SIM_CHUNK.test(url)) this.attachSim(url).catch((e) => this.fail(e));
-    else if (BOOT_CHUNK.test(url))
+    else if (BOOT_CHUNK.test(url)) {
       // Icons are decoration: without them the panel falls back to initials, so a miss only warns.
       this.loadIcons(url).catch((e) => console.warn("[tibobit] no game icons:", e instanceof Error ? e.message : e));
+      // So is the hand: without it the bot's pick is shown by its glow alone.
+      this.loadHand(url).catch((e) => console.warn("[tibobit] no game hand:", e instanceof Error ? e.message : e));
+    }
     else if (ENGLISH_CHUNK.test(url)) this.loadMessages(url).catch((e) => this.fail(e));
   }
 
@@ -176,6 +181,29 @@ export class GameLink {
     if (typeof inPool !== "function") throw new Error("the sim chunk does not export its pool hit test");
     this.inPool = inPool as InPool;
     this.contentFn = contentFn.value as () => Content;
+    this.changed();
+  }
+
+  // The boot chunk names the hand's chunks in its import map: `hand-photo-<hash>.js` holds the image's
+  // URL, and `hand-photo.generated-<hash>.js` its size and fingertip, as `{width:…,height:…,tipX:…,tipY:…}`.
+  private async loadHand(bootUrl: string) {
+    const boot = await (await fetch(bootUrl)).text();
+    const chunk = (pattern: RegExp, what: string) => {
+      const name = boot.match(pattern)?.[1];
+      if (name === undefined) throw new Error(`the boot chunk names no ${what}`);
+      return new URL(name, bootUrl).href;
+    };
+    const photoUrl = chunk(/"(\.\/hand-photo-[\w-]+\.js)"/, "hand photo chunk");
+    const shapeUrl = chunk(/"(\.\/hand-photo\.generated-[\w-]+\.js)"/, "hand shape chunk");
+    const [photo, shape] = await Promise.all([photoUrl, shapeUrl].map(async (u) => (await fetch(u)).text()));
+    const image = photo?.match(/`(hand-[\w-]+\.webp)`/)?.[1];
+    if (image === undefined) throw new Error("the hand photo chunk names no image");
+    const n = (key: string) => {
+      const value = Number(shape?.match(new RegExp(`\\b${key}:(\\d+)`))?.[1]);
+      if (!Number.isFinite(value)) throw new Error(`the hand shape chunk has no ${key}`);
+      return value;
+    };
+    this.hand = { url: new URL(image, photoUrl).href, width: n("width"), height: n("height"), tipX: n("tipX"), tipY: n("tipY") };
     this.changed();
   }
 

@@ -56,9 +56,9 @@ export class Pilot {
     return this.shown;
   }
 
-  /** What the driving bot's function last returned, or why it threw. */
-  active(): { action?: Action; error?: string } | undefined {
-    return this.current.state !== "off" && this.live && this.shown !== undefined ? { ...(this.shown.action === undefined ? {} : { action: this.shown.action }), ...(this.shown.error === undefined ? {} : { error: this.shown.error }) } : undefined;
+  /** What the driving bot's function last returned, or why it threw, and what it keeps in its memory. */
+  active(): { action?: Action; error?: string; memory: Record<string, unknown> } | undefined {
+    return this.current.state !== "off" && this.live && this.shown !== undefined ? { memory: this.shown.memory, ...(this.shown.action === undefined ? {} : { action: this.shown.action }), ...(this.shown.error === undefined ? {} : { error: this.shown.error }) } : undefined;
   }
 
   /** When the function being written was asked for, if one is. */

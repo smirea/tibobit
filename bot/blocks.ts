@@ -1,4 +1,5 @@
-import { fields, groundSources, pct, poiWhat, priceWords, spotLine } from "./phrasing";
+import { fields, groundSources, pct, plural, poiWhat, priceWords, spotLine } from "./phrasing";
+import { type Combo, idOf, type Key, type Loadout, nameOf, type Part, partner } from "../game/catalog";
 import { difficulty, MODE_NAME } from "./run-context";
 import type { BlockName } from "./templates";
 import type { ChoiceAction } from "../protocol/commands";
@@ -12,25 +13,92 @@ import { clock } from "../clock";
 /** One thing Tibo can do on the open choice: the game's own action, and the words the planner weighs it by. */
 export type Card = { action: ChoiceAction; name: string; notes: string[]; text: string };
 
+/** What Tibo holds, by the game's keys, at the level (or count) held. */
+function heldLoadout(r: World): Loadout {
+  return new Map<Key, number>([...r.weapons.map((w) => [`weapon:${w.id}`, w.level] as const), ...r.passives.map((p) => [`passive:${p.id}`, p.level] as const), ...r.items.map((i) => [`item:${i.id}`, i.count] as const)]);
+}
+
+/** Recipes not made yet whose parts are none of them banished: the evolutions this run can still reach. */
+function findable(r: World): Combo[] {
+  const held = heldLoadout(r);
+  const banished = new Set(r.view.tibo.banished);
+  return r.book.combos.filter((c) => !held.has(c.result) && c.parts.every((p) => !banished.has(idOf(p.key))));
+}
+
+/** A recipe's part as the picker reads it: its name, and how far Tibo has it. */
+function partWords(r: World, p: Part, held: Loadout): string {
+  const have = held.get(p.key);
+  const max = r.book.catalog.maxLevel[p.key] ?? 1;
+  const need = p.need === "max" ? `, needed at level ${max}` : "";
+  return `${nameOf(r.book.catalog, p.key)} (${have === undefined ? "not found yet" : p.key.startsWith("item:") ? "equipped" : `equipped at ${have}/${max}`}${need})`;
+}
+
+/** The evolutions an offered entry Tibo does not hold yet leads to, with the other part each needs. */
+function evolutionsOf(r: World, key: Key): string[] {
+  const held = heldLoadout(r);
+  if (held.has(key)) return [];
+  return findable(r)
+    .filter((c) => c.parts.some((p) => p.key === key))
+    .map((c) => `into ${nameOf(r.book.catalog, c.result)} with ${partWords(r, partner(c, key), held)}`);
+}
+
 function slotWords(r: World, type: string, id: string): string {
   const held = (type === "weapon" ? r.weapons : r.passives).find((x) => x.id === id);
   if (type === "weapon") return held === undefined ? `new weapon, fills weapon slot ${r.weapons.length + 1} of 6` : `weapon upgrade to level ${held.level + 1} of ${held.max}`;
   if (type === "passive") return held === undefined ? `new passive, fills passive slot ${r.passives.length + 1} of 6` : `passive upgrade to level ${held.level + 1} of ${held.max}`;
+  if (type === "item") return r.items.some((i) => i.id === id) ? "another of an item Tibo holds" : "new item";
   return type;
+}
+
+/** What an option that is not a card does, in the game's terms. */
+function actionWords(r: World, action: ChoiceAction): string | undefined {
+  const t = r.view.tibo;
+  switch (action.type) {
+    case "reroll":
+      return `replaces every offered card with new ones; ${plural(t.rerolls, "reroll")} left`;
+    case "skip":
+      return `takes nothing this time; ${plural(t.skips, "skip")} left`;
+    case "banish":
+      return `takes nothing, and this card is never offered again this run; ${plural(t.banishes, "banish")} left`;
+    default:
+      return undefined;
+  }
 }
 
 /** The open choice's options as the planner weighs them: each the game's own action, with what the view says of it. */
 export function cards(r: World): Card[] {
   return (r.view.choice?.options ?? []).map((o: ChoiceOption) => {
-    const { action, name, description, type, id, pairs, ...rest } = o as ChoiceOption & { type?: string; id?: string; pairs?: string[] };
+    const { action, name, description, type, id, isNew: _, ...rest } = o as ChoiceOption & { type?: string; id?: string; isNew?: boolean };
+    const kind = type === "weapon" || type === "passive" || type === "item" ? type : undefined;
+    const evolutions = kind === undefined || id === undefined || action.type === "banish" ? [] : evolutionsOf(r, `${kind}:${id}`);
     const notes = [
-      ...(type !== undefined && id !== undefined && (type === "weapon" || type === "passive") ? [slotWords(r, type, id)] : []),
-      ...(pairs ?? []).map((p) => `pairs ${p}`),
+      ...(actionWords(r, action) === undefined ? [] : [actionWords(r, action) ?? ""]),
+      ...(kind !== undefined && id !== undefined && action.type !== "banish" ? [slotWords(r, kind, id)] : []),
+      ...(evolutions.length === 0 ? [] : [`LEADS TO AN EVOLUTION: ${evolutions.join("; or ")}`]),
       ...(description === undefined || description === "" ? [] : [description]),
       ...(Object.keys(rest).length === 0 ? [] : [fields(rest)]),
     ];
     return { action, name, notes, text: `${name}${notes.length === 0 ? "" : ` (${notes.join("; ")})`}` };
   });
+}
+
+/** The choice open now as the picker reads it: what is equipped, what is offered, and the evolutions still to find. */
+function offerBlock(r: World): string {
+  const choice = r.view.choice;
+  if (choice === undefined) return "No choice is open.";
+  const held = heldLoadout(r);
+  const owned = (label: string, xs: { name: string; level: number; max: number; description: string }[]) =>
+    `${label}:${xs.map((x) => `\n  - ${x.name} ${x.level}/${x.max}${x.description === "" ? "" : `: ${x.description.replace(/\s+/g, " ").trim()}`}`).join("") || " none"}`;
+  const recipes = findable(r)
+    .map((c) => ({ c, have: c.parts.filter((p) => held.has(p.key)).length }))
+    .sort((a, z) => z.have - a.have)
+    .map(({ c }) => `\n  - ${nameOf(r.book.catalog, c.result)}: ${c.parts.map((p) => partWords(r, p, held)).join(" + ")}`);
+  return [
+    `Open now: a ${choice.kind}.`,
+    `Equipped:\n${owned(`Weapons (${r.weapons.length} of 6 slots)`, r.weapons)}\n${owned(`Passives (${r.passives.length} of 6 slots)`, r.passives)}\nItems:${r.items.map((i) => `\n  - ${i.name} x${i.count}${i.description === "" ? "" : `: ${i.description}`}`).join("") || " none"}`,
+    `Offered, each one option to choose:${cards(r).map((c) => `\n  - ${c.text}`).join("")}`,
+    `Evolutions this run can still reach (recipes not made yet with no part banished), closest first:${recipes.join("") || " none"}`,
+  ].join("\n\n");
 }
 
 /** Every state block a template may use (see BLOCKS in bot/templates.ts), rendered only when used. */
@@ -97,6 +165,7 @@ export function blocks(r: World, b: Book): Record<BlockName, () => string> {
       const nonzero = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, x]) => typeof x === "number" && x !== 0));
       return `What the game has counted this run: counters ${fields(nonzero(r.counters))}; run ${fields(nonzero(r.run))}.`;
     },
+    offer: () => offerBlock(r),
     weapon_damage: () => {
       const dealt = r.run.damageBySource;
       const minutes = Math.max(r.time, 1) / 60;

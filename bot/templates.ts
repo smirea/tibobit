@@ -38,6 +38,7 @@ export const BLOCKS = {
   dogs: "each of Tibo's dogs: name, breed, the game's description, level, the game's own definition (ability, aura, levelUps and the rest) and what it has done so far by the game's counts",
   events: "what the game showed in the last 15 seconds (boss arrivals, banners, chests), with the times",
   counters: "every number in the game's counters and run that is not zero: distance, hits, crits, nearMisses, dodgePoints, peakEnemies, goldEarned, shrinesUsed and the rest",
+  offer: "the choice open now, for the picker: everything Tibo has equipped with the game's descriptions, every option offered with its description (a new weapon, passive or item marked when it leads to an evolution), and every evolution recipe that can still be found",
   state: "a short default, one per line: time, health, level, gold, dash, weapons, passives, items, banished (when any), recipes, evolutions, standing_on, hurt_by, bosses, enemies, current_goal and recent_goals. Every other block is left out unless a template names it",
 } as const;
 
@@ -47,7 +48,7 @@ export type BlockName = keyof typeof BLOCKS;
 export const SLOTS = {
   "planner.state": { about: "the planner's state: everything it reads before each decision, sent once per planner call", vars: { why: "why the planner is asked now: the run started, a goal ended, a choice opened, a card was just taken, a boss appeared, or N seconds passed" }, required: [] },
   "planner.goal": { about: "asked once per goal option as a yes/no question (noul); the option rated highest becomes the goal", vars: { goal: "one goal option in words, e.g. 'walk to the chest 120 away to the up-left and stand on it for 1 seconds to open it, which gives a free pick'" }, required: ["goal"] },
-  "planner.pick": { about: "asked once at a level-up, chest or shrine as a choice among the cards; each card key carries its kind, slot, pairings, whether the game recommends it, and the game's description", vars: { choice: "level-up, chest or shrine" }, required: [] },
+  "planner.pick": { about: "asked once at a level-up, chest or shrine as a choice among every option the game gives, rerolls, skips and banishes included; each card key carries its kind, slot, the evolutions a new entry leads to, and the game's description", vars: { choice: "level-up, chest or shrine" }, required: [] },
   "action.state": { about: "the action model's state, sent once per step it is asked about", vars: { goal: "the goal in words with its progress, e.g. 'open the chest, 80 away to the left'" }, required: [] },
   "action.hurt": { about: "asked once per move offered, answered on the scale: takes no damage, gets scratched, gets badly hurt, gets very badly hurt, dies", vars: { move: "one move in words: the game's own forecast over the forecastSeconds horizon first, then a boss or hazard that way, enemies close, and how it bears on the goal", goal: "as in action.state" }, required: ["move"] },
   "action.useful": { about: "asked once per move offered as a yes/no question (noul); among the moves rated about as safe as the safest, the most useful wins", vars: { move: "as in action.hurt", goal: "as in action.state" }, required: ["move"] },

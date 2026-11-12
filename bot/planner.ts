@@ -135,7 +135,7 @@ export class Planner {
         ? undefined
         : [...keys].map(([k, o]) => {
             const probability = answers.pick?.probabilities?.[k];
-            return { card: o.name, notes: k.slice(k.indexOf(": ") + 2), ...(probability === undefined ? {} : { probability }), chosen: o === pick, ...("index" in o.action ? { index: o.action.index } : {}) };
+            return { card: o.name, notes: k.slice(k.indexOf(": ") + 2), ...(probability === undefined ? {} : { probability }), chosen: o === pick, action: o.action };
           });
     const weighed: CardOption[] = goals.map((g, i) => ({ card: goalTitle(g.goal, r), notes: g.text, probability: score(i), chosen: i === best }));
     const decision: Inspect = {
@@ -215,12 +215,15 @@ export async function choose(r: World, planner: Planner, log: RunLog) {
   const takeable = options.filter((o) => !deadPicks.names.has(o.text));
   if (takeable.length === 0) throw new Error(`every option of this ${open} choice was tried without closing it: ${options.map((o) => o.name).join(", ")}`);
   let picked = takeable.length === 1 ? takeable[0] : undefined;
-  if (picked === undefined) {
-    picked = (await planner.plan(r, `a ${open} choice opened`, takeable)).pick;
-    // The panel shows the odds over the cards and lands a highlight on the pick before it is taken;
-    // the choice freezes the game, so the wait costs no game time.
-    if (piloted) await Bun.sleep(PICK_SHOW_MS);
-  } else log.write(r, { event: "pick", model: "none", reason: open, action: picked.name, detail: "the only option that can be taken" });
+  if (picked === undefined) picked = (await planner.plan(r, `a ${open} choice opened`, takeable)).pick;
+  else {
+    log.write(r, { event: "pick", model: "none", reason: open, action: picked.name, detail: "the only option that can be taken" });
+    const only: CardOption = { card: picked.name, notes: picked.notes.join("; "), probability: 1, chosen: true, action: picked.action };
+    if (piloted) say({ role: "planner", model: "none", time: r.time, text: `${picked.name}.`, detail: "The only option.", inspect: { kind: "plan", prompt: `A ${open}, with one option.`, choices: [only], goals: [] } });
+  }
+  // The panel shows the odds over the options and the hand pressing the pick before it is taken;
+  // the choice freezes the game, so the wait costs no game time.
+  if (piloted) await Bun.sleep(PICK_SHOW_MS);
   if (picked === undefined) throw new Error(`no ${open} option was picked`);
   deadPicks.names.add(picked.text);
   planner.picked = true;

@@ -176,6 +176,9 @@ export type Game = {
   taint(): void;
 };
 
+/** The game's photo of a pointing hand, in image pixels: its size and its fingertip. */
+export type Hand = { url: string; width: number; height: number; tipX: number; tipY: number };
+
 /** Enum tables the game exports from its boot chunk, found by shape rather than by minified name. */
 export type Enums = {
   pickupKinds: string[];

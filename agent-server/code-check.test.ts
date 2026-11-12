@@ -25,3 +25,10 @@ test("the function cannot reach outside the state", async () => {
 test("a reply's fence and export are dropped", () => {
   expect(codeIn('Here it is:\n```ts\nexport function drive(state: State): Action {\n  return { type: "still" };\n}\n```\n')).toBe('function drive(state: State): Action {\n  return { type: "still" };\n}');
 });
+
+test("memory is anything unless the code declares its shape, and then it is checked", async () => {
+  const keeps = 'function drive(state: State, memory: Memory): Action {\n  memory.seen = state.time;\n  return { type: "still" };\n}';
+  expect(await codeErrors(keeps)).toEqual([]);
+  expect(await codeErrors(`type Memory = { seen?: string };\n\n${keeps}`)).toEqual(["line 4, column 3: Type 'number' is not assignable to type 'string'. (TS2322)"]);
+  expect(await codeErrors(`type Memory = { seen?: number };\n\n${keeps}`)).toEqual([]);
+});

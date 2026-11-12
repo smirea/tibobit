@@ -230,16 +230,18 @@ export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly State
   const declared = codeView(fields, types);
   declared.show(DRIVER_TYPES.trim());
   const now = h("div", "tbh-fsd-now");
+  const memory = h("pre", "tbh-fsd-memory");
   const builderPane = h(
     "section",
     "tbh-fsd-builder",
     h("h3", "tbh-fsd-label", "Function builder"),
-    h("p", "tbh-fsd-hint", "Describe how Tibo should play. Opus 5.5 turns it into one TypeScript function that reads the state and returns what the autopilot does next. TypeScript checks that it always returns an action before the bot runs it."),
+    h("p", "tbh-fsd-hint", "Describe how Tibo should play. Opus 5.5 turns it into one TypeScript function that reads the state and returns what the autopilot does next. It may keep anything it needs in a memory that lasts the run. TypeScript checks that it always returns an action before the bot runs it."),
     builder.wrap,
     h("div", "tbh-fsd-build-row", buildButton, buildNote),
     buildErrors,
     h("h3", "tbh-fsd-label tbh-fsd-code-label", "Function"),
     now,
+    memory,
     code.el,
     h("details", "tbh-fsd-fold", h("summary", "", "The types it is written against"), declared.el),
   );
@@ -375,6 +377,9 @@ export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly State
     now.classList.toggle("tbh-fsd-now-error", active?.error !== undefined);
     now.textContent = active?.error !== undefined ? `drive threw: ${active.error}` : active?.action === undefined ? "" : `Now: ${active.action.why ?? ""} (${actionWords(active.action)})`;
     code.show(d.code, active?.action?.why);
+    const kept = active === undefined || Object.keys(active.memory).length === 0 ? undefined : active.memory;
+    memory.hidden = kept === undefined;
+    memory.textContent = kept === undefined ? "" : `memory: ${JSON.stringify(kept, null, 2)}`;
 
     const live = pilot.preview();
     for (const [path, { value }] of fieldEls) value.textContent = brief(read(live?.state ?? (EXAMPLE.state as State), path));

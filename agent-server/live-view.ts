@@ -5,7 +5,7 @@ import { comboProgress, type Loadout, nameOf, partState, relevantCombos } from "
 import type { Aim, ChoiceOption, DirectionView, LiveView, LoadoutItem } from "../protocol/view";
 import { type Direction, directionOf, DIRECTIONS, TICKS_PER_SECOND } from "../protocol/geometry";
 import type { Snapshot } from "../protocol/snapshot";
-import { type Book, line, pairings } from "../game/book";
+import { type Book, line } from "../game/book";
 import { playedOn } from "../protocol/commands";
 
 type Row = { uid: number; slot: number; x: number; y: number };
@@ -21,7 +21,8 @@ type GameJson = {
   cfg: {
     win: { timeSec: number };
     dash: { charges: number };
-    ladder: { level: number };
+    /** Only on a Nightmare ladder run. */
+    ladder?: { level: number };
     difficulty: { extraElitesPerCurse: number; extraBossesPerCurse: number };
     activation: { seconds: Record<string, number>; pickupRadius: Record<string, number> };
     economy: { chestPriceBase: number; chestPriceLinear: number; chestPriceQuad: number; chestPriceCubic: number; chestPriceKnee: number; vendorPrice: number[] };
@@ -91,7 +92,7 @@ function eventText(b: Book, e: Record<string, unknown>): string {
 }
 
 /** The open choice, by the game's kind, with only what that kind of choice needs. */
-function choiceView(b: Book, g: GameJson, held: Loadout): LiveView["choice"] {
+function choiceView(b: Book, g: GameJson): LiveView["choice"] {
   const c = g.choiceQueue[0];
   if (c === undefined) return undefined;
   const l = g.loadout;
@@ -115,7 +116,6 @@ function choiceView(b: Book, g: GameJson, held: Loadout): LiveView["choice"] {
       const options: ChoiceOption[] = offers.map((o, index) => {
         const key = `${o.type}:${o.id}` as const;
         const level = o.level ?? 1;
-        const pairs = o.type === "weapon" || o.type === "passive" || o.type === "item" ? pairings(b, held, l.banished, key as `weapon:${string}`, level).filter((p) => p.partnerHeld) : [];
         return {
           action: { type: "pick", index },
           type: o.type,
@@ -125,11 +125,12 @@ function choiceView(b: Book, g: GameJson, held: Loadout): LiveView["choice"] {
           max: b.catalog.maxLevel[key as `weapon:${string}`] ?? 1,
           ...(o.isNew ? { isNew: true } : {}),
           description: line(b, o.type, o.id, "desc") ?? "",
-          ...(pairs.length === 0 ? {} : { pairs: pairs.map((p) => `with ${p.partner} into ${p.name}${p.ready ? " right away" : ""}`) }),
         };
       });
       if (l.rerolls > 0) options.push(plain("reroll", "Reroll"));
       if (l.skips > 0) options.push(plain("skip", "Skip"));
+      // The game's banish takes one offered card out of this run for good.
+      if (l.banishes > 0) options.push(...offers.map((o, index) => ({ action: { type: "banish" as const, index }, name: `Banish ${line(b, o.type, o.id) ?? o.id}`, type: o.type, id: o.id })));
       return { kind: c.kind, options, rerolls: l.rerolls, skips: l.skips, banishes: l.banishes };
     }
     case "shrine":
@@ -282,7 +283,7 @@ export function liveView(s: Snapshot, b: Book): LiveView | undefined {
   return {
     time: round(g.runClock),
     world: {
-      difficulty: playedOn(g.difficulty, g.cfg.ladder.level),
+      difficulty: playedOn(g.difficulty, g.cfg.ladder?.level),
       winAt: g.cfg.win.timeSec,
       biome: { id: g.currentBiome, name: line(b, "biome", g.currentBiome) ?? g.currentBiome },
       ...(g.currentLandmark === null
@@ -348,6 +349,6 @@ export function liveView(s: Snapshot, b: Book): LiveView | undefined {
       zones: around.attacks.map((a) => ({ kind: a.kind, shape: a.shape, distance: Math.round(a.dist), direction: a.dir, inside: a.inside, ...(a.landsIn === undefined ? {} : { landsIn: a.landsIn }), enters: a.enters })),
       volleys: around.volleys.map((v) => ({ distance: Math.round(v.dist), direction: v.dir, firesIn: v.firesIn, count: v.count, bursts: v.bursts, damage: v.damage })),
     },
-    ...(g.choiceQueue.length === 0 ? {} : { choice: choiceView(b, g, held) }),
+    ...(g.choiceQueue.length === 0 ? {} : { choice: choiceView(b, g) }),
   };
 }
