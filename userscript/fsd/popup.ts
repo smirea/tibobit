@@ -278,24 +278,45 @@ export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly State
     h("details", "tbh-fsd-fold", h("summary", "", "State the picker can embed"), blockList),
   );
   const entityList = h("div", "tbh-fsd-entity-groups");
-  const entityPane = h("section", "tbh-fsd-world", h("h3", "tbh-fsd-label", "In the world"), h("p", "tbh-fsd-hint", "What the autopilot can walk Tibo to, under the game's own names. Click to add the name where the caret is."), entityList);
+  const entityCount = h("span", "tbh-fsd-entity-count");
+  const entityPane = h("section", "tbh-fsd-world", h("div", "tbh-fsd-label-row", h("h3", "tbh-fsd-label", "In the world"), entityCount), entityList);
+  let chips: { entity: Entity; el: HTMLButtonElement }[] = [];
   const renderEntities = () => {
     entities = game.entities();
-    const chip = (e: Entity) => {
+    chips = entities.map((e) => {
       const el = inserter(h("button", "tbh-fsd-entity", svgIcon(ACTION_ICONS[e.tag], "tbh-fsd-entity-icon"), e.name), () => insert(target ?? builder.area, e.name));
       el.type = "button";
       el.addEventListener("pointerenter", () =>
-        showTip(`entity:${e.key}`, el.getBoundingClientRect(), h("b", "tbh-fsd-tip-name", e.name), ...(e.name === e.key ? [] : [h("code", "tbh-fsd-tip-key", e.key)]), h("div", "tbh-fsd-tip-about", e.about || "No description in the game.")),
+        showTip(
+          `entity:${e.key}`,
+          el.getBoundingClientRect(),
+          h("b", "tbh-fsd-tip-name", e.name),
+          ...(e.name === e.key ? [] : [h("code", "tbh-fsd-tip-key", e.key)]),
+          h("div", "tbh-fsd-tip-about", e.about || "No description in the game."),
+          ...(el.classList.contains("tbh-fsd-unused") ? [h("div", "tbh-fsd-tip-unused", "The function never names it.")] : []),
+        ),
       );
-      return el;
-    };
+      return { entity: e, el };
+    });
     entityList.replaceChildren(
       ...SECTIONS.flatMap((section) => {
-        const group = entities.filter((e) => e.section === section);
-        return group.length === 0 ? [] : [h("h4", "tbh-fsd-entity-type", section), h("div", "tbh-fsd-entities", ...group.map(chip))];
+        const group = chips.filter((c) => c.entity.section === section);
+        return group.length === 0 ? [] : [h("h4", "tbh-fsd-entity-type", section), h("div", "tbh-fsd-entities", ...group.map((c) => c.el))];
       }),
       ...(entities.some((e) => e.name !== e.key) ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]),
     );
+    markUsed(draft().code);
+  };
+  /** Marks the things the function names in a string literal, by the game's key or its English name. */
+  const markUsed = (source: string) => {
+    const literals = new Set([...source.matchAll(/(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)].map((m) => m[2]));
+    let used = 0;
+    for (const { entity, el } of chips) {
+      const named = literals.has(entity.key) || literals.has(entity.name);
+      if (named) used++;
+      el.classList.toggle("tbh-fsd-unused", !named);
+    }
+    entityCount.textContent = `${used} used · ${chips.length - used} unused`;
   };
 
   const saved = h("span", "tbh-fsd-saved");
@@ -377,6 +398,7 @@ export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly State
     now.classList.toggle("tbh-fsd-now-error", active?.error !== undefined);
     now.textContent = active?.error !== undefined ? `drive threw: ${active.error}` : active?.action === undefined ? "" : `Now: ${active.action.why ?? ""} (${actionWords(active.action)})`;
     code.show(d.code, active?.action?.why);
+    markUsed(d.code);
     const kept = active === undefined || Object.keys(active.memory).length === 0 ? undefined : active.memory;
     memory.hidden = kept === undefined;
     memory.textContent = kept === undefined ? "" : `memory: ${JSON.stringify(kept, null, 2)}`;

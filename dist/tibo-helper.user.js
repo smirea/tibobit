@@ -3324,6 +3324,11 @@ Goal: {{goal}}.
 .tbh-fsd-entity-type { margin: 4px 0 0; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .tbh-fsd-entity { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 5px; font: inherit; font-size: 11.5px; color: var(--text); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); border-radius: 999px; cursor: copy; }
 .tbh-fsd-entity:hover { border-color: var(--gold); background: rgba(255,211,107,.1); }
+.tbh-fsd-entity.tbh-fsd-unused { border: 1px dashed var(--bad); }
+.tbh-fsd-entity.tbh-fsd-unused .tbh-fsd-entity-icon { color: var(--bad); }
+.tbh-fsd-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tbh-fsd-entity-count { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tbh-fsd-tip-unused { margin-top: 3px; color: var(--bad); }
 .tbh-fsd-entity-icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--gold); }
 .tbh-fsd-entity-icon .tbh-svg-fill { fill: currentColor; stroke: none; }
 .tbh-fsd-tip { position: fixed; z-index: 1; max-width: min(520px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: hidden; box-sizing: border-box; padding: 8px 10px; pointer-events: none;
@@ -3757,19 +3762,19 @@ export type Action = (
   }
   // protocol/state.example.json
   var state_example_default = {
-    time: 84.4,
+    time: 68,
     state: {
-      time: 84.4,
+      time: 68,
       winAt: 1200,
       tibo: {
-        hp: 132,
-        maxHp: 137,
+        hp: 114,
+        maxHp: 120,
         hurt: 0,
-        dps: 38,
-        level: 4,
-        gold: 0,
-        x: 605,
-        y: 1944,
+        dps: 39,
+        level: 3,
+        gold: 1,
+        x: 825,
+        y: 1309,
         dash: {
           charges: 2,
           max: 2
@@ -3778,12 +3783,18 @@ export type Action = (
           {
             id: "seeker-sprouts",
             name: "Seeker Sprouts",
-            level: 3,
+            level: 1,
             max: 8
           },
           {
-            id: "reset-button",
-            name: "Reset Button",
+            id: "afterburner-fries",
+            name: "Afterburner Fries",
+            level: 1,
+            max: 8
+          },
+          {
+            id: "potato-rain",
+            name: "Potato Rain",
             level: 1,
             max: 8
           }
@@ -3792,17 +3803,17 @@ export type Action = (
         items: [],
         evolves: [],
         stats: {
-          damageMult: 1.899,
+          damageMult: 2.286,
           areaMult: 1,
           cooldownMult: 0.964,
           amountBonus: 1,
           durationMult: 1.25,
           projSpeedMult: 1,
           moveSpeedMult: 1,
-          maxHp: 137.28,
+          maxHp: 120,
           recovery: 0,
           armor: 8.438,
-          magnetRadius: 50.2,
+          magnetRadius: 40,
           luck: 0,
           growthMult: 1.575,
           greedMult: 1.05,
@@ -3824,19 +3835,19 @@ export type Action = (
         }
       },
       enemies: {
-        onScreen: 12,
+        onScreen: 6,
         byDirection: {
-          right: 2,
-          "down-right": 3,
+          right: 0,
+          "down-right": 2,
           down: 0,
-          "down-left": 2,
+          "down-left": 1,
           left: 1,
-          "up-left": 0,
-          up: 2,
-          "up-right": 2
+          "up-left": 2,
+          up: 0,
+          "up-right": 0
         },
-        fewest: "down",
-        most: "down-right",
+        fewest: "right",
+        most: "up-left",
         bullets: {
           right: 0,
           "down-right": 0,
@@ -3851,7 +3862,7 @@ export type Action = (
       elites: [
         {
           id: 65566,
-          dist: 150,
+          dist: 242,
           dir: "up",
           gaveUp: false,
           kind: "cave-grub",
@@ -3861,210 +3872,36 @@ export type Action = (
         },
         {
           id: 65565,
-          dist: 152,
+          dist: 258,
           dir: "up",
           gaveUp: false,
           kind: "cave-grub",
           name: "Cave Grub",
-          hp: 454,
+          hp: 509,
           maxHp: 509
-        },
-        {
-          id: 65559,
-          dist: 206,
-          dir: "up",
-          gaveUp: false,
-          kind: "cave-grub",
-          name: "Cave Grub",
-          hp: 381,
-          maxHp: 557
-        },
-        {
-          id: 65560,
-          dist: 225,
-          dir: "up",
-          gaveUp: false,
-          kind: "cave-grub",
-          name: "Cave Grub",
-          hp: 450,
-          maxHp: 557
         }
       ],
       bosses: [],
       pickups: [
         {
-          id: 65594,
-          dist: 767,
-          dir: "up",
-          gaveUp: false,
-          kind: "skip"
-        },
-        {
-          id: 65559,
-          dist: 1567,
-          dir: "up",
+          id: 65554,
+          dist: 1287,
+          dir: "up-left",
           gaveUp: false,
           kind: "heal"
+        },
+        {
+          id: 65565,
+          dist: 1522,
+          dir: "up-left",
+          gaveUp: false,
+          kind: "banish"
         }
       ],
       pois: [
         {
-          id: 79,
-          dist: 12,
-          dir: "still",
-          gaveUp: false,
-          kind: "chargeShrine",
-          name: "Spud Shrine",
-          inside: true,
-          charged: 4.8,
-          chargeSeconds: 5
-        },
-        {
-          id: 78,
-          dist: 135,
-          dir: "left",
-          gaveUp: false,
-          kind: "paidChest",
-          name: "Potato Crate",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1.5
-        },
-        {
-          id: 84,
-          dist: 159,
-          dir: "down",
-          gaveUp: false,
-          kind: "chargeShrine",
-          name: "Spud Shrine",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 5
-        },
-        {
-          id: 72,
-          dist: 255,
-          dir: "up",
-          gaveUp: false,
-          kind: "vendor",
-          name: "Fry Cart",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1.5
-        },
-        {
-          id: 83,
-          dist: 257,
-          dir: "down-left",
-          gaveUp: false,
-          kind: "taterLantern",
-          name: "Tater Lantern",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1
-        },
-        {
-          id: 85,
-          dist: 314,
-          dir: "down",
-          gaveUp: false,
-          kind: "taterLantern",
-          name: "Tater Lantern",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1
-        },
-        {
-          id: 80,
-          dist: 358,
-          dir: "right",
-          gaveUp: false,
-          kind: "crops",
-          name: "Crop Patch",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1
-        },
-        {
-          id: 86,
-          dist: 394,
-          dir: "down-right",
-          gaveUp: false,
-          kind: "eliteNest",
-          name: "Beetle Nest",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1.5
-        },
-        {
-          id: 71,
-          dist: 394,
-          dir: "up-left",
-          gaveUp: false,
-          kind: "spudFreezer",
-          name: "Spud Freezer",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1.5
-        },
-        {
-          id: 77,
-          dist: 457,
-          dir: "left",
-          gaveUp: false,
-          kind: "chargeShrine",
-          name: "Spud Shrine",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 5
-        },
-        {
-          id: 73,
-          dist: 462,
-          dir: "up-right",
-          gaveUp: false,
-          kind: "dog",
-          name: "Stray Dog",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1
-        },
-        {
-          id: 76,
-          dist: 499,
-          dir: "up-left",
-          gaveUp: false,
-          kind: "curseShrine",
-          name: "Moldy Shrine",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1.5
-        },
-        {
-          id: 81,
-          dist: 525,
-          dir: "right",
-          gaveUp: false,
-          kind: "frenzyFryer",
-          name: "Frenzy Fryer",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 2
-        },
-        {
-          id: 82,
-          dist: 552,
-          dir: "down-left",
-          gaveUp: false,
-          kind: "taterMagnet",
-          name: "Tater Magnet",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1
-        },
-        {
-          id: 90,
-          dist: 559,
+          id: 66,
+          dist: 52,
           dir: "down",
           gaveUp: false,
           kind: "botDock",
@@ -4074,20 +3911,9 @@ export type Action = (
           chargeSeconds: 2
         },
         {
-          id: 59,
-          dist: 561,
-          dir: "up-right",
-          gaveUp: false,
-          kind: "taterLantern",
-          name: "Tater Lantern",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1
-        },
-        {
-          id: 58,
-          dist: 593,
-          dir: "up",
+          id: 64,
+          dist: 148,
+          dir: "left",
           gaveUp: false,
           kind: "frenzyFryer",
           name: "Frenzy Fryer",
@@ -4096,97 +3922,53 @@ export type Action = (
           chargeSeconds: 2
         },
         {
-          id: 89,
-          dist: 600,
-          dir: "down",
-          gaveUp: false,
-          kind: "dog",
-          name: "Stray Dog",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1
-        },
-        {
-          id: 87,
-          dist: 606,
+          id: 65,
+          dist: 192,
           dir: "down-right",
           gaveUp: false,
-          kind: "dog",
-          name: "Stray Dog",
+          kind: "taterLantern",
+          name: "Tater Lantern",
           inside: false,
           charged: 0,
           chargeSeconds: 1
         },
         {
-          id: 56,
-          dist: 614,
-          dir: "up-left",
+          id: 51,
+          dist: 247,
+          dir: "up",
           gaveUp: false,
           kind: "paidChest",
           name: "Potato Crate",
           inside: false,
           charged: 0,
           chargeSeconds: 1.5
-        },
-        {
-          id: 60,
-          dist: 620,
-          dir: "up",
-          gaveUp: false,
-          kind: "botDock",
-          name: "Bot Dock",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 2
-        },
-        {
-          id: 91,
-          dist: 621,
-          dir: "down-right",
-          gaveUp: false,
-          kind: "dog",
-          name: "Stray Dog",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1
         },
         {
           id: 74,
-          dist: 663,
-          dir: "up-right",
+          dist: 276,
+          dir: "down",
           gaveUp: false,
-          kind: "taterLantern",
-          name: "Tater Lantern",
+          kind: "dog",
+          name: "Stray Dog",
           inside: false,
           charged: 0,
           chargeSeconds: 1
         },
         {
-          id: 88,
-          dist: 672,
+          id: 63,
+          dist: 277,
           dir: "down-left",
           gaveUp: false,
-          kind: "taterSlots",
-          name: "Tater Slots",
+          kind: "chargeShrine",
+          name: "Spud Shrine",
           inside: false,
           charged: 0,
-          chargeSeconds: 1.5
+          chargeSeconds: 5
         },
         {
-          id: 92,
-          dist: 680,
-          dir: "down-right",
-          gaveUp: false,
-          kind: "paidChest",
-          name: "Potato Crate",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1.5
-        },
-        {
-          id: 48,
-          dist: 729,
-          dir: "up",
+          id: 50,
+          dist: 286,
+          dir: "left",
           gaveUp: false,
           kind: "whetstone",
           name: "Spud Whetstone",
@@ -4195,64 +3977,9 @@ export type Action = (
           chargeSeconds: 1.5
         },
         {
-          id: 55,
-          dist: 746,
-          dir: "up-left",
-          gaveUp: false,
-          kind: "paidChest",
-          name: "Potato Crate",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1.5
-        },
-        {
-          id: 75,
-          dist: 808,
-          dir: "up-right",
-          gaveUp: false,
-          kind: "crops",
-          name: "Crop Patch",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1
-        },
-        {
-          id: 65,
-          dist: 840,
-          dir: "up-right",
-          gaveUp: false,
-          kind: "taterLantern",
-          name: "Tater Lantern",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1
-        },
-        {
-          id: 46,
-          dist: 844,
-          dir: "up",
-          gaveUp: false,
-          kind: "crops",
-          name: "Crop Patch",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1
-        },
-        {
-          id: 53,
-          dist: 919,
-          dir: "up",
-          gaveUp: false,
-          kind: "paidChest",
-          name: "Potato Crate",
-          inside: false,
-          charged: 0,
-          chargeSeconds: 1.5
-        },
-        {
-          id: 64,
-          dist: 925,
-          dir: "up-right",
+          id: 56,
+          dist: 352,
+          dir: "right",
           gaveUp: false,
           kind: "seedVault",
           name: "Seed Vault",
@@ -4261,8 +3988,228 @@ export type Action = (
           chargeSeconds: 2
         },
         {
+          id: 46,
+          dist: 354,
+          dir: "up",
+          gaveUp: false,
+          kind: "frenzyFryer",
+          name: "Frenzy Fryer",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 2
+        },
+        {
+          id: 67,
+          dist: 423,
+          dir: "right",
+          gaveUp: false,
+          kind: "taterLantern",
+          name: "Tater Lantern",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 73,
+          dist: 424,
+          dir: "down-left",
+          gaveUp: false,
+          kind: "vendor",
+          name: "Fry Cart",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 49,
+          dist: 448,
+          dir: "up-left",
+          gaveUp: false,
+          kind: "crops",
+          name: "Crop Patch",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 75,
+          dist: 455,
+          dir: "down-right",
+          gaveUp: false,
+          kind: "taterLantern",
+          name: "Tater Lantern",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 41,
+          dist: 491,
+          dir: "up-left",
+          gaveUp: false,
+          kind: "taterSlots",
+          name: "Tater Slots",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 61,
+          dist: 516,
+          dir: "right",
+          gaveUp: false,
+          kind: "microwave",
+          name: "Microwave",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 62,
+          dist: 533,
+          dir: "left",
+          gaveUp: false,
+          kind: "paidChest",
+          name: "Potato Crate",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 40,
+          dist: 575,
+          dir: "up-left",
+          gaveUp: false,
+          kind: "eliteNest",
+          name: "Beetle Nest",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 81,
+          dist: 586,
+          dir: "down",
+          gaveUp: false,
+          kind: "crops",
+          name: "Crop Patch",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 78,
+          dist: 610,
+          dir: "down-left",
+          gaveUp: false,
+          kind: "spudFreezer",
+          name: "Spud Freezer",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 76,
+          dist: 614,
+          dir: "down-right",
+          gaveUp: false,
+          kind: "crops",
+          name: "Crop Patch",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 60,
+          dist: 624,
+          dir: "up-right",
+          gaveUp: false,
+          kind: "paidChest",
+          name: "Potato Crate",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 68,
+          dist: 668,
+          dir: "right",
+          gaveUp: false,
+          kind: "curseShrine",
+          name: "Moldy Shrine",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 82,
+          dist: 672,
+          dir: "down-right",
+          gaveUp: false,
+          kind: "frenzyFryer",
+          name: "Frenzy Fryer",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 2
+        },
+        {
           id: 45,
-          dist: 947,
+          dist: 682,
+          dir: "up",
+          gaveUp: false,
+          kind: "eliteNest",
+          name: "Beetle Nest",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 80,
+          dist: 684,
+          dir: "down",
+          gaveUp: false,
+          kind: "chargeShrine",
+          name: "Spud Shrine",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 5
+        },
+        {
+          id: 79,
+          dist: 714,
+          dir: "down-left",
+          gaveUp: false,
+          kind: "paidChest",
+          name: "Potato Crate",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 54,
+          dist: 732,
+          dir: "up-right",
+          gaveUp: false,
+          kind: "botDock",
+          name: "Bot Dock",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 2
+        },
+        {
+          id: 28,
+          dist: 770,
+          dir: "up",
+          gaveUp: false,
+          kind: "paidChest",
+          name: "Potato Crate",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 27,
+          dist: 776,
           dir: "up-left",
           gaveUp: false,
           kind: "paidChest",
@@ -4272,19 +4219,74 @@ export type Action = (
           chargeSeconds: 1.5
         },
         {
-          id: 69,
-          dist: 1027,
+          id: 83,
+          dist: 789,
+          dir: "down-right",
+          gaveUp: false,
+          kind: "taterLantern",
+          name: "Tater Lantern",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1
+        },
+        {
+          id: 26,
+          dist: 815,
+          dir: "up-left",
+          gaveUp: false,
+          kind: "frenzyFryer",
+          name: "Frenzy Fryer",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 2
+        },
+        {
+          id: 72,
+          dist: 861,
+          dir: "right",
+          gaveUp: false,
+          kind: "paidChest",
+          name: "Potato Crate",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 71,
+          dist: 880,
+          dir: "right",
+          gaveUp: false,
+          kind: "curseShrine",
+          name: "Moldy Shrine",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 77,
+          dist: 895,
+          dir: "down-right",
+          gaveUp: false,
+          kind: "dinnerBell",
+          name: "Dinner Bell",
+          inside: false,
+          charged: 0,
+          chargeSeconds: 1.5
+        },
+        {
+          id: 59,
+          dist: 904,
           dir: "up-right",
           gaveUp: false,
-          kind: "microwave",
-          name: "Microwave",
+          kind: "vendor",
+          name: "Fry Cart",
           inside: false,
           charged: 0,
           chargeSeconds: 1.5
         },
         {
           id: 70,
-          dist: 1080,
+          dist: 1000,
           dir: "up-right",
           gaveUp: false,
           kind: "curseShrine",
@@ -4295,8 +4297,8 @@ export type Action = (
         }
       ],
       ground: {
-        xp: 114,
-        gold: 1
+        xp: 119,
+        gold: 6
       },
       prices: {
         crate: 30,
@@ -4320,101 +4322,112 @@ export type Action = (
       previous: {
         action: {
           type: "poi",
-          id: 79,
+          id: 63,
           why: "charge the Spud Shrine"
         },
-        seconds: 14
+        seconds: 11
       }
+    },
+    memory: {
+      retreating: false,
+      charged: [
+        19,
+        55
+      ]
     },
     action: {
       type: "poi",
-      id: 79,
+      id: 63,
       why: "charge the Spud Shrine"
     },
     blocks: {
-      time: "1:24",
-      difficulty: "nightmare",
+      time: "1:08",
+      difficulty: "nightmare-1",
       mode: "daily",
-      health: "Health 132/137 (96%).",
-      level: "Level 4, 97% of the way to the next.",
-      gold: "Gold 0.",
+      health: "Health 114/120 (95%).",
+      level: "Level 3, 52% of the way to the next.",
+      gold: "Gold 1.",
       dash: "Dash charges 2 of 2.",
-      weapons: `Weapons (2 of 6 slots):
-  - Seeker Sprouts 3/8: Sprouts that steer toward enemies.
-  - Reset Button 1/8: We reset the limits. Clears every enemy on screen. Bosses only flinch.`,
+      weapons: `Weapons (3 of 6 slots):
+  - Seeker Sprouts 1/8: Sprouts that steer toward enemies.
+  - Afterburner Fries 1/8: Each dash blasts a fan of hot fries backward from where the dash started.
+  - Potato Rain 1/8: Calls down a shower of potatoes around Tibo.`,
       passives: "Passives (0 of 6 slots): none",
       items: "Items: none",
       banished: "Banished this run: nothing.",
-      recipes: "Recipes in reach: Factory Reset: Reset Button leveling 1/8 + Four-Eyed Spud missing; Overgrowth: Seeker Sprouts leveling 3/8 + Fertilizer missing.",
+      recipes: "Recipes in reach: Golden Harvest: Potato Rain leveling 1/8 + Golden Fry missing; Overgrowth: Seeker Sprouts leveling 1/8 + Fertilizer missing; Jet Fryer: Afterburner Fries leveling 1/8 + Hot Start missing.",
       evolutions: "No recipe is complete yet.",
-      standing_on: "Tibo stands inside the Spud Shrine (stand inside to charge it, then pick a stat), charged 4.8 of 5 seconds.",
+      standing_on: "Tibo stands on no chest or spot.",
       hurt_by: "Hurt in the last 3 seconds by: nothing.",
-      dps: "Damage dealt a second over the last 3 seconds: 38.",
+      dps: "Damage dealt a second over the last 3 seconds: 39.",
       bosses: "Bosses: none.",
-      enemies: "Enemies: 12 on screen. Most to the down-right (3), fewest to the up-left (0).",
-      current_goal: "Current goal: Charge the Spud Shrine, since 1:10.",
-      recent_goals: "Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore down-right: drive returned another action; 1:07 Charge the Spud Shrine: drive returned another action; 1:08 Explore down-right: drive returned another action; 1:08 Explore right: drive returned another action; 1:10 Explore down: drive returned another action.",
-      stats: "Stats: damageMult 1.899, areaMult 1, cooldownMult 0.964, amountBonus 1, durationMult 1.25, projSpeedMult 1, moveSpeedMult 1, maxHp 137.28, recovery 0, armor 8.438, magnetRadius 50.2, luck 0, growthMult 1.575, greedMult 1.05, curse 0.1, critChance 0, critMult 2, evasion 0, knockbackMult 1, pierceBonus 0, revivals 0, eliteMult 1, healOnKill 0, explodeOnKillChance 0, thorns 0, chestPriceMult 1, dashCharges 0, dashCooldownMult 1, dashGraceSec 0. Added by shrines: maxHp 14.399999999999999, magnet 0.255, curse 0.1.",
+      enemies: "Enemies: 6 on screen. Most to the down-right (2), fewest to the up-right (0).",
+      current_goal: "Current goal: Charge the Spud Shrine, since 0:57.",
+      recent_goals: "Recent goals: 0:28 Explore down-right: drive returned another action; 0:29 Explore right: drive returned another action; 0:31 Explore down-right: drive returned another action; 0:32 Explore right: drive returned another action; 0:33 Explore down-right: drive returned another action; 0:57 Charge the Spud Shrine: drive returned another action.",
+      stats: "Stats: damageMult 2.286, areaMult 1, cooldownMult 0.964, amountBonus 1, durationMult 1.25, projSpeedMult 1, moveSpeedMult 1, maxHp 120, recovery 0, armor 8.438, magnetRadius 40, luck 0, growthMult 1.575, greedMult 1.05, curse 0.1, critChance 0, critMult 2, evasion 0, knockbackMult 1, pierceBonus 0, revivals 0, eliteMult 1, healOnKill 0, explodeOnKillChance 0, thorns 0, chestPriceMult 1, dashCharges 0, dashCooldownMult 1, dashGraceSec 0. Added by shrines: might 0.204, curse 0.1.",
       resources: "Rerolls 0, skips 0, banishes 0, revives 0; curses 1, which add 1 elites and 0.3 bosses.",
       spots: `Spots on the loaded map, nearest first:
-  - Spud Shrine (chargeShrine) under Tibo (stand inside to charge it, then pick a stat) Charged 4.8 of 5 s.
-  - Potato Crate (paidChest) 135 away to the left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
-  - Spud Shrine (chargeShrine) 159 away to the down (stand inside to charge it, then pick a stat) Charged 0 of 5 s.
-  - Fry Cart (vendor) 255 away to the up (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 0.
-  - Tater Lantern (taterLantern) 257 away to the down-left (break it for a surprise) Charged 0 of 1 s.
-  - Tater Lantern (taterLantern) 314 away to the down (break it for a surprise) Charged 0 of 1 s.
-  - Crop Patch (crops) 358 away to the right (break it for gold and a snack) Charged 0 of 1 s.
-  - Beetle Nest (eliteNest) 394 away to the down-right (an elite waits here; it drops a chest) Charged 0 of 1.5 s.
-  - Spud Freezer (spudFreezer) 394 away to the up-left (stand by it to freeze every enemy on the map for 7.5 s; bosses only slow down) Charged 0 of 1.5 s.
-  - Spud Shrine (chargeShrine) 457 away to the left (stand inside to charge it, then pick a stat) Charged 0 of 5 s.
-  - Stray Dog (dog) 462 away to the up-right (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
-  - Moldy Shrine (curseShrine) 499 away to the up-left (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.
-  - Frenzy Fryer (frenzyFryer) 525 away to the right (stand by it for a 20 s frenzy) Charged 0 of 2 s.
-  - Tater Magnet (taterMagnet) 552 away to the down-left (stand by it to pull in every gem and coin) Charged 0 of 1 s.
-  - Bot Dock (botDock) 559 away to the down (stand by it to call a swarm of grok bots) Charged 0 of 2 s.
-  - Tater Lantern (taterLantern) 561 away to the up-right (break it for a surprise) Charged 0 of 1 s.
-  - Frenzy Fryer (frenzyFryer) 593 away to the up (stand by it for a 20 s frenzy) Charged 0 of 2 s.
-  - Stray Dog (dog) 600 away to the down (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
-  - Stray Dog (dog) 606 away to the down-right (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
-  - Potato Crate (paidChest) 614 away to the up-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
-  - Bot Dock (botDock) 620 away to the up (stand by it to call a swarm of grok bots) Charged 0 of 2 s.
-  - Stray Dog (dog) 621 away to the down-right (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
-  - Tater Lantern (taterLantern) 663 away to the up-right (break it for a surprise) Charged 0 of 1 s.
-  - Tater Slots (taterSlots) 672 away to the down-left (pay gold to spin; match two for an item) Charged 0 of 1.5 s; a spin costs 15 gold, and Tibo has 0.
-  - Potato Crate (paidChest) 680 away to the down-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
-  - Spud Whetstone (whetstone) 729 away to the up (stand by it to charge it, then level up one of your weapons) Charged 0 of 1.5 s.
-  - Potato Crate (paidChest) 746 away to the up-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
-  - Crop Patch (crops) 808 away to the up-right (break it for gold and a snack) Charged 0 of 1 s.
-  - Tater Lantern (taterLantern) 840 away to the up-right (break it for a surprise) Charged 0 of 1 s.
-  - Crop Patch (crops) 844 away to the up (break it for gold and a snack) Charged 0 of 1 s.
-  - Potato Crate (paidChest) 919 away to the up (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
-  - Seed Vault (seedVault) 925 away to the up-right (stand by it to charge it for rerolls, a skip and a banish) Charged 0 of 2 s.
-  - Potato Crate (paidChest) 947 away to the up-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 0.
-  - Microwave (microwave) 1027 away to the up-right (stand by it to charge it, then copy one of your items; the copy melts another item of the same rarity) Charged 0 of 1.5 s.
-  - Moldy Shrine (curseShrine) 1080 away to the up-right (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.`,
+  - Bot Dock (botDock) 52 away to the down (stand by it to call a swarm of grok bots) Charged 0 of 2 s.
+  - Frenzy Fryer (frenzyFryer) 148 away to the left (stand by it for a 20 s frenzy) Charged 0 of 2 s.
+  - Tater Lantern (taterLantern) 192 away to the down-right (break it for a surprise) Charged 0 of 1 s.
+  - Potato Crate (paidChest) 247 away to the up (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 1.
+  - Stray Dog (dog) 276 away to the down (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.
+  - Spud Shrine (chargeShrine) 277 away to the down-left (stand inside to charge it, then pick a stat) Charged 0 of 5 s.
+  - Spud Whetstone (whetstone) 286 away to the left (stand by it to charge it, then level up one of your weapons) Charged 0 of 1.5 s.
+  - Seed Vault (seedVault) 352 away to the right (stand by it to charge it for rerolls, a skip and a banish) Charged 0 of 2 s.
+  - Frenzy Fryer (frenzyFryer) 354 away to the up (stand by it for a 20 s frenzy) Charged 0 of 2 s.
+  - Tater Lantern (taterLantern) 423 away to the right (break it for a surprise) Charged 0 of 1 s.
+  - Fry Cart (vendor) 424 away to the down-left (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 1.
+  - Crop Patch (crops) 448 away to the up-left (break it for gold and a snack) Charged 0 of 1 s.
+  - Tater Lantern (taterLantern) 455 away to the down-right (break it for a surprise) Charged 0 of 1 s.
+  - Tater Slots (taterSlots) 491 away to the up-left (pay gold to spin; match two for an item) Charged 0 of 1.5 s; a spin costs 15 gold, and Tibo has 1.
+  - Microwave (microwave) 516 away to the right (stand by it to charge it, then copy one of your items; the copy melts another item of the same rarity) Charged 0 of 1.5 s.
+  - Potato Crate (paidChest) 533 away to the left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 1.
+  - Beetle Nest (eliteNest) 575 away to the up-left (an elite waits here; it drops a chest) Charged 0 of 1.5 s.
+  - Crop Patch (crops) 586 away to the down (break it for gold and a snack) Charged 0 of 1 s.
+  - Spud Freezer (spudFreezer) 610 away to the down-left (stand by it to freeze every enemy on the map for 7.5 s; bosses only slow down) Charged 0 of 1.5 s.
+  - Crop Patch (crops) 614 away to the down-right (break it for gold and a snack) Charged 0 of 1 s.
+  - Potato Crate (paidChest) 624 away to the up-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 1.
+  - Moldy Shrine (curseShrine) 668 away to the right (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.
+  - Frenzy Fryer (frenzyFryer) 672 away to the down-right (stand by it for a 20 s frenzy) Charged 0 of 2 s.
+  - Beetle Nest (eliteNest) 682 away to the up (an elite waits here; it drops a chest) Charged 0 of 1.5 s.
+  - Spud Shrine (chargeShrine) 684 away to the down (stand inside to charge it, then pick a stat) Charged 0 of 5 s.
+  - Potato Crate (paidChest) 714 away to the down-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 1.
+  - Bot Dock (botDock) 732 away to the up-right (stand by it to call a swarm of grok bots) Charged 0 of 2 s.
+  - Potato Crate (paidChest) 770 away to the up (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 1.
+  - Potato Crate (paidChest) 776 away to the up-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 1.
+  - Tater Lantern (taterLantern) 789 away to the down-right (break it for a surprise) Charged 0 of 1 s.
+  - Frenzy Fryer (frenzyFryer) 815 away to the up-left (stand by it for a 20 s frenzy) Charged 0 of 2 s.
+  - Potato Crate (paidChest) 861 away to the right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 1.
+  - Moldy Shrine (curseShrine) 880 away to the right (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.
+  - Dinner Bell (dinnerBell) 895 away to the down-right (ring it to call a ring of pests; they drop triple xp) Charged 0 of 1.5 s.
+  - Fry Cart (vendor) 904 away to the up-right (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 1.
+  - Moldy Shrine (curseShrine) 1000 away to the up-right (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.`,
       dogs: "Dogs: none.",
-      pickups: "On the ground: xp worth 113.7 and gold worth 1.1. Chests: none. Food: 1567 up. Other pickups: skip 767 up.",
+      pickups: "On the ground: xp worth 118.9 and gold worth 5.7. Chests: none. Food: 1287 up-left. Other pickups: banish 1522 up-left.",
       buffs: "Timed boosts: none.",
       schedule: "Coming up: 2:00 boss The Festival Mascot; 2:00 event Fry Fly Swarm; 3:00 elite.",
       hazards: "Within 0.5 s: underfoot nothing; walking into nothing. Attacks near: none. Bullets that would hit a Tibo standing still: none.",
-      events: "Recent game events: 1:09 biome Ketchup Bog; 1:15 biome Mash Swamp.",
-      elites: "Elites alive: Cave Grub (cave-grub) 509/509 hp, 150 away to the up; Cave Grub (cave-grub) 454/509 hp, 152 away to the up; Cave Grub (cave-grub) 381/557 hp, 206 away to the up; Cave Grub (cave-grub) 450/557 hp, 225 away to the up.",
-      counters: "What the game has counted this run: counters kills 126, hits 147, gems 25, shots 166; run timeSec 63.31666666666667, level 4, kills 126, distance 3045.233333333253, dodgePoints 826.2243523091407, dodgeSecond 84, curseSince 3034, peakEnemies 47, shrinesUsed 2, grokBotHelps 1.",
-      weapon_damage: "Damage dealt so far by weapon: Seeker Sprouts 2126 (1512 a minute), Reset Button 65 (46 a minute).",
-      state: `Time 1:24. Health 132/137 (96%). Level 4, 97% of the way to the next. Gold 0. Dash charges 2 of 2.
-Weapons (2 of 6 slots):
-  - Seeker Sprouts 3/8: Sprouts that steer toward enemies.
-  - Reset Button 1/8: We reset the limits. Clears every enemy on screen. Bosses only flinch.
+      events: "Recent game events: 0:58 levelUp.",
+      elites: "Elites alive: Cave Grub (cave-grub) 509/509 hp, 242 away to the up; Cave Grub (cave-grub) 509/509 hp, 258 away to the up.",
+      counters: "What the game has counted this run: counters kills 106, hits 114, gems 11, coins 1, shots 137; run timeSec 50.983333333333334, level 3, kills 106, distance 2590.566666666637, dodgePoints 656.5345608681635, dodgeSecond 67, curseSince 2582, goldEarned 1.61, peakEnemies 35, shrinesUsed 2, grokBotHelps 1.",
+      offer: "No choice is open.",
+      weapon_damage: "Damage dealt so far by weapon: Seeker Sprouts 1406 (1241 a minute), Potato Rain 36 (32 a minute), Afterburner Fries 0 (0 a minute).",
+      state: `Time 1:08. Health 114/120 (95%). Level 3, 52% of the way to the next. Gold 1. Dash charges 2 of 2.
+Weapons (3 of 6 slots):
+  - Seeker Sprouts 1/8: Sprouts that steer toward enemies.
+  - Afterburner Fries 1/8: Each dash blasts a fan of hot fries backward from where the dash started.
+  - Potato Rain 1/8: Calls down a shower of potatoes around Tibo.
 Passives (0 of 6 slots): none
 Items: none
-Recipes in reach: Factory Reset: Reset Button leveling 1/8 + Four-Eyed Spud missing; Overgrowth: Seeker Sprouts leveling 3/8 + Fertilizer missing.
+Recipes in reach: Golden Harvest: Potato Rain leveling 1/8 + Golden Fry missing; Overgrowth: Seeker Sprouts leveling 1/8 + Fertilizer missing; Jet Fryer: Afterburner Fries leveling 1/8 + Hot Start missing.
 No recipe is complete yet.
-Tibo stands inside the Spud Shrine (stand inside to charge it, then pick a stat), charged 4.8 of 5 seconds.
+Tibo stands on no chest or spot.
 Hurt in the last 3 seconds by: nothing.
 Bosses: none.
-Enemies: 12 on screen. Most to the down-right (3), fewest to the up-left (0).
-Current goal: Charge the Spud Shrine, since 1:10.
-Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore down-right: drive returned another action; 1:07 Charge the Spud Shrine: drive returned another action; 1:08 Explore down-right: drive returned another action; 1:08 Explore right: drive returned another action; 1:10 Explore down: drive returned another action.`
+Enemies: 6 on screen. Most to the down-right (2), fewest to the up-right (0).
+Current goal: Charge the Spud Shrine, since 0:57.
+Recent goals: 0:28 Explore down-right: drive returned another action; 0:29 Explore right: drive returned another action; 0:31 Explore down-right: drive returned another action; 0:32 Explore right: drive returned another action; 0:33 Explore down-right: drive returned another action; 0:57 Charge the Spud Shrine: drive returned another action.`
     }
   };
 
@@ -4612,19 +4625,33 @@ Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore dow
     }));
     const loadoutPane = h("section", "tbh-fsd-loadout", h("h3", "tbh-fsd-label", "Loadout"), h("p", "tbh-fsd-hint", "The picker's question at every level-up, chest and shrine. It reads the game's state, and whatever you embed here."), loadout.wrap, loadoutErrors, h("details", "tbh-fsd-fold", h("summary", "", "State the picker can embed"), blockList));
     const entityList = h("div", "tbh-fsd-entity-groups");
-    const entityPane = h("section", "tbh-fsd-world", h("h3", "tbh-fsd-label", "In the world"), h("p", "tbh-fsd-hint", "What the autopilot can walk Tibo to, under the game's own names. Click to add the name where the caret is."), entityList);
+    const entityCount = h("span", "tbh-fsd-entity-count");
+    const entityPane = h("section", "tbh-fsd-world", h("div", "tbh-fsd-label-row", h("h3", "tbh-fsd-label", "In the world"), entityCount), entityList);
+    let chips = [];
     const renderEntities = () => {
       entities = game.entities();
-      const chip = (e) => {
+      chips = entities.map((e) => {
         const el = inserter(h("button", "tbh-fsd-entity", svgIcon(ACTION_ICONS[e.tag], "tbh-fsd-entity-icon"), e.name), () => insert(target ?? builder.area, e.name));
         el.type = "button";
-        el.addEventListener("pointerenter", () => showTip(`entity:${e.key}`, el.getBoundingClientRect(), h("b", "tbh-fsd-tip-name", e.name), ...e.name === e.key ? [] : [h("code", "tbh-fsd-tip-key", e.key)], h("div", "tbh-fsd-tip-about", e.about || "No description in the game.")));
-        return el;
-      };
+        el.addEventListener("pointerenter", () => showTip(`entity:${e.key}`, el.getBoundingClientRect(), h("b", "tbh-fsd-tip-name", e.name), ...e.name === e.key ? [] : [h("code", "tbh-fsd-tip-key", e.key)], h("div", "tbh-fsd-tip-about", e.about || "No description in the game."), ...el.classList.contains("tbh-fsd-unused") ? [h("div", "tbh-fsd-tip-unused", "The function never names it.")] : []));
+        return { entity: e, el };
+      });
       entityList.replaceChildren(...SECTIONS.flatMap((section) => {
-        const group = entities.filter((e) => e.section === section);
-        return group.length === 0 ? [] : [h("h4", "tbh-fsd-entity-type", section), h("div", "tbh-fsd-entities", ...group.map(chip))];
+        const group = chips.filter((c) => c.entity.section === section);
+        return group.length === 0 ? [] : [h("h4", "tbh-fsd-entity-type", section), h("div", "tbh-fsd-entities", ...group.map((c) => c.el))];
       }), ...entities.some((e) => e.name !== e.key) ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]);
+      markUsed(draft().code);
+    };
+    const markUsed = (source) => {
+      const literals = new Set([...source.matchAll(/(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)].map((m) => m[2]));
+      let used = 0;
+      for (const { entity, el } of chips) {
+        const named = literals.has(entity.key) || literals.has(entity.name);
+        if (named)
+          used++;
+        el.classList.toggle("tbh-fsd-unused", !named);
+      }
+      entityCount.textContent = `${used} used · ${chips.length - used} unused`;
     };
     const saved = h("span", "tbh-fsd-saved");
     const stopButton = h("button", "tbh-fsd-stop", "Stop driving");
@@ -4697,6 +4724,7 @@ Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore dow
       now.classList.toggle("tbh-fsd-now-error", active?.error !== undefined);
       now.textContent = active?.error !== undefined ? `drive threw: ${active.error}` : active?.action === undefined ? "" : `Now: ${active.action.why ?? ""} (${actionWords(active.action)})`;
       code.show(d.code, active?.action?.why);
+      markUsed(d.code);
       const kept = active === undefined || Object.keys(active.memory).length === 0 ? undefined : active.memory;
       memory.hidden = kept === undefined;
       memory.textContent = kept === undefined ? "" : `memory: ${JSON.stringify(kept, null, 2)}`;
