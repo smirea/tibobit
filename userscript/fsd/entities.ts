@@ -78,3 +78,16 @@ export function worldEntities(link: GameLink): Entity[] {
   }
   return found.sort((a, z) => SECTIONS.indexOf(a.section) - SECTIONS.indexOf(z.section) || a.name.localeCompare(z.name));
 }
+
+// A plain search, not a tokenizer: the function's strings nest inside template literals and its
+// comments hold apostrophes, which throw a tokenizer out of step. A word counts in quotes, as an
+// object's key (a ranking table) or read off an object; a bare variable named `heal` does not.
+const named = (source: string, word: string) => {
+  const w = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(["'\`])${w}\\1|(?<![\\w$.])${w}\\??\\s*:(?!:)|\\.${w}(?![\\w$])`).test(source);
+};
+
+/** Whether the function's code names this thing, by the game's key or its English name. */
+export function namedIn(source: string, entity: Pick<Entity, "key" | "name">): boolean {
+  return named(source, entity.key) || named(source, entity.name);
+}

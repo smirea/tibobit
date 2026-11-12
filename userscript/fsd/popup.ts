@@ -4,7 +4,7 @@ import type { Draft } from "./draft";
 import { actionWords } from "./drive-overlay";
 import { DRIVER_TYPES } from "./driver-source";
 import type { StateField } from "./driver-types";
-import { type Entity, SECTIONS } from "./entities";
+import { type Entity, namedIn, SECTIONS } from "./entities";
 import { EMBEDS } from "../../bot/drive";
 import type { State } from "../../protocol/driver";
 import type { Pilot } from "../pilot/pilot";
@@ -307,14 +307,11 @@ export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly State
     );
     markUsed(draft().code);
   };
-  // A plain search for each quoted name, not a tokenizer: the function's strings nest inside template
-  // literals and its comments hold apostrophes, which throw a tokenizer out of step.
-  const quoted = (source: string, word: string) => ["\"", "'", "`"].some((q) => source.includes(`${q}${word}${q}`));
-  /** Marks the things the function names in quotes, by the game's key or its English name. */
+  /** Marks the things the function names, by the game's key or its English name. */
   const markUsed = (source: string) => {
     let used = 0;
     for (const { entity, el } of chips) {
-      const named = quoted(source, entity.key) || quoted(source, entity.name);
+      const named = namedIn(source, entity);
       if (named) used++;
       el.classList.toggle("tbh-fsd-unused", !named);
     }

@@ -3747,6 +3747,13 @@ export type Action = (
     }
     return found.sort((a, z) => SECTIONS.indexOf(a.section) - SECTIONS.indexOf(z.section) || a.name.localeCompare(z.name));
   }
+  var named = (source, word) => {
+    const w = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(["'\`])${w}\\1|(?<![\\w$.])${w}\\??\\s*:(?!:)|\\.${w}(?![\\w$])`).test(source);
+  };
+  function namedIn(source, entity) {
+    return named(source, entity.key) || named(source, entity.name);
+  }
 
   // userscript/panel/keys.ts
   var ownKeydowns = new Set;
@@ -4647,11 +4654,10 @@ Recent goals: 0:28 Explore down-right: drive returned another action; 0:29 Explo
       }), ...entities.some((e) => e.name !== e.key) ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]);
       markUsed(draft().code);
     };
-    const quoted = (source, word) => ['"', "'", "`"].some((q) => source.includes(`${q}${word}${q}`));
     const markUsed = (source) => {
       let used = 0;
       for (const { entity, el } of chips) {
-        const named = quoted(source, entity.key) || quoted(source, entity.name);
+        const named = namedIn(source, entity);
         if (named)
           used++;
         el.classList.toggle("tbh-fsd-unused", !named);
