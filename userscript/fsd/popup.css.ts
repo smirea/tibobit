@@ -40,7 +40,7 @@ export const css = `
 .tbh-fsd-entity:hover { border-color: var(--gold); background: rgba(255,211,107,.1); }
 .tbh-fsd-entity-icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--gold); }
 .tbh-fsd-entity-icon .tbh-svg-fill { fill: currentColor; stroke: none; }
-.tbh-fsd-tip { position: fixed; z-index: 1; max-width: min(420px, calc(100vw - 16px)); max-height: 46vh; overflow: hidden; box-sizing: border-box; padding: 8px 10px; pointer-events: none;
+.tbh-fsd-tip { position: fixed; z-index: 1; max-width: min(520px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: hidden; box-sizing: border-box; padding: 8px 10px; pointer-events: none;
   background: #1b1622; border: 1px solid #8e74c9; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.6); font-size: 11.5px; }
 .tbh-fsd-tip[hidden] { display: none; }
 .tbh-fsd-tip-name { color: var(--violet); }

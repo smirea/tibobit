@@ -133,7 +133,7 @@ export class Driver {
     const text = action.why ?? key;
     if (text !== this.said?.text && r.time - (this.said?.at ?? Number.NEGATIVE_INFINITY) >= SHOW_EVERY) {
       this.said = { text, at: r.time };
-      this.how = { kind: "state", state: text, about: key };
+      this.how = { kind: "state", state: text, about: JSON.stringify(action, null, 2) };
       say({ role: "planner", model: "code", time: r.time, text, detail: key, inspect: this.how });
       log.write(r, { event: "plan", model: "code", reason: text, action: key });
     }

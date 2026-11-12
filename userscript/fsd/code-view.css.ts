@@ -8,8 +8,11 @@ export const css = `
 .tbh-code-number { color: #ff9f7a; }
 .tbh-code-comment { color: #8d7c5c; font-style: italic; }
 .tbh-code-field { border-bottom: 1px dotted rgba(127,214,255,.6); cursor: help; }
-.tbh-code-field:hover { background: rgba(127,214,255,.16); }
+.tbh-code-declared { border-bottom: 1px dotted rgba(127,214,255,.6); cursor: help; }
+.tbh-code-field:hover, .tbh-code-declared:hover { background: rgba(127,214,255,.16); }
 .tbh-code-compact { padding: 4px 0; font-size: 9.5px; line-height: 1.4; border: 0; background: transparent; overflow: hidden; }
 .tbh-code-compact .tbh-code-line { padding: 0 6px; border-left-width: 2px; }
-.tbh-code-compact .tbh-code-field { border-bottom: 0; }
+.tbh-code-compact :is(.tbh-code-field, .tbh-code-declared) { border-bottom: 0; }
+.tbh-code-tip { max-height: none; margin-top: 6px; padding: 6px 0; font-size: 10.5px; }
+.tbh-code-tip .tbh-code-line { padding: 0 8px; }
 `;

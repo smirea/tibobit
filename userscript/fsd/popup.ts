@@ -27,15 +27,20 @@ const EMBED = /(\{\{[\w.]+\}\})/;
 
 const read = (state: State, path: string) => path.split(".").reduce<unknown>((at, key) => (at as Record<string, unknown> | undefined)?.[key], state);
 
-/** A value of the state in the room a list row or a tooltip has: a list by its length and its first entries. */
-function shown(value: unknown, room: number): string {
+/** A value of the state in a list row: a list by its length, an object folded. */
+function brief(value: unknown): string {
   if (value === undefined) return "";
-  if (Array.isArray(value)) {
-    const first = value.slice(0, 3).map((x) => JSON.stringify(x)).join("\n");
-    return room < 20 ? `${value.length}` : `${value.length} in the list${value.length === 0 ? "" : `, nearest first:\n${first}${value.length > 3 ? "\n…" : ""}`}`;
-  }
-  const text = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
-  return text.length > room ? `${text.slice(0, room - 1)}…` : text;
+  if (Array.isArray(value)) return `${value.length}`;
+  if (typeof value === "object" && value !== null) return "{…}";
+  const text = String(value);
+  return text.length > 14 ? `${text.slice(0, 13)}…` : text;
+}
+
+/** A value of the state in a tooltip, as indented JSON; a long list shows its first entries and how many more. */
+function pretty(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length <= 3) return JSON.stringify(value, null, 2);
+  return `${JSON.stringify(value.slice(0, 3), null, 2).replace(/\n]$/, ",")}\n  … ${value.length - 3} more\n]`;
 }
 
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -96,7 +101,7 @@ function errorList(messages: readonly string[]): HTMLElement {
  * from, with the function shown under it; on the right the picker's loadout question. Everything is
  * kept in this browser.
  */
-export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly StateField[]): { open(from: HTMLElement): void } {
+export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly StateField[], types: ReadonlyMap<string, string>): { open(from: HTMLElement): void } {
   addStyle(popupCss);
   const dialog = h("dialog", "tbh-fsd");
   dialog.setAttribute("aria-labelledby", "tbh-fsd-title");
@@ -146,19 +151,30 @@ export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly State
     const value = live ?? example;
     return value === undefined || value === "" ? [] : [h("div", "tbh-fsd-tip-label", live !== undefined ? `Last seen in a run, at ${clock(pilot.preview()?.time ?? 0)}` : "Example, from a real run"), h("pre", "tbh-fsd-tip-value", value)];
   };
+  /** TypeScript in a tooltip, coloured as the function is, so a type there reads the same as in the code. */
+  const typed = (source: string) => {
+    const view = codeView(fields, types);
+    view.el.classList.add("tbh-code-tip");
+    view.show(source);
+    return view.el;
+  };
   /** A field of the state as the types declare it: its type, its comment, and what it held. */
   const fieldTip = (path: string, box: DOMRect) => {
     const field = fields.find((f) => f.path === path);
     const live = pilot.preview();
+    const type = field?.type ?? "";
     showTip(
       `field:${path}:${live?.time ?? ""}`,
       box,
       h("b", "tbh-fsd-tip-name", `state.${path}`),
-      h("code", "tbh-fsd-tip-key", field?.type ?? ""),
+      ...(type.includes("\n") ? [] : [h("code", "tbh-fsd-tip-key", type)]),
       h("div", "tbh-fsd-tip-about", field?.about ?? ""),
-      ...valueLines(live === undefined ? undefined : shown(read(live.state, path), 400), shown(read(EXAMPLE.state as State, path), 400)),
+      ...(type.includes("\n") ? [typed(type)] : []),
+      ...valueLines(live === undefined ? undefined : pretty(read(live.state, path)), pretty(read(EXAMPLE.state as State, path))),
     );
   };
+  /** A type the function is written against, as declared, with its comments. */
+  const typeTip = (name: string, box: DOMRect) => showTip(`type:${name}`, box, h("b", "tbh-fsd-tip-name", name), typed(types.get(name) ?? ""));
   const embedTip = (name: string, box: DOMRect) =>
     showTip(
       `embed:${name}:${pilot.preview()?.time ?? ""}`,
@@ -183,7 +199,7 @@ export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly State
   const fieldEls = new Map<string, { el: HTMLButtonElement; value: HTMLElement }>();
   for (const field of fields) {
     const value = h("span", "tbh-fsd-block-value");
-    const el = inserter(h("button", "tbh-fsd-block", h("span", "tbh-fsd-block-head", h("b", "", field.path), h("code", "tbh-fsd-block-type", field.type), value), h("span", "tbh-fsd-block-about", field.about)), () => insert(builder.area, `state.${field.path}`));
+    const el = inserter(h("button", "tbh-fsd-block", h("span", "tbh-fsd-block-head", h("b", "", field.path), h("code", "tbh-fsd-block-type", field.type.includes("\n") ? "{…}" : field.type.replace(/\{.*\}/, "{…}")), value), h("span", "tbh-fsd-block-about", field.about)), () => insert(builder.area, `state.${field.path}`));
     el.type = "button";
     el.dataset.name = field.path;
     el.style.paddingLeft = `${8 + 10 * (field.path.split(".").length - 1)}px`;
@@ -210,9 +226,9 @@ export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly State
   });
   const buildNote = h("span", "tbh-fsd-build-note");
   const buildErrors = h("div", "");
-  const code = codeView(fields);
-  const types = codeView(fields);
-  types.show(DRIVER_TYPES.trim());
+  const code = codeView(fields, types);
+  const declared = codeView(fields, types);
+  declared.show(DRIVER_TYPES.trim());
   const now = h("div", "tbh-fsd-now");
   const builderPane = h(
     "section",
@@ -225,14 +241,15 @@ export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly State
     h("h3", "tbh-fsd-label tbh-fsd-code-label", "Function"),
     now,
     code.el,
-    h("details", "tbh-fsd-fold", h("summary", "", "The types it is written against"), types.el),
+    h("details", "tbh-fsd-fold", h("summary", "", "The types it is written against"), declared.el),
   );
-  for (const view of [code, types]) {
+  for (const view of [code, declared]) {
     view.el.addEventListener("pointerover", (e) => {
-      const field = view.fieldAt(e.target);
-      if (field === undefined) {
-        if (tipFor.startsWith("field:")) hideTip();
-      } else fieldTip(field.path, field.box);
+      const at = view.hoverAt(e.target);
+      if (at === undefined) {
+        if (/^(field|type):/.test(tipFor)) hideTip();
+      } else if ("type" in at) typeTip(at.type, at.box);
+      else fieldTip(at.field, at.box);
     });
     view.el.addEventListener("pointerleave", hideTip);
   }
@@ -360,7 +377,7 @@ export function fsdPopup(pilot: Pilot, game: GameControl, fields: readonly State
     code.show(d.code, active?.action?.why);
 
     const live = pilot.preview();
-    for (const [path, { value }] of fieldEls) value.textContent = shown(read(live?.state ?? (EXAMPLE.state as State), path), 14);
+    for (const [path, { value }] of fieldEls) value.textContent = brief(read(live?.state ?? (EXAMPLE.state as State), path));
 
     status.textContent = driving ? "Driving: a function you write takes over as soon as it is ready" : connected ? "" : "The agent server is not connected";
     status.dataset.state = driving ? "on" : connected ? "" : "error";

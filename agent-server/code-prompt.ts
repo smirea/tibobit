@@ -6,13 +6,13 @@ import type { State } from "../protocol/driver";
 import EXAMPLE from "../protocol/state.example.json";
 import { DRIVER_TYPES } from "./code-check";
 
-/** The state as JSON a person can scan: one line per field, one line per thing in a list. */
+/** How many entries of each list the example keeps; the rest are dropped so the example stays readable. */
+const EXAMPLE_ENTRIES = 4;
+
+/** The state as indented JSON, each list cut to its first entries. */
 function stateJson(state: State): string {
-  const lines = Object.entries(state).map(([key, value]) => {
-    if (!Array.isArray(value) || value.length === 0) return `  ${JSON.stringify(key)}: ${JSON.stringify(value)}`;
-    return `  ${JSON.stringify(key)}: [\n${value.map((x) => `    ${JSON.stringify(x)}`).join(",\n")}\n  ]`;
-  });
-  return `{\n${lines.join(",\n")}\n}`;
+  const cut = Object.fromEntries(Object.entries(state).map(([key, value]) => [key, Array.isArray(value) ? value.slice(0, EXAMPLE_ENTRIES) : value]));
+  return JSON.stringify(cut, null, 2);
 }
 
 /** Every kind of point of interest the game has, as `kind: name. what the game says it does`. */
@@ -60,6 +60,8 @@ By the game's own kind, which is \`Poi.kind\`, then the name the person sees in 
 ${poiLines(book)}
 
 ## One call's state, from a real run
+
+Each list is cut to its first ${EXAMPLE_ENTRIES} entries here. In the real call it holds everything, nearest first: this one had ${(Object.entries(EXAMPLE.state) as [string, unknown][]).filter(([, v]) => Array.isArray(v)).map(([k, v]) => `${(v as unknown[]).length} ${k}`).join(", ")}.
 
 \`\`\`json
 ${stateJson(EXAMPLE.state as State)}

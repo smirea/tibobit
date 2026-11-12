@@ -3302,7 +3302,7 @@ Goal: {{goal}}.
 .tbh-fsd-entity:hover { border-color: var(--gold); background: rgba(255,211,107,.1); }
 .tbh-fsd-entity-icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--gold); }
 .tbh-fsd-entity-icon .tbh-svg-fill { fill: currentColor; stroke: none; }
-.tbh-fsd-tip { position: fixed; z-index: 1; max-width: min(420px, calc(100vw - 16px)); max-height: 46vh; overflow: hidden; box-sizing: border-box; padding: 8px 10px; pointer-events: none;
+.tbh-fsd-tip { position: fixed; z-index: 1; max-width: min(520px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: hidden; box-sizing: border-box; padding: 8px 10px; pointer-events: none;
   background: #1b1622; border: 1px solid #8e74c9; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.6); font-size: 11.5px; }
 .tbh-fsd-tip[hidden] { display: none; }
 .tbh-fsd-tip-name { color: var(--violet); }
@@ -3372,16 +3372,19 @@ Goal: {{goal}}.
 .tbh-code-number { color: #ff9f7a; }
 .tbh-code-comment { color: #8d7c5c; font-style: italic; }
 .tbh-code-field { border-bottom: 1px dotted rgba(127,214,255,.6); cursor: help; }
-.tbh-code-field:hover { background: rgba(127,214,255,.16); }
+.tbh-code-declared { border-bottom: 1px dotted rgba(127,214,255,.6); cursor: help; }
+.tbh-code-field:hover, .tbh-code-declared:hover { background: rgba(127,214,255,.16); }
 .tbh-code-compact { padding: 4px 0; font-size: 9.5px; line-height: 1.4; border: 0; background: transparent; overflow: hidden; }
 .tbh-code-compact .tbh-code-line { padding: 0 6px; border-left-width: 2px; }
-.tbh-code-compact .tbh-code-field { border-bottom: 0; }
+.tbh-code-compact :is(.tbh-code-field, .tbh-code-declared) { border-bottom: 0; }
+.tbh-code-tip { max-height: none; margin-top: 6px; padding: 6px 0; font-size: 10.5px; }
+.tbh-code-tip .tbh-code-line { padding: 0 8px; }
 `;
 
   // userscript/fsd/code-view.ts
   var KEYWORDS = new Set(["const", "let", "if", "else", "return", "function", "type", "export", "true", "false", "null", "undefined", "extends", "typeof", "in"]);
   var styled = false;
-  function codeView(fields, compact = false) {
+  function codeView(fields, types, compact = false) {
     if (!styled)
       addStyle(css8);
     styled = true;
@@ -3422,9 +3425,12 @@ Goal: {{goal}}.
           out.push(el);
         } else if (word !== undefined && KEYWORDS.has(word))
           out.push(h("span", "tbh-code-keyword", text));
-        else if (word !== undefined && /^[A-Z]/.test(word))
-          out.push(h("span", "tbh-code-type", text));
-        else
+        else if (word !== undefined && /^[A-Z]/.test(word)) {
+          const el = h("span", `tbh-code-type${types.has(word) ? " tbh-code-declared" : ""}`, text);
+          if (types.has(word))
+            el.dataset.type = word;
+          out.push(el);
+        } else
           out.push(text);
       }
       if (at < line.length)
@@ -3466,10 +3472,14 @@ Goal: {{goal}}.
         if (compact && first !== undefined)
           el.scrollTop = Math.max(0, first.offsetTop - el.clientHeight / 2);
       },
-      fieldAt(target) {
-        const field = target instanceof HTMLElement ? target.closest(".tbh-code-field") : null;
-        const path = field?.dataset.path;
-        return field === null || field === undefined || path === undefined || !el.contains(field) ? undefined : { path, box: field.getBoundingClientRect() };
+      hoverAt(target) {
+        const at = target instanceof HTMLElement ? target.closest(".tbh-code-field, .tbh-code-declared") : null;
+        if (at === null || !el.contains(at))
+          return;
+        const box = at.getBoundingClientRect();
+        if (at.dataset.type !== undefined)
+          return { type: at.dataset.type, box };
+        return at.dataset.path === undefined ? undefined : { field: at.dataset.path, box };
       }
     };
   }
@@ -3499,9 +3509,9 @@ Goal: {{goal}}.
     const { type, why: _, ...rest } = action;
     return [type, ...Object.entries(rest).map(([k, v]) => k === "id" ? `#${v}` : String(v))].join(" ");
   };
-  function driveOverlay(pilot, fields) {
+  function driveOverlay(pilot, fields, types) {
     addStyle(css9);
-    const view = codeView(fields, true);
+    const view = codeView(fields, types, true);
     const why = h("b", "tbh-do-why");
     const action = h("span", "tbh-do-action");
     const box = h("aside", "tbh-do", h("header", "tbh-do-head", h("span", "tbh-do-logo", "FSD"), why, action), view.el);
@@ -4386,18 +4396,24 @@ Recent goals: 0:52 Explore down: drive returned another action; 0:52 Explore dow
   // userscript/fsd/popup.ts
   var EMBED = /(\{\{[\w.]+\}\})/;
   var read = (state, path) => path.split(".").reduce((at, key) => at?.[key], state);
-  function shown(value, room) {
+  function brief(value) {
     if (value === undefined)
       return "";
-    if (Array.isArray(value)) {
-      const first = value.slice(0, 3).map((x) => JSON.stringify(x)).join(`
-`);
-      return room < 20 ? `${value.length}` : `${value.length} in the list${value.length === 0 ? "" : `, nearest first:
-${first}${value.length > 3 ? `
-…` : ""}`}`;
-    }
-    const text = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
-    return text.length > room ? `${text.slice(0, room - 1)}…` : text;
+    if (Array.isArray(value))
+      return `${value.length}`;
+    if (typeof value === "object" && value !== null)
+      return "{…}";
+    const text = String(value);
+    return text.length > 14 ? `${text.slice(0, 13)}…` : text;
+  }
+  function pretty(value) {
+    if (value === undefined)
+      return;
+    if (!Array.isArray(value) || value.length <= 3)
+      return JSON.stringify(value, null, 2);
+    return `${JSON.stringify(value.slice(0, 3), null, 2).replace(/\n]$/, ",")}
+  … ${value.length - 3} more
+]`;
   }
   var reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   function growField(embeds, placeholder, onInput) {
@@ -4441,7 +4457,7 @@ ${first}${value.length > 3 ? `
     el.hidden = messages.length === 0;
     return el;
   }
-  function fsdPopup(pilot, game, fields) {
+  function fsdPopup(pilot, game, fields, types) {
     addStyle(css7);
     const dialog = h("dialog", "tbh-fsd");
     dialog.setAttribute("aria-labelledby", "tbh-fsd-title");
@@ -4485,11 +4501,21 @@ ${first}${value.length > 3 ? `
       const value = live ?? example;
       return value === undefined || value === "" ? [] : [h("div", "tbh-fsd-tip-label", live !== undefined ? `Last seen in a run, at ${clock(pilot.preview()?.time ?? 0)}` : "Example, from a real run"), h("pre", "tbh-fsd-tip-value", value)];
     };
+    const typed = (source) => {
+      const view = codeView(fields, types);
+      view.el.classList.add("tbh-code-tip");
+      view.show(source);
+      return view.el;
+    };
     const fieldTip = (path, box) => {
       const field = fields.find((f) => f.path === path);
       const live = pilot.preview();
-      showTip(`field:${path}:${live?.time ?? ""}`, box, h("b", "tbh-fsd-tip-name", `state.${path}`), h("code", "tbh-fsd-tip-key", field?.type ?? ""), h("div", "tbh-fsd-tip-about", field?.about ?? ""), ...valueLines(live === undefined ? undefined : shown(read(live.state, path), 400), shown(read(state_example_default.state, path), 400)));
+      const type = field?.type ?? "";
+      showTip(`field:${path}:${live?.time ?? ""}`, box, h("b", "tbh-fsd-tip-name", `state.${path}`), ...type.includes(`
+`) ? [] : [h("code", "tbh-fsd-tip-key", type)], h("div", "tbh-fsd-tip-about", field?.about ?? ""), ...type.includes(`
+`) ? [typed(type)] : [], ...valueLines(live === undefined ? undefined : pretty(read(live.state, path)), pretty(read(state_example_default.state, path))));
     };
+    const typeTip = (name, box) => showTip(`type:${name}`, box, h("b", "tbh-fsd-tip-name", name), typed(types.get(name) ?? ""));
     const embedTip = (name, box) => showTip(`embed:${name}:${pilot.preview()?.time ?? ""}`, box, h("b", "tbh-fsd-tip-name", `{{${name}}}`), h("div", "tbh-fsd-tip-about", EMBEDS[name] ?? "Not part of the state: the picker cannot read this."), ...valueLines(pilot.preview()?.blocks[name], state_example_default.blocks[name]));
     const inserter = (el, onClick) => {
       el.addEventListener("mousedown", (e) => e.preventDefault());
@@ -4504,7 +4530,8 @@ ${first}${value.length > 3 ? `
     const fieldEls = new Map;
     for (const field of fields) {
       const value = h("span", "tbh-fsd-block-value");
-      const el = inserter(h("button", "tbh-fsd-block", h("span", "tbh-fsd-block-head", h("b", "", field.path), h("code", "tbh-fsd-block-type", field.type), value), h("span", "tbh-fsd-block-about", field.about)), () => insert(builder.area, `state.${field.path}`));
+      const el = inserter(h("button", "tbh-fsd-block", h("span", "tbh-fsd-block-head", h("b", "", field.path), h("code", "tbh-fsd-block-type", field.type.includes(`
+`) ? "{…}" : field.type.replace(/\{.*\}/, "{…}")), value), h("span", "tbh-fsd-block-about", field.about)), () => insert(builder.area, `state.${field.path}`));
       el.type = "button";
       el.dataset.name = field.path;
       el.style.paddingLeft = `${8 + 10 * (field.path.split(".").length - 1)}px`;
@@ -4531,19 +4558,21 @@ ${first}${value.length > 3 ? `
     });
     const buildNote = h("span", "tbh-fsd-build-note");
     const buildErrors = h("div", "");
-    const code = codeView(fields);
-    const types = codeView(fields);
-    types.show(DRIVER_TYPES.trim());
+    const code = codeView(fields, types);
+    const declared = codeView(fields, types);
+    declared.show(DRIVER_TYPES.trim());
     const now = h("div", "tbh-fsd-now");
-    const builderPane = h("section", "tbh-fsd-builder", h("h3", "tbh-fsd-label", "Function builder"), h("p", "tbh-fsd-hint", "Describe how Tibo should play. Opus 5.5 turns it into one TypeScript function that reads the state and returns what the autopilot does next. TypeScript checks that it always returns an action before the bot runs it."), builder.wrap, h("div", "tbh-fsd-build-row", buildButton, buildNote), buildErrors, h("h3", "tbh-fsd-label tbh-fsd-code-label", "Function"), now, code.el, h("details", "tbh-fsd-fold", h("summary", "", "The types it is written against"), types.el));
-    for (const view of [code, types]) {
+    const builderPane = h("section", "tbh-fsd-builder", h("h3", "tbh-fsd-label", "Function builder"), h("p", "tbh-fsd-hint", "Describe how Tibo should play. Opus 5.5 turns it into one TypeScript function that reads the state and returns what the autopilot does next. TypeScript checks that it always returns an action before the bot runs it."), builder.wrap, h("div", "tbh-fsd-build-row", buildButton, buildNote), buildErrors, h("h3", "tbh-fsd-label tbh-fsd-code-label", "Function"), now, code.el, h("details", "tbh-fsd-fold", h("summary", "", "The types it is written against"), declared.el));
+    for (const view of [code, declared]) {
       view.el.addEventListener("pointerover", (e) => {
-        const field = view.fieldAt(e.target);
-        if (field === undefined) {
-          if (tipFor.startsWith("field:"))
+        const at = view.hoverAt(e.target);
+        if (at === undefined) {
+          if (/^(field|type):/.test(tipFor))
             hideTip();
-        } else
-          fieldTip(field.path, field.box);
+        } else if ("type" in at)
+          typeTip(at.type, at.box);
+        else
+          fieldTip(at.field, at.box);
       });
       view.el.addEventListener("pointerleave", hideTip);
     }
@@ -4644,7 +4673,7 @@ ${first}${value.length > 3 ? `
       code.show(d.code, active?.action?.why);
       const live = pilot.preview();
       for (const [path, { value }] of fieldEls)
-        value.textContent = shown(read(live?.state ?? state_example_default.state, path), 14);
+        value.textContent = brief(read(live?.state ?? state_example_default.state, path));
       status.textContent = driving ? "Driving: a function you write takes over as soon as it is ready" : connected ? "" : "The agent server is not connected";
       status.dataset.state = driving ? "on" : connected ? "" : "error";
       const refused = pilot.state().detail;
@@ -4719,6 +4748,13 @@ ${first}${value.length > 3 ? `
   }
 
   // userscript/fsd/driver-types.ts
+  var isComment = (line) => /^\s*(\/\*\*|\*|\/\/)/.test(line);
+  function block(members) {
+    const kept = members.filter((l) => !isComment(l) && l.trim() !== "");
+    const indent = Math.min(...kept.map((l) => /^ */.exec(l)?.[0].length ?? 0));
+    return ["{", ...kept.map((l) => `  ${l.slice(indent)}`), "}"].join(`
+`);
+  }
   function stateFields(types) {
     const lines = types.split(`
 `);
@@ -4726,33 +4762,59 @@ ${first}${value.length > 3 ? `
     if (start < 0)
       throw new Error("protocol/driver.ts declares no State");
     const fields = [];
-    const parents = [];
+    const open = [];
     let about = [];
-    for (const raw of lines.slice(start + 1)) {
+    for (let i = start + 1;i < lines.length; i++) {
+      const raw = lines[i] ?? "";
       const line = raw.trim();
       if (raw.startsWith("};"))
         break;
-      if (line.startsWith("/**") || line.startsWith("*")) {
+      if (isComment(raw)) {
         const text = line.replace(/^\/\*\*\s?|^\*\/$|^\*\s?|\s?\*\/$/g, "").trim();
         if (text !== "")
           about.push(text);
         continue;
       }
       if (line.startsWith("}")) {
-        parents.pop();
+        const closed = open.pop();
+        if (closed !== undefined)
+          closed.field.type = block(lines.slice(closed.from + 1, i));
         continue;
       }
       const member = /^(\w+)\??: (.*?);?$/.exec(line);
       if (member === null)
         continue;
       const [, name = "", type = ""] = member;
-      const nested = type === "{";
-      fields.push({ path: [...parents, name].join("."), type: nested ? "object" : type, about: about.join(" ") });
+      const field = { path: [...open.map((o) => o.field.path.split(".").at(-1)), name].join("."), type, about: about.join(" ") };
+      fields.push(field);
       about = [];
-      if (nested)
-        parents.push(name);
+      if (type === "{")
+        open.push({ field, from: i });
     }
     return fields;
+  }
+  function typeDeclarations(types) {
+    const lines = types.split(`
+`);
+    const out = new Map;
+    for (let i = 0;i < lines.length; i++) {
+      const name = /^export type (\w+)\b/.exec(lines[i] ?? "")?.[1];
+      if (name === undefined)
+        continue;
+      let from = i;
+      while (from > 0 && isComment(lines[from - 1] ?? ""))
+        from--;
+      let to = i;
+      for (let depth = 0;to < lines.length; to++) {
+        const line = isComment(lines[to] ?? "") ? "" : lines[to] ?? "";
+        depth += (line.match(/[{(]/g) ?? []).length - (line.match(/[})]/g) ?? []).length;
+        if (depth === 0 && /;\s*$/.test(line))
+          break;
+      }
+      out.set(name, lines.slice(from, to + 1).join(`
+`).replace(/^export /m, ""));
+    }
+    return out;
   }
 
   // userscript/panel/panel.ts
@@ -4785,8 +4847,9 @@ ${first}${value.length > 3 ? `
   }
   function startPanel(link, discovery, bridge) {
     const fields = stateFields(DRIVER_TYPES);
-    const fsd = fsdPopup(bridge.pilot, gameControl(link), fields);
-    driveOverlay(bridge.pilot, fields);
+    const types = typeDeclarations(DRIVER_TYPES);
+    const fsd = fsdPopup(bridge.pilot, gameControl(link), fields, types);
+    driveOverlay(bridge.pilot, fields, types);
     const { panel, content } = mount(botFeed(bridge.pilot, fsd.open), connectionRow(bridge, fsd.open));
     let collapsedBefore;
     const followPilot = () => {

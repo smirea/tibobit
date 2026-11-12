@@ -12,9 +12,9 @@ export const actionWords = (action: Action): string => {
 };
 
 /** The function in the screen's top left corner while the bot drives, with the line that returned the action it is on lit. */
-export function driveOverlay(pilot: Pilot, fields: readonly StateField[]) {
+export function driveOverlay(pilot: Pilot, fields: readonly StateField[], types: ReadonlyMap<string, string>) {
   addStyle(css);
-  const view = codeView(fields, true);
+  const view = codeView(fields, types, true);
   const why = h("b", "tbh-do-why");
   const action = h("span", "tbh-do-action");
   const box = h("aside", "tbh-do", h("header", "tbh-do-head", h("span", "tbh-do-logo", "FSD"), why, action), view.el);
