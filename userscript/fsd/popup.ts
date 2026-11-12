@@ -7,7 +7,7 @@ import type { Pilot } from "../pilot/pilot";
 import { addStyle, h } from "../panel/dom";
 import { onOwnKeydown } from "../panel/keys";
 import { clock } from "../../clock";
-import type { Entity } from "./entities";
+import { type Entity, ENTITY_TYPES } from "./entities";
 import { ACTION_ICONS, svgIcon } from "../pilot/icons";
 import EXAMPLE from "../../protocol/state.example.json";
 
@@ -234,18 +234,22 @@ export function fsdPopup(pilot: Pilot, game: GameControl): { open(from: HTMLElem
     loadoutErrors,
     h("details", "tbh-fsd-fold", h("summary", "", "State the picker can embed"), blockList),
   );
-  const entityList = h("div", "tbh-fsd-entities");
+  const entityList = h("div", "tbh-fsd-entity-groups");
   const entityPane = h("section", "tbh-fsd-world", h("h3", "tbh-fsd-label", "In the world"), h("p", "tbh-fsd-hint", "What the autopilot can walk Tibo to. Click to add the name where the caret is."), entityList);
   const renderEntities = () => {
     entities = game.entities();
+    const chip = (e: Entity) => {
+      const el = inserter(h("button", "tbh-fsd-entity", svgIcon(ACTION_ICONS[e.tag], "tbh-fsd-entity-icon"), e.name), () => insert(target ?? builder.area, e.name));
+      el.type = "button";
+      el.addEventListener("pointerenter", () => showTip(`entity:${e.name}`, el.getBoundingClientRect(), h("b", "tbh-fsd-tip-name", e.name), h("div", "tbh-fsd-tip-about", e.about || "No description in the game.")));
+      return el;
+    };
     entityList.replaceChildren(
-      ...entities.map((e) => {
-        const el = inserter(h("button", "tbh-fsd-entity", svgIcon(ACTION_ICONS[e.tag], "tbh-fsd-entity-icon"), e.name), () => insert(target ?? builder.area, e.name));
-        el.type = "button";
-        el.addEventListener("pointerenter", () => showTip(`entity:${e.name}`, el.getBoundingClientRect(), h("b", "tbh-fsd-tip-name", e.name), h("div", "tbh-fsd-tip-about", e.about || "No description in the game.")));
-        return el;
+      ...Object.entries(ENTITY_TYPES).flatMap(([type, label]) => {
+        const group = entities.filter((e) => e.type === type);
+        return group.length === 0 ? [] : [h("h4", "tbh-fsd-entity-type", label), h("div", "tbh-fsd-entities", ...group.map(chip))];
       }),
-      ...(entities.length > 3 ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]),
+      ...(entities.some((e) => e.type !== "pickup") ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]),
     );
   };
 

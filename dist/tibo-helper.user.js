@@ -3614,6 +3614,8 @@ Goal: {{goal}}.
 .tbh-fsd-builder, .tbh-fsd-loadout, .tbh-fsd-world { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .tbh-fsd-side { position: sticky; top: 0; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .tbh-fsd-entities { display: flex; flex-wrap: wrap; gap: 5px; }
+.tbh-fsd-entity-groups { display: flex; flex-direction: column; gap: 5px; }
+.tbh-fsd-entity-type { margin: 4px 0 0; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .tbh-fsd-entity { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 5px; font: inherit; font-size: 11.5px; color: var(--text); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); border-radius: 999px; cursor: copy; }
 .tbh-fsd-entity:hover { border-color: var(--gold); background: rgba(255,211,107,.1); }
 .tbh-fsd-entity-icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--gold); }
@@ -3892,6 +3894,29 @@ ${ACTIONS[action.type].about}`;
             listener(e);
       }, true);
     }
+  }
+
+  // userscript/fsd/entities.ts
+  var ENTITY_TYPES = { pickup: "Pickups", spot: "Spots", varietyPlace: "Variety places" };
+  function worldEntities(link) {
+    const found = [
+      { type: "pickup", name: "chest", about: "A chest on the ground, from an elite or the map. Standing on it opens it for a free pick.", tag: "Loot" },
+      { type: "pickup", name: "food", about: "Food on the ground (the game's heal pickup), which gives Tibo back health.", tag: "Eat" },
+      { type: "pickup", name: "magnet", about: "The game's magnet pickup on the ground.", tag: "Magnet" }
+    ];
+    for (const { kind } of link.table?.pois ?? []) {
+      const name = link.message(`content.poi.${kind}.name`);
+      if (kind !== "varietyPlace" && name !== undefined)
+        found.push({ type: "spot", name, about: link.message(`content.poi.${kind}.desc`) ?? "", tag: SPOT_TAGS[kind] ?? "Spot", kind });
+    }
+    for (const key of Object.keys(link.messages)) {
+      const place = /^content\.varietyPlace\.([^.]+)\.name$/.exec(key)?.[1];
+      const name = place === undefined ? undefined : link.message(key);
+      if (name !== undefined && place !== undefined)
+        found.push({ type: "varietyPlace", name, about: link.message(`content.varietyPlace.${place}.desc`) ?? "", tag: "Spot", kind: place.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase()) });
+    }
+    const types = Object.keys(ENTITY_TYPES);
+    return found.sort((a, z) => types.indexOf(a.type) - types.indexOf(z.type) || a.name.localeCompare(z.name));
   }
   // protocol/state.example.json
   var state_example_default = {
@@ -4317,16 +4342,20 @@ Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 E
       return el;
     }));
     const loadoutPane = h("section", "tbh-fsd-loadout", h("h3", "tbh-fsd-label", "Loadout"), h("p", "tbh-fsd-hint", "The picker's question at every level-up, chest and shrine. It reads the game's state, and whatever you embed here."), loadout.wrap, loadoutErrors, h("details", "tbh-fsd-fold", h("summary", "", "State the picker can embed"), blockList));
-    const entityList = h("div", "tbh-fsd-entities");
+    const entityList = h("div", "tbh-fsd-entity-groups");
     const entityPane = h("section", "tbh-fsd-world", h("h3", "tbh-fsd-label", "In the world"), h("p", "tbh-fsd-hint", "What the autopilot can walk Tibo to. Click to add the name where the caret is."), entityList);
     const renderEntities = () => {
       entities = game.entities();
-      entityList.replaceChildren(...entities.map((e) => {
+      const chip = (e) => {
         const el = inserter(h("button", "tbh-fsd-entity", svgIcon(ACTION_ICONS[e.tag], "tbh-fsd-entity-icon"), e.name), () => insert(target ?? builder.area, e.name));
         el.type = "button";
         el.addEventListener("pointerenter", () => showTip(`entity:${e.name}`, el.getBoundingClientRect(), h("b", "tbh-fsd-tip-name", e.name), h("div", "tbh-fsd-tip-about", e.about || "No description in the game.")));
         return el;
-      }), ...entities.length > 3 ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]);
+      };
+      entityList.replaceChildren(...Object.entries(ENTITY_TYPES).flatMap(([type, label]) => {
+        const group = entities.filter((e) => e.type === type);
+        return group.length === 0 ? [] : [h("h4", "tbh-fsd-entity-type", label), h("div", "tbh-fsd-entities", ...group.map(chip))];
+      }), ...entities.some((e) => e.type !== "pickup") ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]);
     };
     const saved = h("span", "tbh-fsd-saved");
     const stopButton = h("button", "tbh-fsd-stop", "Stop driving");
@@ -4475,28 +4504,6 @@ Recent goals: 1:06 Explore right: walked 300 units and found nothing new; 1:07 E
         Promise.resolve().then(() => flip(true)).catch((e) => console.error("[tibobit] the FSD open animation failed", e));
       }
     };
-  }
-
-  // userscript/fsd/entities.ts
-  function worldEntities(link) {
-    const spots = [];
-    for (const { kind } of link.table?.pois ?? []) {
-      const name = link.message(`content.poi.${kind}.name`);
-      if (kind !== "varietyPlace" && name !== undefined)
-        spots.push({ name, about: link.message(`content.poi.${kind}.desc`) ?? "", tag: SPOT_TAGS[kind] ?? "Spot", kind });
-    }
-    for (const key of Object.keys(link.messages)) {
-      const place = /^content\.varietyPlace\.([^.]+)\.name$/.exec(key)?.[1];
-      const name = place === undefined ? undefined : link.message(key);
-      if (name !== undefined && place !== undefined)
-        spots.push({ name, about: link.message(`content.varietyPlace.${place}.desc`) ?? "", tag: "Spot", kind: place.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase()) });
-    }
-    return [
-      { name: "chest", about: "A chest on the ground, from an elite or the map. Standing on it opens it for a free pick.", tag: "Loot" },
-      { name: "food", about: "Food on the ground (the game's heal pickup), which gives Tibo back health.", tag: "Eat" },
-      { name: "magnet", about: "The game's magnet pickup on the ground.", tag: "Magnet" },
-      ...spots.sort((a, b) => a.name.localeCompare(b.name))
-    ];
   }
 
   // userscript/fsd/machine-overlay.css.ts

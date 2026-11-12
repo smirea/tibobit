@@ -34,6 +34,8 @@ export const css = `
 .tbh-fsd-builder, .tbh-fsd-loadout, .tbh-fsd-world { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .tbh-fsd-side { position: sticky; top: 0; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .tbh-fsd-entities { display: flex; flex-wrap: wrap; gap: 5px; }
+.tbh-fsd-entity-groups { display: flex; flex-direction: column; gap: 5px; }
+.tbh-fsd-entity-type { margin: 4px 0 0; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .tbh-fsd-entity { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 5px; font: inherit; font-size: 11.5px; color: var(--text); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); border-radius: 999px; cursor: copy; }
 .tbh-fsd-entity:hover { border-color: var(--gold); background: rgba(255,211,107,.1); }
 .tbh-fsd-entity-icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--gold); }
