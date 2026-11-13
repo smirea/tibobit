@@ -10,4 +10,5 @@ export const css = `
 .tbh-line.tbh-done, .tbh-line.tbh-leveling { color: #f3e6c4; }
 .tbh-arrow { color: #8d7c5c; }
 .tbh-ready-tag { color: #5ee8a0; font-weight: 700; }
+#ui-tip > .tbh-lb-desc { padding-bottom: 4px; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,.14); }
 `;

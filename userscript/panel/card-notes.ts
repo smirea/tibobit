@@ -5,7 +5,7 @@ import { h } from "./dom";
 import { icon } from "./sprites";
 
 /** What taking a card adds, at what level, and the weapon it takes away, as a Transmute does. */
-export type CardOffer = { key: Key; level: number; replaces?: Key };
+export type CardOffer = { key: Key; level: number; replaces?: Key; limitBreak?: true };
 
 function tippedOffer(card: HTMLElement): CardOffer | undefined {
   const tip = card.dataset.tip ?? "";
@@ -13,6 +13,9 @@ function tippedOffer(card: HTMLElement): CardOffer | undefined {
   if (offer) return { key: `${offer[1] as Kind}:${offer[2]}`, level: Number(offer[3]) };
   const item = tip.match(/^item:([a-z0-9-]+)$/);
   if (item) return { key: `item:${item[1]}`, level: 1 };
+  // A limit break sends the weapon or passive back to level 1.
+  const broken = tip.match(/^bigUpdate:limit-break:(weapon|passive):([a-z0-9-]+):\d+$/);
+  if (broken) return { key: `${broken[1] as Kind}:${broken[2]}`, level: 1, limitBreak: true };
   return undefined;
 }
 

@@ -3071,6 +3071,7 @@ Goal: {{goal}}.
 .tbh-line.tbh-done, .tbh-line.tbh-leveling { color: #f3e6c4; }
 .tbh-arrow { color: #8d7c5c; }
 .tbh-ready-tag { color: #5ee8a0; font-weight: 700; }
+#ui-tip > .tbh-lb-desc { padding-bottom: 4px; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,.14); }
 `;
 
   // userscript/panel/run-damage.css.ts
@@ -3265,6 +3266,9 @@ Goal: {{goal}}.
     const item = tip.match(/^item:([a-z0-9-]+)$/);
     if (item)
       return { key: `item:${item[1]}`, level: 1 };
+    const broken = tip.match(/^bigUpdate:limit-break:(weapon|passive):([a-z0-9-]+):\d+$/);
+    if (broken)
+      return { key: `${broken[1]}:${broken[2]}`, level: 1, limitBreak: true };
     return;
   }
   function transmuteOffer(card, state) {
@@ -3345,6 +3349,28 @@ Goal: {{goal}}.
       else
         cards.before(box);
     }
+  }
+
+  // userscript/panel/limit-break-tip.ts
+  function describeLimitBreak(v, offered) {
+    const tip = document.getElementById("ui-tip");
+    if (tip === null)
+      return;
+    const title = tip.querySelector(".ui-tip-title")?.textContent?.trim();
+    const target = offered.find((o) => o.offer.limitBreak === true && nameOf(v.d.catalog, o.offer.key) === title)?.offer.key;
+    const text = target === undefined ? undefined : v.d.catalog.descriptions[target];
+    const old = tip.querySelector(":scope > .tbh-lb-desc");
+    if (old !== null && old.textContent === text)
+      return;
+    old?.remove();
+    if (text === undefined)
+      return;
+    const desc = h("div", "ui-tip-body tbh-lb-desc", text);
+    const head = tip.querySelector(":scope > .ui-tip-head");
+    if (head === null)
+      tip.append(desc);
+    else
+      head.after(desc);
   }
 
   // userscript/fsd/popup.css.ts
@@ -5099,6 +5125,7 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
       for (const { card, offer } of offered)
         annotateCard(card, offer, view, version);
       showRunDamage(view, game.state, version);
+      describeLimitBreak(view, offered);
       dropStaleTip();
     };
     const schedule = () => {
@@ -5109,7 +5136,7 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
     };
     link.onChange(schedule);
     new MutationObserver((records) => {
-      if (records.some((r) => !panel.contains(r.target) && !(r.target instanceof Element && r.target.closest(".tbh-card, .tbh-xr-damage"))))
+      if (records.some((r) => !panel.contains(r.target) && !(r.target instanceof Element && r.target.closest(".tbh-card, .tbh-xr-damage, .tbh-lb-desc"))))
         schedule();
     }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["data-tip", "hidden"] });
     setInterval(schedule, 1000);

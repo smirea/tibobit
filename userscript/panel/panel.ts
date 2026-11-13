@@ -17,6 +17,7 @@ import { renderPanel, renderProblem, type View } from "./combos-list";
 import { connectionRow } from "./connection";
 import { annotateCard, cardOffer } from "./card-notes";
 import { showRunDamage } from "./run-damage";
+import { describeLimitBreak } from "./limit-break-tip";
 import { fsdPopup, type GameControl } from "../fsd/popup";
 import { worldEntities } from "../fsd/entities";
 import { driveOverlay } from "../fsd/drive-overlay";
@@ -117,6 +118,7 @@ export function startPanel(link: GameLink, discovery: Discovery, bridge: Bridge)
     }
     for (const { card, offer } of offered) annotateCard(card, offer, view, version);
     showRunDamage(view, game.state, version);
+    describeLimitBreak(view, offered);
     dropStaleTip();
   };
   const schedule = () => {
@@ -127,7 +129,7 @@ export function startPanel(link: GameLink, discovery: Discovery, bridge: Bridge)
 
   link.onChange(schedule);
   new MutationObserver((records) => {
-    if (records.some((r) => !panel.contains(r.target) && !(r.target instanceof Element && r.target.closest(".tbh-card, .tbh-xr-damage")))) schedule();
+    if (records.some((r) => !panel.contains(r.target) && !(r.target instanceof Element && r.target.closest(".tbh-card, .tbh-xr-damage, .tbh-lb-desc")))) schedule();
   }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["data-tip", "hidden"] });
   setInterval(schedule, 1000);
   schedule();
