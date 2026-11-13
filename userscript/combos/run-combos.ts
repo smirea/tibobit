@@ -7,9 +7,11 @@ export type RunCombos = { catalog: Catalog; combos: Combo[] };
 let data: RunCombos | undefined;
 let dataFrom: { content: Content; messages: number } | undefined;
 
-/** Catalog for the current run, rebuilt only when the run's content or the loaded names change. */
+// From the game's whole table, not the run's content registry: the sim evolves weapons by the table,
+// and the registry leaves out weapons a run still offers, such as Skipping Cannonball.
+/** Every recipe in the game, rebuilt only when the table or the loaded names change. */
 export function runCombos(link: GameLink): RunCombos | undefined {
-  const content = link.content();
+  const content = link.table;
   if (content === undefined) return undefined;
   const messages = Object.keys(link.messages).length;
   if (dataFrom?.content !== content || dataFrom.messages !== messages) {

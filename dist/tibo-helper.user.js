@@ -750,7 +750,7 @@ function drive(state: State, memory: Memory): Action {
     bossOfferRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is offered every move, even those the one-second forecast prices above extraDamage, since boss attacks are not in that forecast; 0 keeps the usual rule" },
     eliteSeconds: { min: 5, max: 60, about: "seconds a fight-the-elite goal lasts at most: Tibo heads for the elite and keeps it within reach of its weapons until it dies" },
     forecastSeconds: { min: 0.1, max: 2, about: "how far ahead the game's own simulation prices each move, and how far surroundings look for bullets that would hit, attacks and hazards on each path, in seconds; the action model weighs moves by what they cost over this horizon" },
-    autopilot: { min: 0, max: 1, about: "1 takes every step without the action model: of the moves the forecast allows (those within extraDamage of the cheapest), Tibo takes the one nearest the way to the goal, and of two as near the cheaper; it never dashes and no action template is used. 0 asks the action model, as before. In the loop manager's own gym tests at minute 10, a mover that read only the forecast's prices lost no more health per trip than either action-model format, and it answers at once" },
+    autopilot: { min: 0, max: 1, about: "1 takes every step without the action model: of the moves the forecast allows (those within extraDamage of the cheapest), Tibo takes the one nearest the way to the goal, and of two as near the cheaper; it never dashes and no action template is used. 0 asks the action model, as before. In tests from a checkpoint at minute 10, a mover that read only the forecast's prices lost no more health per trip than either action-model format, and it answers at once" },
     planEvery: { min: 1, max: 60, about: "seconds between planner calls while a goal is under way (it is also asked whenever a goal ends, a choice opens, a card is taken or a boss appears); short re-plans switch goals often, long ones let a goal finish. A person watching in the panel sets this instead" },
     distrustBossRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is asked about every step, since boss attacks from afar are not in the one-second forecast; 0 turns it off" },
     dashThreshold: { min: 0.05, max: 0.95, about: "how sure the action model's answer to action.dash must be (a probability) for Tibo to dash; lower dashes more often" },
@@ -2962,7 +2962,7 @@ Goal: {{goal}}.
   var data;
   var dataFrom;
   function runCombos(link) {
-    const content = link.content();
+    const content = link.table;
     if (content === undefined)
       return;
     const messages = Object.keys(link.messages).length;
@@ -3071,6 +3071,19 @@ Goal: {{goal}}.
 .tbh-line.tbh-done, .tbh-line.tbh-leveling { color: #f3e6c4; }
 .tbh-arrow { color: #8d7c5c; }
 .tbh-ready-tag { color: #5ee8a0; font-weight: 700; }
+`;
+
+  // userscript/panel/run-damage.css.ts
+  var css7 = `
+.tbh-xr-damage { margin-block: 4px 6px; padding: 5px 7px; border-radius: 6px; background: rgba(0,0,0,.28); font: clamp(11px, .55em, 15px)/1.3 ui-monospace, Menlo, Consolas, monospace; color: #f3e6c4; text-align: start; }
+.tbh-xr-title { display: flex; justify-content: space-between; gap: 8px; color: #ffd36b; font-weight: 700; margin-bottom: 3px; }
+.tbh-xr-total { color: #c9b58a; font-weight: 400; }
+.tbh-xr-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); column-gap: 14px; row-gap: 2px; }
+.tbh-xr-row { display: grid; grid-template-columns: auto 1fr auto 3.5ch; align-items: center; gap: 5px; min-width: 0; }
+.tbh-xr-row > .tbh-icon { --s: 1.1; }
+.tbh-xr-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tbh-xr-dmg { font-variant-numeric: tabular-nums; }
+.tbh-xr-share { color: #a8977a; text-align: end; font-variant-numeric: tabular-nums; }
 `;
 
   // userscript/panel/sprites.ts
@@ -3244,7 +3257,7 @@ Goal: {{goal}}.
   }
 
   // userscript/panel/card-notes.ts
-  function offerKey(card) {
+  function tippedOffer(card) {
     const tip = card.dataset.tip ?? "";
     const offer = tip.match(/^(weapon|passive)-offer:([a-z0-9-]+):(\d+)$/);
     if (offer)
@@ -3254,21 +3267,36 @@ Goal: {{goal}}.
       return { key: `item:${item[1]}`, level: 1 };
     return;
   }
-  function annotateCard(card, v, version) {
-    const offer = offerKey(card);
-    if (offer === undefined)
+  function transmuteOffer(card, state) {
+    const choice = state.choiceQueue[0];
+    const step = choice?.step;
+    if (choice?.kind !== "crossroads" || step?.kind !== "target" || !card.classList.contains("ui-xr-card"))
       return;
-    const signature = `${offer.key}|${[...v.loadout].join(",")}|${[...v.banished].join(",")}|${v.discovery.version}|${version}`;
+    const id = card.querySelector(".ui-icon[data-icon]")?.dataset.icon;
+    if (id === undefined || !step.into.includes(id))
+      return;
+    const from = state.loadout.weapons.find((w) => w.slot === step.from);
+    const level = Number(card.dataset.tag?.match(/\d+/)?.[0] ?? 1);
+    return { key: `weapon:${id}`, level, ...from === undefined ? {} : { replaces: `weapon:${from.def.id}` } };
+  }
+  function cardOffer(card, state) {
+    return tippedOffer(card) ?? transmuteOffer(card, state);
+  }
+  function annotateCard(card, offer, v, version) {
+    const signature = `${offer.key}|${offer.replaces ?? ""}|${[...v.loadout].join(",")}|${[...v.banished].join(",")}|${v.discovery.version}|${version}`;
     if (card.dataset.tbh === signature)
       return;
     card.dataset.tbh = signature;
     card.querySelector(".tbh-card")?.remove();
     card.classList.remove("tbh-card-new", "tbh-card-evo");
     const isNew = v.discovery.isNew(offer.key);
-    const after = new Map(v.loadout);
-    after.set(offer.key, offer.key.startsWith("item:") ? (v.loadout.get(offer.key) ?? 0) + 1 : offer.level);
-    const held = (c) => v.loadout.has(partner(c, offer.key).key);
-    const uses = combosUsing(v.d.combos, offer.key).filter((c) => !v.loadout.has(c.result)).sort((a, b) => Number(held(b)) - Number(held(a)));
+    const kept = new Map(v.loadout);
+    if (offer.replaces !== undefined)
+      kept.delete(offer.replaces);
+    const after = new Map(kept);
+    after.set(offer.key, offer.key.startsWith("item:") ? (kept.get(offer.key) ?? 0) + 1 : offer.level);
+    const held = (c) => kept.has(partner(c, offer.key).key);
+    const uses = combosUsing(v.d.combos, offer.key).filter((c) => !kept.has(c.result)).sort((a, b) => Number(held(b)) - Number(held(a)));
     if (isNew)
       card.classList.add("tbh-card-new");
     if (uses.some((c) => held(c) && !v.discovery.made(c.result)))
@@ -3282,13 +3310,45 @@ Goal: {{goal}}.
       const other = partner(combo, offer.key);
       const ready = comboProgress(combo, after, v.d.catalog).every((s) => s === "done");
       const fresh = !v.discovery.made(combo.result);
-      box.append(h("div", `tbh-line tbh-${partState(other, v.loadout, v.d.catalog)}`, icon(v, other.key, partNeed(v, other)), h("span", "tbh-arrow", "→"), icon(v, combo.result, fresh ? "never made" : "", fresh ? "tbh-fresh" : ""), h("span", "tbh-result", nameOf(v.d.catalog, combo.result)), ...ready ? [h("span", "tbh-ready-tag", "READY")] : []));
+      box.append(h("div", `tbh-line tbh-${partState(other, kept, v.d.catalog)}`, icon(v, other.key, partNeed(v, other)), h("span", "tbh-arrow", "→"), icon(v, combo.result, fresh ? "never made" : "", fresh ? "tbh-fresh" : ""), h("span", "tbh-result", nameOf(v.d.catalog, combo.result)), ...ready ? [h("span", "tbh-ready-tag", "READY")] : []));
     }
     (card.querySelector(".ui-card-text") ?? card).append(box);
   }
 
+  // userscript/panel/run-damage.ts
+  var compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+  function heldDamage(state) {
+    const weapons = state.loadout.weapons.map((w) => ({ key: `weapon:${w.def.id}`, damage: w.damageDealt }));
+    const items = [...state.loadout.items].filter(([, count]) => count > 0).map(([id]) => ({ key: `item:${id}`, damage: state.run.damageBySource.get(id) ?? 0 }));
+    return [...weapons, ...items].sort((a, b) => b.damage - a.damage);
+  }
+  function showRunDamage(v, state, version) {
+    const panel = document.querySelector(".ui-crossroads");
+    if (panel === null)
+      return;
+    const rows = heldDamage(state);
+    let total = 0;
+    for (const amount of state.run.damageBySource.values())
+      total += amount;
+    const signature = `${rows.map((r) => `${r.key}=${Math.round(r.damage)}`).join(",")}|${Math.round(total)}|${version}`;
+    const old = panel.querySelector(":scope > .tbh-xr-damage");
+    if (old?.dataset.tbh === signature)
+      return;
+    const box = h("div", "tbh-xr-damage", h("div", "tbh-xr-title", "Damage this run", h("span", "tbh-xr-total", compact.format(total))), h("div", "tbh-xr-rows", ...rows.map((r) => h("div", "tbh-xr-row", icon(v, r.key), h("span", "tbh-xr-name", nameOf(v.d.catalog, r.key)), h("span", "tbh-xr-dmg", compact.format(r.damage)), h("span", "tbh-xr-share", total > 0 ? `${Math.round(r.damage / total * 100)}%` : "")))));
+    box.dataset.tbh = signature;
+    if (old !== null)
+      old.replaceWith(box);
+    else {
+      const cards = panel.querySelector(":scope > .ui-cards");
+      if (cards === null)
+        panel.append(box);
+      else
+        cards.before(box);
+    }
+  }
+
   // userscript/fsd/popup.css.ts
-  var css7 = `
+  var css8 = `
 .tbh-fsd { --gold: #ffd36b; --text: #f3e6c4; --muted: #a8977a; --line: #6b5631; --violet: #c9a0ff; --bad: #ff8f80;
   padding: 0; margin: auto; border: 0; background: transparent; color: var(--text); overflow: visible;
   width: min(1320px, calc(100vw - 32px)); max-width: none; max-height: none;
@@ -3396,7 +3456,7 @@ Goal: {{goal}}.
 `;
 
   // userscript/fsd/code-view.css.ts
-  var css8 = `
+  var css9 = `
 .tbh-code { margin: 0; padding: 10px 0; overflow: auto; font: 11.5px/1.55 ui-monospace, Menlo, Consolas, monospace; color: #e8dcc0; background: rgba(0,0,0,.34); border: 1px solid rgba(255,255,255,.07); border-radius: 8px; tab-size: 2; }
 .tbh-code-line { display: block; min-width: max-content; padding: 0 12px; border-left: 3px solid transparent; }
 .tbh-code-live { background: rgba(127,227,164,.14); border-left-color: #7fe3a4; }
@@ -3420,7 +3480,7 @@ Goal: {{goal}}.
   var styled = false;
   function codeView(fields, types, compact = false) {
     if (!styled)
-      addStyle(css8);
+      addStyle(css9);
     styled = true;
     const known = new Set(fields.map((f) => f.path));
     const roots = [...new Set(fields.map((f) => f.path.split(".")[0] ?? ""))];
@@ -3519,7 +3579,7 @@ Goal: {{goal}}.
   }
 
   // userscript/fsd/drive-overlay.css.ts
-  var css9 = `
+  var css10 = `
 .tbh-do { position: fixed; top: 8px; left: 8px; z-index: 2147483000; box-sizing: border-box; width: min(430px, calc(100vw - 16px)); padding: 6px 0 4px;
   pointer-events: none; color: #f3e6c4; background: rgba(17,14,22,.84); border: 1px solid rgba(142,116,201,.7); border-radius: 8px; box-shadow: 0 4px 18px rgba(0,0,0,.5);
   font: 11px/1.35 ui-monospace, Menlo, Consolas, monospace; }
@@ -3544,7 +3604,7 @@ Goal: {{goal}}.
     return [type, ...Object.entries(rest).map(([k, v]) => k === "id" ? `#${v}` : String(v))].join(" ");
   };
   function driveOverlay(pilot, fields, types) {
-    addStyle(css9);
+    addStyle(css10);
     const view = codeView(fields, types, true);
     const why = h("b", "tbh-do-why");
     const action = h("span", "tbh-do-action");
@@ -4568,7 +4628,7 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
     return el;
   }
   function fsdPopup(pilot, game, fields, types) {
-    addStyle(css7);
+    addStyle(css8);
     const dialog = h("dialog", "tbh-fsd");
     dialog.setAttribute("aria-labelledby", "tbh-fsd-title");
     let origin;
@@ -4947,7 +5007,7 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
 
   // userscript/panel/panel.ts
   function mount(chat, footer) {
-    for (const css of [css3, css4, css5, css6])
+    for (const css of [css3, css4, css5, css6, css7])
       addStyle(css);
     const content = h("div", "tbh-content");
     const panel = h("div", "tbh-panel", content, footer, chat);
@@ -5008,10 +5068,13 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
         panel.classList.remove("tbh-choice", "tbh-peek");
         return;
       }
-      const cards = [...document.querySelectorAll(".ui-card[data-tip]")];
-      const offered = cards.map(offerKey).filter((o) => o !== undefined);
-      panel.classList.toggle("tbh-choice", offered.length > 0);
-      if (offered.length === 0)
+      const offered = [...document.querySelectorAll(".ui-card")].flatMap((card) => {
+        const offer = cardOffer(card, game.state);
+        return offer === undefined ? [] : [{ card, offer }];
+      });
+      const choosing = offered.length > 0 || game.state.choiceQueue[0]?.kind === "crossroads";
+      panel.classList.toggle("tbh-choice", choosing);
+      if (!choosing)
         panel.classList.remove("tbh-peek");
       const d = runCombos(link);
       if (d === undefined) {
@@ -5026,15 +5089,16 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
         version++;
       }
       const loadout = readLoadout(game.state);
-      discovery.settle(loadout, new Set(offered.map((o) => o.key)));
+      discovery.settle(loadout, new Set(offered.map((o) => o.offer.key)));
       const view = { d, discovery, icons: link.icons, loadout, banished: game.state.loadout.banished };
       const signature = `${[...loadout].join(",")}|${[...view.banished].join(",")}|${discovery.version}|${version}`;
       if (signature !== panelSignature) {
         panelSignature = signature;
         renderPanel(panel, content, view);
       }
-      for (const card of cards)
-        annotateCard(card, view, version);
+      for (const { card, offer } of offered)
+        annotateCard(card, offer, view, version);
+      showRunDamage(view, game.state, version);
       dropStaleTip();
     };
     const schedule = () => {
@@ -5045,7 +5109,7 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
     };
     link.onChange(schedule);
     new MutationObserver((records) => {
-      if (records.some((r) => !panel.contains(r.target) && !(r.target instanceof Element && r.target.closest(".tbh-card"))))
+      if (records.some((r) => !panel.contains(r.target) && !(r.target instanceof Element && r.target.closest(".tbh-card, .tbh-xr-damage"))))
         schedule();
     }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["data-tip", "hidden"] });
     setInterval(schedule, 1000);
@@ -5053,7 +5117,7 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
   }
 
   // userscript/pilot/pick-overlay.css.ts
-  var css10 = `
+  var css11 = `
 .tbh-pick-layer { position: fixed; inset: 0; z-index: 2147483001; pointer-events: none; font: 800 12px/1.3 ui-monospace, Menlo, Consolas, monospace; }
 .tbh-pick-layer[hidden], .tbh-pick-layer [hidden] { display: none; }
 .tbh-pick-banner { position: fixed; transform: translate(-50%, -100%); box-sizing: border-box; padding: 5px 12px; text-align: center; color: #f3e6c4; background: rgba(42,33,64,.95); border: 1px solid #c9a0ff; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
@@ -5093,7 +5157,7 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
     return plain.find((b) => (b.textContent ?? "").trim().toLowerCase().startsWith(name)) ?? plain.find((b) => BUTTON_WORDS[a.type]?.test(b.textContent ?? "") === true);
   }
   function startPickOverlay(pilot, link) {
-    addStyle(css10);
+    addStyle(css11);
     const layer = h("div", "tbh-pick-layer");
     const banner = h("div", "tbh-pick-banner");
     const hand = h("img", "tbh-pick-hand");

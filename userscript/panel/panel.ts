@@ -9,12 +9,14 @@ import { css as panelCss } from "./panel.css";
 import { css as connectionCss } from "./connection.css";
 import { css as spritesCss } from "./sprites.css";
 import { css as cardNotesCss } from "./card-notes.css";
+import { css as runDamageCss } from "./run-damage.css";
 import { inRun, PANEL_ID, pauseMenuOpen } from "../link/screen";
 import { addStyle, h } from "./dom";
 import { startTips } from "./sprites";
 import { renderPanel, renderProblem, type View } from "./combos-list";
 import { connectionRow } from "./connection";
-import { annotateCard, offerKey } from "./card-notes";
+import { annotateCard, cardOffer } from "./card-notes";
+import { showRunDamage } from "./run-damage";
 import { fsdPopup, type GameControl } from "../fsd/popup";
 import { worldEntities } from "../fsd/entities";
 import { driveOverlay } from "../fsd/drive-overlay";
@@ -22,7 +24,7 @@ import { DRIVER_TYPES } from "../fsd/driver-source";
 import { stateFields, typeDeclarations } from "../fsd/driver-types";
 
 function mount(chat: HTMLElement, footer: HTMLElement): { panel: HTMLElement; content: HTMLElement } {
-  for (const css of [panelCss, connectionCss, spritesCss, cardNotesCss]) addStyle(css);
+  for (const css of [panelCss, connectionCss, spritesCss, cardNotesCss, runDamageCss]) addStyle(css);
   const content = h("div", "tbh-content");
   // The port row sits above the bot's controls while it plays, and at the panel's foot otherwise.
   const panel = h("div", "tbh-panel", content, footer, chat);
@@ -85,10 +87,14 @@ export function startPanel(link: GameLink, discovery: Discovery, bridge: Bridge)
       panel.classList.remove("tbh-choice", "tbh-peek");
       return;
     }
-    const cards = [...document.querySelectorAll<HTMLElement>(".ui-card[data-tip]")];
-    const offered = cards.map(offerKey).filter((o) => o !== undefined);
-    panel.classList.toggle("tbh-choice", offered.length > 0);
-    if (offered.length === 0) panel.classList.remove("tbh-peek");
+    const offered = [...document.querySelectorAll<HTMLElement>(".ui-card")].flatMap((card) => {
+      const offer = cardOffer(card, game.state);
+      return offer === undefined ? [] : [{ card, offer }];
+    });
+    // The Crossroads' first steps offer no weapon to annotate, but its cards sit where the panel would.
+    const choosing = offered.length > 0 || game.state.choiceQueue[0]?.kind === "crossroads";
+    panel.classList.toggle("tbh-choice", choosing);
+    if (!choosing) panel.classList.remove("tbh-peek");
 
     const d = runCombos(link);
     if (d === undefined) {
@@ -102,14 +108,15 @@ export function startPanel(link: GameLink, discovery: Discovery, bridge: Bridge)
       version++;
     }
     const loadout = readLoadout(game.state);
-    discovery.settle(loadout, new Set(offered.map((o) => o.key)));
+    discovery.settle(loadout, new Set(offered.map((o) => o.offer.key)));
     const view: View = { d, discovery, icons: link.icons, loadout, banished: game.state.loadout.banished };
     const signature = `${[...loadout].join(",")}|${[...view.banished].join(",")}|${discovery.version}|${version}`;
     if (signature !== panelSignature) {
       panelSignature = signature;
       renderPanel(panel, content, view);
     }
-    for (const card of cards) annotateCard(card, view, version);
+    for (const { card, offer } of offered) annotateCard(card, offer, view, version);
+    showRunDamage(view, game.state, version);
     dropStaleTip();
   };
   const schedule = () => {
@@ -120,7 +127,7 @@ export function startPanel(link: GameLink, discovery: Discovery, bridge: Bridge)
 
   link.onChange(schedule);
   new MutationObserver((records) => {
-    if (records.some((r) => !panel.contains(r.target) && !(r.target instanceof Element && r.target.closest(".tbh-card")))) schedule();
+    if (records.some((r) => !panel.contains(r.target) && !(r.target instanceof Element && r.target.closest(".tbh-card, .tbh-xr-damage")))) schedule();
   }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["data-tip", "hidden"] });
   setInterval(schedule, 1000);
   schedule();

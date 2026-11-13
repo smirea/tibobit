@@ -39,7 +39,9 @@ export type Table = Content & {
 type Offer = { type: "weapon" | "passive" | "item"; id: string; level?: number; isNew?: boolean };
 /** What a Spud Shrine offers: an amount added to one stat, by the game's stat name. */
 type ShrineOffer = { stat: string; value: number };
-type Choice = { kind: string; offers?: (Offer | ShrineOffer)[]; rewards?: unknown[]; level?: number; gold?: number };
+/** Where a Crossroads choice is: its three offers, the weapon a Sacrifice or Transmute takes, or the weapons the one in slot `from` can become. */
+type CrossroadsStep = { kind: "offers" } | { kind: "weapon"; offer: number } | { kind: "target"; offer: number; from: number; into: string[] };
+type Choice = { kind: string; offers?: (Offer | ShrineOffer)[]; rewards?: unknown[]; level?: number; gold?: number; step?: CrossroadsStep };
 
 type Column<T = number> = { [index: number]: T | undefined; length: number };
 type SlotPool = { count: number; slotAt(n: number): number; isAlive(slot: number): boolean; id(slot: number): number; has(id: number): boolean };
@@ -66,7 +68,8 @@ export type GameState = {
     xp: number;
     xpNext: number;
     gold: number;
-    weapons: { def: WeaponDef; level: number }[];
+    /** `damageDealt` is the weapon's own tally this run, which the Crossroads weighs weapons by. */
+    weapons: { def: WeaponDef; level: number; slot: number; damageDealt: number }[];
     passives: { def: PassiveDef; level: number }[];
     items: Map<string, number>;
     /** Ids the player banished this run; the game never offers them again. */
