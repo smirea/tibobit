@@ -7,7 +7,7 @@ import { DEFAULT_TEMPLATES } from "../../bot/templates";
 /** `builtFrom` is the prompt the function was written from, to tell when the prompt has moved on. */
 export type Draft = { prompt: string; code: string; builtFrom: string; loadout: string };
 
-export const DEFAULT_DRAFT: Draft = { prompt: EXAMPLE_REQUEST, code: EXAMPLE_CODE, builtFrom: EXAMPLE_REQUEST, loadout: DEFAULT_TEMPLATES.planner.pick };
+const DEFAULT_DRAFT: Draft = { prompt: EXAMPLE_REQUEST, code: EXAMPLE_CODE, builtFrom: EXAMPLE_REQUEST, loadout: DEFAULT_TEMPLATES.planner.pick };
 
 export type DraftCheck = {
   /** Present only when the loadout checks. */
