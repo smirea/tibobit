@@ -1,658 +1,658 @@
 {
-  "time": 92.7,
-  "state": {
-    "time": 92.7,
-    "winAt": 1200,
-    "tibo": {
-      "hp": 229,
-      "maxHp": 229,
-      "hurt": 1,
-      "dps": 12,
-      "level": 7,
-      "gold": 40,
-      "x": 103,
-      "y": -265,
-      "dash": {
-        "charges": 1,
-        "max": 1
-      },
-      "weapons": [
-        {
-          "id": "seeker-sprouts",
-          "name": "Seeker Sprouts",
-          "level": 2,
-          "max": 8
-        },
-        {
-          "id": "rosti-disc",
-          "name": "Rösti Disc",
-          "level": 1,
-          "max": 8
-        },
-        {
-          "id": "mezzaluna",
-          "name": "Mezzaluna",
-          "level": 1,
-          "max": 8
-        },
-        {
-          "id": "sprout-satellites",
-          "name": "Sprout Satellites",
-          "level": 1,
-          "max": 8
-        }
-      ],
-      "passives": [
-        {
-          "id": "fertilizer",
-          "name": "Fertilizer",
-          "level": 1,
-          "max": 5
-        },
-        {
-          "id": "butter-pat",
-          "name": "Butter Pat",
-          "level": 2,
-          "max": 5
-        }
-      ],
-      "items": [],
-      "evolves": [],
-      "stats": {
-        "damageMult": 1.2,
-        "areaMult": 1,
-        "cooldownMult": 1,
-        "amountBonus": 1,
-        "durationMult": 1.25,
-        "projSpeedMult": 1,
-        "moveSpeedMult": 1,
-        "maxHp": 228.8,
-        "recovery": 0,
-        "armor": 0,
-        "magnetRadius": 40,
-        "luck": 0,
-        "growthMult": 1.62,
-        "greedMult": 1,
-        "curse": 0,
-        "critChance": 0.053,
-        "critMult": 2,
-        "evasion": 0,
-        "knockbackMult": 1,
-        "pierceBonus": 0,
-        "revivals": 2,
-        "eliteMult": 1,
-        "healOnKill": 0,
-        "explodeOnKillChance": 0,
-        "thorns": 0,
-        "chestPriceMult": 1,
-        "dashCharges": 0,
-        "dashCooldownMult": 1,
-        "dashGraceSec": 0
-      }
-    },
-    "enemies": {
-      "onScreen": 5,
-      "byDirection": {
-        "right": 1,
-        "down-right": 2,
-        "down": 0,
-        "down-left": 1,
-        "left": 0,
-        "up-left": 0,
-        "up": 0,
-        "up-right": 1
-      },
-      "fewest": "down",
-      "most": "down-right",
-      "bullets": {
-        "right": 0,
-        "down-right": 0,
-        "down": 0,
-        "down-left": 0,
-        "left": 0,
-        "up-left": 0,
-        "up": 0,
-        "up-right": 0
-      }
-    },
-    "elites": [],
-    "bosses": [],
-    "pickups": [
-      {
-        "id": 65569,
-        "dist": 204,
-        "dir": "up-right",
-        "gaveUp": false,
-        "kind": "reroll"
-      },
-      {
-        "id": 65552,
-        "dist": 215,
-        "dir": "left",
-        "gaveUp": false,
-        "kind": "heal"
-      },
-      {
-        "id": 65555,
-        "dist": 399,
-        "dir": "left",
-        "gaveUp": false,
-        "kind": "heal"
-      }
-    ],
-    "pois": [
-      {
-        "id": 4,
-        "dist": 43,
-        "dir": "up-right",
-        "gaveUp": false,
-        "kind": "paidChest",
-        "name": "Potato Crate",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 11,
-        "dist": 141,
-        "dir": "down-right",
-        "gaveUp": false,
-        "kind": "vendor",
-        "name": "Fry Cart",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 3,
-        "dist": 287,
-        "dir": "up-left",
-        "gaveUp": false,
-        "kind": "paidChest",
-        "name": "Potato Crate",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 6,
-        "dist": 293,
-        "dir": "up-right",
-        "gaveUp": false,
-        "kind": "dog",
-        "name": "Stray Dog",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 12,
-        "dist": 298,
-        "dir": "down-right",
-        "gaveUp": false,
-        "kind": "dog",
-        "name": "Stray Dog",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 17,
-        "dist": 328,
-        "dir": "down",
-        "gaveUp": false,
-        "kind": "dog",
-        "name": "Stray Dog",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 33,
-        "dist": 367,
-        "dir": "up",
-        "gaveUp": false,
-        "kind": "botDock",
-        "name": "Bot Dock",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 2
-      },
-      {
-        "id": 15,
-        "dist": 439,
-        "dir": "down",
-        "gaveUp": false,
-        "kind": "crops",
-        "name": "Crop Patch",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 34,
-        "dist": 440,
-        "dir": "up-right",
-        "gaveUp": false,
-        "kind": "paidChest",
-        "name": "Potato Crate",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 16,
-        "dist": 457,
-        "dir": "down",
-        "gaveUp": false,
-        "kind": "crops",
-        "name": "Crop Patch",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 8,
-        "dist": 458,
-        "dir": "right",
-        "gaveUp": false,
-        "kind": "taterLantern",
-        "name": "Tater Lantern",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 1,
-        "dist": 527,
-        "dir": "left",
-        "gaveUp": false,
-        "kind": "taterMagnet",
-        "name": "Tater Magnet",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 13,
-        "dist": 528,
-        "dir": "right",
-        "gaveUp": false,
-        "kind": "chargeShrine",
-        "name": "Spud Shrine",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 5
-      },
-      {
-        "id": 32,
-        "dist": 539,
-        "dir": "up-left",
-        "gaveUp": false,
-        "kind": "paidChest",
-        "name": "Potato Crate",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 18,
-        "dist": 571,
-        "dir": "down-right",
-        "gaveUp": false,
-        "kind": "crops",
-        "name": "Crop Patch",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 9,
-        "dist": 584,
-        "dir": "left",
-        "gaveUp": false,
-        "kind": "curseShrine",
-        "name": "Moldy Shrine",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 22,
-        "dist": 593,
-        "dir": "down",
-        "gaveUp": false,
-        "kind": "crops",
-        "name": "Crop Patch",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 2,
-        "dist": 596,
-        "dir": "left",
-        "gaveUp": false,
-        "kind": "chargeShrine",
-        "name": "Spud Shrine",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 5
-      },
-      {
-        "id": 7,
-        "dist": 601,
-        "dir": "right",
-        "gaveUp": false,
-        "kind": "dog",
-        "name": "Stray Dog",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 46,
-        "dist": 607,
-        "dir": "up-right",
-        "gaveUp": false,
-        "kind": "vendor",
-        "name": "Fry Cart",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 31,
-        "dist": 617,
-        "dir": "up-left",
-        "gaveUp": false,
-        "kind": "chargeShrine",
-        "name": "Spud Shrine",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 5
-      },
-      {
-        "id": 19,
-        "dist": 657,
-        "dir": "down-right",
-        "gaveUp": false,
-        "kind": "taterLantern",
-        "name": "Tater Lantern",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 42,
-        "dist": 664,
-        "dir": "up",
-        "gaveUp": false,
-        "kind": "paidChest",
-        "name": "Potato Crate",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 43,
-        "dist": 670,
-        "dir": "up",
-        "gaveUp": false,
-        "kind": "rootTunnel",
-        "name": "Root Tunnel",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 2
-      },
-      {
-        "id": 23,
-        "dist": 692,
-        "dir": "down-right",
-        "gaveUp": false,
-        "kind": "botDock",
-        "name": "Bot Dock",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 2
-      },
-      {
-        "id": 21,
-        "dist": 695,
-        "dir": "down",
-        "gaveUp": false,
-        "kind": "chargeShrine",
-        "name": "Spud Shrine",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 5
-      },
-      {
-        "id": 35,
-        "dist": 707,
-        "dir": "left",
-        "gaveUp": false,
-        "kind": "curseShrine",
-        "name": "Moldy Shrine",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 44,
-        "dist": 713,
-        "dir": "up-right",
-        "gaveUp": false,
-        "kind": "crops",
-        "name": "Crop Patch",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 14,
-        "dist": 741,
-        "dir": "down-left",
-        "gaveUp": false,
-        "kind": "dog",
-        "name": "Stray Dog",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 36,
-        "dist": 745,
-        "dir": "left",
-        "gaveUp": false,
-        "kind": "taterSlots",
-        "name": "Tater Slots",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 20,
-        "dist": 770,
-        "dir": "down-left",
-        "gaveUp": false,
-        "kind": "crops",
-        "name": "Crop Patch",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 41,
-        "dist": 778,
-        "dir": "up-left",
-        "gaveUp": false,
-        "kind": "microwave",
-        "name": "Microwave",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 24,
-        "dist": 823,
-        "dir": "down-right",
-        "gaveUp": false,
-        "kind": "vendor",
-        "name": "Fry Cart",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 37,
-        "dist": 844,
-        "dir": "down-left",
-        "gaveUp": false,
-        "kind": "frenzyFryer",
-        "name": "Frenzy Fryer",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 2
-      },
-      {
-        "id": 45,
-        "dist": 891,
-        "dir": "up-right",
-        "gaveUp": false,
-        "kind": "crops",
-        "name": "Crop Patch",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      },
-      {
-        "id": 30,
-        "dist": 901,
-        "dir": "up-left",
-        "gaveUp": false,
-        "kind": "dinnerBell",
-        "name": "Dinner Bell",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 40,
-        "dist": 934,
-        "dir": "up-left",
-        "gaveUp": false,
-        "kind": "spudFreezer",
-        "name": "Spud Freezer",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 38,
-        "dist": 1003,
-        "dir": "down-left",
-        "gaveUp": false,
-        "kind": "paidChest",
-        "name": "Potato Crate",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1.5
-      },
-      {
-        "id": 39,
-        "dist": 1096,
-        "dir": "up-left",
-        "gaveUp": false,
-        "kind": "dog",
-        "name": "Stray Dog",
-        "inside": false,
-        "charged": 0,
-        "chargeSeconds": 1
-      }
-    ],
-    "ground": {
-      "xp": 86,
-      "gold": 6,
-      "xpByDirection": {
-        "right": 5,
-        "down-right": 2,
-        "down": 9,
-        "down-left": 10,
-        "left": 10,
-        "up-left": 4,
-        "up": 6,
-        "up-right": 10
-      }
-    },
-    "prices": {
-      "crate": 30,
-      "slots": 15
-    },
-    "boosts": [],
-    "upcoming": [
-      {
-        "at": 120,
-        "text": "boss The Festival Mascot"
-      },
-      {
-        "at": 120,
-        "text": "event Fry Fly Swarm"
-      },
-      {
-        "at": 180,
-        "text": "elite"
-      }
-    ],
-    "previous": {
-      "action": {
-        "type": "xp",
-        "why": "gather xp"
-      },
-      "seconds": 21.3
-    }
-  },
-  "memory": {
-    "retreating": false
-  },
-  "action": {
-    "type": "xp",
-    "why": "gather xp"
-  },
-  "blocks": {
-    "time": "1:32",
-    "difficulty": "nightmare",
-    "mode": "world",
-    "health": "Health 229/229 (100%).",
-    "level": "Level 7, 54% of the way to the next.",
-    "gold": "Gold 40.",
-    "dash": "Dash charges 1 of 1.",
-    "weapons": "Weapons (4 of 6 slots):\n  - Seeker Sprouts 2/8: Sprouts that steer toward enemies.\n  - Rösti Disc 1/8: A flat rösti that bounces off the edges of the view.\n  - Mezzaluna 1/8: Chops in front of Tibo and behind him. The more HP Tibo is missing, the harder it hits.\n  - Sprout Satellites 1/8: Potato sprouts circle Tibo for a while.",
-    "passives": "Passives (2 of 6 slots):\n  - Fertilizer 1/5: +8% XP gain per level.\n  - Butter Pat 2/5: +10% damage per level.",
-    "items": "Items: none",
-    "banished": "Banished this run: nothing.",
-    "recipes": "Recipes in reach: Big Fry: Small Fry missing + Fertilizer done 1/5; Eternal Sprouts: Sprout Satellites leveling 1/8 + Slow Cooker missing; Gratin Puddle: Starch Puddle missing + Butter Pat done 2/5; Moon Cleaver: Mezzaluna leveling 1/8 + Rotten Spud missing; Overgrowth: Seeker Sprouts leveling 2/8 + Fertilizer done 1/5; Rösti Storm: Rösti Disc leveling 1/8 + Starch Plating missing; Sack of Russets: Spud Lob missing + Butter Pat done 2/5; Potato Patch: Seed Potato missing + Fertilizer done 1/5; Tailgate Party: Tailgate Fries missing + Butter Pat done 2/5.",
-    "evolutions": "No recipe is complete yet.",
-    "standing_on": "Tibo stands on no chest or spot.",
-    "hurt_by": "Hurt in the last 3 seconds by: Aphid 0.5.",
-    "dps": "Damage dealt a second over the last 3 seconds: 12.",
-    "bosses": "Bosses: none.",
-    "enemies": "Enemies: 5 on screen. Most to the down-right (2), fewest to the up (0).",
-    "current_goal": "Current goal: Gather xp, since 1:11.",
-    "recent_goals": "Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 Gather xp: drive returned another action; 0:21 Charge the Spud Shrine: drive returned another action; 1:09 Gather xp: drive returned another action; 1:11 Open the chest: drive returned another action.",
-    "stats": "Stats: damageMult 1.2, areaMult 1, cooldownMult 1, amountBonus 1, durationMult 1.25, projSpeedMult 1, moveSpeedMult 1, maxHp 228.8, recovery 0, armor 0, magnetRadius 40, luck 0, growthMult 1.62, greedMult 1, curse 0, critChance 0.053, critMult 2, evasion 0, knockbackMult 1, pierceBonus 0, revivals 2, eliteMult 1, healOnKill 0, explodeOnKillChance 0, thorns 0, chestPriceMult 1, dashCharges 0, dashCooldownMult 1, dashGraceSec 0. Added by shrines: maxHp 14.399999999999999, critChance 0.055999999999999994.",
-    "resources": "Rerolls 0, skips 0, banishes 0, revives 2; curses 0, which add 0 elites and 0 bosses.",
-    "spots": "Spots on the loaded map, nearest first:\n  - Potato Crate (paidChest) 43 away to the up-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 40.\n  - Fry Cart (vendor) 141 away to the down-right (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 40.\n  - Potato Crate (paidChest) 287 away to the up-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 40.\n  - Stray Dog (dog) 293 away to the up-right (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.\n  - Stray Dog (dog) 298 away to the down-right (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.\n  - Stray Dog (dog) 328 away to the down (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.\n  - Bot Dock (botDock) 367 away to the up (stand by it to call a swarm of grok bots) Charged 0 of 2 s.\n  - Crop Patch (crops) 439 away to the down (break it for gold and a snack) Charged 0 of 1 s.\n  - Potato Crate (paidChest) 440 away to the up-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 40.\n  - Crop Patch (crops) 457 away to the down (break it for gold and a snack) Charged 0 of 1 s.\n  - Tater Lantern (taterLantern) 458 away to the right (break it for a surprise) Charged 0 of 1 s.\n  - Tater Magnet (taterMagnet) 527 away to the left (stand by it to pull in every gem and coin) Charged 0 of 1 s.\n  - Spud Shrine (chargeShrine) 528 away to the right (stand inside to charge it, then pick a stat) Charged 0 of 5 s.\n  - Potato Crate (paidChest) 539 away to the up-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 40.\n  - Crop Patch (crops) 571 away to the down-right (break it for gold and a snack) Charged 0 of 1 s.\n  - Moldy Shrine (curseShrine) 584 away to the left (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.\n  - Crop Patch (crops) 593 away to the down (break it for gold and a snack) Charged 0 of 1 s.\n  - Spud Shrine (chargeShrine) 596 away to the left (stand inside to charge it, then pick a stat) Charged 0 of 5 s.\n  - Stray Dog (dog) 601 away to the right (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.\n  - Fry Cart (vendor) 607 away to the up-right (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 40.\n  - Spud Shrine (chargeShrine) 617 away to the up-left (stand inside to charge it, then pick a stat) Charged 0 of 5 s.\n  - Tater Lantern (taterLantern) 657 away to the down-right (break it for a surprise) Charged 0 of 1 s.\n  - Potato Crate (paidChest) 664 away to the up (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 40.\n  - Root Tunnel (rootTunnel) 670 away to the up (stand by it to tunnel to a far place) Charged 0 of 2 s.\n  - Bot Dock (botDock) 692 away to the down-right (stand by it to call a swarm of grok bots) Charged 0 of 2 s.\n  - Spud Shrine (chargeShrine) 695 away to the down (stand inside to charge it, then pick a stat) Charged 0 of 5 s.\n  - Moldy Shrine (curseShrine) 707 away to the left (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.\n  - Crop Patch (crops) 713 away to the up-right (break it for gold and a snack) Charged 0 of 1 s.\n  - Stray Dog (dog) 741 away to the down-left (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.\n  - Tater Slots (taterSlots) 745 away to the left (pay gold to spin; match two for an item) Charged 0 of 1.5 s; a spin costs 15 gold, and Tibo has 40.\n  - Crop Patch (crops) 770 away to the down-left (break it for gold and a snack) Charged 0 of 1 s.\n  - Microwave (microwave) 778 away to the up-left (stand by it to charge it, then copy one of your items; the copy melts another item of the same rarity) Charged 0 of 1.5 s.\n  - Fry Cart (vendor) 823 away to the down-right (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 40.\n  - Frenzy Fryer (frenzyFryer) 844 away to the down-left (stand by it for a 20 s frenzy) Charged 0 of 2 s.\n  - Crop Patch (crops) 891 away to the up-right (break it for gold and a snack) Charged 0 of 1 s.\n  - Dinner Bell (dinnerBell) 901 away to the up-left (ring it to call a ring of pests; they drop triple xp) Charged 0 of 1.5 s.\n  - Spud Freezer (spudFreezer) 934 away to the up-left (stand by it to freeze every enemy on the map for 7.5 s; bosses only slow down) Charged 0 of 1.5 s.\n  - Potato Crate (paidChest) 1003 away to the down-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 40.\n  - Stray Dog (dog) 1096 away to the up-left (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.",
-    "dogs": "Dogs: none.",
-    "pickups": "On the ground: xp worth 85.9 and gold worth 6. Chests: none. Food: 215 left; 399 left. Other pickups: reroll 204 up-right.",
-    "buffs": "Timed boosts: none.",
-    "schedule": "Coming up: 2:00 boss The Festival Mascot; 2:00 event Fry Fly Swarm; 3:00 elite.",
-    "hazards": "Within 0.5 s: underfoot nothing; walking into nothing. Attacks near: none. Bullets that would hit a Tibo standing still: none.",
-    "events": "Recent game events: none.",
-    "elites": "Elites alive: none.",
-    "counters": "What the game has counted this run: counters kills 205, hits 215, crits 9, gems 129, coins 6, shots 308; run timeSec 92.73333333333333, level 7, kills 205, distance 4961.240000000245, dodgePoints 906.4281258526416, dodgeSecond 92, curseSince 4363, goldEarned 40, bossChests 1, elitesKilled 1, peakEnemies 21, shrinesUsed 2, grokBotHelps 1, botSwarms 1.",
-    "offer": "No choice is open.",
-    "weapon_damage": "Damage dealt so far by weapon: Seeker Sprouts 843 (546 a minute), Rösti Disc 102 (66 a minute), Sprout Satellites 50 (33 a minute), Mezzaluna 25 (16 a minute).",
-    "state": "Time 1:32. Health 229/229 (100%). Level 7, 54% of the way to the next. Gold 40. Dash charges 1 of 1.\nWeapons (4 of 6 slots):\n  - Seeker Sprouts 2/8: Sprouts that steer toward enemies.\n  - Rösti Disc 1/8: A flat rösti that bounces off the edges of the view.\n  - Mezzaluna 1/8: Chops in front of Tibo and behind him. The more HP Tibo is missing, the harder it hits.\n  - Sprout Satellites 1/8: Potato sprouts circle Tibo for a while.\nPassives (2 of 6 slots):\n  - Fertilizer 1/5: +8% XP gain per level.\n  - Butter Pat 2/5: +10% damage per level.\nItems: none\nRecipes in reach: Big Fry: Small Fry missing + Fertilizer done 1/5; Eternal Sprouts: Sprout Satellites leveling 1/8 + Slow Cooker missing; Gratin Puddle: Starch Puddle missing + Butter Pat done 2/5; Moon Cleaver: Mezzaluna leveling 1/8 + Rotten Spud missing; Overgrowth: Seeker Sprouts leveling 2/8 + Fertilizer done 1/5; Rösti Storm: Rösti Disc leveling 1/8 + Starch Plating missing; Sack of Russets: Spud Lob missing + Butter Pat done 2/5; Potato Patch: Seed Potato missing + Fertilizer done 1/5; Tailgate Party: Tailgate Fries missing + Butter Pat done 2/5.\nNo recipe is complete yet.\nTibo stands on no chest or spot.\nHurt in the last 3 seconds by: Aphid 0.5.\nBosses: none.\nEnemies: 5 on screen. Most to the down-right (2), fewest to the up (0).\nCurrent goal: Gather xp, since 1:11.\nRecent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 Gather xp: drive returned another action; 0:21 Charge the Spud Shrine: drive returned another action; 1:09 Gather xp: drive returned another action; 1:11 Open the chest: drive returned another action."
-  }
+	"time": 92.7,
+	"state": {
+		"time": 92.7,
+		"winAt": 1200,
+		"tibo": {
+			"hp": 229,
+			"maxHp": 229,
+			"hurt": 1,
+			"dps": 12,
+			"level": 7,
+			"gold": 40,
+			"x": 103,
+			"y": -265,
+			"dash": {
+				"charges": 1,
+				"max": 1
+			},
+			"weapons": [
+				{
+					"id": "seeker-sprouts",
+					"name": "Seeker Sprouts",
+					"level": 2,
+					"max": 8
+				},
+				{
+					"id": "rosti-disc",
+					"name": "Rösti Disc",
+					"level": 1,
+					"max": 8
+				},
+				{
+					"id": "mezzaluna",
+					"name": "Mezzaluna",
+					"level": 1,
+					"max": 8
+				},
+				{
+					"id": "sprout-satellites",
+					"name": "Sprout Satellites",
+					"level": 1,
+					"max": 8
+				}
+			],
+			"passives": [
+				{
+					"id": "fertilizer",
+					"name": "Fertilizer",
+					"level": 1,
+					"max": 5
+				},
+				{
+					"id": "butter-pat",
+					"name": "Butter Pat",
+					"level": 2,
+					"max": 5
+				}
+			],
+			"items": [],
+			"evolves": [],
+			"stats": {
+				"damageMult": 1.2,
+				"areaMult": 1,
+				"cooldownMult": 1,
+				"amountBonus": 1,
+				"durationMult": 1.25,
+				"projSpeedMult": 1,
+				"moveSpeedMult": 1,
+				"maxHp": 228.8,
+				"recovery": 0,
+				"armor": 0,
+				"magnetRadius": 40,
+				"luck": 0,
+				"growthMult": 1.62,
+				"greedMult": 1,
+				"curse": 0,
+				"critChance": 0.053,
+				"critMult": 2,
+				"evasion": 0,
+				"knockbackMult": 1,
+				"pierceBonus": 0,
+				"revivals": 2,
+				"eliteMult": 1,
+				"healOnKill": 0,
+				"explodeOnKillChance": 0,
+				"thorns": 0,
+				"chestPriceMult": 1,
+				"dashCharges": 0,
+				"dashCooldownMult": 1,
+				"dashGraceSec": 0
+			}
+		},
+		"enemies": {
+			"onScreen": 5,
+			"byDirection": {
+				"right": 1,
+				"down-right": 2,
+				"down": 0,
+				"down-left": 1,
+				"left": 0,
+				"up-left": 0,
+				"up": 0,
+				"up-right": 1
+			},
+			"fewest": "down",
+			"most": "down-right",
+			"bullets": {
+				"right": 0,
+				"down-right": 0,
+				"down": 0,
+				"down-left": 0,
+				"left": 0,
+				"up-left": 0,
+				"up": 0,
+				"up-right": 0
+			}
+		},
+		"elites": [],
+		"bosses": [],
+		"pickups": [
+			{
+				"id": 65569,
+				"dist": 204,
+				"dir": "up-right",
+				"gaveUp": false,
+				"kind": "reroll"
+			},
+			{
+				"id": 65552,
+				"dist": 215,
+				"dir": "left",
+				"gaveUp": false,
+				"kind": "heal"
+			},
+			{
+				"id": 65555,
+				"dist": 399,
+				"dir": "left",
+				"gaveUp": false,
+				"kind": "heal"
+			}
+		],
+		"pois": [
+			{
+				"id": 4,
+				"dist": 43,
+				"dir": "up-right",
+				"gaveUp": false,
+				"kind": "paidChest",
+				"name": "Potato Crate",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 11,
+				"dist": 141,
+				"dir": "down-right",
+				"gaveUp": false,
+				"kind": "vendor",
+				"name": "Fry Cart",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 3,
+				"dist": 287,
+				"dir": "up-left",
+				"gaveUp": false,
+				"kind": "paidChest",
+				"name": "Potato Crate",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 6,
+				"dist": 293,
+				"dir": "up-right",
+				"gaveUp": false,
+				"kind": "dog",
+				"name": "Stray Dog",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 12,
+				"dist": 298,
+				"dir": "down-right",
+				"gaveUp": false,
+				"kind": "dog",
+				"name": "Stray Dog",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 17,
+				"dist": 328,
+				"dir": "down",
+				"gaveUp": false,
+				"kind": "dog",
+				"name": "Stray Dog",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 33,
+				"dist": 367,
+				"dir": "up",
+				"gaveUp": false,
+				"kind": "botDock",
+				"name": "Bot Dock",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 2
+			},
+			{
+				"id": 15,
+				"dist": 439,
+				"dir": "down",
+				"gaveUp": false,
+				"kind": "crops",
+				"name": "Crop Patch",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 34,
+				"dist": 440,
+				"dir": "up-right",
+				"gaveUp": false,
+				"kind": "paidChest",
+				"name": "Potato Crate",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 16,
+				"dist": 457,
+				"dir": "down",
+				"gaveUp": false,
+				"kind": "crops",
+				"name": "Crop Patch",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 8,
+				"dist": 458,
+				"dir": "right",
+				"gaveUp": false,
+				"kind": "taterLantern",
+				"name": "Tater Lantern",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 1,
+				"dist": 527,
+				"dir": "left",
+				"gaveUp": false,
+				"kind": "taterMagnet",
+				"name": "Tater Magnet",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 13,
+				"dist": 528,
+				"dir": "right",
+				"gaveUp": false,
+				"kind": "chargeShrine",
+				"name": "Spud Shrine",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 5
+			},
+			{
+				"id": 32,
+				"dist": 539,
+				"dir": "up-left",
+				"gaveUp": false,
+				"kind": "paidChest",
+				"name": "Potato Crate",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 18,
+				"dist": 571,
+				"dir": "down-right",
+				"gaveUp": false,
+				"kind": "crops",
+				"name": "Crop Patch",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 9,
+				"dist": 584,
+				"dir": "left",
+				"gaveUp": false,
+				"kind": "curseShrine",
+				"name": "Moldy Shrine",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 22,
+				"dist": 593,
+				"dir": "down",
+				"gaveUp": false,
+				"kind": "crops",
+				"name": "Crop Patch",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 2,
+				"dist": 596,
+				"dir": "left",
+				"gaveUp": false,
+				"kind": "chargeShrine",
+				"name": "Spud Shrine",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 5
+			},
+			{
+				"id": 7,
+				"dist": 601,
+				"dir": "right",
+				"gaveUp": false,
+				"kind": "dog",
+				"name": "Stray Dog",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 46,
+				"dist": 607,
+				"dir": "up-right",
+				"gaveUp": false,
+				"kind": "vendor",
+				"name": "Fry Cart",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 31,
+				"dist": 617,
+				"dir": "up-left",
+				"gaveUp": false,
+				"kind": "chargeShrine",
+				"name": "Spud Shrine",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 5
+			},
+			{
+				"id": 19,
+				"dist": 657,
+				"dir": "down-right",
+				"gaveUp": false,
+				"kind": "taterLantern",
+				"name": "Tater Lantern",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 42,
+				"dist": 664,
+				"dir": "up",
+				"gaveUp": false,
+				"kind": "paidChest",
+				"name": "Potato Crate",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 43,
+				"dist": 670,
+				"dir": "up",
+				"gaveUp": false,
+				"kind": "rootTunnel",
+				"name": "Root Tunnel",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 2
+			},
+			{
+				"id": 23,
+				"dist": 692,
+				"dir": "down-right",
+				"gaveUp": false,
+				"kind": "botDock",
+				"name": "Bot Dock",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 2
+			},
+			{
+				"id": 21,
+				"dist": 695,
+				"dir": "down",
+				"gaveUp": false,
+				"kind": "chargeShrine",
+				"name": "Spud Shrine",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 5
+			},
+			{
+				"id": 35,
+				"dist": 707,
+				"dir": "left",
+				"gaveUp": false,
+				"kind": "curseShrine",
+				"name": "Moldy Shrine",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 44,
+				"dist": 713,
+				"dir": "up-right",
+				"gaveUp": false,
+				"kind": "crops",
+				"name": "Crop Patch",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 14,
+				"dist": 741,
+				"dir": "down-left",
+				"gaveUp": false,
+				"kind": "dog",
+				"name": "Stray Dog",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 36,
+				"dist": 745,
+				"dir": "left",
+				"gaveUp": false,
+				"kind": "taterSlots",
+				"name": "Tater Slots",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 20,
+				"dist": 770,
+				"dir": "down-left",
+				"gaveUp": false,
+				"kind": "crops",
+				"name": "Crop Patch",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 41,
+				"dist": 778,
+				"dir": "up-left",
+				"gaveUp": false,
+				"kind": "microwave",
+				"name": "Microwave",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 24,
+				"dist": 823,
+				"dir": "down-right",
+				"gaveUp": false,
+				"kind": "vendor",
+				"name": "Fry Cart",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 37,
+				"dist": 844,
+				"dir": "down-left",
+				"gaveUp": false,
+				"kind": "frenzyFryer",
+				"name": "Frenzy Fryer",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 2
+			},
+			{
+				"id": 45,
+				"dist": 891,
+				"dir": "up-right",
+				"gaveUp": false,
+				"kind": "crops",
+				"name": "Crop Patch",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			},
+			{
+				"id": 30,
+				"dist": 901,
+				"dir": "up-left",
+				"gaveUp": false,
+				"kind": "dinnerBell",
+				"name": "Dinner Bell",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 40,
+				"dist": 934,
+				"dir": "up-left",
+				"gaveUp": false,
+				"kind": "spudFreezer",
+				"name": "Spud Freezer",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 38,
+				"dist": 1003,
+				"dir": "down-left",
+				"gaveUp": false,
+				"kind": "paidChest",
+				"name": "Potato Crate",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1.5
+			},
+			{
+				"id": 39,
+				"dist": 1096,
+				"dir": "up-left",
+				"gaveUp": false,
+				"kind": "dog",
+				"name": "Stray Dog",
+				"inside": false,
+				"charged": 0,
+				"chargeSeconds": 1
+			}
+		],
+		"ground": {
+			"xp": 86,
+			"gold": 6,
+			"xpByDirection": {
+				"right": 5,
+				"down-right": 2,
+				"down": 9,
+				"down-left": 10,
+				"left": 10,
+				"up-left": 4,
+				"up": 6,
+				"up-right": 10
+			}
+		},
+		"prices": {
+			"crate": 30,
+			"slots": 15
+		},
+		"boosts": [],
+		"upcoming": [
+			{
+				"at": 120,
+				"text": "boss The Festival Mascot"
+			},
+			{
+				"at": 120,
+				"text": "event Fry Fly Swarm"
+			},
+			{
+				"at": 180,
+				"text": "elite"
+			}
+		],
+		"previous": {
+			"action": {
+				"type": "xp",
+				"why": "gather xp"
+			},
+			"seconds": 21.3
+		}
+	},
+	"memory": {
+		"retreating": false
+	},
+	"action": {
+		"type": "xp",
+		"why": "gather xp"
+	},
+	"blocks": {
+		"time": "1:32",
+		"difficulty": "nightmare",
+		"mode": "world",
+		"health": "Health 229/229 (100%).",
+		"level": "Level 7, 54% of the way to the next.",
+		"gold": "Gold 40.",
+		"dash": "Dash charges 1 of 1.",
+		"weapons": "Weapons (4 of 6 slots):\n  - Seeker Sprouts 2/8: Sprouts that steer toward enemies.\n  - Rösti Disc 1/8: A flat rösti that bounces off the edges of the view.\n  - Mezzaluna 1/8: Chops in front of Tibo and behind him. The more HP Tibo is missing, the harder it hits.\n  - Sprout Satellites 1/8: Potato sprouts circle Tibo for a while.",
+		"passives": "Passives (2 of 6 slots):\n  - Fertilizer 1/5: +8% XP gain per level.\n  - Butter Pat 2/5: +10% damage per level.",
+		"items": "Items: none",
+		"banished": "Banished this run: nothing.",
+		"recipes": "Recipes in reach: Big Fry: Small Fry missing + Fertilizer done 1/5; Eternal Sprouts: Sprout Satellites leveling 1/8 + Slow Cooker missing; Gratin Puddle: Starch Puddle missing + Butter Pat done 2/5; Moon Cleaver: Mezzaluna leveling 1/8 + Rotten Spud missing; Overgrowth: Seeker Sprouts leveling 2/8 + Fertilizer done 1/5; Rösti Storm: Rösti Disc leveling 1/8 + Starch Plating missing; Sack of Russets: Spud Lob missing + Butter Pat done 2/5; Potato Patch: Seed Potato missing + Fertilizer done 1/5; Tailgate Party: Tailgate Fries missing + Butter Pat done 2/5.",
+		"evolutions": "No recipe is complete yet.",
+		"standing_on": "Tibo stands on no chest or spot.",
+		"hurt_by": "Hurt in the last 3 seconds by: Aphid 0.5.",
+		"dps": "Damage dealt a second over the last 3 seconds: 12.",
+		"bosses": "Bosses: none.",
+		"enemies": "Enemies: 5 on screen. Most to the down-right (2), fewest to the up (0).",
+		"current_goal": "Current goal: Gather xp, since 1:11.",
+		"recent_goals": "Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 Gather xp: drive returned another action; 0:21 Charge the Spud Shrine: drive returned another action; 1:09 Gather xp: drive returned another action; 1:11 Open the chest: drive returned another action.",
+		"stats": "Stats: damageMult 1.2, areaMult 1, cooldownMult 1, amountBonus 1, durationMult 1.25, projSpeedMult 1, moveSpeedMult 1, maxHp 228.8, recovery 0, armor 0, magnetRadius 40, luck 0, growthMult 1.62, greedMult 1, curse 0, critChance 0.053, critMult 2, evasion 0, knockbackMult 1, pierceBonus 0, revivals 2, eliteMult 1, healOnKill 0, explodeOnKillChance 0, thorns 0, chestPriceMult 1, dashCharges 0, dashCooldownMult 1, dashGraceSec 0. Added by shrines: maxHp 14.399999999999999, critChance 0.055999999999999994.",
+		"resources": "Rerolls 0, skips 0, banishes 0, revives 2; curses 0, which add 0 elites and 0 bosses.",
+		"spots": "Spots on the loaded map, nearest first:\n  - Potato Crate (paidChest) 43 away to the up-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 40.\n  - Fry Cart (vendor) 141 away to the down-right (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 40.\n  - Potato Crate (paidChest) 287 away to the up-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 40.\n  - Stray Dog (dog) 293 away to the up-right (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.\n  - Stray Dog (dog) 298 away to the down-right (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.\n  - Stray Dog (dog) 328 away to the down (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.\n  - Bot Dock (botDock) 367 away to the up (stand by it to call a swarm of grok bots) Charged 0 of 2 s.\n  - Crop Patch (crops) 439 away to the down (break it for gold and a snack) Charged 0 of 1 s.\n  - Potato Crate (paidChest) 440 away to the up-right (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 40.\n  - Crop Patch (crops) 457 away to the down (break it for gold and a snack) Charged 0 of 1 s.\n  - Tater Lantern (taterLantern) 458 away to the right (break it for a surprise) Charged 0 of 1 s.\n  - Tater Magnet (taterMagnet) 527 away to the left (stand by it to pull in every gem and coin) Charged 0 of 1 s.\n  - Spud Shrine (chargeShrine) 528 away to the right (stand inside to charge it, then pick a stat) Charged 0 of 5 s.\n  - Potato Crate (paidChest) 539 away to the up-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 40.\n  - Crop Patch (crops) 571 away to the down-right (break it for gold and a snack) Charged 0 of 1 s.\n  - Moldy Shrine (curseShrine) 584 away to the left (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.\n  - Crop Patch (crops) 593 away to the down (break it for gold and a snack) Charged 0 of 1 s.\n  - Spud Shrine (chargeShrine) 596 away to the left (stand inside to charge it, then pick a stat) Charged 0 of 5 s.\n  - Stray Dog (dog) 601 away to the right (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.\n  - Fry Cart (vendor) 607 away to the up-right (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 40.\n  - Spud Shrine (chargeShrine) 617 away to the up-left (stand inside to charge it, then pick a stat) Charged 0 of 5 s.\n  - Tater Lantern (taterLantern) 657 away to the down-right (break it for a surprise) Charged 0 of 1 s.\n  - Potato Crate (paidChest) 664 away to the up (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 40.\n  - Root Tunnel (rootTunnel) 670 away to the up (stand by it to tunnel to a far place) Charged 0 of 2 s.\n  - Bot Dock (botDock) 692 away to the down-right (stand by it to call a swarm of grok bots) Charged 0 of 2 s.\n  - Spud Shrine (chargeShrine) 695 away to the down (stand inside to charge it, then pick a stat) Charged 0 of 5 s.\n  - Moldy Shrine (curseShrine) 707 away to the left (take curse for a pile of gold; curses bring extra elites and bosses) Charged 0 of 1.5 s.\n  - Crop Patch (crops) 713 away to the up-right (break it for gold and a snack) Charged 0 of 1 s.\n  - Stray Dog (dog) 741 away to the down-left (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.\n  - Tater Slots (taterSlots) 745 away to the left (pay gold to spin; match two for an item) Charged 0 of 1.5 s; a spin costs 15 gold, and Tibo has 40.\n  - Crop Patch (crops) 770 away to the down-left (break it for gold and a snack) Charged 0 of 1 s.\n  - Microwave (microwave) 778 away to the up-left (stand by it to charge it, then copy one of your items; the copy melts another item of the same rarity) Charged 0 of 1.5 s.\n  - Fry Cart (vendor) 823 away to the down-right (sells items for gold) Charged 0 of 1.5 s; its items cost 80, 140, 240, 400, 640 gold by rarity, and Tibo has 40.\n  - Frenzy Fryer (frenzyFryer) 844 away to the down-left (stand by it for a 20 s frenzy) Charged 0 of 2 s.\n  - Crop Patch (crops) 891 away to the up-right (break it for gold and a snack) Charged 0 of 1 s.\n  - Dinner Bell (dinnerBell) 901 away to the up-left (ring it to call a ring of pests; they drop triple xp) Charged 0 of 1.5 s.\n  - Spud Freezer (spudFreezer) 934 away to the up-left (stand by it to freeze every enemy on the map for 7.5 s; bosses only slow down) Charged 0 of 1.5 s.\n  - Potato Crate (paidChest) 1003 away to the down-left (costs gold; holds an item; each crate costs more than the last) Charged 0 of 1.5 s; it costs 30 gold now, and Tibo has 40.\n  - Stray Dog (dog) 1096 away to the up-left (a good dog looking for a friend; walk up to it) Charged 0 of 1 s.",
+		"dogs": "Dogs: none.",
+		"pickups": "On the ground: xp worth 85.9 and gold worth 6. Chests: none. Food: 215 left; 399 left. Other pickups: reroll 204 up-right.",
+		"buffs": "Timed boosts: none.",
+		"schedule": "Coming up: 2:00 boss The Festival Mascot; 2:00 event Fry Fly Swarm; 3:00 elite.",
+		"hazards": "Within 0.5 s: underfoot nothing; walking into nothing. Attacks near: none. Bullets that would hit a Tibo standing still: none.",
+		"events": "Recent game events: none.",
+		"elites": "Elites alive: none.",
+		"counters": "What the game has counted this run: counters kills 205, hits 215, crits 9, gems 129, coins 6, shots 308; run timeSec 92.73333333333333, level 7, kills 205, distance 4961.240000000245, dodgePoints 906.4281258526416, dodgeSecond 92, curseSince 4363, goldEarned 40, bossChests 1, elitesKilled 1, peakEnemies 21, shrinesUsed 2, grokBotHelps 1, botSwarms 1.",
+		"offer": "No choice is open.",
+		"weapon_damage": "Damage dealt so far by weapon: Seeker Sprouts 843 (546 a minute), Rösti Disc 102 (66 a minute), Sprout Satellites 50 (33 a minute), Mezzaluna 25 (16 a minute).",
+		"state": "Time 1:32. Health 229/229 (100%). Level 7, 54% of the way to the next. Gold 40. Dash charges 1 of 1.\nWeapons (4 of 6 slots):\n  - Seeker Sprouts 2/8: Sprouts that steer toward enemies.\n  - Rösti Disc 1/8: A flat rösti that bounces off the edges of the view.\n  - Mezzaluna 1/8: Chops in front of Tibo and behind him. The more HP Tibo is missing, the harder it hits.\n  - Sprout Satellites 1/8: Potato sprouts circle Tibo for a while.\nPassives (2 of 6 slots):\n  - Fertilizer 1/5: +8% XP gain per level.\n  - Butter Pat 2/5: +10% damage per level.\nItems: none\nRecipes in reach: Big Fry: Small Fry missing + Fertilizer done 1/5; Eternal Sprouts: Sprout Satellites leveling 1/8 + Slow Cooker missing; Gratin Puddle: Starch Puddle missing + Butter Pat done 2/5; Moon Cleaver: Mezzaluna leveling 1/8 + Rotten Spud missing; Overgrowth: Seeker Sprouts leveling 2/8 + Fertilizer done 1/5; Rösti Storm: Rösti Disc leveling 1/8 + Starch Plating missing; Sack of Russets: Spud Lob missing + Butter Pat done 2/5; Potato Patch: Seed Potato missing + Fertilizer done 1/5; Tailgate Party: Tailgate Fries missing + Butter Pat done 2/5.\nNo recipe is complete yet.\nTibo stands on no chest or spot.\nHurt in the last 3 seconds by: Aphid 0.5.\nBosses: none.\nEnemies: 5 on screen. Most to the down-right (2), fewest to the up (0).\nCurrent goal: Gather xp, since 1:11.\nRecent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 Gather xp: drive returned another action; 0:21 Charge the Spud Shrine: drive returned another action; 1:09 Gather xp: drive returned another action; 1:11 Open the chest: drive returned another action."
+	}
 }

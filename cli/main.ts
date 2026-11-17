@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
-import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, localOrigin, validPort } from "../protocol/address";
-import { parseCommand } from "../protocol/commands";
-import type { State } from "../protocol/view";
-import { AgentServer, Unreachable } from "../agent-server/client";
-import { clock } from "../clock";
+import { BRIDGE_ORIGIN as DEFAULT_ORIGIN, localOrigin, validPort } from '../protocol/address';
+import { parseCommand } from '../protocol/commands';
+import type { State } from '../protocol/view';
+import { AgentServer, Unreachable } from '../agent-server/client';
+import { clock } from '../clock';
 
 const USAGE = `usage: cli/main.ts [--port <port> | --server <url>] <command>
 
@@ -52,283 +52,372 @@ The agent server defaults to $TIBO_SERVER, then ${DEFAULT_ORIGIN}; --port picks 
 let server = new AgentServer(DEFAULT_ORIGIN);
 
 function serverFrom(args: string[]): string {
-  const wantsPort = args.includes("--port");
-  const port = flag(args, "--port");
-  const wantsUrl = args.includes("--server");
-  const url = flag(args, "--server");
-  if (wantsPort && wantsUrl) throw new Error("pass --port or --server, not both");
-  if (wantsUrl) {
-    if (url === undefined || !URL.canParse(url)) throw new Error(`--server must be a URL such as ${DEFAULT_ORIGIN}, got ${url ?? "nothing"}`);
-    return url.replace(/\/$/, "");
-  }
-  if (!wantsPort) return process.env.TIBO_SERVER ?? DEFAULT_ORIGIN;
-  if (!validPort(Number(port))) throw new Error(`--port must be a number from 1 to 65535, got ${port ?? "nothing"}`);
-  return localOrigin(Number(port));
+	const wantsPort = args.includes('--port');
+	const port = flag(args, '--port');
+	const wantsUrl = args.includes('--server');
+	const url = flag(args, '--server');
+	if (wantsPort && wantsUrl) throw new Error('pass --port or --server, not both');
+	if (wantsUrl) {
+		if (url === undefined || !URL.canParse(url))
+			throw new Error(`--server must be a URL such as ${DEFAULT_ORIGIN}, got ${url ?? 'nothing'}`);
+		return url.replace(/\/$/, '');
+	}
+	if (!wantsPort) return process.env.TIBO_SERVER ?? DEFAULT_ORIGIN;
+	if (!validPort(Number(port))) throw new Error(`--port must be a number from 1 to 65535, got ${port ?? 'nothing'}`);
+	return localOrigin(Number(port));
 }
 
 /** The agent server, with a hint on how to start it when nothing answers. */
 async function asked<T>(work: Promise<T>): Promise<T> {
-  try {
-    return await work;
-  } catch (e) {
-    if (!(e instanceof Unreachable)) throw e;
-    const port = new URL(server.origin).port;
-    throw new Error(`no agent server at ${server.origin}; start it with ./agent-server/main.ts${port === String(new URL(DEFAULT_ORIGIN).port) ? "" : ` --port ${port}`}`);
-  }
+	try {
+		return await work;
+	} catch (e) {
+		if (!(e instanceof Unreachable)) throw e;
+		const port = new URL(server.origin).port;
+		throw new Error(
+			`no agent server at ${server.origin}; start it with ./agent-server/main.ts${port === String(new URL(DEFAULT_ORIGIN).port) ? '' : ` --port ${port}`}`,
+			{ cause: e },
+		);
+	}
 }
 
 function flag(args: string[], name: string): string | undefined {
-  const i = args.indexOf(name);
-  if (i < 0) return undefined;
-  const value = args[i + 1];
-  args.splice(i, 2);
-  return value;
+	const i = args.indexOf(name);
+	if (i < 0) return undefined;
+	const value = args[i + 1];
+	args.splice(i, 2);
+	return value;
 }
 
 // A long list of numbers, such as a weapon's fixed-size buffer, shows its start in text; json has it all.
 const LIST_SHOWN = 32;
 
-const scalar = (v: unknown) => (typeof v === "string" ? JSON.stringify(v) : String(v));
-const isScalar = (v: unknown) => v === null || typeof v !== "object";
+const scalar = (v: unknown) => (typeof v === 'string' ? JSON.stringify(v) : String(v));
+const isScalar = (v: unknown) => v === null || typeof v !== 'object';
 
 /** The game's own keys as an indented tree; a list of entries with the same keys, such as a pool, as a table. */
-function tree(v: unknown, indent = ""): string[] {
-  if (isScalar(v)) return [`${indent}${scalar(v)}`];
-  if (Array.isArray(v)) {
-    if (v.every(isScalar)) return [`${indent}[${v.slice(0, LIST_SHOWN).map(scalar).join(", ")}${v.length > LIST_SHOWN ? `, ... ${v.length - LIST_SHOWN} more` : ""}]`];
-    const rows = v as Record<string, unknown>[];
-    const columns = [...new Set(rows.flatMap((r) => (typeof r === "object" && r !== null ? Object.keys(r) : [])))];
-    const flat = rows.every((r) => typeof r === "object" && r !== null && Object.values(r).every((x) => isScalar(x) || (Array.isArray(x) && x.every(isScalar))));
-    if (flat) {
-      const cell = (x: unknown) => (x === undefined ? "" : Array.isArray(x) ? x.map(scalar).join("|") : typeof x === "number" ? String(Math.round(x * 1000) / 1000) : scalar(x));
-      return [`${indent}${rows.length} entries`, `${indent}${columns.join("\t")}`, ...rows.map((r) => `${indent}${columns.map((c) => cell(r[c])).join("\t")}`)];
-    }
-    return rows.flatMap((r, i) => [`${indent}- [${i}]`, ...tree(r, `${indent}    `)]);
-  }
-  return Object.entries(v as Record<string, unknown>).flatMap(([k, x]) => {
-    if (isScalar(x) || (Array.isArray(x) && x.every(isScalar))) return [`${indent}${k}: ${tree(x).join("")}`];
-    return [`${indent}${k}:`, ...tree(x, `${indent}  `)];
-  });
+function tree(v: unknown, indent = ''): string[] {
+	if (isScalar(v)) return [`${indent}${scalar(v)}`];
+	if (Array.isArray(v)) {
+		if (v.every(isScalar))
+			return [
+				`${indent}[${v.slice(0, LIST_SHOWN).map(scalar).join(', ')}${v.length > LIST_SHOWN ? `, ... ${v.length - LIST_SHOWN} more` : ''}]`,
+			];
+		const rows = v as Record<string, unknown>[];
+		const columns = [...new Set(rows.flatMap(r => (typeof r === 'object' && r !== null ? Object.keys(r) : [])))];
+		const flat = rows.every(
+			r =>
+				typeof r === 'object' &&
+				r !== null &&
+				Object.values(r).every(x => isScalar(x) || (Array.isArray(x) && x.every(isScalar))),
+		);
+		if (flat) {
+			const cell = (x: unknown) =>
+				x === undefined
+					? ''
+					: Array.isArray(x)
+						? x.map(scalar).join('|')
+						: typeof x === 'number'
+							? String(Math.round(x * 1000) / 1000)
+							: scalar(x);
+			return [
+				`${indent}${rows.length} entries`,
+				`${indent}${columns.join('\t')}`,
+				...rows.map(r => `${indent}${columns.map(c => cell(r[c])).join('\t')}`),
+			];
+		}
+		return rows.flatMap((r, i) => [`${indent}- [${i}]`, ...tree(r, `${indent}    `)]);
+	}
+	return Object.entries(v as Record<string, unknown>).flatMap(([k, x]) => {
+		if (isScalar(x) || (Array.isArray(x) && x.every(isScalar))) return [`${indent}${k}: ${tree(x).join('')}`];
+		return [`${indent}${k}:`, ...tree(x, `${indent}  `)];
+	});
 }
 
 /** The part of the snapshot a dotted path names, such as "game.loadout.weapons" or "game.enemies". */
 function pick(s: State, path: string | undefined): unknown {
-  if (path === undefined) return s;
-  let v: unknown = s;
-  for (const key of path.split(".")) {
-    if (typeof v !== "object" || v === null || !(key in v)) throw new Error(`the snapshot has no ${path}; its keys at that level are: ${typeof v === "object" && v !== null ? Object.keys(v).join(", ") : "none"}`);
-    v = (v as Record<string, unknown>)[key];
-  }
-  return v;
+	if (path === undefined) return s;
+	let v: unknown = s;
+	for (const key of path.split('.')) {
+		if (typeof v !== 'object' || v === null || !(key in v))
+			throw new Error(
+				`the snapshot has no ${path}; its keys at that level are: ${typeof v === 'object' && v !== null ? Object.keys(v).join(', ') : 'none'}`,
+			);
+		v = (v as Record<string, unknown>)[key];
+	}
+	return v;
 }
 
 /** The raw groups `--raw=a,b` or `--raw a,b` names. */
-const rawOf = (words: string[]) => words.find((w) => w.startsWith("--raw="))?.slice("--raw=".length) ?? flag([...words], "--raw") ?? "";
+const rawOf = (words: string[]) =>
+	words.find(w => w.startsWith('--raw='))?.slice('--raw='.length) ?? flag([...words], '--raw') ?? '';
 
-const said = (name: string, description?: string) => (description === undefined || description === "" ? name : `${name}: ${description.replace(/\s+/g, " ").trim()}`);
+const said = (name: string, description?: string) =>
+	description === undefined || description === '' ? name : `${name}: ${description.replace(/\s+/g, ' ').trim()}`;
 
 /** The live view as a person or a model reads it: times as m:ss, health as hp/max, a line per thing. */
 function display(s: State): Record<string, unknown> {
-  const { connected: _c, ageMs: _a, capturedAt: _t, headless: _h, gameBuild: _g, commands, drive: _d, time, world, tibo, directions, attacks, choice, ...rest } = s;
-  const out: Record<string, unknown> = {};
-  if (time !== undefined) out.time = clock(time);
-  Object.assign(out, rest);
-  if (world !== undefined)
-    out.world = {
-      ...world,
-      winAt: clock(world.winAt),
-      biome: world.biome.name,
-      ...(world.landmark === undefined ? {} : { landmark: `${world.landmark.name}${world.landmark.event === undefined ? "" : `, event ${world.landmark.event}`}` }),
-      upcoming: world.upcoming.map((u) => `${clock(u.at)} ${u.text}`),
-      boosts: world.boosts.map((b) => `${b.name} ${b.endsIn}s left`),
-      events: world.events.map((e) => `${clock(e.at)} ${e.text}`),
-    };
-  if (tibo !== undefined)
-    out.tibo = {
-      life: `${tibo.life.hp}/${tibo.life.max}`,
-      level: `${tibo.level.level} (${tibo.level.xp}/${tibo.level.next} xp)`,
-      gold: tibo.gold,
-      dash: `${tibo.dash.charges}/${tibo.dash.max}${tibo.dash.readyIn > 0 ? `, next in ${tibo.dash.readyIn}s` : ""}`,
-      position: `${tibo.position.x}, ${tibo.position.y}`,
-      ...(Object.keys(tibo.status).length === 0 ? {} : { status: tibo.status }),
-      rerolls: tibo.rerolls,
-      skips: tibo.skips,
-      banishes: tibo.banishes,
-      ...(tibo.banished.length === 0 ? {} : { banished: tibo.banished }),
-      revives: tibo.revives,
-      weapons: tibo.weapons.map((w) => said(`${w.name} ${w.level}/${w.max}`, w.description)),
-      passives: tibo.passives.map((p) => said(`${p.name} ${p.level}/${p.max}`, p.description)),
-      items: tibo.items.map((i) => said(`${i.name} x${i.count}`, i.description)),
-      dogs: tibo.dogs.map((d) => `${said(`${d.name} ${d.level}/${d.max}`, d.description)}${Object.keys(d.helped).length === 0 ? "" : ` (${Object.entries(d.helped).map(([k, v]) => `${k} ${v}`).join(", ")})`}`),
-      stats: tibo.stats,
-      shrineTotals: tibo.shrineTotals,
-      evolves: tibo.evolves,
-      recipes: tibo.recipes,
-      hurtBy: tibo.hurtBy,
-      dps: tibo.dps,
-    };
-  if (directions !== undefined) {
-    const { horizonMilliseconds, ...ways } = directions;
-    out.directions = {
-      horizonMilliseconds,
-      ...Object.fromEntries(
-        Object.entries(ways).map(([dir, d]) => {
-          if (d === undefined) return [dir, ""];
-          const head = [`enemies ${d.enemies}`, `damage ${d.estimatedDamage}${d.dead ? " (dead)" : ""}${d.damageFrom === undefined ? "" : ` from ${d.damageFrom.join(", ")}`}`, ...(d.bullets === undefined ? [] : [`bullets ${d.bullets}`]), ...(d.enters === undefined ? [] : [`enters ${d.enters.join(", ")}`])].join(", ");
-          const aims = [
-            ...(d.bosses ?? []).map((x) => `boss ${x.name} #${x.id} ${x.distance} away, ${x.hp}/${x.maxHp} hp`),
-            ...(d.elites ?? []).map((x) => `elite ${x.name} #${x.id} ${x.distance} away, ${x.hp}/${x.maxHp} hp`),
-            ...(d.chests ?? []).map((x) => `chest #${x.id} ${x.distance} away, ${x.charged}/${x.chargeSeconds}s`),
-            ...(d.food ?? []).map((x) => `food #${x.id} ${x.distance} away`),
-            ...(d.spots ?? []).map((x) => `${x.name} (${x.type}) #${x.id} ${x.distance} away, ${x.charged}/${x.chargeSeconds}s`),
-            ...(d.pickups ?? []).map((x) => `${x.type} #${x.id} ${x.distance} away`),
-          ];
-          return [dir, aims.length === 0 ? head : [head, ...aims]];
-        }),
-      ),
-    };
-  }
-  if (attacks !== undefined)
-    out.attacks = {
-      bullets: attacks.bullets.map((b) => `from ${b.from} in ${b.in}s, ${b.damage} damage`),
-      zones: attacks.zones.map((z) => `${z.kind} (${z.shape}) ${z.distance} ${z.direction}${z.inside ? ", Tibo inside" : ""}${z.landsIn === undefined ? "" : `, lands in ${z.landsIn}s`}${z.enters.length === 0 ? "" : `, enters walking ${z.enters.join(" ")}`}`),
-      volleys: attacks.volleys.map((v) => `${v.distance} ${v.direction}, fires in ${v.firesIn}s, ${v.count} x ${v.bursts}, ${v.damage} damage`),
-    };
-  if (choice !== undefined) {
-    const { kind, options, ...about } = choice;
-    out.choice = {
-      kind,
-      ...about,
-      options: options.map((o) => {
-        const { action, name, description, ...more } = o;
-        const act = "index" in action ? `${action.type} ${action.index}` : action.type;
-        const extra = Object.entries(more).map(([k, v]) => `${k} ${Array.isArray(v) ? v.join("; ") : v}`);
-        return `[${act}] ${said(name, description)}${extra.length === 0 ? "" : ` (${extra.join(", ")})`}`;
-      }),
-    };
-  }
-  const running = commands.filter((c) => c.state === "running");
-  if (running.length > 0) out.commands = running.map((c) => JSON.stringify(c.command));
-  return out;
+	const {
+		connected: _c,
+		ageMs: _a,
+		capturedAt: _t,
+		headless: _h,
+		gameBuild: _g,
+		commands,
+		drive: _d,
+		time,
+		world,
+		tibo,
+		directions,
+		attacks,
+		choice,
+		...rest
+	} = s;
+	const out: Record<string, unknown> = {};
+	if (time !== undefined) out.time = clock(time);
+	Object.assign(out, rest);
+	if (world !== undefined)
+		out.world = {
+			...world,
+			winAt: clock(world.winAt),
+			biome: world.biome.name,
+			...(world.landmark === undefined
+				? {}
+				: {
+						landmark: `${world.landmark.name}${world.landmark.event === undefined ? '' : `, event ${world.landmark.event}`}`,
+					}),
+			upcoming: world.upcoming.map(u => `${clock(u.at)} ${u.text}`),
+			boosts: world.boosts.map(b => `${b.name} ${b.endsIn}s left`),
+			events: world.events.map(e => `${clock(e.at)} ${e.text}`),
+		};
+	if (tibo !== undefined)
+		out.tibo = {
+			life: `${tibo.life.hp}/${tibo.life.max}`,
+			level: `${tibo.level.level} (${tibo.level.xp}/${tibo.level.next} xp)`,
+			gold: tibo.gold,
+			dash: `${tibo.dash.charges}/${tibo.dash.max}${tibo.dash.readyIn > 0 ? `, next in ${tibo.dash.readyIn}s` : ''}`,
+			position: `${tibo.position.x}, ${tibo.position.y}`,
+			...(Object.keys(tibo.status).length === 0 ? {} : { status: tibo.status }),
+			rerolls: tibo.rerolls,
+			skips: tibo.skips,
+			banishes: tibo.banishes,
+			...(tibo.banished.length === 0 ? {} : { banished: tibo.banished }),
+			revives: tibo.revives,
+			weapons: tibo.weapons.map(w => said(`${w.name} ${w.level}/${w.max}`, w.description)),
+			passives: tibo.passives.map(p => said(`${p.name} ${p.level}/${p.max}`, p.description)),
+			items: tibo.items.map(i => said(`${i.name} x${i.count}`, i.description)),
+			dogs: tibo.dogs.map(
+				d =>
+					`${said(`${d.name} ${d.level}/${d.max}`, d.description)}${
+						Object.keys(d.helped).length === 0
+							? ''
+							: ` (${Object.entries(d.helped)
+									.map(([k, v]) => `${k} ${v}`)
+									.join(', ')})`
+					}`,
+			),
+			stats: tibo.stats,
+			shrineTotals: tibo.shrineTotals,
+			evolves: tibo.evolves,
+			recipes: tibo.recipes,
+			hurtBy: tibo.hurtBy,
+			dps: tibo.dps,
+		};
+	if (directions !== undefined) {
+		const { horizonMilliseconds, ...ways } = directions;
+		out.directions = {
+			horizonMilliseconds,
+			...Object.fromEntries(
+				Object.entries(ways).map(([dir, d]) => {
+					if (d === undefined) return [dir, ''];
+					const head = [
+						`enemies ${d.enemies}`,
+						`damage ${d.estimatedDamage}${d.dead ? ' (dead)' : ''}${d.damageFrom === undefined ? '' : ` from ${d.damageFrom.join(', ')}`}`,
+						...(d.bullets === undefined ? [] : [`bullets ${d.bullets}`]),
+						...(d.enters === undefined ? [] : [`enters ${d.enters.join(', ')}`]),
+					].join(', ');
+					const aims = [
+						...(d.bosses ?? []).map(x => `boss ${x.name} #${x.id} ${x.distance} away, ${x.hp}/${x.maxHp} hp`),
+						...(d.elites ?? []).map(x => `elite ${x.name} #${x.id} ${x.distance} away, ${x.hp}/${x.maxHp} hp`),
+						...(d.chests ?? []).map(x => `chest #${x.id} ${x.distance} away, ${x.charged}/${x.chargeSeconds}s`),
+						...(d.food ?? []).map(x => `food #${x.id} ${x.distance} away`),
+						...(d.spots ?? []).map(
+							x => `${x.name} (${x.type}) #${x.id} ${x.distance} away, ${x.charged}/${x.chargeSeconds}s`,
+						),
+						...(d.pickups ?? []).map(x => `${x.type} #${x.id} ${x.distance} away`),
+					];
+					return [dir, aims.length === 0 ? head : [head, ...aims]];
+				}),
+			),
+		};
+	}
+	if (attacks !== undefined)
+		out.attacks = {
+			bullets: attacks.bullets.map(b => `from ${b.from} in ${b.in}s, ${b.damage} damage`),
+			zones: attacks.zones.map(
+				z =>
+					`${z.kind} (${z.shape}) ${z.distance} ${z.direction}${z.inside ? ', Tibo inside' : ''}${z.landsIn === undefined ? '' : `, lands in ${z.landsIn}s`}${z.enters.length === 0 ? '' : `, enters walking ${z.enters.join(' ')}`}`,
+			),
+			volleys: attacks.volleys.map(
+				v => `${v.distance} ${v.direction}, fires in ${v.firesIn}s, ${v.count} x ${v.bursts}, ${v.damage} damage`,
+			),
+		};
+	if (choice !== undefined) {
+		const { kind, options, ...about } = choice;
+		out.choice = {
+			kind,
+			...about,
+			options: options.map(o => {
+				const { action, name, description, ...more } = o;
+				const act = 'index' in action ? `${action.type} ${action.index}` : action.type;
+				const extra = Object.entries(more).map(([k, v]) => `${k} ${Array.isArray(v) ? v.join('; ') : v}`);
+				return `[${act}] ${said(name, description)}${extra.length === 0 ? '' : ` (${extra.join(', ')})`}`;
+			}),
+		};
+	}
+	const running = commands.filter(c => c.state === 'running');
+	if (running.length > 0) out.commands = running.map(c => JSON.stringify(c.command));
+	return out;
 }
 
 function render(s: State, path: string | undefined): string {
-  const lines = tree(path === undefined ? display(s) : pick(s, path));
-  if (!s.connected) lines.unshift("the tibo.dog tab is not connected");
-  return lines.join("\n");
+	const lines = tree(path === undefined ? display(s) : pick(s, path));
+	if (!s.connected) lines.unshift('the tibo.dog tab is not connected');
+	return lines.join('\n');
 }
 
 function parseArgs(args: string[]): unknown {
-  const [verb, ...rest] = args;
-  const num = (v: string | undefined, what: string) => {
-    const n = Number(v);
-    if (v === undefined || !Number.isFinite(n)) throw new Error(`${what} must be a number\n\n${USAGE}`);
-    return n;
-  };
-  const heading = (v: string | undefined) => (v === undefined ? undefined : Number.isFinite(Number(v)) ? Number(v) : v);
-  switch (verb) {
-    case "move":
-      return { type: "move", dir: heading(rest[0]), ...(rest[1] === undefined ? {} : { seconds: num(rest[1], "seconds") }) };
-    case "goto": {
-      const stay = flag(rest, "--stay");
-      const within = flag(rest, "--within");
-      const timeout = flag(rest, "--timeout");
-      const to =
-        rest[0] === "poi"
-          ? { poi: num(rest[1], "uid") }
-          : rest[0] === "pickup"
-            ? { pickup: num(rest[1], "uid") }
-            : rest[0] === "rel"
-              ? { dx: num(rest[1], "dx"), dy: num(rest[2], "dy") }
-              : { x: num(rest[0], "x"), y: num(rest[1], "y") };
-      return {
-        type: "goto",
-        to,
-        ...(stay === undefined ? {} : { stay: stay === "done" ? "done" : num(stay, "stay") }),
-        ...(within === undefined ? {} : { within: num(within, "within") }),
-        ...(timeout === undefined ? {} : { timeout: num(timeout, "timeout") }),
-      };
-    }
-    case "choose":
-      return { type: "choose", action: rest[1] === undefined ? { type: rest[0] } : { type: rest[0], index: num(rest[1], "index") } };
-    case "dash":
-      return rest[0] === undefined ? { type: "dash" } : { type: "dash", dir: heading(rest[0]) };
-    case "start": {
-      const difficulty = rest.find((w) => w !== "daily");
-      return { type: "start", ...(rest.includes("daily") ? { mode: "daily" } : {}), ...(difficulty === undefined ? {} : { difficulty }) };
-    }
-    case "stop":
-    case "pause":
-    case "resume":
-    case "summary":
-      return { type: verb };
-    case "seed":
-      return { type: "seed", seed: rest[0] };
-    case "checkpoint":
-      return { type: "checkpoint", op: rest[0], name: rest[1] };
-    case "loadout": {
-      const spec: { weapons: unknown[]; passives: unknown[]; items: unknown[]; gold?: number; hp?: number | "full" } = { weapons: [], passives: [], items: [] };
-      for (const word of rest) {
-        const [kind, id = "", n] = word.split(":");
-        if (kind === "w") spec.weapons.push({ id, level: num(n ?? "1", `${word} level`) });
-        else if (kind === "p") spec.passives.push({ id, level: num(n ?? "1", `${word} level`) });
-        else if (kind === "i") spec.items.push({ id, count: num(n ?? "1", `${word} count`) });
-        else if (kind === "gold") spec.gold = num(id, "gold");
-        else if (kind === "hp") spec.hp = id === "full" ? "full" : num(id, "hp");
-        else throw new Error(`${word}: loadout words are w:<id>:<level>, p:<id>:<level>, i:<id>:<count>, gold:<n> or hp:<n>|full\n\n${USAGE}`);
-      }
-      return { type: "loadout", ...spec };
-    }
-  }
-  throw new Error(USAGE);
+	const [verb, ...rest] = args;
+	const num = (v: string | undefined, what: string) => {
+		const n = Number(v);
+		if (v === undefined || !Number.isFinite(n)) throw new Error(`${what} must be a number\n\n${USAGE}`);
+		return n;
+	};
+	const heading = (v: string | undefined) => (v === undefined ? undefined : Number.isFinite(Number(v)) ? Number(v) : v);
+	switch (verb) {
+		case 'move':
+			return {
+				type: 'move',
+				dir: heading(rest[0]),
+				...(rest[1] === undefined ? {} : { seconds: num(rest[1], 'seconds') }),
+			};
+		case 'goto': {
+			const stay = flag(rest, '--stay');
+			const within = flag(rest, '--within');
+			const timeout = flag(rest, '--timeout');
+			const to =
+				rest[0] === 'poi'
+					? { poi: num(rest[1], 'uid') }
+					: rest[0] === 'pickup'
+						? { pickup: num(rest[1], 'uid') }
+						: rest[0] === 'rel'
+							? { dx: num(rest[1], 'dx'), dy: num(rest[2], 'dy') }
+							: { x: num(rest[0], 'x'), y: num(rest[1], 'y') };
+			return {
+				type: 'goto',
+				to,
+				...(stay === undefined ? {} : { stay: stay === 'done' ? 'done' : num(stay, 'stay') }),
+				...(within === undefined ? {} : { within: num(within, 'within') }),
+				...(timeout === undefined ? {} : { timeout: num(timeout, 'timeout') }),
+			};
+		}
+		case 'choose':
+			return {
+				type: 'choose',
+				action: rest[1] === undefined ? { type: rest[0] } : { type: rest[0], index: num(rest[1], 'index') },
+			};
+		case 'dash':
+			return rest[0] === undefined ? { type: 'dash' } : { type: 'dash', dir: heading(rest[0]) };
+		case 'start': {
+			const difficulty = rest.find(w => w !== 'daily');
+			return {
+				type: 'start',
+				...(rest.includes('daily') ? { mode: 'daily' } : {}),
+				...(difficulty === undefined ? {} : { difficulty }),
+			};
+		}
+		case 'stop':
+		case 'pause':
+		case 'resume':
+		case 'summary':
+			return { type: verb };
+		case 'seed':
+			return { type: 'seed', seed: rest[0] };
+		case 'checkpoint':
+			return { type: 'checkpoint', op: rest[0], name: rest[1] };
+		case 'loadout': {
+			const spec: { weapons: unknown[]; passives: unknown[]; items: unknown[]; gold?: number; hp?: number | 'full' } = {
+				weapons: [],
+				passives: [],
+				items: [],
+			};
+			for (const word of rest) {
+				const [kind, id = '', n] = word.split(':');
+				if (kind === 'w') spec.weapons.push({ id, level: num(n ?? '1', `${word} level`) });
+				else if (kind === 'p') spec.passives.push({ id, level: num(n ?? '1', `${word} level`) });
+				else if (kind === 'i') spec.items.push({ id, count: num(n ?? '1', `${word} count`) });
+				else if (kind === 'gold') spec.gold = num(id, 'gold');
+				else if (kind === 'hp') spec.hp = id === 'full' ? 'full' : num(id, 'hp');
+				else
+					throw new Error(
+						`${word}: loadout words are w:<id>:<level>, p:<id>:<level>, i:<id>:<count>, gold:<n> or hp:<n>|full\n\n${USAGE}`,
+					);
+			}
+			return { type: 'loadout', ...spec };
+		}
+	}
+	throw new Error(USAGE);
 }
 
 async function main(argv: string[]) {
-  const args = [...argv];
-  server = new AgentServer(serverFrom(args));
-  const noWait = args.includes("--no-wait");
-  const words = args.filter((a) => a !== "--no-wait");
-  switch (words[0]) {
-    case undefined:
-    case "help":
-    case "--help":
-      console.log(USAGE);
-      return;
-    case "state": {
-      const inline = words.find((w) => w.startsWith("--format="));
-      const format = inline?.slice("--format=".length) ?? (words.includes("--format") ? (flag(words, "--format") ?? "") : "text");
-      if (format !== "text" && format !== "json") throw new Error(`--format must be text or json, got ${format}`);
-      const path = words.slice(1).find((w) => !w.startsWith("--") && w !== flag([...words], "--raw"));
-      const s = await asked(server.state(rawOf(words)));
-      console.log(format === "json" ? JSON.stringify(pick(s, path)) : render(s, path));
-      return;
-    }
-    case "watch": {
-      const path = words.slice(1).find((w) => !w.startsWith("--") && w !== flag([...words], "--raw"));
-      for (;;) {
-        const s = await asked(server.state(rawOf(words))).catch((e: Error) => e);
-        process.stdout.write(`\x1b[2J\x1b[H${s instanceof Error ? s.message : render(s, path)}\n`);
-        await Bun.sleep(250);
-      }
-    }
-    case "checkpoints":
-      for (const c of await asked(server.checkpoints()))
-        console.log(`${c.name}  ${clock(c.time)} lv ${c.level} hp ${c.hp}  ${c.difficulty} seed ${c.seed}  ${c.weapons.join(", ")}  (${c.savedAt}, ${c.build})`);
-      return;
-    case "encyclopedia": {
-      const book: Record<string, unknown> = await asked(server.encyclopedia());
-      console.log(JSON.stringify(words[1] === undefined ? book : book[words[1]], null, 2));
-      return;
-    }
-  }
-  const command = parseCommand(parseArgs(words));
-  const waits = !noWait && !(command.type === "move" && !("seconds" in command));
-  const status = await asked(waits ? server.run(command) : server.send(command));
-  console.log(JSON.stringify(status));
-  if ("state" in status && status.state === "failed") process.exit(1);
+	const args = [...argv];
+	server = new AgentServer(serverFrom(args));
+	const noWait = args.includes('--no-wait');
+	const words = args.filter(a => a !== '--no-wait');
+	switch (words[0]) {
+		case undefined:
+		case 'help':
+		case '--help':
+			console.log(USAGE);
+			return;
+		case 'state': {
+			const inline = words.find(w => w.startsWith('--format='));
+			const format =
+				inline?.slice('--format='.length) ?? (words.includes('--format') ? (flag(words, '--format') ?? '') : 'text');
+			if (format !== 'text' && format !== 'json') throw new Error(`--format must be text or json, got ${format}`);
+			const path = words.slice(1).find(w => !w.startsWith('--') && w !== flag([...words], '--raw'));
+			const s = await asked(server.state(rawOf(words)));
+			console.log(format === 'json' ? JSON.stringify(pick(s, path)) : render(s, path));
+			return;
+		}
+		case 'watch': {
+			const path = words.slice(1).find(w => !w.startsWith('--') && w !== flag([...words], '--raw'));
+			for (;;) {
+				const s = await asked(server.state(rawOf(words))).catch((e: Error) => e);
+				process.stdout.write(`\x1b[2J\x1b[H${s instanceof Error ? s.message : render(s, path)}\n`);
+				await Bun.sleep(250);
+			}
+		}
+		case 'checkpoints':
+			for (const c of await asked(server.checkpoints()))
+				console.log(
+					`${c.name}  ${clock(c.time)} lv ${c.level} hp ${c.hp}  ${c.difficulty} seed ${c.seed}  ${c.weapons.join(', ')}  (${c.savedAt}, ${c.build})`,
+				);
+			return;
+		case 'encyclopedia': {
+			const book: Record<string, unknown> = await asked(server.encyclopedia());
+			console.log(JSON.stringify(words[1] === undefined ? book : book[words[1]], null, 2));
+			return;
+		}
+	}
+	const command = parseCommand(parseArgs(words));
+	const waits = !noWait && !(command.type === 'move' && !('seconds' in command));
+	const status = await asked(waits ? server.run(command) : server.send(command));
+	console.log(JSON.stringify(status));
+	if ('state' in status && status.state === 'failed') process.exit(1);
 }
 
 main(Bun.argv.slice(2)).catch((e: Error) => {
-  console.error(e.message);
-  process.exit(1);
+	console.error(e.message);
+	process.exit(1);
 });
