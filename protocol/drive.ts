@@ -12,15 +12,16 @@ export type Drive = { code: string; loadout: string };
 
 /** Checks a drive's shape. Whether the code type-checks is the agent server's to say (agent-server/code-check.ts), and what the loadout may embed the bot's (bot/drive.ts). */
 export function parseDrive(input: unknown): Drive {
-  const d = (input ?? {}) as Record<string, unknown>;
-  if (typeof d.code !== "string" || d.code.trim() === "") throw new Error("drive.code must be the drive function's source");
-  if (typeof d.loadout !== "string") throw new Error("drive.loadout must be a string");
-  return { code: d.code, loadout: d.loadout };
+	const d = (input ?? {}) as Record<string, unknown>;
+	if (typeof d.code !== 'string' || d.code.trim() === '')
+		throw new Error("drive.code must be the drive function's source");
+	if (typeof d.loadout !== 'string') throw new Error('drive.loadout must be a string');
+	return { code: d.code, loadout: d.loadout };
 }
 
 /** The request the starting function was written from, and the worked example the builder is shown. */
 export const EXAMPLE_REQUEST =
-  "Farm xp by walking toward the fewest enemies. Open gold chests and chests and grab magnets when they are close, and use Spud Shrines while it is calm. Under 40% health, eat food if there is any; otherwise get away, dashing when hit hard, and keep clear until health is back over 70%.";
+	'Farm xp by walking toward the fewest enemies. Open gold chests and chests and grab magnets when they are close, and use Spud Shrines while it is calm. Under 40% health, eat food if there is any; otherwise get away, dashing when hit hard, and keep clear until health is back over 70%.';
 
 export const EXAMPLE_CODE = `type Memory = { retreating?: boolean };
 

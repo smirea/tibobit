@@ -118,7 +118,12 @@
       fail("route.seconds must be from 0.5 to 6");
     if (r.leg !== undefined && (num(r.leg, "route.leg") < 0.1 || num(r.leg, "route.leg") > 2))
       fail("route.leg must be from 0.1 to 2");
-    return { to: target(r.to), ...r.stay === undefined ? {} : { stay: num(r.stay, "route.stay") }, ...r.seconds === undefined ? {} : { seconds: num(r.seconds, "route.seconds") }, ...r.leg === undefined ? {} : { leg: num(r.leg, "route.leg") } };
+    return {
+      to: target(r.to),
+      ...r.stay === undefined ? {} : { stay: num(r.stay, "route.stay") },
+      ...r.seconds === undefined ? {} : { seconds: num(r.seconds, "route.seconds") },
+      ...r.leg === undefined ? {} : { leg: num(r.leg, "route.leg") }
+    };
   }
   function target(v) {
     const t = v ?? {};
@@ -225,7 +230,12 @@
         const w = c.weapon;
         if (w !== undefined && (typeof w !== "string" || !/^[a-z0-9-]+$/.test(w)))
           fail("weapon must be a weapon id such as deep-fryer");
-        return { type: "start", ...m === undefined ? {} : { mode: m }, ...d === undefined ? {} : { difficulty: d }, ...w === undefined ? {} : { weapon: w } };
+        return {
+          type: "start",
+          ...m === undefined ? {} : { mode: m },
+          ...d === undefined ? {} : { difficulty: d },
+          ...w === undefined ? {} : { weapon: w }
+        };
       }
       case "stop":
       case "pause":
@@ -278,7 +288,26 @@
 
   // userscript/agent/reflect.ts
   var NOT_STATE = {
-    "": ["rng", "spawnRng", "lootRng", "botRng", "hits", "hash", "buf", "scratch", "attack", "damageRing", "effects", "fx", "colors", "colorIndex", "sourceColors", "recordEvents", "events", "itemFx"],
+    "": [
+      "rng",
+      "spawnRng",
+      "lootRng",
+      "botRng",
+      "hits",
+      "hash",
+      "buf",
+      "scratch",
+      "attack",
+      "damageRing",
+      "effects",
+      "fx",
+      "colors",
+      "colorIndex",
+      "sourceColors",
+      "recordEvents",
+      "events",
+      "itemFx"
+    ],
     world: ["chunks", "activeChunks", "temp", "moist", "height", "biomeByBand"]
   };
   var isPool = (v) => {
@@ -308,7 +337,16 @@
   }
   function contentIds(table) {
     const ids = new WeakMap;
-    const lists = [table.allWeapons, table.passives, table.allItems, table.enemies, table.dogs, table.events, table.botHelps, table.biomes];
+    const lists = [
+      table.allWeapons,
+      table.passives,
+      table.allItems,
+      table.enemies,
+      table.dogs,
+      table.events,
+      table.botHelps,
+      table.biomes
+    ];
     for (const list of lists)
       for (const d of list)
         if (typeof d === "object" && d !== null && typeof d.id === "string")
@@ -462,7 +500,19 @@
         xp[directionOf(dx, dy)] += (Number(p.value) || 0) * (1 - dist / XP_REACH);
     }
     items.sort((a, z) => a.dist - z.dist);
-    return { seconds, hurtBy: recentHurt(s), dps: recentDps(s), ...threats(link, s, seconds), elites, pickups: { counts, value: { xp: round(value.xp), gold: round(value.gold) }, xp: Object.fromEntries(DIRECTIONS.map((d) => [d, round(xp[d])])), items } };
+    return {
+      seconds,
+      hurtBy: recentHurt(s),
+      dps: recentDps(s),
+      ...threats(link, s, seconds),
+      elites,
+      pickups: {
+        counts,
+        value: { xp: round(value.xp), gold: round(value.gold) },
+        xp: Object.fromEntries(DIRECTIONS.map((d) => [d, round(xp[d])])),
+        items
+      }
+    };
   }
   function threats(link, s, seconds) {
     const enums = link.enums;
@@ -512,7 +562,13 @@
       const dy = (s.emitters.y[i] ?? 0) - py;
       if (Math.hypot(dx, dy) > REACH)
         continue;
-      volleys.push({ ...bearing(dx, dy), firesIn: round(s.emitters.telegraph[i] ?? 0), count: s.emitters.count[i] ?? 0, bursts: s.emitters.burstsLeft[i] ?? 0, damage: round(s.emitters.damage[i] ?? 0) });
+      volleys.push({
+        ...bearing(dx, dy),
+        firesIn: round(s.emitters.telegraph[i] ?? 0),
+        count: s.emitters.count[i] ?? 0,
+        bursts: s.emitters.burstsLeft[i] ?? 0,
+        damage: round(s.emitters.damage[i] ?? 0)
+      });
     }
     volleys.sort((x, y) => x.dist - y.dist);
     const inPool = link.inPool;
@@ -554,7 +610,14 @@
       if (at.dist - r > REACH)
         continue;
       const kind = zoneKind[s.zones.kind[i] ?? -1] ?? String(s.zones.kind[i]);
-      attacks.push({ ...at, kind, shape, inside: contains(0, 0), ...kind === "telegraph" ? { landsIn: round(s.zones.delay[i] ?? 0) } : {}, enters: entered(contains) });
+      attacks.push({
+        ...at,
+        kind,
+        shape,
+        inside: contains(0, 0),
+        ...kind === "telegraph" ? { landsIn: round(s.zones.delay[i] ?? 0) } : {},
+        enters: entered(contains)
+      });
     }
     attacks.sort((x, y) => x.dist - y.dist);
     const underfoot = [];
@@ -576,7 +639,13 @@
           list.push(h.kind);
       }
     }
-    return { enemies: { onScreen, near, byDirection }, bullets, volleys, attacks, hazards: { underfoot, byDirection: hazardPaths } };
+    return {
+      enemies: { onScreen, near, byDirection },
+      bullets,
+      volleys,
+      attacks,
+      hazards: { underfoot, byDirection: hazardPaths }
+    };
   }
 
   // userscript/agent/snapshot.ts
@@ -611,7 +680,12 @@
       capturedAt: Date.now(),
       screen,
       ...reflection === undefined ? {} : { game: reflection, gameEvents: link.events.map(json) },
-      ...reflection === undefined || !playing ? {} : { surroundings: surroundings(link, game.state, seconds, { enemies: reflection.enemies ?? [], pickups: reflection.pickups ?? [] }) },
+      ...reflection === undefined || !playing ? {} : {
+        surroundings: surroundings(link, game.state, seconds, {
+          enemies: reflection.enemies ?? [],
+          pickups: reflection.pickups ?? []
+        })
+      },
       storage: gameStorage(),
       headless: navigator.webdriver,
       ...link.simBuild === undefined ? {} : { gameBuild: link.simBuild },
@@ -661,7 +735,30 @@ function drive(state: State, memory: Memory): Action {
   var PICK_SHOW_MS = 2000;
   var ACTION_TAGS = [
     ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
-    ...["Pet", "Kennel", "Crate", "Shrine", "Curse", "Golden", "Farm", "Shop", "Microwave", "Nest", "Lair", "Bot", "Whetstone", "Bell", "Slots", "Vault", "Magnet", "Tunnel", "Light", "Freezer", "Fryer", "Xp"],
+    ...[
+      "Pet",
+      "Kennel",
+      "Crate",
+      "Shrine",
+      "Curse",
+      "Golden",
+      "Farm",
+      "Shop",
+      "Microwave",
+      "Nest",
+      "Lair",
+      "Bot",
+      "Whetstone",
+      "Bell",
+      "Slots",
+      "Vault",
+      "Magnet",
+      "Tunnel",
+      "Light",
+      "Freezer",
+      "Fryer",
+      "Xp"
+    ],
     ...["Dash", "Hold", "Start", "Take over", "Over", "Stopped"]
   ];
   var SPOT_TAGS = {
@@ -741,25 +838,93 @@ function drive(state: State, memory: Memory): Action {
     state: "a short default, one per line: time, health, level, gold, dash, weapons, passives, items, banished (when any), recipes, evolutions, standing_on, hurt_by, bosses, enemies, current_goal and recent_goals. Every other block is left out unless a template names it"
   };
   var KNOBS = {
-    exploreDistance: { min: 100, max: 1500, about: "units an explore goal walks before it ends; it also ends at the first chest never listed before" },
+    exploreDistance: {
+      min: 100,
+      max: 1500,
+      about: "units an explore goal walks before it ends; it also ends at the first chest never listed before"
+    },
     evadeSeconds: { min: 2, max: 30, about: "seconds an evade goal lasts" },
     stuckSeconds: { min: 2, max: 20, about: "seconds without getting closer (or charging) before a goal is given up" },
-    extraDamage: { min: 0, max: 0.25, about: "share of max health a move may cost over the cheapest move within the forecastSeconds horizon and still be taken: the page walks Tibo to the goal on its own while the way there costs no more than this over the cheapest, and the action model is never offered a move that costs more" },
-    safeMargin: { min: 0, max: 0.5, about: "how far above the safest move's hurt rating (as a share of the scale) a move may be and still compete on usefulness" },
-    distrustSeconds: { min: 0, max: 30, about: "after Tibo loses health on a step the forecast called free (a walk row), the action model is asked about every step for this many seconds instead of the page walking on its own; 0 trusts the forecast" },
-    bossOfferRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is offered every move, even those the one-second forecast prices above extraDamage, since boss attacks are not in that forecast; 0 keeps the usual rule" },
-    eliteSeconds: { min: 5, max: 60, about: "seconds a fight-the-elite goal lasts at most: Tibo heads for the elite and keeps it within reach of its weapons until it dies" },
-    forecastSeconds: { min: 0.1, max: 2, about: "how far ahead the game's own simulation prices each move, and how far surroundings look for bullets that would hit, attacks and hazards on each path, in seconds; the action model weighs moves by what they cost over this horizon" },
-    autopilot: { min: 0, max: 1, about: "1 takes every step without the action model: of the moves the forecast allows (those within extraDamage of the cheapest), Tibo takes the one nearest the way to the goal, and of two as near the cheaper; it never dashes and no action template is used. 0 asks the action model, as before. In tests from a checkpoint at minute 10, a mover that read only the forecast's prices lost no more health per trip than either action-model format, and it answers at once" },
-    planEvery: { min: 1, max: 60, about: "seconds between planner calls while a goal is under way (it is also asked whenever a goal ends, a choice opens, a card is taken or a boss appears); short re-plans switch goals often, long ones let a goal finish. A person watching in the panel sets this instead" },
-    distrustBossRange: { min: 0, max: 600, about: "while a boss is within this many units, the action model is asked about every step, since boss attacks from afar are not in the one-second forecast; 0 turns it off" },
-    dashThreshold: { min: 0.05, max: 0.95, about: "how sure the action model's answer to action.dash must be (a probability) for Tibo to dash; lower dashes more often" },
-    bossDashThreshold: { min: 0.05, max: 0.95, about: "the dash threshold instead of dashThreshold while a boss is within bossDashRange" },
-    bossDashRange: { min: 0, max: 600, about: "while a boss is within this many units, bossDashThreshold applies; 0 never" },
-    eliteFrom: { min: 0, max: 1200, about: "game seconds before which no fight-the-elite goal is offered, so the planner cannot pick one; 0 offers them from the start" },
-    eliteMinHp: { min: 0, max: 1, about: "share of max health below which no fight-the-elite goal is offered; 0 offers them at any health" },
-    holdAbortHurt: { min: 0, max: 0.5, about: `share of max health lost within the last ${HURT_SECONDS} seconds at which a goal that holds Tibo in place ends as given up and the planner is asked: standing on a chest, a shrine or another spot, or keeping an elite within reach. For ${GIVE_UP_SECONDS} seconds the planner then reads next to that target that Tibo gave up on it and why, like any goal given up; it can still pick it. 0 never ends a goal this way` },
-    planOnHurt: { min: 0, max: 0.5, about: `share of max health lost within the last ${HURT_SECONDS} seconds at which the planner is asked at once, whatever planEvery says, and at most once in ${HURT_SECONDS} seconds; the goal under way goes on unless the planner picks another. 0 never asks for this` }
+    extraDamage: {
+      min: 0,
+      max: 0.25,
+      about: "share of max health a move may cost over the cheapest move within the forecastSeconds horizon and still be taken: the page walks Tibo to the goal on its own while the way there costs no more than this over the cheapest, and the action model is never offered a move that costs more"
+    },
+    safeMargin: {
+      min: 0,
+      max: 0.5,
+      about: "how far above the safest move's hurt rating (as a share of the scale) a move may be and still compete on usefulness"
+    },
+    distrustSeconds: {
+      min: 0,
+      max: 30,
+      about: "after Tibo loses health on a step the forecast called free (a walk row), the action model is asked about every step for this many seconds instead of the page walking on its own; 0 trusts the forecast"
+    },
+    bossOfferRange: {
+      min: 0,
+      max: 600,
+      about: "while a boss is within this many units, the action model is offered every move, even those the one-second forecast prices above extraDamage, since boss attacks are not in that forecast; 0 keeps the usual rule"
+    },
+    eliteSeconds: {
+      min: 5,
+      max: 60,
+      about: "seconds a fight-the-elite goal lasts at most: Tibo heads for the elite and keeps it within reach of its weapons until it dies"
+    },
+    forecastSeconds: {
+      min: 0.1,
+      max: 2,
+      about: "how far ahead the game's own simulation prices each move, and how far surroundings look for bullets that would hit, attacks and hazards on each path, in seconds; the action model weighs moves by what they cost over this horizon"
+    },
+    autopilot: {
+      min: 0,
+      max: 1,
+      about: "1 takes every step without the action model: of the moves the forecast allows (those within extraDamage of the cheapest), Tibo takes the one nearest the way to the goal, and of two as near the cheaper; it never dashes and no action template is used. 0 asks the action model, as before. In tests from a checkpoint at minute 10, a mover that read only the forecast's prices lost no more health per trip than either action-model format, and it answers at once"
+    },
+    planEvery: {
+      min: 1,
+      max: 60,
+      about: "seconds between planner calls while a goal is under way (it is also asked whenever a goal ends, a choice opens, a card is taken or a boss appears); short re-plans switch goals often, long ones let a goal finish. A person watching in the panel sets this instead"
+    },
+    distrustBossRange: {
+      min: 0,
+      max: 600,
+      about: "while a boss is within this many units, the action model is asked about every step, since boss attacks from afar are not in the one-second forecast; 0 turns it off"
+    },
+    dashThreshold: {
+      min: 0.05,
+      max: 0.95,
+      about: "how sure the action model's answer to action.dash must be (a probability) for Tibo to dash; lower dashes more often"
+    },
+    bossDashThreshold: {
+      min: 0.05,
+      max: 0.95,
+      about: "the dash threshold instead of dashThreshold while a boss is within bossDashRange"
+    },
+    bossDashRange: {
+      min: 0,
+      max: 600,
+      about: "while a boss is within this many units, bossDashThreshold applies; 0 never"
+    },
+    eliteFrom: {
+      min: 0,
+      max: 1200,
+      about: "game seconds before which no fight-the-elite goal is offered, so the planner cannot pick one; 0 offers them from the start"
+    },
+    eliteMinHp: {
+      min: 0,
+      max: 1,
+      about: "share of max health below which no fight-the-elite goal is offered; 0 offers them at any health"
+    },
+    holdAbortHurt: {
+      min: 0,
+      max: 0.5,
+      about: `share of max health lost within the last ${HURT_SECONDS} seconds at which a goal that holds Tibo in place ends as given up and the planner is asked: standing on a chest, a shrine or another spot, or keeping an elite within reach. For ${GIVE_UP_SECONDS} seconds the planner then reads next to that target that Tibo gave up on it and why, like any goal given up; it can still pick it. 0 never ends a goal this way`
+    },
+    planOnHurt: {
+      min: 0,
+      max: 0.5,
+      about: `share of max health lost within the last ${HURT_SECONDS} seconds at which the planner is asked at once, whatever planEvery says, and at most once in ${HURT_SECONDS} seconds; the goal under way goes on unless the planner picks another. 0 never asks for this`
+    }
   };
   var DEFAULT_TEMPLATES = {
     planner: {
@@ -782,7 +947,27 @@ Goal: {{goal}}.
       useful: "If Tibo does this: {{move}}. Does it bring Tibo closer to its goal ({{goal}})?",
       dash: "Is Tibo about to be hit or surrounded, so a quick dash away would save it?"
     },
-    knobs: { exploreDistance: 300, evadeSeconds: 8, stuckSeconds: 6, extraDamage: 0.02, safeMargin: 0.1, distrustSeconds: 0, distrustBossRange: 0, planEvery: 5, eliteSeconds: 20, bossOfferRange: 0, dashThreshold: 0.5, bossDashThreshold: 0.5, bossDashRange: 0, eliteFrom: 0, eliteMinHp: 0, forecastSeconds: 0.5, autopilot: 0, holdAbortHurt: 0, planOnHurt: 0 }
+    knobs: {
+      exploreDistance: 300,
+      evadeSeconds: 8,
+      stuckSeconds: 6,
+      extraDamage: 0.02,
+      safeMargin: 0.1,
+      distrustSeconds: 0,
+      distrustBossRange: 0,
+      planEvery: 5,
+      eliteSeconds: 20,
+      bossOfferRange: 0,
+      dashThreshold: 0.5,
+      bossDashThreshold: 0.5,
+      bossDashRange: 0,
+      eliteFrom: 0,
+      eliteMinHp: 0,
+      forecastSeconds: 0.5,
+      autopilot: 0,
+      holdAbortHurt: 0,
+      planOnHurt: 0
+    }
   };
 
   // bot/drive.ts
@@ -797,7 +982,12 @@ Goal: {{goal}}.
   }
 
   // userscript/fsd/draft.ts
-  var DEFAULT_DRAFT = { prompt: EXAMPLE_REQUEST, code: EXAMPLE_CODE, builtFrom: EXAMPLE_REQUEST, loadout: DEFAULT_TEMPLATES.planner.pick };
+  var DEFAULT_DRAFT = {
+    prompt: EXAMPLE_REQUEST,
+    code: EXAMPLE_CODE,
+    builtFrom: EXAMPLE_REQUEST,
+    loadout: DEFAULT_TEMPLATES.planner.pick
+  };
   function checkDraft(d) {
     const loadout = loadoutErrors(d.loadout);
     return loadout.length === 0 ? { loadout, drive: { code: d.code, loadout: d.loadout } } : { loadout };
@@ -855,7 +1045,11 @@ Goal: {{goal}}.
       return this.shown;
     }
     active() {
-      return this.current.state !== "off" && this.live && this.shown !== undefined ? { memory: this.shown.memory, ...this.shown.action === undefined ? {} : { action: this.shown.action }, ...this.shown.error === undefined ? {} : { error: this.shown.error } } : undefined;
+      return this.current.state !== "off" && this.live && this.shown !== undefined ? {
+        memory: this.shown.memory,
+        ...this.shown.action === undefined ? {} : { action: this.shown.action },
+        ...this.shown.error === undefined ? {} : { error: this.shown.error }
+      } : undefined;
     }
     building() {
       return this.build?.since;
@@ -948,7 +1142,10 @@ Goal: {{goal}}.
       this.server.ask(change).then((ok) => {
         if (ok)
           return;
-        this.current = { ...this.current, detail: `the agent server on ${this.server.origin()} refused the change; restart it with this version of agent-server/main.ts` };
+        this.current = {
+          ...this.current,
+          detail: `the agent server on ${this.server.origin()} refused the change; restart it with this version of agent-server/main.ts`
+        };
         this.notify();
       });
     }
@@ -1042,7 +1239,12 @@ Goal: {{goal}}.
       for (const listener of listeners)
         listener();
     };
-    const pilot = new Pilot({ connected: () => connected, origin: () => origin, ask: (change) => post(origin, "/pilot", change), build: (prompt) => buildCode(origin, prompt) }, () => controller.release());
+    const pilot = new Pilot({
+      connected: () => connected,
+      origin: () => origin,
+      ask: (change) => post(origin, "/pilot", change),
+      build: (prompt) => buildCode(origin, prompt)
+    }, () => controller.release());
     let inFlight = 0;
     let lastPush = 0;
     let screen = "title";
@@ -1171,7 +1373,12 @@ Goal: {{goal}}.
         screen = made.screen;
         body = JSON.stringify(made);
       } catch (e) {
-        body = JSON.stringify({ capturedAt: Date.now(), screen, commands: controller.statuses, error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}` });
+        body = JSON.stringify({
+          capturedAt: Date.now(),
+          screen,
+          commands: controller.statuses,
+          error: `snapshot failed: ${e instanceof Error ? e.message : String(e)}`
+        });
       }
       snapshotMs = performance.now() - built;
       inFlight++;
@@ -1179,7 +1386,11 @@ Goal: {{goal}}.
     }, RUN_INTERVAL_MS / 2);
     listen();
     return {
-      status: () => ({ port: Number(new URL(origin).port), state: connected ? "connected" : "connecting", error: connected ? undefined : error }),
+      status: () => ({
+        port: Number(new URL(origin).port),
+        state: connected ? "connected" : "connecting",
+        error: connected ? undefined : error
+      }),
       connect: (port) => {
         if (!validPort(port))
           throw new Error(`not a port: ${port}`);
@@ -1940,7 +2151,11 @@ Goal: {{goal}}.
       const slot = to.pickup & 65535;
       const kind = enums?.pickupKinds[s.pickups.kind[slot] ?? -1] ?? "";
       const radius = s.cfg.activation.pickupRadius[kind];
-      return { x: s.pickups.x[slot] ?? 0, y: s.pickups.y[slot] ?? 0, within: within ?? (radius === undefined ? 6 : radius * 0.5) };
+      return {
+        x: s.pickups.x[slot] ?? 0,
+        y: s.pickups.y[slot] ?? 0,
+        within: within ?? (radius === undefined ? 6 : radius * 0.5)
+      };
     }
     return { x: to.x, y: to.y, within: within ?? 6 };
   }
@@ -2074,7 +2289,11 @@ Goal: {{goal}}.
           const game = this.game();
           applyLoadout(this.link, game, command);
           const L = game.state.loadout;
-          this.finish(status, "done", [...L.weapons.map((w) => `${w.def.id} ${w.level}`), ...L.passives.map((p) => `${p.def.id} ${p.level}`), ...[...L.items.keys()]].join(", "));
+          this.finish(status, "done", [
+            ...L.weapons.map((w) => `${w.def.id} ${w.level}`),
+            ...L.passives.map((p) => `${p.def.id} ${p.level}`),
+            ...[...L.items.keys()]
+          ].join(", "));
           return;
         }
       }
@@ -2281,14 +2500,35 @@ Goal: {{goal}}.
   }
   function assertContent(value) {
     const c = value;
-    for (const key of ["baseWeapons", "evolutions", "unions", "passives", "items", "evolvedItems", "allWeapons", "allItems", "enemies", "bossIds"])
+    for (const key of [
+      "baseWeapons",
+      "evolutions",
+      "unions",
+      "passives",
+      "items",
+      "evolvedItems",
+      "allWeapons",
+      "allItems",
+      "enemies",
+      "bossIds"
+    ])
       if (!Array.isArray(c[key]))
         throw new Error(`content registry has no ${key} list`);
   }
 
   // userscript/link/game-link.ts
   var KEEP_EVENTS = 40;
-  var NOISY_EVENTS = new Set(["playerHit", "hitStop", "dodge", "dashed", "block", "throttle", "reelStop", "dogAbility", "bossLanding"]);
+  var NOISY_EVENTS = new Set([
+    "playerHit",
+    "hitStop",
+    "dodge",
+    "dashed",
+    "block",
+    "throttle",
+    "reelStop",
+    "dogAbility",
+    "bossLanding"
+  ]);
 
   class GameLink {
     game;
@@ -2420,7 +2660,9 @@ Goal: {{goal}}.
         return cloneState(state, shared);
       };
       const simulator = (game, state) => {
-        const sim = Object.assign(Object.create(Object.getPrototypeOf(game)), game, { recorder: NO_RECORDER });
+        const sim = Object.assign(Object.create(Object.getPrototypeOf(game)), game, {
+          recorder: NO_RECORDER
+        });
         sim.state = state;
         sim.state.paused = false;
         return { sim, step: () => step.call(sim), setInput: (x, y) => setInput.call(sim, x, y) };
@@ -2466,7 +2708,13 @@ Goal: {{goal}}.
           throw new Error(`the hand shape chunk has no ${key}`);
         return value;
       };
-      this.hand = { url: new URL(image, photoUrl).href, width: n("width"), height: n("height"), tipX: n("tipX"), tipY: n("tipY") };
+      this.hand = {
+        url: new URL(image, photoUrl).href,
+        width: n("width"),
+        height: n("height"),
+        tipX: n("tipX"),
+        tipY: n("tipY")
+      };
       this.changed();
     }
     async loadIcons(url) {
@@ -2560,8 +2808,18 @@ Goal: {{goal}}.
   var ACTION_ICONS = {
     Loot: ["M3 11h18v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z", "M3 11V9a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v2", "M10 11v3h4v-3"],
     Wander: [ring(12, 12, 9), { fill: "M15.5 8.5l-2 5-5 2 2-5z" }],
-    Run: [dot(15, 4.5, 2.2), "M13 8.5 11 14", "M13 8.5 9 9.5 7 12.5", "M13 8.5l3 3h3", "M11 14l3 2.5V21", "M11 14l-2 3.5H5"],
-    Eat: ["M12 8c-1.5-1.2-3-1.5-4.5-1.2C5 7.3 3.5 9.6 4 13c.6 4 3.2 7.5 5.5 7.5 1 0 1.6-.5 2.5-.5s1.5.5 2.5.5c2.3 0 4.9-3.5 5.5-7.5.5-3.4-1-5.7-3.5-6.2-1.5-.3-3 0-4.5 1.2z", "M12 8c0-2 .5-3.5 2-5"],
+    Run: [
+      dot(15, 4.5, 2.2),
+      "M13 8.5 11 14",
+      "M13 8.5 9 9.5 7 12.5",
+      "M13 8.5l3 3h3",
+      "M11 14l3 2.5V21",
+      "M11 14l-2 3.5H5"
+    ],
+    Eat: [
+      "M12 8c-1.5-1.2-3-1.5-4.5-1.2C5 7.3 3.5 9.6 4 13c.6 4 3.2 7.5 5.5 7.5 1 0 1.6-.5 2.5-.5s1.5.5 2.5.5c2.3 0 4.9-3.5 5.5-7.5.5-3.4-1-5.7-3.5-6.2-1.5-.3-3 0-4.5 1.2z",
+      "M12 8c0-2 .5-3.5 2-5"
+    ],
     Hunt: [ring(12, 12, 7), "M12 2v5M12 17v5M2 12h5M17 12h5", dot(12, 12, 1.4)],
     Spot: ["M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z", ring(12, 9, 2.5)],
     Pet: [
@@ -2574,11 +2832,22 @@ Goal: {{goal}}.
     Kennel: ["M3 11.5 12 3l9 8.5", "M5 9.5V20h14V9.5", "M9.5 20v-4a2.5 2.5 0 0 1 5 0v4"],
     Crate: ["M12 2.5 3 7v10l9 4.5 9-4.5V7z", "M3 7l9 4.5L21 7", "M12 11.5v10", "M7.5 4.8l9 4.5"],
     Shrine: ["M2 5c4 1.2 16 1.2 20 0", "M4 9.5h16", "M7 6v15M17 6v15", "M12 6.5v3"],
-    Curse: ["M3 12a9 8 0 0 1 18 0z", "M9 12v6a3 3 0 0 0 6 0v-6", dot(8.5, 8.5, 1.3), dot(14, 6.5, 1.3), dot(16.5, 10, 1.1)],
+    Curse: [
+      "M3 12a9 8 0 0 1 18 0z",
+      "M9 12v6a3 3 0 0 0 6 0v-6",
+      dot(8.5, 8.5, 1.3),
+      dot(14, 6.5, 1.3),
+      dot(16.5, 10, 1.1)
+    ],
     Golden: [{ fill: "M12 2.5l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.3l-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9z" }],
     Farm: ["M12 21v-9", "M12 12c0-4-3-6-7-6 0 4 3 6 7 6z", "M12 10c0-3 2.5-5.5 7-5.5 0 4-3 5.5-7 5.5z", "M7 21h10"],
     Shop: ["M2 3h3l2.5 12h11L21 7H6.2", dot(9, 19.5, 1.7), dot(17, 19.5, 1.7)],
-    Microwave: ["M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z", "M5 8h10v8H5z", ring(18.5, 10, 1.3), "M17.5 14h2M17.5 16.5h2"],
+    Microwave: [
+      "M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z",
+      "M5 8h10v8H5z",
+      ring(18.5, 10, 1.3),
+      "M17.5 14h2M17.5 16.5h2"
+    ],
     Nest: [
       "M12 8c3 0 5 2.8 5 6.2S15 20.5 12 20.5 7 17.6 7 14.2 9 8 12 8z",
       "M9.6 8.6a2.4 2.4 0 0 1 4.8 0",
@@ -2592,28 +2861,65 @@ Goal: {{goal}}.
       { fill: "M7.8 11.2l3.4 1.3-.5 1.5-2.6-.8zM16.2 11.2l-3.4 1.3.5 1.5 2.6-.8z" },
       "M9 17l1.5 1.5L12 17l1.5 1.5L15 17"
     ],
-    Bot: ["M5 8h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z", "M12 8V5", dot(12, 3.7, 1.5), dot(9, 12.5, 1.6), dot(15, 12.5, 1.6), "M9.5 16h5", "M2 12v3M22 12v3"],
+    Bot: [
+      "M5 8h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z",
+      "M12 8V5",
+      dot(12, 3.7, 1.5),
+      dot(9, 12.5, 1.6),
+      dot(15, 12.5, 1.6),
+      "M9.5 16h5",
+      "M2 12v3M22 12v3"
+    ],
     Whetstone: ["M9.5 17.5 21 6V3h-3L6.5 14.5", "M11 19l-6-6M8 16l-4 4M5 21l-2-2", "M3 3l2 2M3 8.5h2.5M8.5 3v2.5"],
     Bell: ["M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z", "M10 20.5a2 2 0 0 0 4 0", "M12 3v2"],
     Slots: ["M2 7h15v14H2z", "M5 7V4h9v3", "M4.5 11h3v5h-3zM8 11h3v5H8zM11.5 11h3v5h-3z", "M17 13h3V5", dot(20, 4, 1.6)],
-    Vault: ["M3 4h18v15H3z", ring(12, 11.5, 4.2), dot(12, 11.5, 1.2), "M12 7.3v1.6M12 14.1v1.6M7.8 11.5h1.6M14.6 11.5h1.6", "M6 19v2M18 19v2"],
+    Vault: [
+      "M3 4h18v15H3z",
+      ring(12, 11.5, 4.2),
+      dot(12, 11.5, 1.2),
+      "M12 7.3v1.6M12 14.1v1.6M7.8 11.5h1.6M14.6 11.5h1.6",
+      "M6 19v2M18 19v2"
+    ],
     Xp: ["M8 4h8l4 5-8 11L4 9z", "M4 9h16", "M10 4 8.5 9 12 20l3.5-11L14 4"],
     Magnet: ["M5 3h5v9a2 2 0 0 0 4 0V3h5v9a7 7 0 0 1-14 0z", "M5 7.5h5M14 7.5h5"],
     Tunnel: ["M2 21h20", "M4.5 21v-8a7.5 7.5 0 0 1 15 0v8", { fill: "M8.5 21v-6a3.5 3.5 0 0 1 7 0v6z" }],
-    Light: ["M9 5a3 3 0 0 1 6 0", "M7.5 7h9", "M9 7l-1.5 3v7L9 20h6l1.5-3v-7L15 7", "M9 20v1h6v-1", { fill: "M12 10.5c1.6 1.6 2.2 2.8 2.2 3.9a2.2 2.2 0 0 1-4.4 0c0-1.1.6-2.3 2.2-3.9z" }],
-    Freezer: ["M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7", "M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5", "M3.6 10.5l3.5-.8-1-3.4M20.4 13.5l-3.5.8 1 3.4M3.6 13.5l3.5.8-1 3.4M20.4 10.5l-3.5-.8 1-3.4"],
+    Light: [
+      "M9 5a3 3 0 0 1 6 0",
+      "M7.5 7h9",
+      "M9 7l-1.5 3v7L9 20h6l1.5-3v-7L15 7",
+      "M9 20v1h6v-1",
+      { fill: "M12 10.5c1.6 1.6 2.2 2.8 2.2 3.9a2.2 2.2 0 0 1-4.4 0c0-1.1.6-2.3 2.2-3.9z" }
+    ],
+    Freezer: [
+      "M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7",
+      "M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5",
+      "M3.6 10.5l3.5-.8-1-3.4M20.4 13.5l-3.5.8 1 3.4M3.6 13.5l3.5.8-1 3.4M20.4 10.5l-3.5-.8 1-3.4"
+    ],
     Fryer: ["M5.5 10h13l-1.8 11H7.3z", "M8 10V4.5M10.7 10V3M13.3 10V3.5M16 10V5"],
     Dash: [{ fill: "M13 2 4 14h7l-1 8 9-12h-7z" }],
-    Hold: [{ fill: "M6.5 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM14.5 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" }],
+    Hold: [
+      {
+        fill: "M6.5 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM14.5 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"
+      }
+    ],
     Start: [{ fill: "M7 4v16l13-8z" }],
     "Take over": [ring(12, 12, 9), ring(12, 12, 2.5), "M3.5 10.5l6 1M20.5 10.5l-6 1M12 14.5V21"],
-    Over: ["M12 3a8 8 0 0 0-8 8c0 2.8 1.3 4.5 3 5.5V20a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3.5c1.7-1 3-2.7 3-5.5a8 8 0 0 0-8-8z", dot(9, 11.5, 1.9), dot(15, 11.5, 1.9), "M10 21v-2.5M14 21v-2.5"],
+    Over: [
+      "M12 3a8 8 0 0 0-8 8c0 2.8 1.3 4.5 3 5.5V20a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3.5c1.7-1 3-2.7 3-5.5a8 8 0 0 0-8-8z",
+      dot(9, 11.5, 1.9),
+      dot(15, 11.5, 1.9),
+      "M10 21v-2.5M14 21v-2.5"
+    ],
     Stopped: [{ fill: "M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" }]
   };
   var NOTE_ICON = ["M4 5h16v11H9l-4 4v-4H4z", "M8 9h8M8 12h5"];
   var STILL_ICON = [ring(12, 12, 3.5)];
   var ARROW_ICON = ["M4 12h15", "M13 6l6 6-6 6"];
-  var RESULT_ICONS = { done: ["M5 12.5l4.5 4.5L19 7.5"], failed: ["M6 6l12 12M18 6 6 18"], dropped: ["M6 12h12"] };
+  var RESULT_ICONS = {
+    done: ["M5 12.5l4.5 4.5L19 7.5"],
+    failed: ["M6 6l12 12M18 6 6 18"],
+    dropped: ["M6 12h12"]
+  };
   var SVG = "http://www.w3.org/2000/svg";
   function svgIcon(icon, className, turn = 0) {
     const svg = document.createElementNS(SVG, "svg");
@@ -2697,7 +3003,10 @@ Goal: {{goal}}.
 
   // userscript/pilot/arrows.ts
   var ARROW_GLYPHS = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"];
-  var ARROWS = { ...Object.fromEntries(DIRECTIONS.map((d, i) => [d, ARROW_GLYPHS[i]])), still: "•" };
+  var ARROWS = {
+    ...Object.fromEntries(DIRECTIONS.map((d, i) => [d, ARROW_GLYPHS[i]])),
+    still: "•"
+  };
   var DIRECTION_WORDS = new RegExp(`(?<![\\w-])(${[...DIRECTIONS].sort((a, z) => z.length - a.length).join("|")})(?![\\w-])`, "g");
   var arrowed = (text) => text.replace(DIRECTION_WORDS, (d) => ARROWS[d] ?? d);
 
@@ -2724,10 +3033,15 @@ Goal: {{goal}}.
     return h("details", "tbh-insp-fold", h("summary", "", title), pre(text, className));
   }
   function oddsRows(options) {
-    return options.map((c) => h("div", `tbh-opt ${c.chosen ? "tbh-opt-chosen" : c.probability === undefined ? "tbh-opt-ruled-out" : "tbh-opt-safe"}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name", arrowed(c.card)), ...c.chosen ? [h("span", "tbh-opt-outcome", "chosen")] : [], ...c.probability === undefined ? [] : [h("span", "tbh-opt-scores", meter(percent(c.probability), c.probability, "tbh-meter-useful tbh-meter-wide"))]), ...c.notes === "" ? [] : [h("div", "tbh-opt-desc", c.notes)]));
+    return options.map((c) => h("div", `tbh-opt ${c.chosen ? "tbh-opt-chosen" : c.probability === undefined ? "tbh-opt-ruled-out" : "tbh-opt-safe"}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name", arrowed(c.card)), ...c.chosen ? [h("span", "tbh-opt-outcome", "chosen")] : [], ...c.probability === undefined ? [] : [
+      h("span", "tbh-opt-scores", meter(percent(c.probability), c.probability, "tbh-meter-useful tbh-meter-wide"))
+    ]), ...c.notes === "" ? [] : [h("div", "tbh-opt-desc", c.notes)]));
   }
   function inspectBody(m) {
-    const words = [h("div", "tbh-insp-text", arrowed(m.text)), ...m.detail === undefined ? [] : [h("div", "tbh-opt-desc", m.detail)]];
+    const words = [
+      h("div", "tbh-insp-text", arrowed(m.text)),
+      ...m.detail === undefined ? [] : [h("div", "tbh-opt-desc", m.detail)]
+    ];
     const inspect = m.inspect;
     if (inspect === undefined)
       return words;
@@ -2749,17 +3063,25 @@ Goal: {{goal}}.
       case "state":
         return [...words, section("Action", pre(inspect.about))];
       case "moves": {
-        const rows = inspect.moves.map((m) => h("div", `tbh-opt tbh-opt-${m.outcome.replace(" ", "-")}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name tbh-opt-arrow", ARROWS[m.move]), h("span", "tbh-opt-outcome", m.outcome), h("span", "tbh-opt-scores", ...m.forecast === undefined ? [] : [h("span", `tbh-chip${costly(m.forecast) ? "" : " tbh-chip-ok"}`, m.forecast.dead ? "dead" : costly(m.forecast) ? `-${Math.round(m.forecast.damage)} hp` : "no damage")], ...m.hurt === undefined ? [] : [meter(`hurt ${percent(m.hurt)}`, m.hurt, "tbh-meter-hurt")], ...m.useful === undefined ? [] : [meter(`useful ${percent(m.useful)}`, m.useful, "tbh-meter-useful")])), h("div", "tbh-opt-desc", m.description)));
+        const rows = inspect.moves.map((m) => h("div", `tbh-opt tbh-opt-${m.outcome.replace(" ", "-")}`, h("div", "tbh-opt-head", h("span", "tbh-opt-name tbh-opt-arrow", ARROWS[m.move]), h("span", "tbh-opt-outcome", m.outcome), h("span", "tbh-opt-scores", ...m.forecast === undefined ? [] : [
+          h("span", `tbh-chip${costly(m.forecast) ? "" : " tbh-chip-ok"}`, m.forecast.dead ? "dead" : costly(m.forecast) ? `-${Math.round(m.forecast.damage)} hp` : "no damage")
+        ], ...m.hurt === undefined ? [] : [meter(`hurt ${percent(m.hurt)}`, m.hurt, "tbh-meter-hurt")], ...m.useful === undefined ? [] : [meter(`useful ${percent(m.useful)}`, m.useful, "tbh-meter-useful")])), h("div", "tbh-opt-desc", m.description)));
         return [
           ...words,
-          section("Moves", ...rows, ...inspect.dash === undefined ? [] : [h("div", "tbh-opt-desc", `Dash to escape? ${percent(inspect.dash.odds)} (dashes above ${percent(inspect.dash.above)})`)]),
+          section("Moves", ...rows, ...inspect.dash === undefined ? [] : [
+            h("div", "tbh-opt-desc", `Dash to escape? ${percent(inspect.dash.odds)} (dashes above ${percent(inspect.dash.above)})`)
+          ]),
           section("Prompt", pre([inspect.situation, ...inspect.questions ?? []].join(`
 
 `)))
         ];
       }
       case "cards":
-        return [...words, section(inspect.question, ...oddsRows(inspect.cards)), section("Prompt", pre(inspect.situation))];
+        return [
+          ...words,
+          section(inspect.question, ...oddsRows(inspect.cards)),
+          section("Prompt", pre(inspect.situation))
+        ];
     }
   }
   function inspector(panel, messages) {
@@ -2868,7 +3190,11 @@ Goal: {{goal}}.
     if (m.role !== "action" || m.inspect?.kind !== "moves")
       return;
     const chosen = m.inspect.moves.find((x) => x.outcome === "chosen");
-    return { move: chosen?.move ?? "still", hurt: chosen?.forecast !== undefined && costly(chosen.forecast), dash: m.tag === "Dash" };
+    return {
+      move: chosen?.move ?? "still",
+      hurt: chosen?.forecast !== undefined && costly(chosen.forecast),
+      dash: m.tag === "Dash"
+    };
   }
   function actionTile(m) {
     const s = step(m);
@@ -3192,7 +3518,11 @@ Goal: {{goal}}.
         opts.append(icon(v, o.partner.key, pairingNote(v, o.partner, o.combo), v.discovery.made(o.combo.result) ? "" : "tbh-fresh"));
       body.append(h("div", "tbh-need", fresh ? h("span", "tbh-badge tbh-badge-evo", "NEW") : h("span", ""), icon(v, held), h("span", "tbh-colon", ":"), opts));
     }
-    const counts = [`${rows.length} open`, `${paired.length} paired`, ...ready.length > 0 ? [`${ready.length} ready`] : []].join(" · ");
+    const counts = [
+      `${rows.length} open`,
+      `${paired.length} paired`,
+      ...ready.length > 0 ? [`${ready.length} ready`] : []
+    ].join(" · ");
     const head = header(panel, counts);
     head.title = paired.map((c) => `${c.parts.map((p) => partTitle(v, p)).join(" + ")} → ${nameOf(v.d.catalog, c.result)}`).join(`
 `);
@@ -3502,7 +3832,23 @@ Goal: {{goal}}.
 `;
 
   // userscript/fsd/code-view.ts
-  var KEYWORDS = new Set(["const", "let", "if", "else", "return", "function", "type", "export", "true", "false", "null", "undefined", "extends", "typeof", "in"]);
+  var KEYWORDS = new Set([
+    "const",
+    "let",
+    "if",
+    "else",
+    "return",
+    "function",
+    "type",
+    "export",
+    "true",
+    "false",
+    "null",
+    "undefined",
+    "extends",
+    "typeof",
+    "in"
+  ]);
   var styled = false;
   function codeView(fields, types, compact = false) {
     if (!styled)
@@ -3658,130 +4004,131 @@ Goal: {{goal}}.
 // imports: its text is the type check's prelude, part of the builder's prompt, and what the popup
 // shows beside the code. Names are the game's own.
 
-export type Direction = "right" | "down-right" | "down" | "down-left" | "left" | "up-left" | "up" | "up-right";
+export type Direction = 'right' | 'down-right' | 'down' | 'down-left' | 'left' | 'up-left' | 'up' | 'up-right';
 
 /** Where something is from Tibo. Distances are world units; Tibo walks about 62 a second. */
 export type Placed = {
-  /** The id an action names it by. */
-  id: number;
-  dist: number;
-  /** The way to walk to it; "still" when Tibo stands on or in it. */
-  dir: Direction | "still";
-  /** Tibo gave up on it in the last 45 seconds: it could not be reached, charged or paid for. */
-  gaveUp: boolean;
+	/** The id an action names it by. */
+	id: number;
+	dist: number;
+	/** The way to walk to it; "still" when Tibo stands on or in it. */
+	dir: Direction | 'still';
+	/** Tibo gave up on it in the last 45 seconds: it could not be reached, charged or paid for. */
+	gaveUp: boolean;
 };
 
 /** A weapon or passive Tibo holds, by the game's id, with its level of the most it can reach. */
 export type Held = { id: string; name: string; level: number; max: number };
 
 export type Pickup = Placed & {
-  /**
-   * The game's pickup kind. A chest opens after Tibo has stood on it; the game calls it a goldChest
-   * when a boss or Poteto left it. heal is food. magnet pulls in all the xp on the ground.
-   */
-  kind: "chest" | "goldChest" | "heal" | "magnet" | "reroll" | "skip" | "banish" | "item" | "beacon";
-  /** For a chest: seconds stood on it so far, and the seconds it takes to open. */
-  charged?: number;
-  chargeSeconds?: number;
+	/**
+	 * The game's pickup kind. A chest opens after Tibo has stood on it; the game calls it a goldChest
+	 * when a boss or Poteto left it. heal is food. magnet pulls in all the xp on the ground.
+	 */
+	kind: 'chest' | 'goldChest' | 'heal' | 'magnet' | 'reroll' | 'skip' | 'banish' | 'item' | 'beacon';
+	/** For a chest: seconds stood on it so far, and the seconds it takes to open. */
+	charged?: number;
+	chargeSeconds?: number;
 };
 
 /** A point of interest: a place that does something once Tibo has stood inside it. Only unused ones are listed. */
 export type Poi = Placed & {
-  /** The game's kind, such as chargeShrine or paidChest; a variety place goes by its own id, such as lighthouse. */
-  kind: string;
-  /** The game's English name, such as Spud Shrine or Potato Crate. */
-  name: string;
-  inside: boolean;
-  /** Seconds stood inside so far, and the seconds it takes to charge. */
-  charged: number;
-  chargeSeconds: number;
+	/** The game's kind, such as chargeShrine or paidChest; a variety place goes by its own id, such as lighthouse. */
+	kind: string;
+	/** The game's English name, such as Spud Shrine or Potato Crate. */
+	name: string;
+	inside: boolean;
+	/** Seconds stood inside so far, and the seconds it takes to charge. */
+	charged: number;
+	chargeSeconds: number;
 };
 
 export type Enemy = Placed & {
-  /** The game's id of the enemy or boss. */
-  kind: string;
-  name: string;
-  hp: number;
-  maxHp: number;
+	/** The game's id of the enemy or boss. */
+	kind: string;
+	name: string;
+	hp: number;
+	maxHp: number;
 };
 
 export type State = {
-  /** Seconds of game time since the run began. */
-  time: number;
-  /** The second the run counts as won; it goes on after that until Tibo dies. */
-  winAt: number;
-  tibo: {
-    hp: number;
-    maxHp: number;
-    /** Health lost over the last 3 seconds. */
-    hurt: number;
-    /** Damage dealt a second over the last 3 seconds. */
-    dps: number;
-    level: number;
-    gold: number;
-    x: number;
-    y: number;
-    dash: { charges: number; max: number };
-    /** Up to 6 of each. */
-    weapons: Held[];
-    passives: Held[];
-    items: { id: string; name: string; count: number }[];
-    /** Weapons the next chest opened would evolve, because their recipe is complete. */
-    evolves: string[];
-    /** The effective stats, by the game's own names, such as damageMult, armor and magnetRadius. */
-    stats: Record<string, number>;
-  };
-  enemies: {
-    onScreen: number;
-    /** Enemies on screen in each direction. */
-    byDirection: Record<Direction, number>;
-    /** The direction with the fewest enemies on screen, and the one with the most. */
-    fewest: Direction;
-    most: Direction;
-    /** Bullets about to arrive from each direction. */
-    bullets: Record<Direction, number>;
-  };
-  /** Every list below is nearest first. */
-  elites: Enemy[];
-  bosses: Enemy[];
-  /** What lies on the ground, other than xp and gold. */
-  pickups: Pickup[];
-  pois: Poi[];
-  /** The total value of the xp and of the gold lying on the ground, and the xp lying each way within about half a screen, nearer xp counting for more. */
-  ground: { xp: number; gold: number; xpByDirection: Record<Direction, number> };
-  /** Gold a Potato Crate (paidChest) costs now, and a Tater Slots spin. */
-  prices: { crate: number; slots: number };
-  /** Timed boosts running, by the game's key, with the seconds left. */
-  boosts: { name: string; endsIn: number }[];
-  /** The next boss, elite and event to come, with the run second each comes at. */
-  upcoming: { at: number; text: string }[];
-  /** What \`drive\` returned last time and for how many seconds it has returned the same; null on the first call. To remember anything else, keep it in \`memory\`. */
-  previous: { action: Action; seconds: number } | null;
+	/** Seconds of game time since the run began. */
+	time: number;
+	/** The second the run counts as won; it goes on after that until Tibo dies. */
+	winAt: number;
+	tibo: {
+		hp: number;
+		maxHp: number;
+		/** Health lost over the last 3 seconds. */
+		hurt: number;
+		/** Damage dealt a second over the last 3 seconds. */
+		dps: number;
+		level: number;
+		gold: number;
+		x: number;
+		y: number;
+		dash: { charges: number; max: number };
+		/** Up to 6 of each. */
+		weapons: Held[];
+		passives: Held[];
+		items: { id: string; name: string; count: number }[];
+		/** Weapons the next chest opened would evolve, because their recipe is complete. */
+		evolves: string[];
+		/** The effective stats, by the game's own names, such as damageMult, armor and magnetRadius. */
+		stats: Record<string, number>;
+	};
+	enemies: {
+		onScreen: number;
+		/** Enemies on screen in each direction. */
+		byDirection: Record<Direction, number>;
+		/** The direction with the fewest enemies on screen, and the one with the most. */
+		fewest: Direction;
+		most: Direction;
+		/** Bullets about to arrive from each direction. */
+		bullets: Record<Direction, number>;
+	};
+	/** Every list below is nearest first. */
+	elites: Enemy[];
+	bosses: Enemy[];
+	/** What lies on the ground, other than xp and gold. */
+	pickups: Pickup[];
+	pois: Poi[];
+	/** The total value of the xp and of the gold lying on the ground, and the xp lying each way within about half a screen, nearer xp counting for more. */
+	ground: { xp: number; gold: number; xpByDirection: Record<Direction, number> };
+	/** Gold a Potato Crate (paidChest) costs now, and a Tater Slots spin. */
+	prices: { crate: number; slots: number };
+	/** Timed boosts running, by the game's key, with the seconds left. */
+	boosts: { name: string; endsIn: number }[];
+	/** The next boss, elite and event to come, with the run second each comes at. */
+	upcoming: { at: number; text: string }[];
+	/** What \`drive\` returned last time and for how many seconds it has returned the same; null on the first call. To remember anything else, keep it in \`memory\`. */
+	previous: { action: Action; seconds: number } | null;
 };
 
 /**
  * What the autopilot does until the next call. It walks there and dodges on its own. \`why\` is a
  * few words shown to the person watching, and comes back as \`state.previous.action.why\`.
  */
-export type Action = (
-  /** Walk to a pickup and take it; a chest is stood on until it opens. */
-  | { type: "pickup"; id: number }
-  /** Walk to a point of interest and stand inside it until it has charged. */
-  | { type: "poi"; id: number }
-  /** Fight an elite: keep it within reach of Tibo's weapons until it dies. */
-  | { type: "elite"; id: number }
-  /** Walk that way. */
-  | { type: "move"; dir: Direction }
-  /** Dash that way, a quick burst that spends a dash charge; with none, walk that way. */
-  | { type: "dash"; dir: Direction }
-  /**
-   * Gather xp: each step, walk the safe way with the most xp for the fewest enemies, and take any
-   * magnet within 500 on the way. With no xp near, keep away from enemies. It lasts until another action.
-   */
-  | { type: "xp" }
-  /** Stand still, stepping aside only when standing would cost more health than moving. */
-  | { type: "still" }
-) & { why?: string };
+export type Action =
+	/** Walk to a pickup and take it; a chest is stood on until it opens. */
+	(
+		| { type: 'pickup'; id: number }
+		/** Walk to a point of interest and stand inside it until it has charged. */
+		| { type: 'poi'; id: number }
+		/** Fight an elite: keep it within reach of Tibo's weapons until it dies. */
+		| { type: 'elite'; id: number }
+		/** Walk that way. */
+		| { type: 'move'; dir: Direction }
+		/** Dash that way, a quick burst that spends a dash charge; with none, walk that way. */
+		| { type: 'dash'; dir: Direction }
+		/**
+		 * Gather xp: each step, walk the safe way with the most xp for the fewest enemies, and take any
+		 * magnet within 500 on the way. With no xp near, keep away from enemies. It lasts until another action.
+		 */
+		| { type: 'xp' }
+		/** Stand still, stepping aside only when standing would cost more health than moving. */
+		| { type: 'still' }
+	) & { why?: string };
 `;
 
   // userscript/fsd/entities.ts
@@ -3816,15 +4163,57 @@ export type Action = (
     rowboat: "Travel"
   };
   var PICKUPS = [
-    { section: "Chests", key: "chest", name: "chest", tag: "Loot", about: "A chest an elite, a loot runner or a place left on the ground. Standing on it for 1 second opens it." },
-    { section: "Chests", key: "goldChest", name: "goldChest", tag: "Loot", about: "A chest a boss or Poteto left. It opens like a chest, after 1.5 seconds." },
+    {
+      section: "Chests",
+      key: "chest",
+      name: "chest",
+      tag: "Loot",
+      about: "A chest an elite, a loot runner or a place left on the ground. Standing on it for 1 second opens it."
+    },
+    {
+      section: "Chests",
+      key: "goldChest",
+      name: "goldChest",
+      tag: "Loot",
+      about: "A chest a boss or Poteto left. It opens like a chest, after 1.5 seconds."
+    },
     { section: "Pickups", key: "heal", name: "heal", tag: "Eat", about: "Food on the ground, which gives health back." },
-    { section: "Chests", key: "item", name: "item", tag: "Loot", about: "An item on the ground. Standing on it opens a choice of an item, as a chest does." },
-    { section: "Pickups", key: "magnet", name: "magnet", tag: "Magnet", about: "A magnet on the ground, which pulls in all the xp lying there." },
-    { section: "Pickups", key: "reroll", name: "reroll", tag: "Loot", about: "One more reroll for a later choice. Elites and lanterns drop it." },
+    {
+      section: "Chests",
+      key: "item",
+      name: "item",
+      tag: "Loot",
+      about: "An item on the ground. Standing on it opens a choice of an item, as a chest does."
+    },
+    {
+      section: "Pickups",
+      key: "magnet",
+      name: "magnet",
+      tag: "Magnet",
+      about: "A magnet on the ground, which pulls in all the xp lying there."
+    },
+    {
+      section: "Pickups",
+      key: "reroll",
+      name: "reroll",
+      tag: "Loot",
+      about: "One more reroll for a later choice. Elites and lanterns drop it."
+    },
     { section: "Pickups", key: "skip", name: "skip", tag: "Loot", about: "One more skip for a later choice." },
-    { section: "Pickups", key: "banish", name: "banish", tag: "Loot", about: "One more banish for a later choice. Elites and lanterns drop it." },
-    { section: "Pickups", key: "beacon", name: "beacon", tag: "Bot", about: "A Bot Beacon, which calls a swarm of bots around Tibo for a while." }
+    {
+      section: "Pickups",
+      key: "banish",
+      name: "banish",
+      tag: "Loot",
+      about: "One more banish for a later choice. Elites and lanterns drop it."
+    },
+    {
+      section: "Pickups",
+      key: "beacon",
+      name: "beacon",
+      tag: "Bot",
+      about: "A Bot Beacon, which calls a swarm of bots around Tibo for a while."
+    }
   ];
   function worldEntities(link) {
     const found = [...PICKUPS];
@@ -4695,7 +5084,10 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
     };
     const valueLines = (live, example) => {
       const value = live ?? example;
-      return value === undefined || value === "" ? [] : [h("div", "tbh-fsd-tip-label", live !== undefined ? `Last seen in a run, at ${clock(pilot.preview()?.time ?? 0)}` : "Example, from a real run"), h("pre", "tbh-fsd-tip-value", value)];
+      return value === undefined || value === "" ? [] : [
+        h("div", "tbh-fsd-tip-label", live !== undefined ? `Last seen in a run, at ${clock(pilot.preview()?.time ?? 0)}` : "Example, from a real run"),
+        h("pre", "tbh-fsd-tip-value", value)
+      ];
     };
     const typed = (source) => {
       const view = codeView(fields, types);
@@ -4915,7 +5307,11 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
         { opacity: 1, offset: 0.35 },
         { transform: big, opacity: 1, offset: 1 }
       ];
-      return sheet.animate(frames, { duration: opening ? 820 : 520, direction: opening ? "normal" : "reverse", easing: opening ? "cubic-bezier(.2,.8,.25,1)" : "cubic-bezier(.75,0,.8,.2)" }).finished;
+      return sheet.animate(frames, {
+        duration: opening ? 820 : 520,
+        direction: opening ? "normal" : "reverse",
+        easing: opening ? "cubic-bezier(.2,.8,.25,1)" : "cubic-bezier(.75,0,.8,.2)"
+      }).finished;
     }
     function close() {
       if (!dialog.open || closing)
@@ -4999,7 +5395,11 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
       if (member === null)
         continue;
       const [, name = "", type = ""] = member;
-      const field = { path: [...open.map((o) => o.field.path.split(".").at(-1)), name].join("."), type, about: about.join(" ") };
+      const field = {
+        path: [...open.map((o) => o.field.path.split(".").at(-1)), name].join("."),
+        type,
+        about: about.join(" ")
+      };
       fields.push(field);
       about = [];
       if (type === "{")
@@ -5138,7 +5538,13 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
     new MutationObserver((records) => {
       if (records.some((r) => !panel.contains(r.target) && !(r.target instanceof Element && r.target.closest(".tbh-card, .tbh-xr-damage, .tbh-lb-desc"))))
         schedule();
-    }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["data-tip", "hidden"] });
+    }).observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["data-tip", "hidden"]
+    });
     setInterval(schedule, 1000);
     schedule();
   }
@@ -5175,7 +5581,15 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
   function buttons() {
     return [...document.querySelectorAll("button")].filter((b) => !b.matches(".ui-card, .ui-pause-btn, .ui-sound") && !b.closest(OURS) && b.getClientRects().length > 0 && (b.textContent ?? "").trim() !== "");
   }
-  var BUTTON_WORDS = { reroll: /reroll/i, skip: /skip/i, banish: /banish/i, close: /leave|close|keep|no thanks|done/i, continue: /continue|ok|take|collect/i, accept: /accept|take/i, endRun: /end/i };
+  var BUTTON_WORDS = {
+    reroll: /reroll/i,
+    skip: /skip/i,
+    banish: /banish/i,
+    close: /leave|close|keep|no thanks|done/i,
+    continue: /continue|ok|take|collect/i,
+    accept: /accept|take/i,
+    endRun: /end/i
+  };
   function elementOf(option, cards, plain) {
     const a = option.action;
     if ("index" in a)
@@ -5259,8 +5673,17 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
         left = Math.min(left, rect.left);
         right = Math.max(right, rect.right);
         const below = option.action.type === "banish";
-        Object.assign(parts.bar.style, { left: `${rect.left}px`, top: `${below ? rect.bottom + 6 : rect.top - 22}px`, width: `${Math.max(rect.width, 90)}px` });
-        Object.assign(parts.frame.style, { left: `${rect.left - 3}px`, top: `${rect.top - 3}px`, width: `${rect.width + 6}px`, height: `${rect.height + 6}px` });
+        Object.assign(parts.bar.style, {
+          left: `${rect.left}px`,
+          top: `${below ? rect.bottom + 6 : rect.top - 22}px`,
+          width: `${Math.max(rect.width, 90)}px`
+        });
+        Object.assign(parts.frame.style, {
+          left: `${rect.left - 3}px`,
+          top: `${rect.top - 3}px`,
+          width: `${rect.width + 6}px`,
+          height: `${rect.height + 6}px`
+        });
         parts.frame.classList.toggle("tbh-pick-on", arrived && i === show.chosen);
         parts.frame.classList.toggle("tbh-pick-final", done && i === show.chosen);
         parts.bar.classList.toggle("tbh-pick-dim", done && i !== show.chosen);
@@ -5275,14 +5698,23 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
         hand.style.height = `${HAND_HEIGHT}px`;
         const t = Math.min(1, age / ARRIVE_MS);
         const eased = 1 - (1 - t) ** 3;
-        const [fromX, fromY, toX, toY] = [left, top - 60, pick.left + pick.width / 2, pick.top + Math.min(18, pick.height / 3)];
+        const [fromX, fromY, toX, toY] = [
+          left,
+          top - 60,
+          pick.left + pick.width / 2,
+          pick.top + Math.min(18, pick.height / 3)
+        ];
         const x = fromX + (toX - fromX) * eased;
         const y = fromY + (toY - fromY) * eased;
         Object.assign(hand.style, { left: `${x - shape.tipX * scale}px`, top: `${y - shape.tipY * scale}px` });
         hand.classList.toggle("tbh-pick-pressing", arrived);
       }
       if (Number.isFinite(top))
-        Object.assign(banner.style, { left: `${(left + right) / 2}px`, top: `${top - 66}px`, maxWidth: `${Math.max(240, right - left)}px` });
+        Object.assign(banner.style, {
+          left: `${(left + right) / 2}px`,
+          top: `${top - 66}px`,
+          maxWidth: `${Math.max(240, right - left)}px`
+        });
     };
     requestAnimationFrame(frame);
   }
@@ -5331,7 +5763,12 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
       if (command.seconds !== undefined)
         this.ticks = Math.round(command.seconds * TICKS_PER_SECOND);
       const ticks = (seconds) => Math.round(seconds * TICKS_PER_SECOND);
-      this.route = route === undefined || s === undefined ? undefined : { to: anchored(s, route.to), stayTicks: ticks(route.stay ?? ROUTE_DEFAULTS.stay), ticks: ticks(route.seconds ?? ROUTE_DEFAULTS.seconds), legTicks: ticks(route.leg ?? ROUTE_DEFAULTS.leg) };
+      this.route = route === undefined || s === undefined ? undefined : {
+        to: anchored(s, route.to),
+        stayTicks: ticks(route.stay ?? ROUTE_DEFAULTS.stay),
+        ticks: ticks(route.seconds ?? ROUTE_DEFAULTS.seconds),
+        legTicks: ticks(route.leg ?? ROUTE_DEFAULTS.leg)
+      };
     }
     reset() {
       this.live = false;
@@ -5448,7 +5885,12 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
       return {
         tick: game.state.tick,
         seconds: lagTicks / TICKS_PER_SECOND,
-        player: { x: s.player.x[me] ?? 0, y: s.player.y[me] ?? 0, hp: s.player.hp[me] ?? 0, dashCharges: s.player.dashCharges[me] ?? 0 },
+        player: {
+          x: s.player.x[me] ?? 0,
+          y: s.player.y[me] ?? 0,
+          hp: s.player.hp[me] ?? 0,
+          dashCharges: s.player.dashCharges[me] ?? 0
+        },
         threats: threats(this.link, s, this.ticks / TICKS_PER_SECOND)
       };
     }
@@ -5517,7 +5959,14 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
         lag: s.paused ? 0 : this.lagTicks / TICKS_PER_SECOND,
         seconds: this.ticks / TICKS_PER_SECOND,
         ahead,
-        ...this.routed && route !== undefined ? { routes: { seconds: route.ticks / TICKS_PER_SECOND, leg: route.legTicks / TICKS_PER_SECOND, stay: route.stayTicks / TICKS_PER_SECOND, options: outcomes } } : { moves: outcomes }
+        ...this.routed && route !== undefined ? {
+          routes: {
+            seconds: route.ticks / TICKS_PER_SECOND,
+            leg: route.legTicks / TICKS_PER_SECOND,
+            stay: route.stayTicks / TICKS_PER_SECOND,
+            options: outcomes
+          }
+        } : { moves: outcomes }
       };
     }
   }
