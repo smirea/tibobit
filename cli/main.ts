@@ -76,6 +76,7 @@ async function asked<T>(work: Promise<T>): Promise<T> {
 		const port = new URL(server.origin).port;
 		throw new Error(
 			`no agent server at ${server.origin}; start it with ./agent-server/main.ts${port === String(new URL(DEFAULT_ORIGIN).port) ? '' : ` --port ${port}`}`,
+			{ cause: e },
 		);
 	}
 }

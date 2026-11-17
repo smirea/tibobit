@@ -199,7 +199,7 @@ export class Checkpoints {
 			throw new Error(
 				`this page cannot rebuild classes ${[...missing, ...ambiguous.map(k => `${k} (two classes share this name)`)].join(', ')}`,
 			);
-		const made: unknown[] = new Array(data.nodes.length);
+		const made: unknown[] = [];
 		const dec = (x: Encoded): unknown => {
 			if (x === null || typeof x !== 'object') return x;
 			if ('u' in x) return undefined;

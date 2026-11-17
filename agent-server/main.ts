@@ -203,7 +203,7 @@ const server = Bun.serve<{ raw: string[] }>({
 					const snapshot = (await req.json()) as Snapshot;
 					const view = book === undefined ? undefined : liveView(snapshot, book);
 					latest = { snapshot, ...(view === undefined ? {} : { view }) };
-					for (const done of [...waiters]) done();
+					for (const done of waiters) done();
 					for (const ws of sockets) {
 						try {
 							ws.send(JSON.stringify(state(ws.data.raw)));

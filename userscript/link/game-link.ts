@@ -142,6 +142,7 @@ export class GameLink {
 		const ns = (await import(url)) as Record<string, unknown>;
 		const Game = findGameClass(ns);
 		this.simBuild = url.split('/').at(-1);
+		// oxlint-disable-next-line typescript/no-this-alias -- the patched methods need the game as `this` and the link beside it
 		const link = this;
 		const { step, setInput, drainEvents } = Game.prototype;
 		// The renderer drains the game's events every frame to show banners and effects, so this sees

@@ -165,7 +165,7 @@ export class Controller {
 					[
 						...L.weapons.map(w => `${w.def.id} ${w.level}`),
 						...L.passives.map(p => `${p.def.id} ${p.level}`),
-						...[...L.items.keys()],
+						...L.items.keys(),
 					].join(', '),
 				);
 				return;

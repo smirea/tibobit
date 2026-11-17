@@ -300,7 +300,7 @@ export function liveView(s: Snapshot, b: Book): LiveView | undefined {
 				]),
 	].sort((x, y) => x.at - y.at);
 
-	const timers = { ...(g as unknown as Record<string, unknown>), ...(g.moreVariety ?? {}) };
+	const timers = { ...(g as unknown as Record<string, unknown>), ...g.moreVariety };
 	const boosts = Object.entries(timers)
 		.filter((x): x is [string, number] => x[0].endsWith('Until') && typeof x[1] === 'number' && x[1] > g.time)
 		.map(([k, until]) => ({ name: k.replace(/Until$/, ''), endsIn: round(until - g.time) }));

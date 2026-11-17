@@ -56,7 +56,7 @@ export function bookFrom(e: Encyclopedia): Book {
 		const m = k.match(/^content\.([^.]+)\.([^.]+)\.([^.]+)$/);
 		if (m === null) continue;
 		const key = `${m[1]}:${m[2]}`;
-		text.set(key, { ...(text.get(key) ?? {}), [m[3] ?? '']: line });
+		text.set(key, { ...text.get(key), [m[3] ?? '']: line });
 	}
 	const catalog = buildCatalog(content, messages);
 	return { catalog, combos: catalog.recipes.map(toCombo), text, dogs: new Map((e.dogs as Def[]).map(d => [d.id, d])) };

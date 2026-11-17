@@ -733,34 +733,6 @@ function drive(state: State, memory: Memory): Action {
 
   // protocol/pilot.ts
   var PICK_SHOW_MS = 2000;
-  var ACTION_TAGS = [
-    ...["Loot", "Wander", "Run", "Eat", "Hunt", "Spot"],
-    ...[
-      "Pet",
-      "Kennel",
-      "Crate",
-      "Shrine",
-      "Curse",
-      "Golden",
-      "Farm",
-      "Shop",
-      "Microwave",
-      "Nest",
-      "Lair",
-      "Bot",
-      "Whetstone",
-      "Bell",
-      "Slots",
-      "Vault",
-      "Magnet",
-      "Tunnel",
-      "Light",
-      "Freezer",
-      "Fryer",
-      "Xp"
-    ],
-    ...["Dash", "Hold", "Start", "Take over", "Over", "Stopped"]
-  ];
   var SPOT_TAGS = {
     dog: "Pet",
     dogKennel: "Kennel",
@@ -1854,7 +1826,7 @@ Goal: {{goal}}.
       const ambiguous = [...needed].filter((k) => this.classes.get(k) === "ambiguous");
       if (missing.length > 0 || ambiguous.length > 0)
         throw new Error(`this page cannot rebuild classes ${[...missing, ...ambiguous.map((k) => `${k} (two classes share this name)`)].join(", ")}`);
-      const made = new Array(data.nodes.length);
+      const made = [];
       const dec = (x) => {
         if (x === null || typeof x !== "object")
           return x;
@@ -2292,7 +2264,7 @@ Goal: {{goal}}.
           this.finish(status, "done", [
             ...L.weapons.map((w) => `${w.def.id} ${w.level}`),
             ...L.passives.map((p) => `${p.def.id} ${p.level}`),
-            ...[...L.items.keys()]
+            ...L.items.keys()
           ].join(", "));
           return;
         }
