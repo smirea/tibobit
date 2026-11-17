@@ -148,11 +148,14 @@ If the game changes shape so the script can no longer read it, the panel says so
 ## Building
 
 ```sh
-bun install
+bun install   # also installs the pre-commit hook
 bun check   # the type checker built into Bun
 bun test
+bun run lint   # oxlint fixes, then oxfmt formats; lint:ci only checks
 bun run build   # writes dist/tibo-helper.user.js
 ```
+
+Every commit runs the pre-commit hook in `lefthook.yml`, in about a second: oxlint and oxfmt fix the staged files, then `bun check` and `bun test` run over the whole repo. There is no CI, so the hook is the only check a change gets.
 
 To run a local build, install a wrapper script that `@require`s it. Tampermonkey takes grants only from the installed script's own header, never from a required file, so the wrapper needs the agent API's grants itself:
 

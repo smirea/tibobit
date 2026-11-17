@@ -11,3 +11,7 @@ Each action tile in the bot panel shows an icon for its tag. The tags are `ACTIO
 ## The game's content
 
 For anything in the game's content, such as recipes, names, descriptions, max levels, enemies or bosses, run `./headless/encyclopedia.ts` (`--json [section]` for the definitions). It reads tibo.dog as it is deployed now, in a few seconds. Do not download or grep the game's JS chunks for content, and do not keep a copy of it in the repo. When the script cannot read something you need, fix `userscript/link/` and the encyclopedia so the userscript gets it too.
+
+## Checking a change
+
+The pre-commit hook in `lefthook.yml` is the only gate: there is no CI. It fixes lint and format on the staged files and runs `bun check` and `bun test`. `bun install` installs it. When it fails, fix the cause; never commit around it.
