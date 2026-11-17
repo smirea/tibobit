@@ -4,7 +4,6 @@
   "type": "module",
   "scripts": {
     "build": "bun userscript/build.ts",
-    "check": "bun check --no-script",
     "agent-server": "bun --watch agent-server/main.ts",
     "test": "bun test"
   },
