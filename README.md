@@ -149,7 +149,8 @@ If the game changes shape so the script can no longer read it, the panel says so
 
 ```sh
 bun install
-bun run check
+bun run check   # bun check, the type checker built into Bun
+bun test
 bun run build   # writes dist/tibo-helper.user.js
 ```
 
