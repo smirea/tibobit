@@ -1,12 +1,12 @@
-import { startBridge } from './agent/bridge';
-import { Controller } from './agent/control';
-import { Discovery } from './combos/discovery';
-import { GameLink } from './link/game-link';
-import { startPanel } from './panel/panel';
-import { guardPanelKeys } from './panel/keys';
-import { startPickOverlay } from './pilot/pick-overlay';
-import { installSeedHook } from './agent/seed';
-import { Forecaster } from './agent/forecast';
+import { startBridge } from "./agent/bridge";
+import { Controller } from "./agent/control";
+import { Discovery } from "./combos/discovery";
+import { GameLink } from "./link/game-link";
+import { startPanel } from "./panel/panel";
+import { guardPanelKeys } from "./panel/keys";
+import { startPickOverlay } from "./pilot/pick-overlay";
+import { installSeedHook } from "./agent/seed";
+import { Forecaster } from "./agent/forecast";
 
 installSeedHook();
 
@@ -19,11 +19,11 @@ Object.assign(window, { __tibobit: { link } });
 guardPanelKeys();
 
 function start() {
-	forecaster.start();
-	const bridge = startBridge(link, controller, forecaster);
-	startPanel(link, discovery, bridge);
-	startPickOverlay(bridge.pilot, link);
+  forecaster.start();
+  const bridge = startBridge(link, controller, forecaster);
+  startPanel(link, discovery, bridge);
+  startPickOverlay(bridge.pilot, link);
 }
 
-if (document.body === null) document.addEventListener('DOMContentLoaded', start, { once: true });
+if (document.body === null) document.addEventListener("DOMContentLoaded", start, { once: true });
 else start();

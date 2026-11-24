@@ -1,40 +1,48 @@
 // What the builder is told: how the bot runs the function, the types it is written against, the
 // game's kinds of place, a real call's state, how to write it, and one request worked through.
-import type { Book } from '../game/book';
-import { EXAMPLE_CODE, EXAMPLE_REQUEST } from '../protocol/drive';
-import type { State } from '../protocol/driver';
-import EXAMPLE from '../protocol/state.example.json';
-import { DRIVER_TYPES } from './code-check';
+import type { Book } from "../game/book";
+import { EXAMPLE_CODE, EXAMPLE_REQUEST } from "../protocol/drive";
+import type { State } from "../protocol/driver";
+import EXAMPLE from "../protocol/state.example.json";
+import { DRIVER_TYPES } from "./code-check";
 
 /** How many entries of each list the example keeps; the rest are dropped so the example stays readable. */
 const EXAMPLE_ENTRIES = 4;
 
 /** The state as indented JSON, each list cut to its first entries. */
 function stateJson(state: State): string {
-	const cut = Object.fromEntries(
-		Object.entries(state).map(([key, value]) => [key, Array.isArray(value) ? value.slice(0, EXAMPLE_ENTRIES) : value]),
-	);
-	return JSON.stringify(cut, null, 2);
+  const cut = Object.fromEntries(
+    Object.entries(state).map(([key, value]) => [
+      key,
+      Array.isArray(value) ? value.slice(0, EXAMPLE_ENTRIES) : value,
+    ]),
+  );
+  return JSON.stringify(cut, null, 2);
 }
 
 /** Every kind of point of interest the game has, as `kind: name. what the game says it does`. */
 function poiLines(book: Book | undefined): string {
-	if (book === undefined)
-		return "The tab has not sent the game's kinds yet. Match a point of interest by its `name`, which the request will use.";
-	const lines: string[] = [];
-	for (const [key, text] of book.text) {
-		const [section, id] = key.split(':');
-		// The game's `varietyPlace` kind stands for every variety place; each one is listed by its own id, spelled as the game does.
-		if ((section !== 'poi' && section !== 'varietyPlace') || id === undefined || key === 'poi:varietyPlace') continue;
-		lines.push(
-			`- \`${id.replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase())}\`: ${text.name ?? id}. ${(text.desc ?? '').replace(/\s+/g, ' ').trim()}`,
-		);
-	}
-	return lines.sort().join('\n');
+  if (book === undefined)
+    return "The tab has not sent the game's kinds yet. Match a point of interest by its `name`, which the request will use.";
+  const lines: string[] = [];
+  for (const [key, text] of book.text) {
+    const [section, id] = key.split(":");
+    // The game's `varietyPlace` kind stands for every variety place; each one is listed by its own id, spelled as the game does.
+    if (
+      (section !== "poi" && section !== "varietyPlace") ||
+      id === undefined ||
+      key === "poi:varietyPlace"
+    )
+      continue;
+    lines.push(
+      `- \`${id.replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase())}\`: ${text.name ?? id}. ${(text.desc ?? "").replace(/\s+/g, " ").trim()}`,
+    );
+  }
+  return lines.sort().join("\n");
 }
 
 export function builderPrompt(request: string, book: Book | undefined): string {
-	return `You write the TypeScript function that plays the game tibo.dog for a person. Their request is at the end. Your reply is the function's source and nothing else.
+  return `You write the TypeScript function that plays the game tibo.dog for a person. Their request is at the end. Your reply is the function's source and nothing else.
 
 ## The game
 
@@ -69,11 +77,11 @@ ${poiLines(book)}
 ## One call's state, from a real run
 
 Each list is cut to its first ${EXAMPLE_ENTRIES} entries here. In the real call it holds everything, nearest first: this one had ${(
-		Object.entries(EXAMPLE.state) as [string, unknown][]
-	)
-		.filter(([, v]) => Array.isArray(v))
-		.map(([k, v]) => `${(v as unknown[]).length} ${k}`)
-		.join(', ')}.
+    Object.entries(EXAMPLE.state) as [string, unknown][]
+  )
+    .filter(([, v]) => Array.isArray(v))
+    .map(([k, v]) => `${(v as unknown[]).length} ${k}`)
+    .join(", ")}.
 
 \`\`\`json
 ${stateJson(EXAMPLE.state as State)}
@@ -112,7 +120,7 @@ ${request.trim()}`;
 
 /** The prompt again, with the reply that was refused and why, for another try. */
 export function retryPrompt(prompt: string, reply: string, problems: readonly string[]): string {
-	return `${prompt}
+  return `${prompt}
 
 ## Your last reply was refused
 
@@ -122,7 +130,7 @@ ${reply.trim().slice(0, 12_000)}
 
 The type check refused it. Line numbers count from the first line of your code:
 
-${problems.map(p => `- ${p}`).join('\n')}
+${problems.map((p) => `- ${p}`).join("\n")}
 
 Reply with the whole function again, corrected, and nothing else.`;
 }
