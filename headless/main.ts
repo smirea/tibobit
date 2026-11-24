@@ -2,27 +2,28 @@
 // Runs tibo.dog in a headless browser with the userscript, so a bot can play without a visible
 // browser. Tampermonkey is not available there, so GM_xmlhttpRequest is shimmed with fetch; the
 // page's CSP and CORS would block that fetch, which is why both are turned off for this profile.
-import { USERSCRIPT } from '../paths';
-import { chromium } from 'playwright-core';
-import { executablePath } from './chromium';
-import { BRIDGE_ORIGIN_GLOBAL, HEADLESS_PORT, localOrigin } from '../protocol/address';
-import path from 'node:path';
+import { USERSCRIPT } from "../paths";
+import { chromium } from "playwright-core";
+import { executablePath } from "./chromium";
+import { BRIDGE_ORIGIN_GLOBAL, HEADLESS_PORT, localOrigin } from "../protocol/address";
+import path from "node:path";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {
-	const i = args.indexOf(`--${name}`);
-	return i >= 0 ? (args[i + 1] ?? fallback) : fallback;
+  const i = args.indexOf(`--${name}`);
+  return i >= 0 ? (args[i + 1] ?? fallback) : fallback;
 };
-const width = Number(option('width', '960'));
-const height = Number(option('height', '600'));
-const port = Number(option('port', String(HEADLESS_PORT)));
-const headed = args.includes('--headed');
-const bridge = option('bridge', '');
+const width = Number(option("width", "960"));
+const height = Number(option("height", "600"));
+const port = Number(option("port", String(HEADLESS_PORT)));
+const headed = args.includes("--headed");
+const bridge = option("bridge", "");
 // A profile folder keeps the game's own progress, such as unlocked Nightmare levels, across launches.
-const profile = option('profile', '');
+const profile = option("profile", "");
 
 const userscript = Bun.file(USERSCRIPT);
-if (!(await userscript.exists())) throw new Error('dist/tibo-helper.user.js is missing; run bun run build');
+if (!(await userscript.exists()))
+  throw new Error("dist/tibo-helper.user.js is missing; run bun run build");
 
 const shim = `window.GM_xmlhttpRequest = (d) => {
   const ctrl = new AbortController();
@@ -35,79 +36,102 @@ const shim = `window.GM_xmlhttpRequest = (d) => {
 };`;
 
 const launch = {
-	executablePath: headed ? undefined : executablePath(option('chrome', '')),
-	headless: !headed,
-	args: ['--disable-web-security', '--disable-features=LocalNetworkAccessChecks', '--mute-audio', '--use-angle=metal'],
+  executablePath: headed ? undefined : executablePath(option("chrome", "")),
+  headless: !headed,
+  args: [
+    "--disable-web-security",
+    "--disable-features=LocalNetworkAccessChecks",
+    "--mute-audio",
+    "--use-angle=metal",
+  ],
 };
 const contextOptions = { bypassCSP: true, viewport: { width, height } };
 const context =
-	profile === ''
-		? await (await chromium.launch(launch)).newContext(contextOptions)
-		: await chromium.launchPersistentContext(path.resolve(profile), { ...launch, ...contextOptions });
-const target = bridge === '' ? '' : `window.${BRIDGE_ORIGIN_GLOBAL} = "${localOrigin(Number(bridge))}";`;
+  profile === ""
+    ? await (await chromium.launch(launch)).newContext(contextOptions)
+    : await chromium.launchPersistentContext(path.resolve(profile), {
+        ...launch,
+        ...contextOptions,
+      });
+const target =
+  bridge === "" ? "" : `window.${BRIDGE_ORIGIN_GLOBAL} = "${localOrigin(Number(bridge))}";`;
 await context.addInitScript({ content: `${target}\n${shim}\n${await userscript.text()}` });
 const page = context.pages()[0] ?? (await context.newPage());
 // tibo.dog polls /version.json and reloads itself onto a new build, which drops the run in
 // progress. Keep answering with the build this page loaded; /reload picks up a new one.
 let loadedVersion: { body: string; contentType: string } | undefined;
-await page.route('**/version.json*', async route => {
-	if (loadedVersion === undefined) {
-		const response = await route.fetch();
-		loadedVersion = {
-			body: await response.text(),
-			contentType: response.headers()['content-type'] ?? 'application/json',
-		};
-	}
-	await route.fulfill({ status: 200, body: loadedVersion.body, contentType: loadedVersion.contentType });
+await page.route("**/version.json*", async (route) => {
+  if (loadedVersion === undefined) {
+    const response = await route.fetch();
+    loadedVersion = {
+      body: await response.text(),
+      contentType: response.headers()["content-type"] ?? "application/json",
+    };
+  }
+  await route.fulfill({
+    status: 200,
+    body: loadedVersion.body,
+    contentType: loadedVersion.contentType,
+  });
 });
-page.on('pageerror', e => console.error('page error:', String(e)));
-page.on('console', m => {
-	if (m.type() === 'error' && !m.text().includes('Failed to load resource'))
-		console.error('console:', m.text().slice(0, 300));
+page.on("pageerror", (e) => console.error("page error:", String(e)));
+page.on("console", (m) => {
+  if (m.type() === "error" && !m.text().includes("Failed to load resource"))
+    console.error("console:", m.text().slice(0, 300));
 });
 // Served before the page loads, so whoever started this can reach it as soon as the page has connected to the agent server.
 Bun.serve({
-	hostname: '127.0.0.1',
-	port,
-	async fetch(req) {
-		const url = new URL(req.url);
-		if (url.pathname === '/screenshot')
-			return new Response(new Uint8Array(await page.screenshot()), { headers: { 'content-type': 'image/png' } });
-		if (url.pathname === '/reload') {
-			loadedVersion = undefined;
-			await page.reload();
-			return new Response('reloaded\n');
-		}
-		if ((url.pathname === '/click' || url.pathname === '/hover') && req.method === 'POST') {
-			try {
-				const selector = await req.text();
-				if (url.pathname === '/click') await page.click(selector, { timeout: 5000 });
-				else await page.hover(selector, { timeout: 5000 });
-				return new Response(`${url.pathname.slice(1)}ed\n`);
-			} catch (e) {
-				return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
-			}
-		}
-		if (url.pathname === '/eval' && req.method === 'POST') {
-			try {
-				return Response.json(await page.evaluate(await req.text()));
-			} catch (e) {
-				return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
-			}
-		}
-		return new Response(
-			'GET /screenshot, GET /reload, POST /click <selector>, POST /hover <selector> or POST /eval <expression>\n',
-			{ status: 404 },
-		);
-	},
+  hostname: "127.0.0.1",
+  port,
+  async fetch(req) {
+    const url = new URL(req.url);
+    if (url.pathname === "/screenshot")
+      return new Response(new Uint8Array(await page.screenshot()), {
+        headers: { "content-type": "image/png" },
+      });
+    if (url.pathname === "/reload") {
+      loadedVersion = undefined;
+      await page.reload();
+      return new Response("reloaded\n");
+    }
+    if ((url.pathname === "/click" || url.pathname === "/hover") && req.method === "POST") {
+      try {
+        const selector = await req.text();
+        if (url.pathname === "/click") await page.click(selector, { timeout: 5000 });
+        else await page.hover(selector, { timeout: 5000 });
+        return new Response(`${url.pathname.slice(1)}ed\n`);
+      } catch (e) {
+        return Response.json(
+          { error: e instanceof Error ? e.message : String(e) },
+          { status: 500 },
+        );
+      }
+    }
+    if (url.pathname === "/eval" && req.method === "POST") {
+      try {
+        return Response.json(await page.evaluate(await req.text()));
+      } catch (e) {
+        return Response.json(
+          { error: e instanceof Error ? e.message : String(e) },
+          { status: 500 },
+        );
+      }
+    }
+    return new Response(
+      "GET /screenshot, GET /reload, POST /click <selector>, POST /hover <selector> or POST /eval <expression>\n",
+      { status: 404 },
+    );
+  },
 });
-await page.goto('https://tibo.dog/');
+await page.goto("https://tibo.dog/");
 
-console.log(`tibo.dog running headless at ${width}x${height}; screenshots at ${localOrigin(port)}/screenshot`);
+console.log(
+  `tibo.dog running headless at ${width}x${height}; screenshots at ${localOrigin(port)}/screenshot`,
+);
 
 const shutdown = async () => {
-	await (context.browser() ?? context).close();
-	process.exit(0);
+  await (context.browser() ?? context).close();
+  process.exit(0);
 };
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

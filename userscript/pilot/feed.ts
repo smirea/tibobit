@@ -1,25 +1,27 @@
-import { css as feedCss } from './feed.css';
-import { ACTION_ICONS, moveIcon, NOTE_ICON, RESULT_ICONS, svgIcon } from './icons';
-import type { ChatMessage } from '../../protocol/pilot';
-import type { Direction } from '../../protocol/geometry';
-import { Pilot } from './pilot';
-import { addStyle, h } from '../panel/dom';
-import { costly, inspector } from './inspector';
-import { arrowed } from './arrows';
-import { clock } from '../../clock';
+import { css as feedCss } from "./feed.css";
+import { ACTION_ICONS, moveIcon, NOTE_ICON, RESULT_ICONS, svgIcon } from "./icons";
+import type { ChatMessage } from "../../protocol/pilot";
+import type { Direction } from "../../protocol/geometry";
+import { Pilot } from "./pilot";
+import { addStyle, h } from "../panel/dom";
+import { costly, inspector } from "./inspector";
+import { arrowed } from "./arrows";
+import { clock } from "../../clock";
 
 // More tiles than the box ever holds; it clips the rest.
 const FLOW_TILES = 60;
 
 /** A step the action model chose, as the move it took; undefined for anything else. */
-function step(m: ChatMessage): { move: Direction | 'still'; hurt: boolean; dash: boolean } | undefined {
-	if (m.role !== 'action' || m.inspect?.kind !== 'moves') return undefined;
-	const chosen = m.inspect.moves.find(x => x.outcome === 'chosen');
-	return {
-		move: chosen?.move ?? 'still',
-		hurt: chosen?.forecast !== undefined && costly(chosen.forecast),
-		dash: m.tag === 'Dash',
-	};
+function step(
+  m: ChatMessage,
+): { move: Direction | "still"; hurt: boolean; dash: boolean } | undefined {
+  if (m.role !== "action" || m.inspect?.kind !== "moves") return undefined;
+  const chosen = m.inspect.moves.find((x) => x.outcome === "chosen");
+  return {
+    move: chosen?.move ?? "still",
+    hurt: chosen?.forecast !== undefined && costly(chosen.forecast),
+    dash: m.tag === "Dash",
+  };
 }
 
 /**
@@ -27,25 +29,25 @@ function step(m: ChatMessage): { move: Direction | 'still'; hurt: boolean; dash:
  * bolt when it dashes), anything else its tag's icon, badged with how a goal ended.
  */
 function actionTile(m: ChatMessage): HTMLElement {
-	const s = step(m);
-	const icon =
-		s !== undefined
-			? moveIcon(s.move, 'tbh-tile-icon')
-			: svgIcon(m.tag === undefined ? NOTE_ICON : ACTION_ICONS[m.tag], 'tbh-tile-icon');
-	const badge = s?.dash
-		? [svgIcon(ACTION_ICONS.Dash, 'tbh-tile-badge tbh-badge-dash')]
-		: m.result === undefined
-			? []
-			: [svgIcon(RESULT_ICONS[m.result], `tbh-tile-badge tbh-result-${m.result}`)];
-	const el = h(
-		'span',
-		`tbh-tile tbh-tile-${m.role}${s?.hurt ? ' tbh-tile-hurt' : ''}${m.inspect === undefined ? '' : ' tbh-tile-inspectable'}`,
-		icon,
-		...badge,
-	);
-	el.setAttribute('aria-label', arrowed(m.text));
-	el.dataset.id = String(m.id);
-	return el;
+  const s = step(m);
+  const icon =
+    s !== undefined
+      ? moveIcon(s.move, "tbh-tile-icon")
+      : svgIcon(m.tag === undefined ? NOTE_ICON : ACTION_ICONS[m.tag], "tbh-tile-icon");
+  const badge = s?.dash
+    ? [svgIcon(ACTION_ICONS.Dash, "tbh-tile-badge tbh-badge-dash")]
+    : m.result === undefined
+      ? []
+      : [svgIcon(RESULT_ICONS[m.result], `tbh-tile-badge tbh-result-${m.result}`)];
+  const el = h(
+    "span",
+    `tbh-tile tbh-tile-${m.role}${s?.hurt ? " tbh-tile-hurt" : ""}${m.inspect === undefined ? "" : " tbh-tile-inspectable"}`,
+    icon,
+    ...badge,
+  );
+  el.setAttribute("aria-label", arrowed(m.text));
+  el.dataset.id = String(m.id);
+  return el;
 }
 
 /**
@@ -53,93 +55,101 @@ function actionTile(m: ChatMessage): HTMLElement {
  * the latest actions under it, newest first. Hovering either shows what led to it.
  */
 export function botFeed(pilot: Pilot, openFsd: (from: HTMLElement) => void): HTMLElement {
-	addStyle(feedCss);
-	const giveBack = h('button', 'tbh-giveback');
-	giveBack.type = 'button';
-	giveBack.addEventListener('click', () => pilot.stop());
-	const instructions = h('button', 'tbh-fsd-open', 'FSD');
-	instructions.type = 'button';
-	instructions.title = "Open Full Self Driving's function and loadout (pauses the game)";
-	instructions.addEventListener('click', () => openFsd(instructions));
-	const tools = h('div', 'tbh-chat-tools', giveBack, instructions);
+  addStyle(feedCss);
+  const giveBack = h("button", "tbh-giveback");
+  giveBack.type = "button";
+  giveBack.addEventListener("click", () => pilot.stop());
+  const instructions = h("button", "tbh-fsd-open", "FSD");
+  instructions.type = "button";
+  instructions.title = "Open Full Self Driving's function and loadout (pauses the game)";
+  instructions.addEventListener("click", () => openFsd(instructions));
+  const tools = h("div", "tbh-chat-tools", giveBack, instructions);
 
-	const plan = h('div', 'tbh-plan');
-	const list = h('div', 'tbh-actions');
-	list.setAttribute('aria-live', 'polite');
-	const rows = new Map<number, { el: HTMLElement; message: ChatMessage }>();
-	const insp = inspector(
-		() => plan.closest<HTMLElement>('.tbh-panel') ?? plan,
-		() => pilot.chat(),
-	);
-	let shownPlan: ChatMessage | undefined;
+  const plan = h("div", "tbh-plan");
+  const list = h("div", "tbh-actions");
+  list.setAttribute("aria-live", "polite");
+  const rows = new Map<number, { el: HTMLElement; message: ChatMessage }>();
+  const insp = inspector(
+    () => plan.closest<HTMLElement>(".tbh-panel") ?? plan,
+    () => pilot.chat(),
+  );
+  let shownPlan: ChatMessage | undefined;
 
-	const render = () => {
-		const now = pilot.state();
-		const label = now.state === 'stopping' ? 'Handing the wheel back…' : "I'll do it myself";
-		if (giveBack.textContent !== label) giveBack.textContent = label;
-		giveBack.disabled = now.state !== 'on';
+  const render = () => {
+    const now = pilot.state();
+    const label = now.state === "stopping" ? "Handing the wheel back…" : "I'll do it myself";
+    if (giveBack.textContent !== label) giveBack.textContent = label;
+    giveBack.disabled = now.state !== "on";
 
-		const messages = pilot.chat();
-		const latest = [...messages].reverse().find(m => m.role === 'planner');
-		if (latest !== shownPlan || latest === undefined) {
-			shownPlan = latest;
-			plan.replaceChildren(
-				h('span', 'tbh-plan-label', latest === undefined || latest.model === 'code' ? 'Action' : 'Pick'),
-				...(latest?.time === undefined ? [] : [h('span', 'tbh-row-time', clock(latest.time))]),
-				h('span', 'tbh-plan-text', latest === undefined ? 'Waiting for the function…' : arrowed(latest.text)),
-				...(latest?.stream === undefined
-					? []
-					: [h('div', 'tbh-plan-stream', h('span', '', latest.stream, h('b', 'tbh-cursor', '▍')))]),
-			);
-			plan.classList.toggle('tbh-row-inspectable', latest !== undefined);
-		}
+    const messages = pilot.chat();
+    const latest = [...messages].reverse().find((m) => m.role === "planner");
+    if (latest !== shownPlan || latest === undefined) {
+      shownPlan = latest;
+      plan.replaceChildren(
+        h(
+          "span",
+          "tbh-plan-label",
+          latest === undefined || latest.model === "code" ? "Action" : "Pick",
+        ),
+        ...(latest?.time === undefined ? [] : [h("span", "tbh-row-time", clock(latest.time))]),
+        h(
+          "span",
+          "tbh-plan-text",
+          latest === undefined ? "Waiting for the function…" : arrowed(latest.text),
+        ),
+        ...(latest?.stream === undefined
+          ? []
+          : [h("div", "tbh-plan-stream", h("span", "", latest.stream, h("b", "tbh-cursor", "▍")))]),
+      );
+      plan.classList.toggle("tbh-row-inspectable", latest !== undefined);
+    }
 
-		// Newest first: the newest action is a 3x3 tile in the corner, the one before it 2x2, and the
-		// rest flow around them, as many as the box holds. The tiles hold still while the pointer is over them, or a new step
-		// every few tenths of a second would slide the one being read out from under it.
-		if (list.matches(':hover'))
-			return insp.refresh(target => (target.kind === 'plan' ? plan : rows.get(target.id)?.el));
-		const actions: ChatMessage[] = [];
-		for (let i = messages.length - 1; i >= 0 && actions.length < FLOW_TILES; i--) {
-			const m = messages[i];
-			if (m !== undefined && m.role !== 'planner') actions.push(m);
-		}
-		const ids = new Set(actions.map(m => m.id));
-		for (const [id] of rows) if (!ids.has(id)) rows.delete(id);
-		const els = actions.map((message, i) => {
-			const before = rows.get(message.id);
-			const el = before?.message === message ? before.el : actionTile(message);
-			rows.set(message.id, { el, message });
-			el.classList.toggle('tbh-tile-main', i === 0);
-			el.classList.toggle('tbh-tile-prev', i === 1);
-			return el;
-		});
-		if (els.length !== list.children.length || els.some((el, i) => list.children[i] !== el))
-			list.replaceChildren(...els);
-		insp.refresh(target => (target.kind === 'plan' ? plan : rows.get(target.id)?.el));
-	};
+    // Newest first: the newest action is a 3x3 tile in the corner, the one before it 2x2, and the
+    // rest flow around them, as many as the box holds. The tiles hold still while the pointer is over them, or a new step
+    // every few tenths of a second would slide the one being read out from under it.
+    if (list.matches(":hover"))
+      return insp.refresh((target) => (target.kind === "plan" ? plan : rows.get(target.id)?.el));
+    const actions: ChatMessage[] = [];
+    for (let i = messages.length - 1; i >= 0 && actions.length < FLOW_TILES; i--) {
+      const m = messages[i];
+      if (m !== undefined && m.role !== "planner") actions.push(m);
+    }
+    const ids = new Set(actions.map((m) => m.id));
+    for (const [id] of rows) if (!ids.has(id)) rows.delete(id);
+    const els = actions.map((message, i) => {
+      const before = rows.get(message.id);
+      const el = before?.message === message ? before.el : actionTile(message);
+      rows.set(message.id, { el, message });
+      el.classList.toggle("tbh-tile-main", i === 0);
+      el.classList.toggle("tbh-tile-prev", i === 1);
+      return el;
+    });
+    if (els.length !== list.children.length || els.some((el, i) => list.children[i] !== el))
+      list.replaceChildren(...els);
+    insp.refresh((target) => (target.kind === "plan" ? plan : rows.get(target.id)?.el));
+  };
 
-	// Moving within one tile fires pointerover again for each child; only a new tile starts over.
-	let hovered: Element | undefined;
-	plan.addEventListener('pointerenter', () => {
-		if (shownPlan === undefined || hovered === plan) return;
-		hovered = plan;
-		insp.show({ kind: 'plan' }, plan);
-	});
-	list.addEventListener('pointerover', e => {
-		const el = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-id]') : null;
-		if (el === hovered) return;
-		hovered = el ?? undefined;
-		if (el === null) return insp.leave();
-		insp.show({ kind: 'action', id: Number(el.dataset.id) }, el);
-	});
-	const box = h('div', 'tbh-chatbox', tools, plan, list, insp.box);
-	box.addEventListener('pointerleave', () => {
-		hovered = undefined;
-		insp.leave();
-	});
+  // Moving within one tile fires pointerover again for each child; only a new tile starts over.
+  let hovered: Element | undefined;
+  plan.addEventListener("pointerenter", () => {
+    if (shownPlan === undefined || hovered === plan) return;
+    hovered = plan;
+    insp.show({ kind: "plan" }, plan);
+  });
+  list.addEventListener("pointerover", (e) => {
+    const el = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-id]") : null;
+    if (el === hovered) return;
+    hovered = el ?? undefined;
+    if (el === null) return insp.leave();
+    insp.show({ kind: "action", id: Number(el.dataset.id) }, el);
+  });
+  const box = h("div", "tbh-chatbox", tools, plan, list, insp.box);
+  box.addEventListener("pointerleave", () => {
+    hovered = undefined;
+    insp.leave();
+  });
 
-	pilot.onChange(render);
-	render();
-	return box;
+  pilot.onChange(render);
+  render();
+  return box;
 }

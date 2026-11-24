@@ -1,22 +1,23 @@
 {
-	"name": "tibobit",
-	"version": "1.15.0",
-	"private": true,
-	"type": "module",
-	"scripts": {
-		"postinstall": "lefthook install",
-		"build": "bun userscript/build.ts",
-		"agent-server": "bun --watch agent-server/main.ts",
-		"test": "bun test",
-		"lint": "oxlint --fix && oxfmt",
-		"lint:ci": "oxlint && oxfmt --check"
-	},
-	"devDependencies": {
-		"@types/bun": "^1.4.4",
-		"lefthook": "^2.2.2",
-		"oxfmt": "^0.79.0",
-		"oxlint": "^1.94.0",
-		"playwright-core": "1.65",
-		"typescript": "^7.0.2"
-	}
+  "name": "tibobit",
+  "version": "1.15.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "[ ! -d .git ] || lefthook install",
+    "build": "bun userscript/build.ts",
+    "agent-server": "bun --watch agent-server/main.ts",
+    "test": "bun test",
+    "lint": "oxlint --fix",
+    "lint:ci": "oxlint",
+    "typecheck": "bun check"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.5",
+    "lefthook": "^2.2.2",
+    "oxlint": "^1.95.0",
+    "playwright-core": "1.65",
+    "typescript": "^7.0.2"
+  },
+  "packageManager": "bun@1.4.5"
 }

@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
-import path from 'node:path';
-import { ROOT, USERSCRIPT } from '../paths';
-import pkg from '../package.json';
+import path from "node:path";
+import { ROOT, USERSCRIPT } from "../paths";
+import pkg from "../package.json";
 
 const outFile = USERSCRIPT;
-const rawUrl = 'https://raw.githubusercontent.com/smirea/tibobit/master/dist/tibo-helper.user.js';
+const rawUrl = "https://raw.githubusercontent.com/smirea/tibobit/master/dist/tibo-helper.user.js";
 const { version } = pkg;
 
 const header = `// ==UserScript==
@@ -22,17 +22,21 @@ const header = `// ==UserScript==
 `;
 
 const result = await Bun.build({
-	define: { __DRIVER_TYPES__: JSON.stringify(await Bun.file(path.join(ROOT, 'protocol', 'driver.ts')).text()) },
-	entrypoints: [path.join(import.meta.dir, 'main.ts')],
-	target: 'browser',
-	format: 'iife',
-	minify: false,
+  define: {
+    __DRIVER_TYPES__: JSON.stringify(
+      await Bun.file(path.join(ROOT, "protocol", "driver.ts")).text(),
+    ),
+  },
+  entrypoints: [path.join(import.meta.dir, "main.ts")],
+  target: "browser",
+  format: "iife",
+  minify: false,
 });
 if (!result.success) {
-	for (const log of result.logs) console.error(log);
-	throw new Error('build failed');
+  for (const log of result.logs) console.error(log);
+  throw new Error("build failed");
 }
 const output = result.outputs[0];
-if (output === undefined) throw new Error('build produced no output');
+if (output === undefined) throw new Error("build produced no output");
 await Bun.write(outFile, header + (await output.text()));
 console.log(`wrote ${path.relative(ROOT, outFile)} (${version})`);

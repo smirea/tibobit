@@ -29,7 +29,18 @@
     if (table === undefined || !link.ready)
       return;
     const withText = (kind, defs) => defs.map((d) => ({ ...textOf(link, kind, d.id), ...plain(d) }));
-    const tabled = new Set(["weapon", "passive", "item", "enemy", "boss", "dog", "poi", "biome", "event", "botHelp"]);
+    const tabled = new Set([
+      "weapon",
+      "passive",
+      "item",
+      "enemy",
+      "boss",
+      "dog",
+      "poi",
+      "biome",
+      "event",
+      "botHelp"
+    ]);
     const messages = {};
     for (const [key, lines] of Object.entries(link.messages)) {
       const kind = key.match(/^content\.([^.]+)\./)?.[1];
@@ -64,7 +75,16 @@
 
   // protocol/geometry.ts
   var TICKS_PER_SECOND = 60;
-  var DIRECTIONS = ["right", "down-right", "down", "down-left", "left", "up-left", "up", "up-right"];
+  var DIRECTIONS = [
+    "right",
+    "down-right",
+    "down",
+    "down-left",
+    "left",
+    "up-left",
+    "up",
+    "up-right"
+  ];
   var STILL = { x: 0, y: 0 };
   function unitOf(heading) {
     const radians = (typeof heading === "number" ? heading : DIRECTIONS.indexOf(heading) * 45) * Math.PI / 180;
@@ -84,7 +104,17 @@
   }
 
   // protocol/commands.ts
-  var CHOICE_ACTIONS = ["pick", "banish", "buy", "reroll", "skip", "close", "accept", "continue", "endRun"];
+  var CHOICE_ACTIONS = [
+    "pick",
+    "banish",
+    "buy",
+    "reroll",
+    "skip",
+    "close",
+    "accept",
+    "continue",
+    "endRun"
+  ];
   var CHECKPOINT_NAME = /^[\w.@-]{1,100}$/;
   var SEED = /^[0-9A-Z]{1,7}$/;
 
@@ -326,11 +356,17 @@
     const sources = s.sources ?? [];
     const source = (n) => sources[n] ?? n;
     return {
-      enemies: { def: (n) => table.enemyAt(n)?.id ?? n, flags: enums === undefined ? (n) => n : flagNames(enums.enemyFlags) },
+      enemies: {
+        def: (n) => table.enemyAt(n)?.id ?? n,
+        flags: enums === undefined ? (n) => n : flagNames(enums.enemyFlags)
+      },
       bosses: { def: (n) => table.bossIdAt(n) ?? n },
       pets: { breed: (n) => table.dogAt(n)?.id ?? n },
       grokBots: { help: (n) => table.botHelpAt(n)?.id ?? n, mode: name(enums?.botModes) },
-      pickups: { kind: (n) => enums?.pickupKinds[n] ?? n, source: (n) => enums?.pickupSources[n] ?? n },
+      pickups: {
+        kind: (n) => enums?.pickupKinds[n] ?? n,
+        source: (n) => enums?.pickupSources[n] ?? n
+      },
       zones: { kind: name(enums?.zoneKinds), shape: name(enums?.zoneShapes) },
       "*": { src: source, burnSrc: source, lastSrc: source }
     };
@@ -469,7 +505,10 @@
   var PATH_SAMPLES = [0.25, 0.5, 0.75, 1];
   var round = (n) => Math.round(n * 10) / 10;
   var XP_REACH = 600;
-  var bearing = (dx, dy) => ({ dist: round(Math.hypot(dx, dy)), dir: directionOf(dx, dy) });
+  var bearing = (dx, dy) => ({
+    dist: round(Math.hypot(dx, dy)),
+    dir: directionOf(dx, dy)
+  });
   function* alive(p) {
     for (let n = 0;n < p.pool.count; n++) {
       const slot = p.pool.slotAt(n);
@@ -553,7 +592,11 @@
       const gap = Math.hypot(dx + vx * t, dy + vy * t);
       if (gap > radius + (b.radius[i] ?? 0))
         continue;
-      bullets.push({ from: directionOf(dx, dy), in: Math.round(t * 100) / 100, damage: round(b.damage[i] ?? 0) });
+      bullets.push({
+        from: directionOf(dx, dy),
+        in: Math.round(t * 100) / 100,
+        damage: round(b.damage[i] ?? 0)
+      });
     }
     bullets.sort((x, y) => x.in - y.in);
     const volleys = [];
@@ -816,7 +859,11 @@ function drive(state: State, memory: Memory): Action {
       about: "units an explore goal walks before it ends; it also ends at the first chest never listed before"
     },
     evadeSeconds: { min: 2, max: 30, about: "seconds an evade goal lasts" },
-    stuckSeconds: { min: 2, max: 20, about: "seconds without getting closer (or charging) before a goal is given up" },
+    stuckSeconds: {
+      min: 2,
+      max: 20,
+      about: "seconds without getting closer (or charging) before a goal is given up"
+    },
     extraDamage: {
       min: 0,
       max: 0.25,
@@ -1744,7 +1791,10 @@ Goal: {{goal}}.
         nodes.push({ A: [] });
         let node;
         if (ArrayBuffer.isView(v))
-          node = { T: v.constructor.name, d: b64(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)) };
+          node = {
+            T: v.constructor.name,
+            d: b64(new Uint8Array(v.buffer, v.byteOffset, v.byteLength))
+          };
         else if (Array.isArray(v))
           node = { A: v.map(enc) };
         else if (v instanceof Map)
@@ -1995,7 +2045,9 @@ Goal: {{goal}}.
     await wait(400);
     const option = document.querySelector(`[data-testid="start-pick-option-${id}"]`);
     if (option === null) {
-      const offered = [...document.querySelectorAll('[data-testid^="start-pick-option-"]')].flatMap((o) => o.dataset.testid?.slice("start-pick-option-".length) ?? []).filter((x) => x !== "random");
+      const offered = [
+        ...document.querySelectorAll('[data-testid^="start-pick-option-"]')
+      ].flatMap((o) => o.dataset.testid?.slice("start-pick-option-".length) ?? []).filter((x) => x !== "random");
       byTestId("start-pick-close")?.click();
       throw new CommandFailure("weaponNotOffered", `starting weapon ${id} is not offered; offered: ${offered.join(", ")}`, offered);
     }
@@ -2637,7 +2689,11 @@ Goal: {{goal}}.
         });
         sim.state = state;
         sim.state.paused = false;
-        return { sim, step: () => step.call(sim), setInput: (x, y) => setInput.call(sim, x, y) };
+        return {
+          sim,
+          step: () => step.call(sim),
+          setInput: (x, y) => setInput.call(sim, x, y)
+        };
       };
       this.copyState = copyState;
       this.simulator = simulator;
@@ -2719,7 +2775,11 @@ Goal: {{goal}}.
         const pageUrl = props["--icon-sheet"]?.match(/^url\("(.*)"\)$/)?.[1];
         if (pageUrl === undefined)
           return sheet;
-        return { url: pageUrl, width: Number(props["--icon-sheet-w"]), height: Number(props["--icon-sheet-h"]) };
+        return {
+          url: pageUrl,
+          width: Number(props["--icon-sheet-w"]),
+          height: Number(props["--icon-sheet-h"])
+        };
       };
       this.icons = { url: sheet.url, width: sheet.width, height: sheet.height, frames, pageOf };
       this.changed();
@@ -2778,7 +2838,11 @@ Goal: {{goal}}.
   var ring = (x, y, r) => `M${x - r} ${y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
   var dot = (x, y, r) => ({ fill: ring(x, y, r) });
   var ACTION_ICONS = {
-    Loot: ["M3 11h18v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z", "M3 11V9a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v2", "M10 11v3h4v-3"],
+    Loot: [
+      "M3 11h18v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z",
+      "M3 11V9a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v2",
+      "M10 11v3h4v-3"
+    ],
     Wander: [ring(12, 12, 9), { fill: "M15.5 8.5l-2 5-5 2 2-5z" }],
     Run: [
       dot(15, 4.5, 2.2),
@@ -2795,7 +2859,9 @@ Goal: {{goal}}.
     Hunt: [ring(12, 12, 7), "M12 2v5M12 17v5M2 12h5M17 12h5", dot(12, 12, 1.4)],
     Spot: ["M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z", ring(12, 9, 2.5)],
     Pet: [
-      { fill: "M7.5 17.5c0-3 2-5.5 4.5-5.5s4.5 2.5 4.5 5.5c0 2-1.5 3-3 3-.6 0-1-.3-1.5-.3s-.9.3-1.5.3c-1.5 0-3-1-3-3z" },
+      {
+        fill: "M7.5 17.5c0-3 2-5.5 4.5-5.5s4.5 2.5 4.5 5.5c0 2-1.5 3-3 3-.6 0-1-.3-1.5-.3s-.9.3-1.5.3c-1.5 0-3-1-3-3z"
+      },
       dot(5, 10.5, 2),
       dot(9, 5.5, 2),
       dot(15, 5.5, 2),
@@ -2811,8 +2877,15 @@ Goal: {{goal}}.
       dot(14, 6.5, 1.3),
       dot(16.5, 10, 1.1)
     ],
-    Golden: [{ fill: "M12 2.5l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.3l-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9z" }],
-    Farm: ["M12 21v-9", "M12 12c0-4-3-6-7-6 0 4 3 6 7 6z", "M12 10c0-3 2.5-5.5 7-5.5 0 4-3 5.5-7 5.5z", "M7 21h10"],
+    Golden: [
+      { fill: "M12 2.5l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.3l-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9z" }
+    ],
+    Farm: [
+      "M12 21v-9",
+      "M12 12c0-4-3-6-7-6 0 4 3 6 7 6z",
+      "M12 10c0-3 2.5-5.5 7-5.5 0 4-3 5.5-7 5.5z",
+      "M7 21h10"
+    ],
     Shop: ["M2 3h3l2.5 12h11L21 7H6.2", dot(9, 19.5, 1.7), dot(17, 19.5, 1.7)],
     Microwave: [
       "M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z",
@@ -2842,9 +2915,19 @@ Goal: {{goal}}.
       "M9.5 16h5",
       "M2 12v3M22 12v3"
     ],
-    Whetstone: ["M9.5 17.5 21 6V3h-3L6.5 14.5", "M11 19l-6-6M8 16l-4 4M5 21l-2-2", "M3 3l2 2M3 8.5h2.5M8.5 3v2.5"],
+    Whetstone: [
+      "M9.5 17.5 21 6V3h-3L6.5 14.5",
+      "M11 19l-6-6M8 16l-4 4M5 21l-2-2",
+      "M3 3l2 2M3 8.5h2.5M8.5 3v2.5"
+    ],
     Bell: ["M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z", "M10 20.5a2 2 0 0 0 4 0", "M12 3v2"],
-    Slots: ["M2 7h15v14H2z", "M5 7V4h9v3", "M4.5 11h3v5h-3zM8 11h3v5H8zM11.5 11h3v5h-3z", "M17 13h3V5", dot(20, 4, 1.6)],
+    Slots: [
+      "M2 7h15v14H2z",
+      "M5 7V4h9v3",
+      "M4.5 11h3v5h-3zM8 11h3v5H8zM11.5 11h3v5h-3z",
+      "M17 13h3V5",
+      dot(20, 4, 1.6)
+    ],
     Vault: [
       "M3 4h18v15H3z",
       ring(12, 11.5, 4.2),
@@ -2854,7 +2937,11 @@ Goal: {{goal}}.
     ],
     Xp: ["M8 4h8l4 5-8 11L4 9z", "M4 9h16", "M10 4 8.5 9 12 20l3.5-11L14 4"],
     Magnet: ["M5 3h5v9a2 2 0 0 0 4 0V3h5v9a7 7 0 0 1-14 0z", "M5 7.5h5M14 7.5h5"],
-    Tunnel: ["M2 21h20", "M4.5 21v-8a7.5 7.5 0 0 1 15 0v8", { fill: "M8.5 21v-6a3.5 3.5 0 0 1 7 0v6z" }],
+    Tunnel: [
+      "M2 21h20",
+      "M4.5 21v-8a7.5 7.5 0 0 1 15 0v8",
+      { fill: "M8.5 21v-6a3.5 3.5 0 0 1 7 0v6z" }
+    ],
     Light: [
       "M9 5a3 3 0 0 1 6 0",
       "M7.5 7h9",
@@ -3397,7 +3484,11 @@ Goal: {{goal}}.
     const banished = v.banished.has(id);
     const box = h("span", `tbh-icon ${className}${banished ? " tbh-banished" : ""}`.trim());
     const notes = [...banished ? ["banished this run"] : [], ...note === "" ? [] : [note]].join(" · ");
-    tips.set(box, { name: nameOf(v.d.catalog, key), note: notes, description: v.d.catalog.descriptions[key] });
+    tips.set(box, {
+      name: nameOf(v.d.catalog, key),
+      note: notes,
+      description: v.d.catalog.descriptions[key]
+    });
     if (v.icons === undefined || frame === undefined) {
       box.classList.add("tbh-icon-text");
       box.textContent = initials(nameOf(v.d.catalog, key));
@@ -3583,7 +3674,11 @@ Goal: {{goal}}.
       return;
     const from = state.loadout.weapons.find((w) => w.slot === step.from);
     const level = Number(card.dataset.tag?.match(/\d+/)?.[0] ?? 1);
-    return { key: `weapon:${id}`, level, ...from === undefined ? {} : { replaces: `weapon:${from.def.id}` } };
+    return {
+      key: `weapon:${id}`,
+      level,
+      ...from === undefined ? {} : { replaces: `weapon:${from.def.id}` }
+    };
   }
   function cardOffer(card, state) {
     return tippedOffer(card) ?? transmuteOffer(card, state);
@@ -3624,7 +3719,10 @@ Goal: {{goal}}.
   // userscript/panel/run-damage.ts
   var compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
   function heldDamage(state) {
-    const weapons = state.loadout.weapons.map((w) => ({ key: `weapon:${w.def.id}`, damage: w.damageDealt }));
+    const weapons = state.loadout.weapons.map((w) => ({
+      key: `weapon:${w.def.id}`,
+      damage: w.damageDealt
+    }));
     const items = [...state.loadout.items].filter(([, count]) => count > 0).map(([id]) => ({ key: `item:${id}`, damage: state.run.damageBySource.get(id) ?? 0 }));
     return [...weapons, ...items].sort((a, b) => b.damage - a.damage);
   }
@@ -3892,8 +3990,11 @@ Goal: {{goal}}.
         if (source !== shown) {
           shown = source;
           lines = source.split(`
-`).map((line) => ({ el: h("span", "tbh-code-line", ...paint(line), `
-`), returns: whyOf(line) }));
+`).map((line) => ({
+            el: h("span", "tbh-code-line", ...paint(line), `
+`),
+            returns: whyOf(line)
+          }));
           el.replaceChildren(...lines.map((l) => l.el));
           lit = "";
         }
@@ -3976,105 +4077,122 @@ Goal: {{goal}}.
 // imports: its text is the type check's prelude, part of the builder's prompt, and what the popup
 // shows beside the code. Names are the game's own.
 
-export type Direction = 'right' | 'down-right' | 'down' | 'down-left' | 'left' | 'up-left' | 'up' | 'up-right';
+export type Direction =
+  | "right"
+  | "down-right"
+  | "down"
+  | "down-left"
+  | "left"
+  | "up-left"
+  | "up"
+  | "up-right";
 
 /** Where something is from Tibo. Distances are world units; Tibo walks about 62 a second. */
 export type Placed = {
-	/** The id an action names it by. */
-	id: number;
-	dist: number;
-	/** The way to walk to it; "still" when Tibo stands on or in it. */
-	dir: Direction | 'still';
-	/** Tibo gave up on it in the last 45 seconds: it could not be reached, charged or paid for. */
-	gaveUp: boolean;
+  /** The id an action names it by. */
+  id: number;
+  dist: number;
+  /** The way to walk to it; "still" when Tibo stands on or in it. */
+  dir: Direction | "still";
+  /** Tibo gave up on it in the last 45 seconds: it could not be reached, charged or paid for. */
+  gaveUp: boolean;
 };
 
 /** A weapon or passive Tibo holds, by the game's id, with its level of the most it can reach. */
 export type Held = { id: string; name: string; level: number; max: number };
 
 export type Pickup = Placed & {
-	/**
-	 * The game's pickup kind. A chest opens after Tibo has stood on it; the game calls it a goldChest
-	 * when a boss or Poteto left it. heal is food. magnet pulls in all the xp on the ground.
-	 */
-	kind: 'chest' | 'goldChest' | 'heal' | 'magnet' | 'reroll' | 'skip' | 'banish' | 'item' | 'beacon';
-	/** For a chest: seconds stood on it so far, and the seconds it takes to open. */
-	charged?: number;
-	chargeSeconds?: number;
+  /**
+   * The game's pickup kind. A chest opens after Tibo has stood on it; the game calls it a goldChest
+   * when a boss or Poteto left it. heal is food. magnet pulls in all the xp on the ground.
+   */
+  kind:
+    | "chest"
+    | "goldChest"
+    | "heal"
+    | "magnet"
+    | "reroll"
+    | "skip"
+    | "banish"
+    | "item"
+    | "beacon";
+  /** For a chest: seconds stood on it so far, and the seconds it takes to open. */
+  charged?: number;
+  chargeSeconds?: number;
 };
 
 /** A point of interest: a place that does something once Tibo has stood inside it. Only unused ones are listed. */
 export type Poi = Placed & {
-	/** The game's kind, such as chargeShrine or paidChest; a variety place goes by its own id, such as lighthouse. */
-	kind: string;
-	/** The game's English name, such as Spud Shrine or Potato Crate. */
-	name: string;
-	inside: boolean;
-	/** Seconds stood inside so far, and the seconds it takes to charge. */
-	charged: number;
-	chargeSeconds: number;
+  /** The game's kind, such as chargeShrine or paidChest; a variety place goes by its own id, such as lighthouse. */
+  kind: string;
+  /** The game's English name, such as Spud Shrine or Potato Crate. */
+  name: string;
+  inside: boolean;
+  /** Seconds stood inside so far, and the seconds it takes to charge. */
+  charged: number;
+  chargeSeconds: number;
 };
 
 export type Enemy = Placed & {
-	/** The game's id of the enemy or boss. */
-	kind: string;
-	name: string;
-	hp: number;
-	maxHp: number;
+  /** The game's id of the enemy or boss. */
+  kind: string;
+  name: string;
+  hp: number;
+  maxHp: number;
 };
 
 export type State = {
-	/** Seconds of game time since the run began. */
-	time: number;
-	/** The second the run counts as won; it goes on after that until Tibo dies. */
-	winAt: number;
-	tibo: {
-		hp: number;
-		maxHp: number;
-		/** Health lost over the last 3 seconds. */
-		hurt: number;
-		/** Damage dealt a second over the last 3 seconds. */
-		dps: number;
-		level: number;
-		gold: number;
-		x: number;
-		y: number;
-		dash: { charges: number; max: number };
-		/** Up to 6 of each. */
-		weapons: Held[];
-		passives: Held[];
-		items: { id: string; name: string; count: number }[];
-		/** Weapons the next chest opened would evolve, because their recipe is complete. */
-		evolves: string[];
-		/** The effective stats, by the game's own names, such as damageMult, armor and magnetRadius. */
-		stats: Record<string, number>;
-	};
-	enemies: {
-		onScreen: number;
-		/** Enemies on screen in each direction. */
-		byDirection: Record<Direction, number>;
-		/** The direction with the fewest enemies on screen, and the one with the most. */
-		fewest: Direction;
-		most: Direction;
-		/** Bullets about to arrive from each direction. */
-		bullets: Record<Direction, number>;
-	};
-	/** Every list below is nearest first. */
-	elites: Enemy[];
-	bosses: Enemy[];
-	/** What lies on the ground, other than xp and gold. */
-	pickups: Pickup[];
-	pois: Poi[];
-	/** The total value of the xp and of the gold lying on the ground, and the xp lying each way within about half a screen, nearer xp counting for more. */
-	ground: { xp: number; gold: number; xpByDirection: Record<Direction, number> };
-	/** Gold a Potato Crate (paidChest) costs now, and a Tater Slots spin. */
-	prices: { crate: number; slots: number };
-	/** Timed boosts running, by the game's key, with the seconds left. */
-	boosts: { name: string; endsIn: number }[];
-	/** The next boss, elite and event to come, with the run second each comes at. */
-	upcoming: { at: number; text: string }[];
-	/** What \`drive\` returned last time and for how many seconds it has returned the same; null on the first call. To remember anything else, keep it in \`memory\`. */
-	previous: { action: Action; seconds: number } | null;
+  /** Seconds of game time since the run began. */
+  time: number;
+  /** The second the run counts as won; it goes on after that until Tibo dies. */
+  winAt: number;
+  tibo: {
+    hp: number;
+    maxHp: number;
+    /** Health lost over the last 3 seconds. */
+    hurt: number;
+    /** Damage dealt a second over the last 3 seconds. */
+    dps: number;
+    level: number;
+    gold: number;
+    x: number;
+    y: number;
+    dash: { charges: number; max: number };
+    /** Up to 6 of each. */
+    weapons: Held[];
+    passives: Held[];
+    items: { id: string; name: string; count: number }[];
+    /** Weapons the next chest opened would evolve, because their recipe is complete. */
+    evolves: string[];
+    /** The effective stats, by the game's own names, such as damageMult, armor and magnetRadius. */
+    stats: Record<string, number>;
+  };
+  enemies: {
+    onScreen: number;
+    /** Enemies on screen in each direction. */
+    byDirection: Record<Direction, number>;
+    /** The direction with the fewest enemies on screen, and the one with the most. */
+    fewest: Direction;
+    most: Direction;
+    /** Bullets about to arrive from each direction. */
+    bullets: Record<Direction, number>;
+  };
+  /** Every list below is nearest first. */
+  elites: Enemy[];
+  bosses: Enemy[];
+  /** What lies on the ground, other than xp and gold. */
+  pickups: Pickup[];
+  pois: Poi[];
+  /** The total value of the xp and of the gold lying on the ground, and the xp lying each way within about half a screen, nearer xp counting for more. */
+  ground: { xp: number; gold: number; xpByDirection: Record<Direction, number> };
+  /** Gold a Potato Crate (paidChest) costs now, and a Tater Slots spin. */
+  prices: { crate: number; slots: number };
+  /** Timed boosts running, by the game's key, with the seconds left. */
+  boosts: { name: string; endsIn: number }[];
+  /** The next boss, elite and event to come, with the run second each comes at. */
+  upcoming: { at: number; text: string }[];
+  /** What \`drive\` returned last time and for how many seconds it has returned the same; null on the first call. To remember anything else, keep it in \`memory\`. */
+  previous: { action: Action; seconds: number } | null;
 };
 
 /**
@@ -4082,29 +4200,38 @@ export type State = {
  * few words shown to the person watching, and comes back as \`state.previous.action.why\`.
  */
 export type Action =
-	/** Walk to a pickup and take it; a chest is stood on until it opens. */
-	(
-		| { type: 'pickup'; id: number }
-		/** Walk to a point of interest and stand inside it until it has charged. */
-		| { type: 'poi'; id: number }
-		/** Fight an elite: keep it within reach of Tibo's weapons until it dies. */
-		| { type: 'elite'; id: number }
-		/** Walk that way. */
-		| { type: 'move'; dir: Direction }
-		/** Dash that way, a quick burst that spends a dash charge; with none, walk that way. */
-		| { type: 'dash'; dir: Direction }
-		/**
-		 * Gather xp: each step, walk the safe way with the most xp for the fewest enemies, and take any
-		 * magnet within 500 on the way. With no xp near, keep away from enemies. It lasts until another action.
-		 */
-		| { type: 'xp' }
-		/** Stand still, stepping aside only when standing would cost more health than moving. */
-		| { type: 'still' }
-	) & { why?: string };
+  /** Walk to a pickup and take it; a chest is stood on until it opens. */
+  (
+    | { type: "pickup"; id: number }
+    /** Walk to a point of interest and stand inside it until it has charged. */
+    | { type: "poi"; id: number }
+    /** Fight an elite: keep it within reach of Tibo's weapons until it dies. */
+    | { type: "elite"; id: number }
+    /** Walk that way. */
+    | { type: "move"; dir: Direction }
+    /** Dash that way, a quick burst that spends a dash charge; with none, walk that way. */
+    | { type: "dash"; dir: Direction }
+    /**
+     * Gather xp: each step, walk the safe way with the most xp for the fewest enemies, and take any
+     * magnet within 500 on the way. With no xp near, keep away from enemies. It lasts until another action.
+     */
+    | { type: "xp" }
+    /** Stand still, stepping aside only when standing would cost more health than moving. */
+    | { type: "still" }
+  ) & { why?: string };
 `;
 
   // userscript/fsd/entities.ts
-  var SECTIONS = ["Chests", "Pickups", "Shrines", "Buffs", "Upgrades", "Loot", "Travel", "Other"];
+  var SECTIONS = [
+    "Chests",
+    "Pickups",
+    "Shrines",
+    "Buffs",
+    "Upgrades",
+    "Loot",
+    "Travel",
+    "Other"
+  ];
   var POI_SECTIONS = {
     paidChest: "Chests",
     chargeShrine: "Shrines",
@@ -4149,7 +4276,13 @@ export type Action =
       tag: "Loot",
       about: "A chest a boss or Poteto left. It opens like a chest, after 1.5 seconds."
     },
-    { section: "Pickups", key: "heal", name: "heal", tag: "Eat", about: "Food on the ground, which gives health back." },
+    {
+      section: "Pickups",
+      key: "heal",
+      name: "heal",
+      tag: "Eat",
+      about: "Food on the ground, which gives health back."
+    },
     {
       section: "Chests",
       key: "item",
@@ -4171,7 +4304,13 @@ export type Action =
       tag: "Loot",
       about: "One more reroll for a later choice. Elites and lanterns drop it."
     },
-    { section: "Pickups", key: "skip", name: "skip", tag: "Loot", about: "One more skip for a later choice." },
+    {
+      section: "Pickups",
+      key: "skip",
+      name: "skip",
+      tag: "Loot",
+      about: "One more skip for a later choice."
+    },
     {
       section: "Pickups",
       key: "banish",
@@ -4189,7 +4328,13 @@ export type Action =
   ];
   function worldEntities(link) {
     const found = [...PICKUPS];
-    const place = (key, name, about) => found.push({ section: POI_SECTIONS[key] ?? "Other", key, name, about: about ?? "", tag: SPOT_TAGS[key] ?? "Spot" });
+    const place = (key, name, about) => found.push({
+      section: POI_SECTIONS[key] ?? "Other",
+      key,
+      name,
+      about: about ?? "",
+      tag: SPOT_TAGS[key] ?? "Spot"
+    });
     for (const { kind } of link.table?.pois ?? []) {
       const name = link.message(`content.poi.${kind}.name`);
       if (kind !== "varietyPlace" && name !== undefined)
@@ -5160,7 +5305,10 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
       });
       entityList.replaceChildren(...SECTIONS.flatMap((section) => {
         const group = chips.filter((c) => c.entity.section === section);
-        return group.length === 0 ? [] : [h("h4", "tbh-fsd-entity-type", section), h("div", "tbh-fsd-entities", ...group.map((c) => c.el))];
+        return group.length === 0 ? [] : [
+          h("h4", "tbh-fsd-entity-type", section),
+          h("div", "tbh-fsd-entities", ...group.map((c) => c.el))
+        ];
       }), ...entities.some((e) => e.name !== e.key) ? [] : [h("p", "tbh-fsd-hint", "The game's places get their names once a run has started.")]);
       markUsed(draft().code);
     };
@@ -5488,7 +5636,13 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
       }
       const loadout = readLoadout(game.state);
       discovery.settle(loadout, new Set(offered.map((o) => o.offer.key)));
-      const view = { d, discovery, icons: link.icons, loadout, banished: game.state.loadout.banished };
+      const view = {
+        d,
+        discovery,
+        icons: link.icons,
+        loadout,
+        banished: game.state.loadout.banished
+      };
       const signature = `${[...loadout].join(",")}|${[...view.banished].join(",")}|${discovery.version}|${version}`;
       if (signature !== panelSignature) {
         panelSignature = signature;
@@ -5596,7 +5750,13 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
       const chosen = options.findIndex((c) => c.chosen);
       if (chosen < 0)
         return;
-      show = { id: m.id, seen: performance.now() - Math.max(0, Date.now() - m.at), text: m.text, options, chosen };
+      show = {
+        id: m.id,
+        seen: performance.now() - Math.max(0, Date.now() - m.at),
+        text: m.text,
+        options,
+        chosen
+      };
       for (const { bar, frame } of bars.values()) {
         bar.remove();
         frame.remove();
@@ -5624,7 +5784,9 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
       layer.hidden = !visible;
       if (!visible || show === undefined)
         return;
-      const cards = [...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")].filter((c) => c.parentElement?.closest(OURS) === null);
+      const cards = [
+        ...document.querySelectorAll("button.ui-card, .ui-card[data-tip]")
+      ].filter((c) => c.parentElement?.closest(OURS) === null);
       const plain = buttons();
       const done = age >= SHOW_MS;
       const arrived = age >= ARRIVE_MS;
@@ -5678,7 +5840,10 @@ Recent goals: 0:07 Charge the Spud Shrine: drive returned another action; 0:10 G
         ];
         const x = fromX + (toX - fromX) * eased;
         const y = fromY + (toY - fromY) * eased;
-        Object.assign(hand.style, { left: `${x - shape.tipX * scale}px`, top: `${y - shape.tipY * scale}px` });
+        Object.assign(hand.style, {
+          left: `${x - shape.tipX * scale}px`,
+          top: `${y - shape.tipY * scale}px`
+        });
         hand.classList.toggle("tbh-pick-pressing", arrived);
       }
       if (Number.isFinite(top))
