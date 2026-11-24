@@ -2702,7 +2702,7 @@ Goal: {{goal}}.
           throw new Error(`could not find the ${what} in the boot chunk`);
         return exportedName;
       };
-      const loaderName = name(/async function ([\w$]+)\(\)\{return [\w$]+\(await [\w$]+\(\)\)\}/, "icon sheet loader");
+      const loaderName = name(/async function ([\w$]+)\(\)\{return [\w$]+\((?:await [\w$]+\()+\)+\}/, "icon sheet loader");
       const pageName = name(/function ([\w$]+)\(e,t\)\{let n=[\w$]+\.get\(t\);n!==void 0&&[\w$]+\(e,n\)\}/, "icon page lookup");
       const mod = await import(url);
       const loader = mod[loaderName];

@@ -257,8 +257,9 @@ export class GameLink {
 		this.changed();
 	}
 
-	// The boot chunk exports the loader that builds the game's icon sheet, `async function x(){return
-	// y(await z())}`, and the helper that points a style at the right atlas page for a frame,
+	// The boot chunk exports the loader that builds the game's icon sheet, a chain of steps such as
+	// `async function x(){return y(await z(await w()))}` that grows as the game adds icon sources,
+	// and the helper that points a style at the right atlas page for a frame,
 	// `function x(e,t){let n=m.get(t);n!==void 0&&f(e,n)}`. Their export names are minified.
 	private async loadIcons(url: string) {
 		const source = await (await fetch(url)).text();
@@ -274,7 +275,10 @@ export class GameLink {
 			if (exportedName === undefined) throw new Error(`could not find the ${what} in the boot chunk`);
 			return exportedName;
 		};
-		const loaderName = name(/async function ([\w$]+)\(\)\{return [\w$]+\(await [\w$]+\(\)\)\}/, 'icon sheet loader');
+		const loaderName = name(
+			/async function ([\w$]+)\(\)\{return [\w$]+\((?:await [\w$]+\()+\)+\}/,
+			'icon sheet loader',
+		);
 		const pageName = name(
 			/function ([\w$]+)\(e,t\)\{let n=[\w$]+\.get\(t\);n!==void 0&&[\w$]+\(e,n\)\}/,
 			'icon page lookup',
