@@ -13,5 +13,5 @@
 		"skipLibCheck": true,
 		"noEmit": true
 	},
-	"include": ["*.ts", "protocol", "game", "userscript", "agent-server", "cli", "headless", "bot"]
+	"include": ["*.ts", "protocol", "game", "userscript", "agent-server", "cli", "headless", "bot", "scripts"]
 }

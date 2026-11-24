@@ -14,4 +14,4 @@ For anything in the game's content, such as recipes, names, descriptions, max le
 
 ## Checking a change
 
-The pre-commit hook in `lefthook.yml` is the only gate: there is no CI. It fixes lint and format on the staged files and runs `bun check` and `bun test`. `bun install` installs it. When it fails, fix the cause; never commit around it.
+The pre-commit hook in `lefthook.yml` fixes lint on the staged files and runs `bun run typecheck` and `bun test`. `bun install` installs it. CI in `.github/workflows/ci.yml` repeats lint, typecheck, tests, and the build. `.github/CI.md` describes those checks. When a check fails, fix the cause; never commit around it.
